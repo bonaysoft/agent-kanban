@@ -1,0 +1,42 @@
+node_modules/
+dist/
+.wrangler/
+*.local
+
+# Build output
+packages/shared/dist/
+packages/cli/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+.dev.vars
+
+# Test
+coverage/
+
+# Symlink (local dev workaround)
+/functions
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# gstack logs
+.gstack/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Root wrangler config (local dev workaround)
+/wrangler.jsonc

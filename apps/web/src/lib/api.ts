@@ -1,0 +1,60 @@
+const API_BASE = "/api";
+
+function getToken(): string | null {
+  return localStorage.getItem("api-key");
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = getToken();
+  if (!token) throw new Error("NOT_AUTHENTICATED");
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const err = new Error(data.error?.message || `HTTP ${res.status}`);
+    (err as any).code = data.error?.code || "UNKNOWN";
+    (err as any).status = res.status;
+    throw err;
+  }
+
+  return data as T;
+}
+
+export const api = {
+  boards: {
+    list: () => request<any[]>("GET", "/boards"),
+    get: (id: string) => request<any>("GET", `/boards/${id}`),
+    create: (name: string) => request<any>("POST", "/boards", { name }),
+    delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
+  },
+  tasks: {
+    list: (params?: Record<string, string>) => {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return request<any[]>("GET", `/tasks${qs}`);
+    },
+    get: (id: string) => request<any>("GET", `/tasks/${id}`),
+    create: (input: Record<string, unknown>) => request<any>("POST", "/tasks", input),
+    update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/tasks/${id}`, body),
+    delete: (id: string) => request<void>("DELETE", `/tasks/${id}`),
+    claim: (id: string) => request<any>("POST", `/tasks/${id}/claim`),
+    complete: (id: string, body?: Record<string, unknown>) => request<any>("POST", `/tasks/${id}/complete`, body),
+    addLog: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/logs`, { detail }),
+    getLogs: (id: string) => request<any[]>("GET", `/tasks/${id}/logs`),
+  },
+  auth: {
+    keys: {
+      list: () => request<any[]>("GET", "/auth/keys"),
+      create: (name?: string) => request<any>("POST", "/auth/keys", { name }),
+      revoke: (id: string) => request<void>("DELETE", `/auth/keys/${id}`),
+    },
+  },
+};

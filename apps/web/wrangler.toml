@@ -1,0 +1,8 @@
+name = "agent-kanban"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agent-kanban-db"
+database_id = "placeholder-replace-after-create"
+migrations_dir = "migrations"

@@ -1,0 +1,20 @@
+{
+  "name": "agent-kanban",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agent-first cross-project kanban board",
+  "scripts": {
+    "dev": "pnpm --filter @agent-kanban/web dev",
+    "build": "pnpm --filter @agent-kanban/shared build && pnpm --filter @agent-kanban/web build",
+    "test": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": ["kanban", "agent", "ai", "cli"],
+  "author": "saltbo",
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.2",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

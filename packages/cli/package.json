@@ -1,0 +1,20 @@
+{
+  "name": "agent-kanban",
+  "version": "1.0.0",
+  "description": "CLI for Agent Kanban — agent-first cross-project task board",
+  "type": "module",
+  "bin": {
+    "agent-kanban": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@agent-kanban/shared": "workspace:*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
