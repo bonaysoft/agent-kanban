@@ -14,6 +14,8 @@ const actionStyles: Record<string, string> = {
   completed: "text-success",
   released: "text-warning",
   timed_out: "text-error",
+  cancelled: "text-error",
+  review_requested: "text-accent",
 };
 
 const actionLabels: Record<string, string> = {
@@ -24,6 +26,8 @@ const actionLabels: Record<string, string> = {
   released: "Released",
   timed_out: "Timed out",
   moved: "Moved",
+  cancelled: "Cancelled",
+  review_requested: "Moved to review",
 };
 
 export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps) {

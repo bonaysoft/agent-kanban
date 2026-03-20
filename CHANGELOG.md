@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-03-20
+
+### Added
+
+- **In Review and Cancelled task statuses.** Two new kanban columns extend the task lifecycle: `Todo → In Progress → In Review → Done` with `Cancelled` available from any stage.
+- **API endpoints.** `POST /api/tasks/:id/review` moves a task to In Review. `POST /api/tasks/:id/cancel` cancels a task (guarded: cannot cancel completed tasks).
+- **CLI commands.** `task review <id>` and `task cancel <id>` with `--agent-name` support.
+- **D1 migration.** `0004_review_cancel.sql` adds columns to existing boards, shifts positions, expands task_logs CHECK constraint.
+
+### Changed
+
+- **Agent idle check** now considers tasks in both "In Progress" and "In Review" as active.
+- **Dependency blocked check** treats both "Done" and "Cancelled" as finished (unblocking dependents).
+- **Stale detection** covers tasks in "In Review" (previously only "In Progress").
+- **Board grid** uses dynamic `gridTemplateColumns` instead of hardcoded Tailwind class.
+
+### Fixed
+
+- **Activity log** now displays "Cancelled" and "Moved to review" labels with appropriate colors.
+
 ## [1.2.0] - 2026-03-20 — Agent Observatory
 
 ### Added

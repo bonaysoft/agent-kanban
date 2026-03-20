@@ -11,7 +11,7 @@ export async function detectAndReleaseStale(db: D1, boardId: string): Promise<vo
   const staleTasks = await db.prepare(`
     SELECT t.id, t.assigned_to FROM tasks t
     JOIN columns c ON t.column_id = c.id
-    WHERE c.board_id = ? AND c.name = 'In Progress' AND t.assigned_to IS NOT NULL
+    WHERE c.board_id = ? AND c.name IN ('In Progress', 'In Review') AND t.assigned_to IS NOT NULL
     AND (
       SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.task_id = t.id
     ) < ?

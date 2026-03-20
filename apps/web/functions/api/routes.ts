@@ -5,7 +5,7 @@ import { authMiddleware, generateApiKey, revokeApiKey, listApiKeys } from "./aut
 import { createBoard, listBoards, getBoard, deleteBoard, getColumnByBoardAndName, getDefaultBoard } from "./boardRepo";
 import { createProject, listProjects, getProject, getProjectByName, deleteProject, addResource, listResources, deleteResource } from "./projectRepo";
 import { RESOURCE_TYPES } from "@agent-kanban/shared";
-import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, addTaskLog, getTaskLogs, getTaskWithBoard } from "./taskRepo";
+import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs, getTaskWithBoard } from "./taskRepo";
 import { findOrCreateAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
@@ -206,6 +206,51 @@ api.post("/api/tasks/:id/assign", async (c) => {
 
   const task = await assignTask(c.env.DB, c.req.param("id"), body.agent_id, inProgressCol.id);
   await setAgentWorkingIfIdle(c.env.DB, body.agent_id);
+  return c.json(task);
+});
+
+api.post("/api/tasks/:id/cancel", async (c) => {
+  const body = await c.req.json().catch(() => ({})) as { agent_name?: string };
+
+  let agentId: string | null = null;
+  if (body.agent_name) {
+    const apiKey = c.get("apiKey");
+    const agent = await findOrCreateAgent(c.env.DB, apiKey.id, body.agent_name);
+    agentId = agent.id;
+  }
+
+  const taskRow = await getTaskWithBoard(c.env.DB, c.req.param("id"));
+  const doneCol = await getColumnByBoardAndName(c.env.DB, taskRow.board_id, "Done");
+  if (doneCol && taskRow.column_id === doneCol.id) throw new HTTPException(400, { message: "Cannot cancel a completed task" });
+
+  const cancelledCol = await getColumnByBoardAndName(c.env.DB, taskRow.board_id, "Cancelled");
+  if (!cancelledCol) throw new HTTPException(500, { message: "Cancelled column not found" });
+
+  const task = await cancelTask(c.env.DB, c.req.param("id"), cancelledCol.id, agentId || taskRow.assigned_to);
+
+  const effectiveAgentId = agentId || taskRow.assigned_to;
+  if (effectiveAgentId) {
+    await setAgentIdleIfNoActiveTasks(c.env.DB, effectiveAgentId);
+  }
+
+  return c.json(task);
+});
+
+api.post("/api/tasks/:id/review", async (c) => {
+  const body = await c.req.json().catch(() => ({})) as { agent_name?: string };
+
+  let agentId: string | null = null;
+  if (body.agent_name) {
+    const apiKey = c.get("apiKey");
+    const agent = await findOrCreateAgent(c.env.DB, apiKey.id, body.agent_name);
+    agentId = agent.id;
+  }
+
+  const taskRow = await getTaskWithBoard(c.env.DB, c.req.param("id"));
+  const reviewCol = await getColumnByBoardAndName(c.env.DB, taskRow.board_id, "In Review");
+  if (!reviewCol) throw new HTTPException(500, { message: "In Review column not found" });
+
+  const task = await reviewTask(c.env.DB, c.req.param("id"), reviewCol.id, agentId || taskRow.assigned_to);
   return c.json(task);
 });
 

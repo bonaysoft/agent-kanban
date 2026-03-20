@@ -39,7 +39,7 @@ export async function computeBlocked(db: D1, taskIds: string[]): Promise<Set<str
     const undone = await db.prepare(`
       SELECT t.id FROM tasks t
       JOIN columns c ON t.column_id = c.id
-      WHERE t.id IN (${placeholders}) AND c.name != 'Done'
+      WHERE t.id IN (${placeholders}) AND c.name NOT IN ('Done', 'Cancelled')
       LIMIT 1
     `).bind(...deps).first();
 

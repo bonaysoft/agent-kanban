@@ -61,7 +61,7 @@ export async function setAgentIdleIfNoActiveTasks(db: D1, agentId: string): Prom
   const active = await db.prepare(`
     SELECT COUNT(*) as cnt FROM tasks t
     JOIN columns c ON t.column_id = c.id
-    WHERE t.assigned_to = ? AND c.name = 'In Progress'
+    WHERE t.assigned_to = ? AND c.name IN ('In Progress', 'In Review')
   `).bind(agentId).first<{ cnt: number }>();
 
   if (active && active.cnt === 0) {

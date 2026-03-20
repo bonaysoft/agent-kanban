@@ -244,6 +244,54 @@ export async function completeTask(
   return { ...task, column_id: doneColumnId, result, pr_url: prUrl, updated_at: now };
 }
 
+export async function cancelTask(
+  db: D1,
+  taskId: string,
+  cancelledColumnId: string,
+  agentId: string | null,
+): Promise<Task | null> {
+  const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
+  if (!task) return null;
+
+  const now = new Date().toISOString();
+  const logId = newId();
+
+  await db.batch([
+    db.prepare(
+      "UPDATE tasks SET column_id = ?, assigned_to = NULL, updated_at = ? WHERE id = ?"
+    ).bind(cancelledColumnId, now, taskId),
+    db.prepare(
+      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'cancelled', NULL, ?)"
+    ).bind(logId, taskId, agentId, now),
+  ]);
+
+  return { ...task, column_id: cancelledColumnId, assigned_to: null, updated_at: now };
+}
+
+export async function reviewTask(
+  db: D1,
+  taskId: string,
+  reviewColumnId: string,
+  agentId: string | null,
+): Promise<Task | null> {
+  const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
+  if (!task) return null;
+
+  const now = new Date().toISOString();
+  const logId = newId();
+
+  await db.batch([
+    db.prepare(
+      "UPDATE tasks SET column_id = ?, updated_at = ? WHERE id = ?"
+    ).bind(reviewColumnId, now, taskId),
+    db.prepare(
+      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'review_requested', NULL, ?)"
+    ).bind(logId, taskId, agentId, now),
+  ]);
+
+  return { ...task, column_id: reviewColumnId, updated_at: now };
+}
+
 export async function releaseTask(
   db: D1,
   taskId: string,

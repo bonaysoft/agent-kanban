@@ -89,7 +89,9 @@ agent-kanban resource list --project <name>
 | `task list` | List tasks (optional: --status, --project, --label, --format) |
 | `task claim <id>` | Claim a task (optional: --agent-name) |
 | `task log <id> <msg>` | Add a progress log entry |
+| `task review <id>` | Move task to In Review (optional: --agent-name) |
 | `task complete <id>` | Mark task done (optional: --result, --pr-url) |
+| `task cancel <id>` | Cancel a task (optional: --agent-name) |
 | `project create --name <n>` | Create a project (optional: --description) |
 | `project list` | List all projects |
 | `resource add --project <p>` | Add a resource (required: --type, --name, --uri) |
