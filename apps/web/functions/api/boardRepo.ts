@@ -1,6 +1,7 @@
 import type { Board, BoardWithColumns, Column, ColumnWithTasks, Task } from "@agent-kanban/shared";
 import { DEFAULT_COLUMNS } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
+import { computeBlocked } from "./taskDeps";
 
 export async function createBoard(db: D1, name: string): Promise<BoardWithColumns> {
   const boardId = newId();
@@ -54,6 +55,15 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithColumn
     WHERE c.board_id = ?
     ORDER BY t.position
   `).bind(boardId).all<Task & { agent_name: string | null }>();
+
+  // Compute blocked status for tasks with dependencies
+  const withDeps = tasks.results.filter((t) => t.depends_on);
+  if (withDeps.length > 0) {
+    const blockedSet = await computeBlocked(db, withDeps.map((t) => t.id));
+    for (const task of tasks.results) {
+      (task as any).blocked = blockedSet.has(task.id);
+    }
+  }
 
   const columnMap = new Map<string, (Task & { agent_name: string | null })[]>();
   for (const task of tasks.results) {

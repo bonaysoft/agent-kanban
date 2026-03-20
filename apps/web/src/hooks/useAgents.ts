@@ -5,7 +5,7 @@ export function useAgents() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
       const result = await api.agents.list();
       setAgents(result);
@@ -13,7 +13,7 @@ export function useAgents() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { load(); }, [load]);
 
-  return { agents, loading, refresh: fetch };
+  return { agents, loading, refresh: load };
 }

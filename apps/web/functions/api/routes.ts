@@ -21,8 +21,7 @@ api.onError((err, c) => {
 
 // Auth middleware for all routes except SSE (uses token param)
 api.use("/api/*", async (c, next) => {
-  // SSE endpoint uses query param auth
-  if (c.req.path.endsWith("/stream")) return next();
+  if (c.req.path.match(/\/api\/tasks\/[^/]+\/stream$/)) return next();
   return authMiddleware(c, next);
 });
 

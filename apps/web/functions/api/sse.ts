@@ -28,8 +28,12 @@ export async function createSSEResponse(
   };
 
   const run = async () => {
-    // Send initial batch — logs since lastEventId or last 50
-    const since = lastEventId || undefined;
+    // Resolve lastEventId (a log ID) to a timestamp for since-based filtering
+    let since: string | undefined;
+    if (lastEventId) {
+      const ref = await db.prepare("SELECT created_at FROM task_logs WHERE id = ?").bind(lastEventId).first<{ created_at: string }>();
+      since = ref?.created_at;
+    }
     const initialLogs = await getTaskLogs(db, taskId, since);
     const batch = since ? initialLogs : initialLogs.slice(-50);
 

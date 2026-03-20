@@ -56,9 +56,6 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const poll = useCallback(async () => {
     if (!token) return;
     try {
-      const since = lastEventId.current
-        ? undefined // Use log-based dedup
-        : undefined;
       const res = await fetch(`/api/tasks/${taskId}/logs`, {
         headers: { Authorization: `Bearer ${token}` },
       });
