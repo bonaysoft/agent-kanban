@@ -218,6 +218,9 @@ api.post("/api/tasks/:id/cancel", async (c) => {
   }
 
   const taskRow = await getTaskWithBoard(c.env.DB, c.req.param("id"));
+  const doneCol = await getColumnByBoardAndName(c.env.DB, taskRow.board_id, "Done");
+  if (doneCol && taskRow.column_id === doneCol.id) throw new HTTPException(400, { message: "Cannot cancel a completed task" });
+
   const cancelledCol = await getColumnByBoardAndName(c.env.DB, taskRow.board_id, "Cancelled");
   if (!cancelledCol) throw new HTTPException(500, { message: "Cancelled column not found" });
 
