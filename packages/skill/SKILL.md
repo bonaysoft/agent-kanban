@@ -71,7 +71,9 @@ agent-kanban task log <original-task-id> "Created subtask for shared-lib fix"
 | `task list` | List tasks (optional: --status, --project, --label, --format) |
 | `task claim <id>` | Claim a task (optional: --agent-name) |
 | `task log <id> <msg>` | Add a progress log entry |
+| `task review <id>` | Move task to In Review (optional: --agent-name) |
 | `task complete <id>` | Mark task done (optional: --result, --pr-url) |
+| `task cancel <id>` | Cancel a task (optional: --agent-name) |
 | `board view` | Show the kanban board (optional: --format json) |
 | `config set <key> <val>` | Set api-url or api-key |
 

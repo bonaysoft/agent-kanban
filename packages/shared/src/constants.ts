@@ -1,4 +1,4 @@
-export const DEFAULT_COLUMNS = ["Todo", "In Progress", "Done"] as const;
+export const DEFAULT_COLUMNS = ["Todo", "In Progress", "In Review", "Done", "Cancelled"] as const;
 
 export const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 
@@ -11,6 +11,8 @@ export const TASK_ACTIONS = [
   "assigned",
   "released",
   "timed_out",
+  "cancelled",
+  "review_requested",
 ] as const;
 
 export const AGENT_STATUSES = ["idle", "working", "offline"] as const;

@@ -56,6 +56,12 @@ export class ApiClient {
   releaseTask(id: string) {
     return this.request("POST", `/api/tasks/${id}/release`);
   }
+  cancelTask(id: string, body: Record<string, unknown> = {}) {
+    return this.request("POST", `/api/tasks/${id}/cancel`, body);
+  }
+  reviewTask(id: string, body: Record<string, unknown> = {}) {
+    return this.request("POST", `/api/tasks/${id}/review`, body);
+  }
   assignTask(id: string, agentId: string) {
     return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
   }

@@ -81,7 +81,9 @@ export type TaskAction =
   | "completed"
   | "assigned"
   | "released"
-  | "timed_out";
+  | "timed_out"
+  | "cancelled"
+  | "review_requested";
 
 export interface BoardWithColumns extends Board {
   columns: ColumnWithTasks[];

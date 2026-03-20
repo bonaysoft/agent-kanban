@@ -92,7 +92,7 @@ Dark is the default. Light mode uses the same hue relationships with adjusted li
 
 ## Layout
 - **Approach:** Grid-disciplined — strict columns for the kanban board, predictable alignment
-- **Grid:** 3 equal columns (kanban), 12-column grid for other layouts
+- **Grid:** 5 equal columns (kanban: Todo, In Progress, In Review, Done, Cancelled), 12-column grid for other layouts
 - **Max content width:** 1200px
 - **Border radius:**
   - sm: 4px — badges, small chips
@@ -102,7 +102,7 @@ Dark is the default. Light mode uses the same hue relationships with adjusted li
 - **Breakpoints:**
   - Desktop: ≥1024px — 3 columns, slide-out panel 50% width
   - Tablet: 768-1023px — 3 columns (narrower), panel 70% width, filter bar collapses
-  - Mobile: <768px — tab switcher (Todo | In Progress | Done), full-screen detail
+  - Mobile: <768px — tab switcher (Todo | In Progress | In Review | Done | Cancelled), full-screen detail
 
 ## Motion
 - **Approach:** Intentional — card transitions on poll refresh are the magic moment. Everything else is functional.

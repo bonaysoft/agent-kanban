@@ -139,6 +139,34 @@ taskCmd
   });
 
 taskCmd
+  .command("cancel <id>")
+  .description("Cancel a task")
+  .option("--agent-name <name>", "Agent identity")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (id, opts) => {
+    const client = new ApiClient();
+    const body: Record<string, unknown> = {};
+    if (opts.agentName) body.agent_name = opts.agentName;
+    const task = await client.cancelTask(id, body);
+    const fmt = getFormat(opts.format);
+    output(task, fmt, (t) => `Cancelled task ${t.id}: ${t.title}`);
+  });
+
+taskCmd
+  .command("review <id>")
+  .description("Move a task to In Review")
+  .option("--agent-name <name>", "Agent identity")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (id, opts) => {
+    const client = new ApiClient();
+    const body: Record<string, unknown> = {};
+    if (opts.agentName) body.agent_name = opts.agentName;
+    const task = await client.reviewTask(id, body);
+    const fmt = getFormat(opts.format);
+    output(task, fmt, (t) => `Moved task ${t.id} to review: ${t.title}`);
+  });
+
+taskCmd
   .command("complete <id>")
   .description("Complete a task")
   .option("--result <result>", "Completion result summary")

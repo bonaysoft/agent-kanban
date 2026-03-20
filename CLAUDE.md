@@ -23,7 +23,8 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Claim atomicity: db.batch() for race-condition-free task claims
 - Auth: API key = Machine level (one key per computer, all agents share it). SHA-256 hashed in D1. Bootstrap via wrangler d1 execute. SSE uses `?token=` query param (validated via `validateToken()`).
 - Agent identity: auto-registered in `agents` table on first claim/create. Not tied to API key 1:1.
-- Agent status: idle → working (on claim/assign) → idle (on complete/release with no other active tasks) → offline (on stale timeout)
+- Agent status: idle → working (on claim/assign) → idle (on complete/release/cancel with no other active tasks) → offline (on stale timeout)
+- Task lifecycle: Todo → In Progress (claim/assign) → In Review (review) → Done (complete) or Cancelled (cancel at any stage)
 - Task dependencies: `depends_on` JSON array, cycle detection via recursive CTE (taskDeps.ts), `blocked` computed on read
 - Task origin: `created_from` for single-level subtask tracking
 - Stale detection: write-on-read in GET /api/boards/:id and inline before assign (taskStale.ts). 2h timeout, idempotent.

@@ -62,8 +62,8 @@ export function BoardPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <div className="grid grid-cols-3 gap-0 p-4">
-          {[0, 1, 2].map((i) => (
+        <div className="grid grid-cols-5 gap-0 p-4">
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="p-4 space-y-3">
               <div className="h-4 w-20 bg-surface-tertiary rounded animate-pulse" />
               {[0, 1].map((j) => (
@@ -112,8 +112,8 @@ export function BoardPage() {
         ))}
       </div>
 
-      {/* Desktop: 3-column grid */}
-      <div className="hidden md:grid grid-cols-3 min-h-[calc(100vh-100px)]">
+      {/* Desktop: 5-column grid */}
+      <div className="hidden md:grid grid-cols-5 min-h-[calc(100vh-100px)]">
         {(filteredBoard?.columns || []).map((col: any) => (
           <KanbanColumn
             key={col.id}
