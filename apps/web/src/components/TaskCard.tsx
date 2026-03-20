@@ -19,7 +19,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
     <button
       onClick={onClick}
       className={`
-        w-full text-left bg-surface-card border rounded-lg p-3 mb-2
+        w-full text-left bg-surface-card border rounded-lg p-3
         transition-all duration-150 cursor-pointer
         ${isAgentActive
           ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"

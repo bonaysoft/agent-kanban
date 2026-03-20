@@ -19,6 +19,7 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [depTitles, setDepTitles] = useState<Record<string, string>>({});
 
   const reload = () => api.tasks.get(taskId).then(setTask);
 
@@ -26,6 +27,13 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
     reload().finally(() => setLoading(false));
     api.projects.list().then(setProjects);
   }, [taskId]);
+
+  useEffect(() => {
+    if (!task?.depends_on) return;
+    const depIds: string[] = JSON.parse(task.depends_on);
+    Promise.all(depIds.map((id) => api.tasks.get(id).then((t: any) => [id, t.title] as const)))
+      .then((entries) => setDepTitles(Object.fromEntries(entries)));
+  }, [task?.depends_on]);
 
   async function handleUpdate(field: string, value: string | null) {
     await api.tasks.update(taskId, { [field]: value });
@@ -150,8 +158,8 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
             <FieldLabel>Depends on</FieldLabel>
             <div className="flex gap-1.5 flex-wrap">
               {dependsOn.map((depId) => (
-                <span key={depId} className="font-mono text-[11px] px-2 py-0.5 rounded bg-surface-tertiary text-content-secondary">
-                  {depId}
+                <span key={depId} className="text-[11px] px-2 py-0.5 rounded bg-surface-tertiary text-content-secondary">
+                  {depTitles[depId] || depId}
                 </span>
               ))}
             </div>

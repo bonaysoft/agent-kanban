@@ -40,7 +40,7 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick, onRefresh }: K
         </span>
       </div>
 
-      <div className="space-y-0">
+      <div className="space-y-2">
         {column.tasks.map((task: any) => (
           <TaskCard
             key={task.id}

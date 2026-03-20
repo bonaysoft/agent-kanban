@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "wrangler pages dev -- vite",
     "build": "vite build",
     "preview": "wrangler pages dev dist",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local"
