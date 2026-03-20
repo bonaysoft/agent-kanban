@@ -3,12 +3,14 @@ import { Header } from "../components/Header";
 import { FilterBar } from "../components/FilterBar";
 import { KanbanColumn } from "../components/KanbanColumn";
 import { TaskDetail } from "../components/TaskDetail";
+import { AgentProfile } from "../components/AgentProfile";
 import { Onboarding } from "../components/Onboarding";
 import { useBoard } from "../hooks/useBoard";
 
 export function BoardPage() {
   const { board, loading, error, refresh } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState(0);
 
@@ -117,6 +119,7 @@ export function BoardPage() {
             key={col.id}
             column={col}
             onTaskClick={setSelectedTask}
+            onAgentClick={setSelectedAgent}
             onRefresh={refresh}
           />
         ))}
@@ -129,6 +132,7 @@ export function BoardPage() {
             key={col.id}
             column={col}
             onTaskClick={setSelectedTask}
+            onAgentClick={setSelectedAgent}
             onRefresh={refresh}
           />
         ))}
@@ -145,6 +149,21 @@ export function BoardPage() {
             columns={(board?.columns || []).map((c: any) => ({ id: c.id, name: c.name }))}
             onClose={() => setSelectedTask(null)}
             onRefresh={refresh}
+            onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}
+          />
+        </>
+      )}
+
+      {selectedAgent && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/20 z-40"
+            onClick={() => setSelectedAgent(null)}
+          />
+          <AgentProfile
+            agentId={selectedAgent}
+            onClose={() => setSelectedAgent(null)}
+            onTaskClick={(taskId) => { setSelectedAgent(null); setSelectedTask(taskId); }}
           />
         </>
       )}

@@ -53,7 +53,16 @@ export class ApiClient {
   completeTask(id: string, body: Record<string, unknown>) {
     return this.request("POST", `/api/tasks/${id}/complete`, body);
   }
+  releaseTask(id: string) {
+    return this.request("POST", `/api/tasks/${id}/release`);
+  }
+  assignTask(id: string, agentId: string) {
+    return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
+  }
   addLog(taskId: string, detail: string, agentName?: string) {
     return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_name: agentName });
   }
+
+  // Agents
+  listAgents() { return this.request("GET", "/api/agents"); }
 }

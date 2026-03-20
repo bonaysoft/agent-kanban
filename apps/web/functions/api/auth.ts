@@ -11,18 +11,18 @@ async function hashKey(key: string): Promise<string> {
     .join("");
 }
 
+export async function validateToken(db: D1Database, token: string): Promise<ApiKey | null> {
+  const hash = await hashKey(token);
+  return db.prepare("SELECT * FROM api_keys WHERE key_hash = ?").bind(hash).first<ApiKey>();
+}
+
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
   const header = c.req.header("Authorization");
   if (!header?.startsWith("Bearer ")) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" } }, 401);
   }
 
-  const token = header.slice(7);
-  const hash = await hashKey(token);
-
-  const key = await c.env.DB.prepare(
-    "SELECT * FROM api_keys WHERE key_hash = ?"
-  ).bind(hash).first<ApiKey>();
+  const key = await validateToken(c.env.DB, header.slice(7));
 
   if (!key) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);

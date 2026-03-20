@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config";
 import { ApiClient } from "./client";
 import { detectProject } from "./project";
-import { getFormat, output, formatTaskList, formatBoard } from "./output";
+import { getFormat, output, formatTaskList, formatBoard, formatAgentList } from "./output";
 
 const program = new Command();
 program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.0.0");
@@ -46,6 +46,8 @@ taskCmd
   .option("--labels <labels>", "Comma-separated labels")
   .option("--input <json>", "JSON input payload")
   .option("--agent-name <name>", "Agent identity")
+  .option("--parent <id>", "Parent task ID (creates subtask)")
+  .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
@@ -57,6 +59,8 @@ taskCmd
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
     if (opts.agentName) body.agent_name = opts.agentName;
+    if (opts.parent) body.created_from = opts.parent;
+    if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
     if (opts.input) {
       try { body.input = JSON.parse(opts.input); }
       catch { console.error("Invalid JSON for --input"); process.exit(1); }
@@ -73,6 +77,7 @@ taskCmd
   .option("--project <project>", "Filter by project")
   .option("--status <status>", "Filter by status (column name)")
   .option("--label <label>", "Filter by label")
+  .option("--parent <id>", "Filter subtasks of a parent task")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
@@ -81,6 +86,7 @@ taskCmd
     if (project) params.project = project;
     if (opts.status) params.status = opts.status;
     if (opts.label) params.label = opts.label;
+    if (opts.parent) params.parent = opts.parent;
 
     const tasks = await client.listTasks(params);
     const fmt = getFormat(opts.format);
@@ -97,6 +103,29 @@ taskCmd
     const task = await client.claimTask(id, opts.agentName);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Claimed task ${t.id}: ${t.title}`);
+  });
+
+taskCmd
+  .command("release <id>")
+  .description("Release a claimed task back to Todo")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (id, opts) => {
+    const client = new ApiClient();
+    const task = await client.releaseTask(id);
+    const fmt = getFormat(opts.format);
+    output(task, fmt, (t) => `Released task ${t.id}: ${t.title}`);
+  });
+
+taskCmd
+  .command("assign <id>")
+  .description("Assign a task to an agent")
+  .requiredOption("--agent <agent-id>", "Agent ID to assign to")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (id, opts) => {
+    const client = new ApiClient();
+    const task = await client.assignTask(id, opts.agent);
+    const fmt = getFormat(opts.format);
+    output(task, fmt, (t) => `Assigned task ${t.id}: ${t.title}`);
   });
 
 taskCmd
@@ -125,6 +154,21 @@ taskCmd
     const task = await client.completeTask(id, body);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Completed task ${t.id}: ${t.title}`);
+  });
+
+// ─── Agent ───
+
+const agentCmd = program.command("agent").description("Manage agents");
+
+agentCmd
+  .command("list")
+  .description("List all agents")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const agents = await client.listAgents();
+    const fmt = getFormat(opts.format);
+    output(agents, fmt, formatAgentList);
   });
 
 // ─── Board ───

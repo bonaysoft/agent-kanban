@@ -5,10 +5,11 @@ import { api } from "../lib/api";
 interface KanbanColumnProps {
   column: any;
   onTaskClick: (taskId: string) => void;
+  onAgentClick?: (agentId: string) => void;
   onRefresh: () => void;
 }
 
-export function KanbanColumn({ column, onTaskClick, onRefresh }: KanbanColumnProps) {
+export function KanbanColumn({ column, onTaskClick, onAgentClick, onRefresh }: KanbanColumnProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [newTaskId, setNewTaskId] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export function KanbanColumn({ column, onTaskClick, onRefresh }: KanbanColumnPro
             key={task.id}
             task={task}
             onClick={() => onTaskClick(task.id)}
+            onAgentClick={onAgentClick}
             isNew={task.id === newTaskId}
           />
         ))}

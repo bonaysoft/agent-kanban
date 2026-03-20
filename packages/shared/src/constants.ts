@@ -8,6 +8,13 @@ export const TASK_ACTIONS = [
   "moved",
   "commented",
   "completed",
+  "assigned",
+  "released",
+  "timed_out",
 ] as const;
+
+export const AGENT_STATUSES = ["idle", "working", "offline"] as const;
+
+export const STALE_TIMEOUT_MS = 7200000; // 2 hours
 
 export const DEFAULT_BOARD_NAME = "My Board";

@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../lib/api";
+import { EditableText, EditableTextarea, EditableBadge, Field, FieldLabel } from "./TaskDetailFields";
+import { ActivityLog } from "./ActivityLog";
+import { SubtaskList } from "./SubtaskList";
+import { AssignDropdown } from "./AssignDropdown";
 
 interface TaskDetailProps {
   taskId: string;
   columns: { id: string; name: string }[];
   onClose: () => void;
   onRefresh: () => void;
+  onAgentClick?: (agentId: string) => void;
 }
 
 const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
-export function TaskDetail({ taskId, columns, onClose, onRefresh }: TaskDetailProps) {
+export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,18 +66,25 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh }: TaskDetailPr
     );
   }
 
-  const currentCol = columns.find((c) => c.id === task.column_id);
+  const dependsOn: string[] = task.depends_on ? JSON.parse(task.depends_on) : [];
 
   return (
     <Panel>
       {/* Header */}
       <div className="flex items-start justify-between p-5 border-b border-border">
         <div className="flex-1 min-w-0 mr-4">
-          <EditableText
-            value={task.title}
-            onSave={(v) => handleUpdate("title", v)}
-            className="text-lg font-semibold text-content-primary"
-          />
+          <div className="flex items-center gap-2">
+            <EditableText
+              value={task.title}
+              onSave={(v) => handleUpdate("title", v)}
+              className="text-lg font-semibold text-content-primary"
+            />
+            {task.blocked && (
+              <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-error/15 text-error">
+                Blocked
+              </span>
+            )}
+          </div>
           <div className="flex gap-1.5 mt-2 flex-wrap">
             <EditableBadge
               value={task.project}
@@ -111,17 +123,34 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh }: TaskDetailPr
               ))}
             </select>
           </div>
-          <Field label="Assigned to" value={
-            task.assigned_to
-              ? <span className="font-mono text-[13px] text-accent">{task.agent_name || task.assigned_to}</span>
-              : <span className="text-content-tertiary">Unassigned</span>
-          } />
+          <div>
+            <FieldLabel>Assigned to</FieldLabel>
+            <AssignDropdown
+              taskId={taskId}
+              currentAgent={task.agent_name || null}
+              onAssigned={() => { reload(); onRefresh(); }}
+            />
+          </div>
           <Field label="Duration" value={
             task.duration_minutes != null
               ? <span className="font-mono text-[13px]">{task.duration_minutes} min</span>
               : <span className="text-content-tertiary">—</span>
           } />
         </div>
+
+        {/* Dependencies */}
+        {dependsOn.length > 0 && (
+          <div>
+            <FieldLabel>Depends on</FieldLabel>
+            <div className="flex gap-1.5 flex-wrap">
+              {dependsOn.map((depId) => (
+                <span key={depId} className="font-mono text-[11px] px-2 py-0.5 rounded bg-surface-tertiary text-content-secondary">
+                  {depId}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div>
@@ -161,39 +190,27 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh }: TaskDetailPr
           </div>
         )}
 
+        {/* Subtasks */}
+        {task.subtask_count > 0 && (
+          <>
+            <hr className="border-border" />
+            <div>
+              <FieldLabel>Subtasks ({task.subtask_count})</FieldLabel>
+              <SubtaskList parentId={taskId} onTaskClick={(id) => { /* navigate to subtask */ }} />
+            </div>
+          </>
+        )}
+
         <hr className="border-border" />
 
         {/* Activity Log */}
         <div>
           <FieldLabel>Activity</FieldLabel>
-          <div className="space-y-0 mt-2">
-            {(task.logs || []).slice().reverse().map((log: any) => (
-              <div
-                key={log.id}
-                className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
-                  log.action === "commented" ? "border-accent" : "border-border"
-                }`}
-              >
-                <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
-                  {formatRelative(log.created_at)}
-                </span>
-                <span className={`text-[13px] ${
-                  log.action === "commented"
-                    ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
-                    : "text-content-secondary"
-                }`}>
-                  {log.action === "claimed" && <span className="text-accent">Claimed</span>}
-                  {log.action === "completed" && <span className="text-success">Completed</span>}
-                  {log.action === "created" && "Created"}
-                  {log.action === "commented" && log.detail}
-                  {log.action === "moved" && `Moved${log.detail ? `: ${log.detail}` : ""}`}
-                </span>
-              </div>
-            ))}
-            {(!task.logs || task.logs.length === 0) && (
-              <p className="text-sm text-content-tertiary">No activity yet.</p>
-            )}
-          </div>
+          <ActivityLog
+            taskId={taskId}
+            initialLogs={task.logs || []}
+            assigned={!!task.assigned_to}
+          />
         </div>
 
         <hr className="border-border" />
@@ -216,149 +233,4 @@ function Panel({ children }: { children: React.ReactNode }) {
       {children}
     </aside>
   );
-}
-
-function EditableText({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
-
-  function commit() {
-    setEditing(false);
-    if (draft.trim() && draft !== value) onSave(draft.trim());
-    else setDraft(value);
-  }
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
-        className={`${className} bg-transparent border-b border-accent outline-none w-full`}
-      />
-    );
-  }
-
-  return (
-    <span
-      onClick={() => setEditing(true)}
-      className={`${className} cursor-pointer hover:border-b hover:border-content-tertiary`}
-    >
-      {value}
-    </span>
-  );
-}
-
-function EditableTextarea({ value, placeholder, onSave }: { value: string; placeholder: string; onSave: (v: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
-
-  function commit() {
-    setEditing(false);
-    if (draft !== value) onSave(draft);
-  }
-
-  if (editing) {
-    return (
-      <textarea
-        ref={ref}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
-        rows={3}
-        className="w-full text-sm bg-surface-primary border border-accent rounded-md p-2 text-content-primary outline-none resize-y"
-      />
-    );
-  }
-
-  return (
-    <p
-      onClick={() => setEditing(true)}
-      className={`text-sm cursor-pointer rounded-md p-2 hover:bg-surface-tertiary transition-colors ${
-        value ? "text-content-secondary" : "text-content-tertiary"
-      }`}
-    >
-      {value || placeholder}
-    </p>
-  );
-}
-
-function EditableBadge({ value, placeholder, onSave, className }: { value: string | null; placeholder: string; onSave: (v: string) => void; className: string }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value || "");
-  const ref = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setDraft(value || ""); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
-
-  function commit() {
-    setEditing(false);
-    if (draft !== (value || "")) onSave(draft);
-  }
-
-  if (editing) {
-    return (
-      <input
-        ref={ref}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value || ""); setEditing(false); } }}
-        placeholder="project name"
-        className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-primary border border-accent outline-none w-24"
-      />
-    );
-  }
-
-  if (!value) {
-    return (
-      <button onClick={() => setEditing(true)} className="text-[11px] font-mono px-2 py-0.5 rounded border border-dashed border-border text-content-tertiary hover:border-content-tertiary">
-        {placeholder}
-      </button>
-    );
-  }
-
-  return (
-    <span onClick={() => setEditing(true)} className={`text-[11px] font-mono px-2 py-0.5 rounded cursor-pointer ${className}`}>
-      {value}
-    </span>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
-      <div className="text-sm text-content-primary">{value}</div>
-    </div>
-  );
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
-      {children}
-    </div>
-  );
-}
-
-function formatRelative(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  return `${Math.floor(hrs / 24)}d`;
 }

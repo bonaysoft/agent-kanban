@@ -47,8 +47,17 @@ export const api = {
     delete: (id: string) => request<void>("DELETE", `/tasks/${id}`),
     claim: (id: string) => request<any>("POST", `/tasks/${id}/claim`),
     complete: (id: string, body?: Record<string, unknown>) => request<any>("POST", `/tasks/${id}/complete`, body),
+    release: (id: string) => request<any>("POST", `/tasks/${id}/release`),
+    assign: (id: string, agentId: string) => request<any>("POST", `/tasks/${id}/assign`, { agent_id: agentId }),
     addLog: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/logs`, { detail }),
-    getLogs: (id: string) => request<any[]>("GET", `/tasks/${id}/logs`),
+    getLogs: (id: string, since?: string) => {
+      const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+      return request<any[]>("GET", `/tasks/${id}/logs${qs}`);
+    },
+  },
+  agents: {
+    list: () => request<any[]>("GET", "/agents"),
+    get: (id: string) => request<any>("GET", `/agents/${id}`),
   },
   auth: {
     keys: {
