@@ -16,13 +16,17 @@ export function BoardPage() {
 
   const projects = useMemo(() => {
     if (!board?.columns) return [];
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     for (const col of board.columns) {
       for (const task of col.tasks) {
-        if (task.project) set.add(task.project);
+        if (task.project_id && task.project_name) {
+          map.set(task.project_id, task.project_name);
+        }
       }
     }
-    return Array.from(set).sort();
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [board]);
 
   const filteredBoard = useMemo(() => {
@@ -31,7 +35,7 @@ export function BoardPage() {
       ...board,
       columns: board.columns.map((col: any) => ({
         ...col,
-        tasks: col.tasks.filter((t: any) => t.project === activeProject),
+        tasks: col.tasks.filter((t: any) => t.project_id === activeProject),
       })),
     };
   }, [board, activeProject]);

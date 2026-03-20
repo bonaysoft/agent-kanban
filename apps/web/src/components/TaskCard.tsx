@@ -40,9 +40,9 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        {task.project && (
+        {task.project_name && (
           <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent">
-            {task.project}
+            {task.project_name}
           </span>
         )}
         {task.priority && (

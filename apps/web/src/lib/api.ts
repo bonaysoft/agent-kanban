@@ -59,6 +59,19 @@ export const api = {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
   },
+  projects: {
+    list: () => request<any[]>("GET", "/projects"),
+    get: (id: string) => request<any>("GET", `/projects/${id}`),
+    create: (input: { name: string; description?: string }) => request<any>("POST", "/projects", input),
+    delete: (id: string) => request<void>("DELETE", `/projects/${id}`),
+    resources: {
+      list: (projectId: string) => request<any[]>("GET", `/projects/${projectId}/resources`),
+      add: (projectId: string, input: { type: string; name: string; uri: string }) =>
+        request<any>("POST", `/projects/${projectId}/resources`, input),
+      delete: (projectId: string, resourceId: string) =>
+        request<void>("DELETE", `/projects/${projectId}/resources/${resourceId}`),
+    },
+  },
   auth: {
     keys: {
       list: () => request<any[]>("GET", "/auth/keys"),

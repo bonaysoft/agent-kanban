@@ -21,7 +21,7 @@ export function formatTaskList(tasks: any[]): string {
 
   const lines = tasks.map((t) => {
     const priority = t.priority ? `[${t.priority}]` : "";
-    const project = t.project ? `(${t.project})` : "";
+    const project = t.project_name ? `(${t.project_name})` : "";
     const agent = t.assigned_to ? `→ ${t.assigned_to}` : "";
     return `  ${t.id}  ${priority.padEnd(8)} ${t.title} ${project} ${agent}`;
   });
@@ -37,6 +37,27 @@ export function formatAgentList(agents: any[]): string {
     const tasks = `${a.task_count} tasks`;
     const lastActive = a.last_active_at ? `last: ${a.last_active_at}` : "never active";
     return `  ${a.id}  ${status} ${a.name} — ${tasks}, ${lastActive}`;
+  });
+
+  return lines.join("\n");
+}
+
+export function formatProjectList(projects: any[]): string {
+  if (projects.length === 0) return "No projects found.";
+
+  const lines = projects.map((p) => {
+    const desc = p.description ? ` — ${p.description}` : "";
+    return `  ${p.id}  ${p.name}${desc}`;
+  });
+
+  return lines.join("\n");
+}
+
+export function formatResourceList(resources: any[]): string {
+  if (resources.length === 0) return "No resources found.";
+
+  const lines = resources.map((r) => {
+    return `  ${r.id}  [${r.type}] ${r.name}  ${r.uri}`;
   });
 
   return lines.join("\n");

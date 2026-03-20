@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
 import { authMiddleware, generateApiKey, revokeApiKey, listApiKeys } from "./auth";
 import { createBoard, listBoards, getBoard, deleteBoard, getColumnByBoardAndName, getDefaultBoard } from "./boardRepo";
+import { createProject, listProjects, getProject, getProjectByName, deleteProject, addResource, listResources, deleteResource } from "./projectRepo";
+import { RESOURCE_TYPES } from "@agent-kanban/shared";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, addTaskLog, getTaskLogs, getTaskWithBoard } from "./taskRepo";
 import { findOrCreateAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
@@ -90,8 +92,8 @@ api.post("/api/tasks", async (c) => {
 });
 
 api.get("/api/tasks", async (c) => {
-  const { project, status, label, board_id, parent } = c.req.query();
-  const tasks = await listTasks(c.env.DB, { project, status, label, board_id, parent });
+  const { project_id, status, label, board_id, parent } = c.req.query();
+  const tasks = await listTasks(c.env.DB, { project_id, status, label, board_id, parent });
   return c.json(tasks);
 });
 
@@ -246,6 +248,63 @@ api.get("/api/tasks/:id/stream", async (c) => {
 
   const lastEventId = c.req.header("Last-Event-ID") || null;
   return createSSEResponse(c.env.DB, c.req.param("id"), lastEventId, token);
+});
+
+// ─── Projects ───
+
+api.post("/api/projects", async (c) => {
+  const body = await c.req.json<{ name: string; description?: string }>();
+  if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  const project = await createProject(c.env.DB, body.name, body.description);
+  return c.json(project, 201);
+});
+
+api.get("/api/projects", async (c) => {
+  const name = c.req.query("name");
+  if (name) {
+    const project = await getProjectByName(c.env.DB, name);
+    if (!project) throw new HTTPException(404, { message: "Project not found" });
+    return c.json(project);
+  }
+  const projects = await listProjects(c.env.DB);
+  return c.json(projects);
+});
+
+api.get("/api/projects/:id", async (c) => {
+  const project = await getProject(c.env.DB, c.req.param("id"));
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+  return c.json(project);
+});
+
+api.delete("/api/projects/:id", async (c) => {
+  const deleted = await deleteProject(c.env.DB, c.req.param("id"));
+  if (!deleted) throw new HTTPException(404, { message: "Project not found" });
+  return c.json({ ok: true });
+});
+
+api.post("/api/projects/:id/resources", async (c) => {
+  const body = await c.req.json<{ type: string; name: string; uri: string; config?: string }>();
+  if (!body.type || !body.name || !body.uri) {
+    throw new HTTPException(400, { message: "type, name, and uri are required" });
+  }
+  if (!(RESOURCE_TYPES as readonly string[]).includes(body.type)) {
+    throw new HTTPException(400, { message: `Invalid resource type. Allowed: ${RESOURCE_TYPES.join(", ")}` });
+  }
+  const project = await getProject(c.env.DB, c.req.param("id"));
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+  const resource = await addResource(c.env.DB, c.req.param("id"), body);
+  return c.json(resource, 201);
+});
+
+api.get("/api/projects/:id/resources", async (c) => {
+  const resources = await listResources(c.env.DB, c.req.param("id"));
+  return c.json(resources);
+});
+
+api.delete("/api/projects/:id/resources/:resourceId", async (c) => {
+  const deleted = await deleteResource(c.env.DB, c.req.param("resourceId"));
+  if (!deleted) throw new HTTPException(404, { message: "Resource not found" });
+  return c.json({ ok: true });
 });
 
 // ─── Auth / Keys ───

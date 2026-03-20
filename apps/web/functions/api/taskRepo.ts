@@ -50,11 +50,11 @@ export async function createTask(db: D1, input: CreateTaskInput & { agentId?: st
 
   await db.batch([
     db.prepare(`
-      INSERT INTO tasks (id, column_id, title, description, project, labels, priority, created_by, assigned_to, result, pr_url, input, depends_on, created_from, position, created_at, updated_at)
+      INSERT INTO tasks (id, column_id, title, description, project_id, labels, priority, created_by, assigned_to, result, pr_url, input, depends_on, created_from, position, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)
     `).bind(
       taskId, todoColumn.id, input.title, input.description || null,
-      input.project || null, labelsJson, input.priority || null,
+      input.project_id || null, labelsJson, input.priority || null,
       input.agentId || "human", inputJson, depsJson, input.created_from || null,
       (maxPos?.max_pos ?? -1) + 1, now, now,
     ),
@@ -65,7 +65,7 @@ export async function createTask(db: D1, input: CreateTaskInput & { agentId?: st
 
   return {
     id: taskId, column_id: todoColumn.id, title: input.title,
-    description: input.description || null, project: input.project || null,
+    description: input.description || null, project_id: input.project_id || null,
     labels: labelsJson, priority: input.priority || null,
     created_by: input.agentId || "human", assigned_to: null,
     result: null, pr_url: null, input: inputJson,
@@ -76,12 +76,13 @@ export async function createTask(db: D1, input: CreateTaskInput & { agentId?: st
 
 export async function listTasks(
   db: D1,
-  filters: { project?: string; status?: string; label?: string; board_id?: string; parent?: string },
+  filters: { project_id?: string; status?: string; label?: string; board_id?: string; parent?: string },
 ): Promise<Task[]> {
   let query = `
-    SELECT t.* FROM tasks t
+    SELECT t.*, p.name as project_name FROM tasks t
     JOIN columns c ON t.column_id = c.id
     JOIN boards b ON c.board_id = b.id
+    LEFT JOIN projects p ON t.project_id = p.id
     WHERE 1=1
   `;
   const binds: unknown[] = [];
@@ -90,9 +91,9 @@ export async function listTasks(
     query += " AND b.id = ?";
     binds.push(filters.board_id);
   }
-  if (filters.project) {
-    query += " AND t.project = ?";
-    binds.push(filters.project);
+  if (filters.project_id) {
+    query += " AND t.project_id = ?";
+    binds.push(filters.project_id);
   }
   if (filters.status) {
     query += " AND c.name = ? COLLATE NOCASE";
@@ -126,9 +127,12 @@ export async function listTasks(
 
 export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs & { agent_name: string | null; subtask_count: number } | null> {
   const task = await db.prepare(`
-    SELECT t.*, a.name as agent_name,
+    SELECT t.*, a.name as agent_name, p.name as project_name,
       (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count
-    FROM tasks t LEFT JOIN agents a ON t.assigned_to = a.id WHERE t.id = ?
+    FROM tasks t
+    LEFT JOIN agents a ON t.assigned_to = a.id
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.id = ?
   `).bind(taskId).first<Task & { agent_name: string | null; subtask_count: number }>();
   if (!task) return null;
 
@@ -163,7 +167,7 @@ export async function updateTask(db: D1, taskId: string, updates: Partial<Task>)
   const sets: string[] = ["updated_at = ?"];
   const binds: unknown[] = [now];
 
-  const allowedFields = ["title", "description", "project", "labels", "priority", "column_id", "result", "pr_url", "input", "depends_on"] as const;
+  const allowedFields = ["title", "description", "project_id", "labels", "priority", "column_id", "result", "pr_url", "input", "depends_on"] as const;
   for (const field of allowedFields) {
     if (field in updates && updates[field] !== undefined) {
       sets.push(`${field} = ?`);

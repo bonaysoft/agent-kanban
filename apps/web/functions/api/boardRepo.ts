@@ -49,12 +49,13 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithColumn
   ).bind(boardId).all<Column>();
 
   const tasks = await db.prepare(`
-    SELECT t.*, a.name as agent_name FROM tasks t
+    SELECT t.*, a.name as agent_name, p.name as project_name FROM tasks t
     JOIN columns c ON t.column_id = c.id
     LEFT JOIN agents a ON t.assigned_to = a.id
+    LEFT JOIN projects p ON t.project_id = p.id
     WHERE c.board_id = ?
     ORDER BY t.position
-  `).bind(boardId).all<Task & { agent_name: string | null }>();
+  `).bind(boardId).all<Task & { agent_name: string | null; project_name: string | null }>();
 
   // Compute blocked status for tasks with dependencies
   const withDeps = tasks.results.filter((t) => t.depends_on);
