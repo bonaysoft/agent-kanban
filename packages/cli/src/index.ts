@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { setConfigValue, getConfigValue } from "./config";
-import { ApiClient } from "./client";
-import { detectProject } from "./project";
-import { getFormat, output, formatTaskList, formatBoard, formatAgentList } from "./output";
+import { setConfigValue, getConfigValue } from "./config.js";
+import { ApiClient } from "./client.js";
+import { detectProject } from "./project.js";
+import { getFormat, output, formatTaskList, formatBoard, formatAgentList } from "./output.js";
 
 const program = new Command();
 program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.0.0");

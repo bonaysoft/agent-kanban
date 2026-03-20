@@ -1,4 +1,4 @@
-import { getConfigValue } from "./config";
+import { getConfigValue } from "./config.js";
 
 export class ApiClient {
   private baseUrl: string;

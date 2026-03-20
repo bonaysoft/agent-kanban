@@ -4,7 +4,8 @@
   "description": "CLI for Agent Kanban — agent-first cross-project task board",
   "type": "module",
   "bin": {
-    "agent-kanban": "./dist/index.js"
+    "agent-kanban": "./dist/index.js",
+    "ak": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -15,6 +16,7 @@
     "commander": "^13.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.7.0"
   }
 }
