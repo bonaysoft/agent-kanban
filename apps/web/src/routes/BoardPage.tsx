@@ -10,6 +10,7 @@ export function BoardPage() {
   const { board, loading, error, refresh } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState(0);
 
   const projects = useMemo(() => {
     if (!board?.columns) return [];
@@ -94,8 +95,36 @@ export function BoardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 min-h-[calc(100vh-100px)]">
+      {/* Mobile tab switcher */}
+      <div className="flex md:hidden border-b border-border">
+        {(filteredBoard?.columns || []).map((col: any, i: number) => (
+          <button
+            key={col.id}
+            onClick={() => setMobileTab(i)}
+            className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide text-center transition-colors ${
+              mobileTab === i ? "text-accent border-b-2 border-accent" : "text-content-tertiary"
+            }`}
+          >
+            {col.name} ({col.tasks.length})
+          </button>
+        ))}
+      </div>
+
+      {/* Desktop: 3-column grid */}
+      <div className="hidden md:grid grid-cols-3 min-h-[calc(100vh-100px)]">
         {(filteredBoard?.columns || []).map((col: any) => (
+          <KanbanColumn
+            key={col.id}
+            column={col}
+            onTaskClick={setSelectedTask}
+            onRefresh={refresh}
+          />
+        ))}
+      </div>
+
+      {/* Mobile: single column based on tab */}
+      <div className="md:hidden min-h-[calc(100vh-160px)]">
+        {(filteredBoard?.columns || []).filter((_: any, i: number) => i === mobileTab).map((col: any) => (
           <KanbanColumn
             key={col.id}
             column={col}
