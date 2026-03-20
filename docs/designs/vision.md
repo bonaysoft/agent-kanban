@@ -197,6 +197,89 @@ agents (add role_id)
   role_id → roles.id (which role this instance is using)
 ```
 
+## Project = Resource Container
+
+A Project is an **organizational unit that groups related resources**. It is NOT tied 1:1 to a git repository. A Project can contain multiple resources of different types.
+
+### Why not Project = Repo?
+
+The product should not be limited to coding. A self-media creator might use Agent Kanban to manage content workflows — their Project has no git repos but might have media libraries, publishing platform accounts, etc. Even for developers, a single project often spans multiple repos, databases, and infrastructure.
+
+### Data Model
+
+```
+projects
+  id, name, description, created_at
+
+project_resources (multiple per project, multiple types)
+  id, project_id, type, name, uri, config (JSON)
+
+tasks
+  project_id → projects.id
+```
+
+Resource types (extensible):
+- `git_repo`: code repository (uri = clone URL)
+- `credentials`: third-party platform accounts, API keys, tokens
+- `database`: structured data (uri = connection string)
+- `storage`: file/media storage (uri = S3/R2/OSS bucket)
+- `document`: knowledge base, specs, design docs
+- `data_feed`: real-time data source (uri = API endpoint)
+- User-defined types
+
+Each type can have multiple instances per project. A game dev project might have 3 git repos, 2 databases, and 5 asset storage buckets.
+
+### Industry Examples
+
+**Game Development — "星际殖民"**
+```
+Resources:
+  git_repo:    game-client, game-server, shared-proto
+  storage:     art-assets, sound-library
+  database:    player-db, config-tables
+  credentials: Steam Developer, App Store Connect
+  document:    game-design-doc
+```
+
+**Self-Media — "科技频道"**
+```
+Resources:
+  storage:     media-assets (photos, videos, audio)
+  credentials: YouTube, TikTok, WeChat Official Account
+  document:    content-calendar, brand-guidelines
+```
+
+**Finance — "量化策略 Alpha-7"**
+```
+Resources:
+  git_repo:    strategy-code, backtest-framework
+  database:    market-history, trade-records
+  data_feed:   realtime-quotes (exchange API)
+  credentials: exchange API keys
+  document:    risk-rules, compliance-requirements
+```
+
+**Real Estate Agency — "翡翠湾楼盘"**
+```
+Resources:
+  database:    property-listings, client-needs
+  storage:     property-photos, floor-plans
+  credentials: 贝壳/链家, WeChat groups
+  document:    contract-templates
+```
+
+### Task → Resource: No Hard Binding
+
+**Design principle: Task only associates with Project. Task does NOT link to specific Resources. Resource selection is the Agent's decision, not a data model constraint.**
+
+When an agent is dispatched to work on a task:
+1. Look up `task.project_id` → Project
+2. Query `project_resources` for that Project → get all available resources
+3. Agent reads task description + available resources → decides which to use
+4. If the task spans multiple resources (e.g., update API contract across client + server repos), the agent works across them
+
+This mirrors how human developers work: a Jira ticket says "fix the auth bug in Project X." It doesn't say "go to the user-service repo." The developer figures that out. Agents should too — that intelligence belongs in the Agent's Skill, not in the database schema.
+
 ## Key Design Constraints
 
 1. **We don't build execution agents.** The dispatch/orchestration agent is ours. The agents that do the actual work (coding, reviewing, fixing) are external CLIs (Claude Code, Codex, Gemini CLI, etc.).
