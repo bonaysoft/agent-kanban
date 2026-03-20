@@ -63,6 +63,24 @@ Log the relationship on the original task:
 agent-kanban task log <original-task-id> "Created subtask for shared-lib fix"
 ```
 
+## Projects & Resources
+
+Projects are organizational containers for related resources (repos, etc). Tasks are linked to projects.
+
+```bash
+# Create a project
+agent-kanban project create --name <name> --description "optional desc"
+
+# List projects
+agent-kanban project list
+
+# Add a git repo resource to a project
+agent-kanban resource add --project <name> --type git_repo --name <name> --uri <clone-url>
+
+# List resources for a project
+agent-kanban resource list --project <name>
+```
+
 ## CLI Reference
 
 | Command | Description |
@@ -74,6 +92,10 @@ agent-kanban task log <original-task-id> "Created subtask for shared-lib fix"
 | `task review <id>` | Move task to In Review (optional: --agent-name) |
 | `task complete <id>` | Mark task done (optional: --result, --pr-url) |
 | `task cancel <id>` | Cancel a task (optional: --agent-name) |
+| `project create --name <n>` | Create a project (optional: --description) |
+| `project list` | List all projects |
+| `resource add --project <p>` | Add a resource (required: --type, --name, --uri) |
+| `resource list --project <p>` | List resources for a project |
 | `board view` | Show the kanban board (optional: --format json) |
 | `config set <key> <val>` | Set api-url or api-key |
 

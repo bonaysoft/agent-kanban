@@ -17,7 +17,7 @@ export interface Task {
   column_id: string;
   title: string;
   description: string | null;
-  project: string | null;
+  project_id: string | null;
   labels: string | null; // JSON array stored as TEXT
   priority: Priority | null;
   created_by: string | null;
@@ -31,6 +31,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   blocked?: boolean; // Computed, not stored
+  project_name?: string; // Joined from projects table
 }
 
 export interface TaskWithMeta extends Task {
@@ -105,10 +106,44 @@ export interface ErrorEnvelope {
   };
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectResource {
+  id: string;
+  project_id: string;
+  type: string;
+  name: string;
+  uri: string;
+  config: string | null;
+  created_at: string;
+}
+
+export interface ProjectWithResources extends Project {
+  resources: ProjectResource[];
+}
+
+export interface CreateProjectInput {
+  name: string;
+  description?: string;
+}
+
+export interface CreateResourceInput {
+  type: string;
+  name: string;
+  uri: string;
+  config?: string;
+}
+
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  project?: string;
+  project_id?: string;
   labels?: string[];
   priority?: Priority;
   input?: Record<string, unknown>;

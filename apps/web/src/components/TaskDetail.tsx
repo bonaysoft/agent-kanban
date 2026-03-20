@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
-import { EditableText, EditableTextarea, EditableBadge, Field, FieldLabel } from "./TaskDetailFields";
+import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
 import { ActivityLog } from "./ActivityLog";
 import { SubtaskList } from "./SubtaskList";
 import { AssignDropdown } from "./AssignDropdown";
@@ -18,11 +18,13 @@ const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
   const reload = () => api.tasks.get(taskId).then(setTask);
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
+    api.projects.list().then(setProjects);
   }, [taskId]);
 
   async function handleUpdate(field: string, value: string | null) {
@@ -86,12 +88,16 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
             )}
           </div>
           <div className="flex gap-1.5 mt-2 flex-wrap">
-            <EditableBadge
-              value={task.project}
-              placeholder="+ project"
-              onSave={(v) => handleUpdate("project", v || null)}
-              className="bg-accent-soft text-accent"
-            />
+            <select
+              value={task.project_id || ""}
+              onChange={(e) => handleUpdate("project_id", e.target.value || null)}
+              className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent border-none outline-none cursor-pointer"
+            >
+              <option value="">no project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
             <select
               value={task.priority || ""}
               onChange={(e) => handleUpdate("priority", e.target.value || null)}

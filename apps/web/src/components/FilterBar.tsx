@@ -1,5 +1,5 @@
 interface FilterBarProps {
-  projects: string[];
+  projects: { id: string; name: string }[];
   activeProject: string | null;
   onProjectChange: (project: string | null) => void;
 }
@@ -21,15 +21,15 @@ export function FilterBar({ projects, activeProject, onProjectChange }: FilterBa
       </button>
       {projects.map((p) => (
         <button
-          key={p}
-          onClick={() => onProjectChange(p)}
+          key={p.id}
+          onClick={() => onProjectChange(p.id)}
           className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
-            activeProject === p
+            activeProject === p.id
               ? "border-accent text-accent bg-accent-soft"
               : "border-border text-content-secondary bg-surface-secondary"
           }`}
         >
-          {p}
+          {p.name}
         </button>
       ))}
     </div>

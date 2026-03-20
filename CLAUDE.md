@@ -18,7 +18,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Agent skill: packages/skill/ — installed to ~/.claude/skills/agent-kanban/
 
 ## Patterns
-- Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts) — no raw SQL in route handlers
+- Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, projectRepo.ts) — no raw SQL in route handlers
 - Error handling: Hono onError + HTTPException — centralized error envelope { error: { code, message } }
 - Claim atomicity: db.batch() for race-condition-free task claims
 - Auth: API key = Machine level (one key per computer, all agents share it). SHA-256 hashed in D1. Bootstrap via wrangler d1 execute. SSE uses `?token=` query param (validated via `validateToken()`).

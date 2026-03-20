@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Header } from "../components/Header";
+import { ProjectSettings } from "../components/ProjectSettings";
 import { api } from "../lib/api";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 
@@ -57,6 +58,9 @@ export function SettingsPage() {
             ))}
           </div>
         </section>
+
+        {/* Projects */}
+        <ProjectSettings />
 
         {/* API Keys */}
         <section className="space-y-3">

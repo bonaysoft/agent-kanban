@@ -2,11 +2,11 @@
 import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
 import { ApiClient } from "./client.js";
-import { detectProject } from "./project.js";
-import { getFormat, output, formatTaskList, formatBoard, formatAgentList } from "./output.js";
+import { detectProjectId } from "./project.js";
+import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatProjectList, formatResourceList } from "./output.js";
 
 const program = new Command();
-program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.0.0");
+program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.3.0");
 
 // ─── Config ───
 
@@ -51,11 +51,11 @@ taskCmd
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    const project = detectProject(opts.project);
+    const projectId = await detectProjectId(client, opts.project);
 
     const body: Record<string, unknown> = { title: opts.title };
     if (opts.description) body.description = opts.description;
-    if (project) body.project = project;
+    if (projectId) body.project_id = projectId;
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
     if (opts.agentName) body.agent_name = opts.agentName;
@@ -82,8 +82,8 @@ taskCmd
   .action(async (opts) => {
     const client = new ApiClient();
     const params: Record<string, string> = {};
-    const project = detectProject(opts.project);
-    if (project) params.project = project;
+    const projectId = await detectProjectId(client, opts.project);
+    if (projectId) params.project_id = projectId;
     if (opts.status) params.status = opts.status;
     if (opts.label) params.label = opts.label;
     if (opts.parent) params.parent = opts.parent;
@@ -242,5 +242,76 @@ boardCmd
     const fmt = getFormat(opts.format);
     output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
   });
+
+// ─── Project ───
+
+const projectCmd = program.command("project").description("Manage projects");
+
+projectCmd
+  .command("create")
+  .description("Create a new project")
+  .requiredOption("--name <name>", "Project name")
+  .option("--description <desc>", "Project description")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const project = await client.createProject({ name: opts.name, description: opts.description });
+    const fmt = getFormat(opts.format);
+    output(project, fmt, (p) => `Created project ${p.id}: ${p.name}`);
+  });
+
+projectCmd
+  .command("list")
+  .description("List all projects")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const projects = await client.listProjects();
+    const fmt = getFormat(opts.format);
+    output(projects, fmt, formatProjectList);
+  });
+
+// ─── Resource ───
+
+const resourceCmd = program.command("resource").description("Manage project resources");
+
+resourceCmd
+  .command("add")
+  .description("Add a resource to a project")
+  .requiredOption("--project <name-or-id>", "Project name or ID")
+  .requiredOption("--type <type>", "Resource type (git_repo)")
+  .requiredOption("--name <name>", "Resource name")
+  .requiredOption("--uri <uri>", "Resource URI (e.g. clone URL)")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const projectId = await resolveProjectId(client, opts.project);
+    const resource = await client.addResource(projectId, { type: opts.type, name: opts.name, uri: opts.uri });
+    const fmt = getFormat(opts.format);
+    output(resource, fmt, (r) => `Added resource ${r.id}: ${r.name} (${r.type})`);
+  });
+
+resourceCmd
+  .command("list")
+  .description("List resources for a project")
+  .requiredOption("--project <name-or-id>", "Project name or ID")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const projectId = await resolveProjectId(client, opts.project);
+    const resources = await client.listResources(projectId);
+    const fmt = getFormat(opts.format);
+    output(resources, fmt, formatResourceList);
+  });
+
+async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<string> {
+  const projects = await client.listProjects();
+  const match = projects.find((p: any) => p.id === nameOrId || p.name === nameOrId);
+  if (!match) {
+    console.error(`Project not found: ${nameOrId}`);
+    process.exit(1);
+  }
+  return match.id;
+}
 
 program.parseAsync();

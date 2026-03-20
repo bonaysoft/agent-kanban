@@ -71,4 +71,17 @@ export class ApiClient {
 
   // Agents
   listAgents() { return this.request("GET", "/api/agents"); }
+
+  // Projects
+  createProject(input: { name: string; description?: string }) {
+    return this.request("POST", "/api/projects", input);
+  }
+  listProjects() { return this.request<any[]>("GET", "/api/projects"); }
+  getProjectByName(name: string) { return this.request("GET", `/api/projects?name=${encodeURIComponent(name)}`); }
+
+  // Resources
+  addResource(projectId: string, input: { type: string; name: string; uri: string; config?: string }) {
+    return this.request("POST", `/api/projects/${projectId}/resources`, input);
+  }
+  listResources(projectId: string) { return this.request("GET", `/api/projects/${projectId}/resources`); }
 }
