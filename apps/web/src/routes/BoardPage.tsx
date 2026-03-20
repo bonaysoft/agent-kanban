@@ -62,7 +62,7 @@ export function BoardPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <div className="grid grid-cols-5 gap-0 p-4">
+        <div className="grid gap-0 p-4" style={{ gridTemplateColumns: `repeat(5, minmax(0, 1fr))` }}>
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="p-4 space-y-3">
               <div className="h-4 w-20 bg-surface-tertiary rounded animate-pulse" />
@@ -112,8 +112,8 @@ export function BoardPage() {
         ))}
       </div>
 
-      {/* Desktop: 5-column grid */}
-      <div className="hidden md:grid grid-cols-5 min-h-[calc(100vh-100px)]">
+      {/* Desktop: dynamic column grid */}
+      <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${filteredBoard?.columns?.length || 5}, minmax(0, 1fr))` }}>
         {(filteredBoard?.columns || []).map((col: any) => (
           <KanbanColumn
             key={col.id}
