@@ -2,29 +2,7 @@
 
 ## API
 
-### Task Dependency Chains
-
-**What:** Add `depends_on` JSON array field to tasks, cycle detection via DFS, blocked UI badge, and 409 on /claim with unmet dependencies.
-
-**Why:** Foundation for v2 orchestrator — without dependency awareness, auto-dispatch is just round-robin. Enables multi-step workflows where task B can't start until task A completes.
-
-**Context:** CEO plan specified the full design: `depends_on TEXT` column storing JSON array of task IDs, computed `blocked` boolean on read, DFS cycle detection on write, and `/claim` returning 409 Conflict if any dependency is not in "Done" column. Deferred from v1 to reduce scope — the core "human creates → agent executes" loop works without dependencies. Implement when building the v2 central orchestrator agent.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** None
-
-### Task Origin Tracking (parent_task / created_from)
-
-**What:** Add optional `created_from` field to tasks. When an agent creates a subtask during execution of another task, it can link back to the parent task.
-
-**Why:** When agents autonomously create tasks (e.g., discovering a dependency gap while working), the relationship between parent and child tasks is lost. This makes it hard to understand why a task exists and trace the chain of work.
-
-**Context:** v1 already supports agents creating tasks via CLI (`task create`). The `created_by` field records which agent created it, but not which task it was spawned from. The workaround in v1 is logging context manually (`task log abc123 "Created subtask def456"`), but this is unstructured text. A proper `created_from TEXT` field (nullable, references tasks.id) would enable the UI to show task trees and the CLI to query subtasks. Distinct from `depends_on` — `created_from` is provenance ("where did this come from"), `depends_on` is execution ordering ("what blocks this").
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
+### GitHub PR Status Integration
 
 ### GitHub PR Status Integration
 
@@ -36,18 +14,6 @@
 
 **Effort:** M
 **Priority:** P2
-**Depends on:** None
-
-### Stale Claim Detection
-
-**What:** Auto-release tasks claimed by agents that don't complete within a configurable timeout (default: 2 hours).
-
-**Why:** Prevents tasks from being stuck in "In Progress" forever when an agent crashes or times out. Important for reliability once agents run unsupervised.
-
-**Context:** CEO plan specified: check on every `GET /api/tasks` — if claimed log exists, no completed log, and `now - claimed_at > timeout`, auto-release to "Todo" column and log `timed_out` action. No separate cron needed. Deferred from v1 — edge case until real agent usage patterns emerge.
-
-**Effort:** S
-**Priority:** P3
 **Depends on:** None
 
 ### Pagination on List Endpoints
@@ -115,3 +81,27 @@
 **Depends on:** None
 
 **Completed:** v1.0.0 (2026-03-20)
+
+### Task Dependency Chains
+
+**What:** `depends_on` JSON array field, cycle detection via recursive CTE, blocked UI badge, 409 on /claim with unmet dependencies.
+
+**Effort:** M
+**Priority:** P2
+**Completed:** v1.2.0 (2026-03-20)
+
+### Task Origin Tracking (created_from)
+
+**What:** `created_from` field linking subtasks to parents, subtask list in UI, CLI `--parent` flag.
+
+**Effort:** S
+**Priority:** P2
+**Completed:** v1.2.0 (2026-03-20)
+
+### Stale Claim Detection
+
+**What:** Auto-release tasks claimed >2 hours, write-on-read pattern, agent set to offline.
+
+**Effort:** S
+**Priority:** P3
+**Completed:** v1.2.0 (2026-03-20)
