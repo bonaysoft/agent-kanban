@@ -9,11 +9,19 @@
     "test": "vitest",
     "lint": "tsc --noEmit"
   },
-  "keywords": ["kanban", "agent", "ai", "cli"],
+  "keywords": [
+    "kanban",
+    "agent",
+    "ai",
+    "cli"
+  ],
   "author": "saltbo",
   "license": "MIT",
   "packageManager": "pnpm@10.30.2",
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^29.0.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

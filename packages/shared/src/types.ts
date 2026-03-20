@@ -25,9 +25,12 @@ export interface Task {
   result: string | null;
   pr_url: string | null;
   input: string | null; // JSON object stored as TEXT
+  depends_on: string | null; // JSON array of task IDs stored as TEXT
+  created_from: string | null; // Parent task ID
   position: number;
   created_at: string;
   updated_at: string;
+  blocked?: boolean; // Computed, not stored
 }
 
 export interface TaskWithMeta extends Task {
@@ -45,12 +48,20 @@ export interface TaskLog {
   created_at: string;
 }
 
+export type AgentStatus = "idle" | "working" | "offline";
+
 export interface Agent {
   id: string;
   machine_id: string;
   name: string;
   role_id: string | null;
+  status: AgentStatus;
   created_at: string;
+}
+
+export interface AgentWithActivity extends Agent {
+  last_active_at: string | null;
+  task_count: number;
 }
 
 export interface ApiKey {
@@ -67,7 +78,10 @@ export type TaskAction =
   | "claimed"
   | "moved"
   | "commented"
-  | "completed";
+  | "completed"
+  | "assigned"
+  | "released"
+  | "timed_out";
 
 export interface BoardWithColumns extends Board {
   columns: ColumnWithTasks[];
@@ -98,6 +112,12 @@ export interface CreateTaskInput {
   input?: Record<string, unknown>;
   board_id?: string;
   agent_name?: string;
+  depends_on?: string[];
+  created_from?: string;
+}
+
+export interface AssignTaskInput {
+  agent_id: string;
 }
 
 export interface ClaimTaskInput {

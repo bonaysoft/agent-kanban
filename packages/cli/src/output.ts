@@ -29,6 +29,19 @@ export function formatTaskList(tasks: any[]): string {
   return lines.join("\n");
 }
 
+export function formatAgentList(agents: any[]): string {
+  if (agents.length === 0) return "No agents found.";
+
+  const lines = agents.map((a) => {
+    const status = `[${a.status}]`.padEnd(10);
+    const tasks = `${a.task_count} tasks`;
+    const lastActive = a.last_active_at ? `last: ${a.last_active_at}` : "never active";
+    return `  ${a.id}  ${status} ${a.name} — ${tasks}, ${lastActive}`;
+  });
+
+  return lines.join("\n");
+}
+
 export function formatBoard(board: any): string {
   const cols = board.columns || [];
   const maxWidth = 30;

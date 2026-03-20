@@ -1,6 +1,7 @@
 interface TaskCardProps {
   task: any;
   onClick: () => void;
+  onAgentClick?: (agentId: string) => void;
   isNew?: boolean;
 }
 
@@ -11,7 +12,7 @@ const priorityColors: Record<string, string> = {
   low: "bg-zinc-500/15 text-content-tertiary",
 };
 
-export function TaskCard({ task, onClick, isNew }: TaskCardProps) {
+export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) {
   const isAgentActive = !!task.assigned_to && !task.result;
 
   return (
@@ -27,8 +28,15 @@ export function TaskCard({ task, onClick, isNew }: TaskCardProps) {
         ${isNew ? "animate-card-highlight" : ""}
       `}
     >
-      <div className="text-[13px] font-medium mb-2 leading-snug text-content-primary">
-        {task.title}
+      <div className="flex items-center gap-1.5 mb-2">
+        <div className="text-[13px] font-medium leading-snug text-content-primary flex-1">
+          {task.title}
+        </div>
+        {task.blocked && (
+          <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-error/15 text-error shrink-0">
+            Blocked
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -47,7 +55,17 @@ export function TaskCard({ task, onClick, isNew }: TaskCardProps) {
       {isAgentActive && (
         <div className="flex items-center gap-1.5 mt-2 text-accent">
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />
-          <span className="font-mono text-[11px]">{task.agent_name || task.assigned_to}</span>
+          <span
+            className="font-mono text-[11px] hover:underline"
+            onClick={(e) => {
+              if (onAgentClick && task.assigned_to) {
+                e.stopPropagation();
+                onAgentClick(task.assigned_to);
+              }
+            }}
+          >
+            {task.agent_name || task.assigned_to}
+          </span>
         </div>
       )}
 
