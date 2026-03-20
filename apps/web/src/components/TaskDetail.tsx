@@ -113,7 +113,7 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh }: TaskDetailPr
           </div>
           <Field label="Assigned to" value={
             task.assigned_to
-              ? <span className="font-mono text-[13px] text-accent">{task.assigned_to}</span>
+              ? <span className="font-mono text-[13px] text-accent">{task.agent_name || task.assigned_to}</span>
               : <span className="text-content-tertiary">Unassigned</span>
           } />
           <Field label="Duration" value={

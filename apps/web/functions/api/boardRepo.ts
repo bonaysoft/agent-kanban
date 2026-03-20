@@ -48,13 +48,14 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithColumn
   ).bind(boardId).all<Column>();
 
   const tasks = await db.prepare(`
-    SELECT t.* FROM tasks t
+    SELECT t.*, a.name as agent_name FROM tasks t
     JOIN columns c ON t.column_id = c.id
+    LEFT JOIN agents a ON t.assigned_to = a.id
     WHERE c.board_id = ?
     ORDER BY t.position
-  `).bind(boardId).all<Task>();
+  `).bind(boardId).all<Task & { agent_name: string | null }>();
 
-  const columnMap = new Map<string, Task[]>();
+  const columnMap = new Map<string, (Task & { agent_name: string | null })[]>();
   for (const task of tasks.results) {
     const list = columnMap.get(task.column_id) || [];
     list.push(task);

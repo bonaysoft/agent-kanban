@@ -84,8 +84,10 @@ export async function listTasks(
   return result.results;
 }
 
-export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | null> {
-  const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
+export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs & { agent_name: string | null } | null> {
+  const task = await db.prepare(
+    "SELECT t.*, a.name as agent_name FROM tasks t LEFT JOIN agents a ON t.assigned_to = a.id WHERE t.id = ?"
+  ).bind(taskId).first<Task & { agent_name: string | null }>();
   if (!task) return null;
 
   const logs = await db.prepare(

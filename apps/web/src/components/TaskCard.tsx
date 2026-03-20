@@ -47,7 +47,7 @@ export function TaskCard({ task, onClick, isNew }: TaskCardProps) {
       {isAgentActive && (
         <div className="flex items-center gap-1.5 mt-2 text-accent">
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />
-          <span className="font-mono text-[11px]">{task.assigned_to}</span>
+          <span className="font-mono text-[11px]">{task.agent_name || task.assigned_to}</span>
         </div>
       )}
 
