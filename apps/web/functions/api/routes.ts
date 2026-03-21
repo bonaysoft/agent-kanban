@@ -6,7 +6,7 @@ import { createBoard, listBoards, getBoard, deleteBoard, getColumnByBoardAndName
 import { createProject, listProjects, getProject, getProjectByName, deleteProject, addResource, listResources, deleteResource } from "./projectRepo";
 import { RESOURCE_TYPES } from "@agent-kanban/shared";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs, getTaskWithBoard } from "./taskRepo";
-import { findOrCreateAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks } from "./agentRepo";
+import { findOrCreateAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -69,6 +69,12 @@ api.get("/api/agents/:id", async (c) => {
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   const logs = await getAgentLogs(c.env.DB, c.req.param("id"));
   return c.json({ ...agent, logs });
+});
+
+api.patch("/api/agents/:id/usage", async (c) => {
+  const body = await c.req.json<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_usd: number }>();
+  await updateAgentUsage(c.env.DB, c.req.param("id"), body);
+  return c.json({ ok: true });
 });
 
 // ─── Tasks ───

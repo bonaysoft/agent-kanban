@@ -49,6 +49,30 @@ export async function getAgentLogs(db: D1, agentId: string): Promise<any[]> {
   return result.results;
 }
 
+export interface AgentUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_usd: number;
+}
+
+export async function updateAgentUsage(db: D1, agentId: string, usage: AgentUsage): Promise<void> {
+  await db.prepare(`
+    UPDATE agents SET
+      input_tokens = input_tokens + ?,
+      output_tokens = output_tokens + ?,
+      cache_read_tokens = cache_read_tokens + ?,
+      cache_creation_tokens = cache_creation_tokens + ?,
+      cost_usd = cost_usd + ?
+    WHERE id = ?
+  `).bind(
+    usage.input_tokens, usage.output_tokens,
+    usage.cache_read_tokens, usage.cache_creation_tokens,
+    usage.cost_usd, agentId,
+  ).run();
+}
+
 export async function updateAgentStatus(db: D1, agentId: string, status: AgentStatus): Promise<void> {
   await db.prepare("UPDATE agents SET status = ? WHERE id = ?").bind(status, agentId).run();
 }

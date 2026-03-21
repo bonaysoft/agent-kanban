@@ -85,6 +85,11 @@ export class ApiClient {
   }
   listResources(projectId: string) { return this.request("GET", `/api/projects/${projectId}/resources`); }
 
+  // Agent usage
+  updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_usd: number }) {
+    return this.request("PATCH", `/api/agents/${agentId}/usage`, usage);
+  }
+
   // Messages
   sendMessage(taskId: string, body: { agent_id: string; role: string; content: string }) {
     return this.request("POST", `/api/tasks/${taskId}/messages`, body);
