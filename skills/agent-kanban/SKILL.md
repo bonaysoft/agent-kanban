@@ -96,8 +96,7 @@ ak task log <original-task-id> "Created subtask for shared-lib fix"
 | `task list` | List tasks (optional: --status, --label, --format) |
 | `task claim <id>` | Claim an assigned task — start working |
 | `task log <id> <msg>` | Add a progress log entry |
-| `task review <id>` | Move task to In Review |
-| `task complete <id>` | Mark task done (optional: --result, --pr-url) |
+| `task review <id>` | Submit for review (required: --pr-url) |
 | `task cancel <id>` | Cancel a task |
 | `board list` | List all boards |
 | `board view` | Show the kanban board |
@@ -114,10 +113,10 @@ ak task log <original-task-id> "Created subtask for shared-lib fix"
 - **409 Conflict**: Task is already claimed or not assigned to you
 - **404 Not Found**: Task ID doesn't exist — check with `task list`
 
-## Best Practices
+## Rules
 
 1. Always claim before working — don't start without claiming
-2. Log progress frequently — humans monitor the board
-3. Create subtasks when you find dependency gaps
-4. Include PR URLs when completing — it closes the loop
-5. Use meaningful agent names for traceability
+2. **Never call `task complete`** — only humans can complete tasks
+3. **Always create a PR** and submit via `task review --pr-url <url>` when done
+4. Log progress frequently — humans monitor the board
+5. Create subtasks when you find dependency gaps
