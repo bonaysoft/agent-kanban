@@ -43,11 +43,11 @@ api.use("/api/*", async (c, next) => {
 
 // ─── Machines ───
 
-api.post("/api/machines/heartbeat", async (c) => {
+api.post("/api/machines/:id/heartbeat", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[] }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const updated = await upsertMachineHeartbeat(c.env.DB, c.get("machineId")!, body);
+  const updated = await upsertMachineHeartbeat(c.env.DB, c.req.param("id"), body);
   return c.json(updated);
 });
 
@@ -63,19 +63,10 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
-  const guard = requireUser(c); if (guard) return guard;
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-  const ownerId = c.get("ownerId");
-  const name = body.name || "unnamed";
-
-  const machine = await createMachine(c.env.DB, ownerId, name);
-
-  const auth = createAuth(c.env);
-  const apiKeyResult = await auth.api.createApiKey({
-    body: { userId: ownerId, metadata: { machineId: machine.id } },
-  });
-
-  return c.json({ key: apiKeyResult.key, id: machine.id, name: machine.name, created_at: machine.created_at }, 201);
+  const machine = await createMachine(c.env.DB, c.get("ownerId"), body.name || "unnamed");
+  return c.json(machine, 201);
 });
 
 api.delete("/api/machines/:id", async (c) => {
@@ -116,10 +107,9 @@ api.post("/api/tasks", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
-  const machineId = c.get("machineId");
   let agentId: string | undefined;
-  if (body.agent_id && machineId) {
-    const agent = await ensureAgent(c.env.DB, machineId, body.agent_id);
+  if (body.agent_id && body.machine_id) {
+    const agent = await ensureAgent(c.env.DB, body.machine_id, body.agent_id);
     agentId = agent.id;
   }
 
@@ -168,21 +158,22 @@ api.delete("/api/tasks/:id", async (c) => {
 
 api.post("/api/tasks/:id/claim", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
+  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; machine_id?: string };
+  if (!body.machine_id) throw new HTTPException(400, { message: "machine_id is required" });
   const agentId = body.agent_id || crypto.randomUUID();
 
-  const agent = await ensureAgent(c.env.DB, c.get("machineId")!, agentId);
+  const agent = await ensureAgent(c.env.DB, body.machine_id, agentId);
   const task = await claimTask(c.env.DB, c.req.param("id"), agent.id);
   await setAgentWorkingIfIdle(c.env.DB, agent.id);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
+  const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string; machine_id?: string };
 
   let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+  if (body.agent_id && body.machine_id) {
+    const agent = await ensureAgent(c.env.DB, body.machine_id!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -212,10 +203,11 @@ api.post("/api/tasks/:id/release", async (c) => {
 
 api.post("/api/tasks/:id/assign", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
-  const body = await c.req.json<{ agent_id: string }>();
+  const body = await c.req.json<{ agent_id: string; machine_id: string }>();
   if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
+  if (!body.machine_id) throw new HTTPException(400, { message: "machine_id is required" });
 
-  const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+  const agent = await ensureAgent(c.env.DB, body.machine_id, body.agent_id);
 
   const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ board_id: string }>();
@@ -228,11 +220,11 @@ api.post("/api/tasks/:id/assign", async (c) => {
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
+  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; machine_id?: string };
 
   let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+  if (body.agent_id && body.machine_id) {
+    const agent = await ensureAgent(c.env.DB, body.machine_id!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -252,11 +244,11 @@ api.post("/api/tasks/:id/cancel", async (c) => {
 
 api.post("/api/tasks/:id/review", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
+  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string; machine_id?: string };
 
   let agentId: string | null = null;
   if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+    const agent = await ensureAgent(c.env.DB, body.machine_id!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -270,12 +262,12 @@ api.post("/api/tasks/:id/review", async (c) => {
 // ─── Task Logs ───
 
 api.post("/api/tasks/:id/logs", async (c) => {
-  const body = await c.req.json<{ detail: string; agent_id?: string }>();
+  const body = await c.req.json<{ detail: string; agent_id?: string; machine_id?: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
   let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+  if (body.agent_id && body.machine_id) {
+    const agent = await ensureAgent(c.env.DB, body.machine_id!, body.agent_id);
     agentId = agent.id;
   }
 

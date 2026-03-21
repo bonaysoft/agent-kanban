@@ -8,6 +8,7 @@ const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 interface Config {
   "api-url"?: string;
   "api-key"?: string;
+  "machine-id"?: string;
 }
 
 export function readConfig(): Config {

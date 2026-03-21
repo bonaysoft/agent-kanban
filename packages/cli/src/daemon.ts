@@ -6,6 +6,7 @@ import { randomUUID } from "crypto";
 import { ApiClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository } from "./links.js";
+import { getConfigValue, setConfigValue } from "./config.js";
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -74,15 +75,23 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   console.log(`[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
 
-  // Register machine and start heartbeat
+  // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
-  await client.heartbeat(machineInfo).catch((err: any) =>
+  let machineId = getConfigValue("machine-id");
+  if (!machineId) {
+    const machine = await client.registerMachine(machineInfo.name);
+    machineId = machine.id;
+    setConfigValue("machine-id", machineId);
+    console.log(`[INFO] Machine registered: ${machineId}`);
+  }
+
+  await client.heartbeat(machineId, machineInfo).catch((err: any) =>
     console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
   );
-  console.log(`[INFO] Machine registered: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
+  console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(() => {
-    client.heartbeat(machineInfo).catch((err: any) =>
+    client.heartbeat(machineId!, machineInfo).catch((err: any) =>
       console.error(`[WARN] Heartbeat failed: ${err.message}`)
     );
   }, 30000);

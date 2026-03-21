@@ -3,6 +3,7 @@ import { getConfigValue } from "./config.js";
 export class ApiClient {
   private baseUrl: string;
   private apiKey: string;
+  private machineId: string | undefined;
 
   constructor() {
     const url = getConfigValue("api-url");
@@ -11,6 +12,7 @@ export class ApiClient {
     if (!key) throw new Error("API key not configured. Run: agent-kanban config set api-key <key>");
     this.baseUrl = url.replace(/\/$/, "");
     this.apiKey = key;
+    this.machineId = getConfigValue("machine-id");
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -43,30 +45,33 @@ export class ApiClient {
   }
   getTask(id: string) { return this.request("GET", `/api/tasks/${id}`); }
   claimTask(id: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${id}/claim`, agentName ? { agent_id: agentName } : {});
+    return this.request("POST", `/api/tasks/${id}/claim`, { agent_id: agentName, machine_id: this.machineId });
   }
   completeTask(id: string, body: Record<string, unknown>) {
-    return this.request("POST", `/api/tasks/${id}/complete`, body);
+    return this.request("POST", `/api/tasks/${id}/complete`, { ...body, machine_id: this.machineId });
   }
   releaseTask(id: string) {
-    return this.request("POST", `/api/tasks/${id}/release`);
+    return this.request("POST", `/api/tasks/${id}/release`, { machine_id: this.machineId });
   }
   cancelTask(id: string, body: Record<string, unknown> = {}) {
-    return this.request("POST", `/api/tasks/${id}/cancel`, body);
+    return this.request("POST", `/api/tasks/${id}/cancel`, { ...body, machine_id: this.machineId });
   }
   reviewTask(id: string, body: Record<string, unknown> = {}) {
-    return this.request("POST", `/api/tasks/${id}/review`, body);
+    return this.request("POST", `/api/tasks/${id}/review`, { ...body, machine_id: this.machineId });
   }
   assignTask(id: string, agentId: string) {
-    return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
+    return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId, machine_id: this.machineId });
   }
   addLog(taskId: string, detail: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_id: agentName });
+    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_id: agentName, machine_id: this.machineId });
   }
 
   // Machines
-  heartbeat(info: { name: string; os?: string; version?: string; runtimes?: string[] }) {
-    return this.request("POST", "/api/machines/heartbeat", info);
+  registerMachine(name: string) {
+    return this.request<{ id: string; name: string }>("POST", "/api/machines", { name });
+  }
+  heartbeat(machineId: string, info: { name: string; os?: string; version?: string; runtimes?: string[] }) {
+    return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
   // Agents
