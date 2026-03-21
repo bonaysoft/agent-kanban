@@ -136,8 +136,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const repoDir = findPathForRepository(task.repository_id)!;
       const sessionId = randomUUID();
 
-      // Assign locks the task to this agent (status stays todo)
+      // Register agent, then assign the task
       try {
+        await client.registerAgent(sessionId);
         await client.assignTask(task.id, sessionId);
       } catch (err: any) {
         if (err.message.includes("409") || err.message.includes("assigned") || err.message.includes("blocked")) {

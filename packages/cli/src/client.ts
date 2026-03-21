@@ -73,6 +73,9 @@ export class ApiClient {
   }
 
   // Agents
+  registerAgent(agentId: string) {
+    return this.request("POST", "/api/agents", { agent_id: agentId });
+  }
   listAgents() { return this.request("GET", "/api/agents"); }
 
   // Boards

@@ -1,17 +1,11 @@
 import type { Agent, AgentStatus, AgentWithActivity } from "@agent-kanban/shared";
 import type { D1 } from "./db";
 
-export async function ensureAgent(
+export async function createAgent(
   db: D1,
   machineId: string,
   agentId: string,
 ): Promise<Agent> {
-  const existing = await db.prepare(
-    "SELECT * FROM agents WHERE id = ?"
-  ).bind(agentId).first<Agent>();
-
-  if (existing) return existing;
-
   const now = new Date().toISOString();
   const name = `Agent-${agentId.slice(0, 6)}`;
 

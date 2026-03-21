@@ -5,7 +5,7 @@ import { authMiddleware, requireUser, requireMachine } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
-import { ensureAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
+import { createAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -97,6 +97,15 @@ api.get("/api/agents/:id", async (c) => {
   return c.json({ ...agent, logs });
 });
 
+api.post("/api/agents", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
+  const body = await c.req.json<{ agent_id: string }>();
+  if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
+  if (!c.get("machineId")) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
+  const agent = await createAgent(c.env.DB, c.get("machineId")!, body.agent_id);
+  return c.json(agent, 201);
+});
+
 api.patch("/api/agents/:id/usage", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json();
@@ -114,13 +123,7 @@ api.post("/api/tasks", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
-  let agentId: string | undefined;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId"), body.agent_id);
-    agentId = agent.id;
-  }
-
-  const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, agentId });
+  const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, agentId: body.agent_id });
   return c.json(task, 201);
 });
 
@@ -166,30 +169,22 @@ api.delete("/api/tasks/:id", async (c) => {
 api.post("/api/tasks/:id/claim", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
-  if (!c.get("machineId")) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
-  const agentId = body.agent_id || crypto.randomUUID();
+  if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const agent = await ensureAgent(c.env.DB, c.get("machineId"), agentId);
-  const task = await claimTask(c.env.DB, c.req.param("id"), agent.id);
-  await setAgentWorkingIfIdle(c.env.DB, agent.id);
+  const task = await claimTask(c.env.DB, c.req.param("id"), body.agent_id);
+  await setAgentWorkingIfIdle(c.env.DB, body.agent_id);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
 
-  let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
-    agentId = agent.id;
-  }
-
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
 
-  const task = await completeTask(c.env.DB, c.req.param("id"), agentId, body.result || null, body.pr_url || null);
+  const task = await completeTask(c.env.DB, c.req.param("id"), body.agent_id || null, body.result || null, body.pr_url || null);
 
-  const effectiveAgentId = agentId || existing?.assigned_to;
+  const effectiveAgentId = body.agent_id || existing?.assigned_to;
   if (effectiveAgentId) {
     await setAgentIdleIfNoActiveTasks(c.env.DB, effectiveAgentId);
   }
@@ -213,34 +208,26 @@ api.post("/api/tasks/:id/assign", async (c) => {
   const body = await c.req.json<{ agent_id: string }>();
   if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const agent = await ensureAgent(c.env.DB, c.get("machineId"), body.agent_id);
-
   const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ board_id: string }>();
   if (existing) {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
 
-  const task = await assignTask(c.env.DB, c.req.param("id"), agent.id);
+  const task = await assignTask(c.env.DB, c.req.param("id"), body.agent_id);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
 
-  let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
-    agentId = agent.id;
-  }
-
   const existing = await c.env.DB.prepare("SELECT status, assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ status: string; assigned_to: string | null }>();
   if (existing?.status === "done") throw new HTTPException(400, { message: "Cannot cancel a completed task" });
 
-  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null);
+  const task = await cancelTask(c.env.DB, c.req.param("id"), body.agent_id || existing?.assigned_to || null);
 
-  const effectiveAgentId = agentId || existing?.assigned_to;
+  const effectiveAgentId = body.agent_id || existing?.assigned_to;
   if (effectiveAgentId) {
     await setAgentIdleIfNoActiveTasks(c.env.DB, effectiveAgentId);
   }
@@ -252,16 +239,10 @@ api.post("/api/tasks/:id/review", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
 
-  let agentId: string | null = null;
-  if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
-    agentId = agent.id;
-  }
-
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
 
-  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null);
+  const task = await reviewTask(c.env.DB, c.req.param("id"), body.agent_id || existing?.assigned_to || null, body.pr_url || null);
   return c.json(task);
 });
 
@@ -271,17 +252,11 @@ api.post("/api/tasks/:id/logs", async (c) => {
   const body = await c.req.json<{ detail: string; agent_id?: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
-  let agentId: string | null = null;
-  if (body.agent_id && c.get("machineId")) {
-    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
-    agentId = agent.id;
-  }
-
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const log = await addTaskLog(c.env.DB, c.req.param("id"), agentId, "commented", body.detail);
+  const log = await addTaskLog(c.env.DB, c.req.param("id"), body.agent_id || null, "commented", body.detail);
   return c.json(log, 201);
 });
 
