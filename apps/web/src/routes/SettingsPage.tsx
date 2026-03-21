@@ -30,7 +30,7 @@ export function SettingsPage() {
     setSaving(true);
     await api.boards.update(board.id, {
       name: editName.trim(),
-      description: editDesc.trim() || undefined,
+      description: editDesc.trim(),
     });
     setSaving(false);
     refresh();

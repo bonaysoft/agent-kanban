@@ -57,7 +57,7 @@ export async function updateBoard(db: D1, boardId: string, updates: { name?: str
   const sets: string[] = [];
   const values: unknown[] = [];
   if (updates.name !== undefined) { sets.push("name = ?"); values.push(updates.name); }
-  if (updates.description !== undefined) { sets.push("description = ?"); values.push(updates.description); }
+  if (updates.description !== undefined) { sets.push("description = ?"); values.push(updates.description || null); }
   if (sets.length === 0) return db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
 
   sets.push("updated_at = ?");

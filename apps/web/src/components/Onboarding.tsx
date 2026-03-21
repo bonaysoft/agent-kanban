@@ -7,7 +7,7 @@ interface OnboardingProps {
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
-  const [boardName, setProjectName] = useState("My Project");
+  const [boardName, setBoardName] = useState("My Board");
   const [taskTitle, setTaskTitle] = useState("First task");
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
   const [apiUrl, setApiUrl] = useState(window.location.origin);
@@ -61,7 +61,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             </label>
             <input
               value={boardName}
-              onChange={(e) => setProjectName(e.target.value)}
+              onChange={(e) => setBoardName(e.target.value)}
               className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2.5 text-sm text-content-primary outline-none focus:border-accent"
             />
             <button
