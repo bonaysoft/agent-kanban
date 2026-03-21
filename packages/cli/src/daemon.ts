@@ -143,8 +143,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       // Ensure the agent-kanban skill is installed in the target repo
       ensureSkill(repoDir);
 
-      // Notify the agent — it will claim, work, and complete via CLI
-      const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nUse the agent-kanban CLI to view the task, claim it, do the work, and mark it complete.`;
+      // Notify the agent — it will claim, work, create PR, and submit for review
+      const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nFollow the agent-kanban skill workflow: claim the task, do the work, create a PR with gh, then submit for review with ak task review --pr-url <url>. Do NOT call task complete — only humans can complete tasks.`;
       await pm.spawnAgent(task.id, sessionId, repoDir, prompt);
 
       // Reset backoff on success
