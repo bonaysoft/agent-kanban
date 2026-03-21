@@ -23,6 +23,14 @@ api.onError((err, c) => {
   return c.json({ error: { code: "INTERNAL_ERROR", message: err.message || "Internal server error" } }, 500);
 });
 
+// Better Auth migration — returns tables/columns needed by plugins (D1 blocks DDL at runtime)
+api.get("/api/migrate", async (c) => {
+  const { getMigrations } = await import("better-auth/db/migration");
+  const auth = createAuth(c.env);
+  const { toBeCreated, toBeAdded } = await getMigrations(auth.options);
+  return c.json({ toBeCreated, toBeAdded });
+});
+
 // Better Auth handler — must be before auth middleware
 api.on(["GET", "POST"], "/api/auth/*", async (c) => {
   try {
