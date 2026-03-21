@@ -1,3 +1,8 @@
+---
+name: agent-kanban
+description: Task management skill for the Agent Kanban CLI — claim, log, complete tasks
+---
+
 # Agent Kanban — Task Management Skill
 
 Use the `agent-kanban` CLI (alias `ak`) to manage tasks on your kanban board.

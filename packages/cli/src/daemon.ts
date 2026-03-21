@@ -140,6 +140,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
+      // Ensure the agent-kanban skill is installed in the target repo
+      ensureSkill(repoDir);
+
       // Notify the agent — it will claim, work, and complete via CLI
       const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nUse the agent-kanban CLI to view the task, claim it, do the work, and mark it complete.`;
       await pm.spawnAgent(task.id, sessionId, repoDir, prompt);
@@ -159,6 +162,36 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   schedulePoll(0);
 }
 
+
+const SKILL_SOURCE = "bonaysoft/agent-kanban";
+const SKILL_NAME = "agent-kanban";
+
+function ensureSkill(repoDir: string) {
+  const skillFile = join(repoDir, `.claude/skills/${SKILL_NAME}/SKILL.md`);
+
+  try {
+    if (!existsSync(skillFile)) {
+      console.log(`[INFO] Installing skill "${SKILL_NAME}" in ${repoDir}`);
+      execSync(`npx skills add ${SKILL_SOURCE} --skill ${SKILL_NAME} --agent claude-code --agent universal -y`, {
+        cwd: repoDir,
+        stdio: "pipe",
+      });
+    } else {
+      // Check for updates
+      const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
+      if (result.includes("up to date")) return;
+      console.log(`[INFO] Skill "${SKILL_NAME}" updated in ${repoDir}`);
+    }
+
+    // Commit any changes
+    execSync(`git add .claude/skills/ && git diff --cached --quiet || git commit -m "chore: update ${SKILL_NAME} skill"`, {
+      cwd: repoDir,
+      stdio: "pipe",
+    });
+  } catch (err: any) {
+    console.error(`[WARN] Failed to ensure skill: ${err.message}`);
+  }
+}
 
 function removePidFile() {
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }
