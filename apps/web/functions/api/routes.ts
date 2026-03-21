@@ -3,7 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
 import { authMiddleware, generateMachineKey, revokeMachine } from "./auth";
 import { getBoard, getBoardByProject } from "./boardRepo";
-import { createProject, listProjects, getProject, getProjectByName, deleteProject, addRepository, listRepositories, deleteRepository } from "./projectRepo";
+import { createProject, listProjects, getProject, getProjectByName, deleteProject } from "./projectRepo";
+import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { ensureAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
@@ -371,25 +372,30 @@ api.get("/api/projects/:id/board", async (c) => {
   return c.json(full);
 });
 
-api.post("/api/projects/:id/repositories", async (c) => {
+// ─── Repositories ───
+
+api.post("/api/repositories", async (c) => {
   const body = await c.req.json<{ name: string; url: string }>();
   if (!body.name || !body.url) {
     throw new HTTPException(400, { message: "name and url are required" });
   }
-  const project = await getProject(c.env.DB, c.req.param("id"));
-  if (!project) throw new HTTPException(404, { message: "Project not found" });
-  const repository = await addRepository(c.env.DB, c.req.param("id"), body);
+  const machine = c.get("machine");
+  const repository = await createRepository(c.env.DB, machine.owner_id, body);
   return c.json(repository, 201);
 });
 
-api.get("/api/projects/:id/repositories", async (c) => {
-  const repositories = await listRepositories(c.env.DB, c.req.param("id"));
+api.get("/api/repositories", async (c) => {
+  const machine = c.get("machine");
+  const repositories = await listRepositories(c.env.DB, machine.owner_id);
   return c.json(repositories);
 });
 
-api.delete("/api/projects/:id/repositories/:repoId", async (c) => {
-  const deleted = await deleteRepository(c.env.DB, c.req.param("repoId"));
-  if (!deleted) throw new HTTPException(404, { message: "Repository not found" });
+api.delete("/api/repositories/:id", async (c) => {
+  const machine = c.get("machine");
+  const repo = await c.env.DB.prepare("SELECT owner_id FROM repositories WHERE id = ?").bind(c.req.param("id")).first<{ owner_id: string }>();
+  if (!repo) throw new HTTPException(404, { message: "Repository not found" });
+  if (repo.owner_id !== machine.owner_id) throw new HTTPException(403, { message: "Forbidden" });
+  await deleteRepository(c.env.DB, c.req.param("id"));
   return c.json({ ok: true });
 });
 

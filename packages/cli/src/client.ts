@@ -81,10 +81,10 @@ export class ApiClient {
   getProjectBoard(projectId: string) { return this.request("GET", `/api/projects/${projectId}/board`); }
 
   // Repositories
-  addRepository(projectId: string, input: { name: string; url: string }) {
-    return this.request("POST", `/api/projects/${projectId}/repositories`, input);
+  createRepository(input: { name: string; url: string }) {
+    return this.request("POST", "/api/repositories", input);
   }
-  listRepositories(projectId: string) { return this.request("GET", `/api/projects/${projectId}/repositories`); }
+  listRepositories() { return this.request<any[]>("GET", "/api/repositories"); }
 
   // Agent usage
   updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {

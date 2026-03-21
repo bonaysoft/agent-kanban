@@ -45,9 +45,8 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
   }, [taskId]);
 
   useEffect(() => {
-    if (!task?.project_id) return;
-    api.projects.repositories.list(task.project_id).then(setRepositories).catch(() => {});
-  }, [task?.project_id]);
+    api.repositories.list().then(setRepositories).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!task?.depends_on || task.depends_on.length === 0) return;

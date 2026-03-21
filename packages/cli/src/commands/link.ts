@@ -19,9 +19,8 @@ function getGitRemoteUrl(): string | undefined {
 export function registerLinkCommand(program: Command) {
   program
     .command("link")
-    .description("Link current repo to a project")
-    .requiredOption("--project <name>", "Project name")
-    .action(async (opts) => {
+    .description("Register current repo and map local directory to it")
+    .action(async () => {
       let repoRoot: string;
       try {
         repoRoot = getGitRepoRoot();
@@ -30,33 +29,32 @@ export function registerLinkCommand(program: Command) {
         process.exit(1);
       }
 
-      const client = new ApiClient();
-      const projects = await client.listProjects() as any[];
-      const project = projects.find((p: any) => p.name === opts.project);
-      if (!project) {
-        console.error(`Project not found: ${opts.project}`);
+      const remoteUrl = getGitRemoteUrl();
+      if (!remoteUrl) {
+        console.error("No git remote found. Add an origin remote first.");
         process.exit(1);
       }
 
-      setLink(repoRoot, project.id);
-      console.log(`Linked ${repoRoot} → project "${project.name}" (${project.id})`);
-
-      // Auto-add repository if remote exists
-      const remoteUrl = getGitRemoteUrl();
-      if (remoteUrl) {
-        try {
-          const repositories = await client.listRepositories(project.id) as any[];
-          const exists = repositories.some((r: any) => r.url === remoteUrl);
-          if (!exists) {
-            await client.addRepository(project.id, {
-              name: basename(repoRoot),
-              url: remoteUrl,
-            });
-            console.log(`Added repository: ${remoteUrl}`);
-          }
-        } catch (err: any) {
-          console.warn(`Warning: could not add repository: ${err.message}`);
+      const client = new ApiClient();
+      let repo: any;
+      try {
+        repo = await client.createRepository({
+          name: basename(repoRoot),
+          url: remoteUrl,
+        });
+        console.log(`Registered repository: ${remoteUrl}`);
+      } catch (err: any) {
+        if (err.message?.includes("UNIQUE")) {
+          // Already exists — find it
+          const repos = await client.listRepositories();
+          repo = repos.find((r: any) => r.url === remoteUrl);
+          console.log(`Repository already registered: ${remoteUrl}`);
+        } else {
+          throw err;
         }
       }
+
+      setLink(repo.id, repoRoot);
+      console.log(`Linked repository ${repo.id} → ${repoRoot}`);
     });
 }

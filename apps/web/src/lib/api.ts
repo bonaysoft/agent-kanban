@@ -73,12 +73,10 @@ export const api = {
     create: (input: { name: string; description?: string }) => request<any>("POST", "/projects", input),
     delete: (id: string) => request<void>("DELETE", `/projects/${id}`),
     board: (id: string) => request<any>("GET", `/projects/${id}/board`),
-    repositories: {
-      list: (projectId: string) => request<any[]>("GET", `/projects/${projectId}/repositories`),
-      add: (projectId: string, input: { name: string; url: string }) =>
-        request<any>("POST", `/projects/${projectId}/repositories`, input),
-      delete: (projectId: string, repoId: string) =>
-        request<void>("DELETE", `/projects/${projectId}/repositories/${repoId}`),
-    },
+  },
+  repositories: {
+    list: () => request<any[]>("GET", "/repositories"),
+    create: (input: { name: string; url: string }) => request<any>("POST", "/repositories", input),
+    delete: (id: string) => request<void>("DELETE", `/repositories/${id}`),
   },
 };

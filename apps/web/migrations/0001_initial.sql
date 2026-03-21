@@ -25,12 +25,13 @@ CREATE INDEX idx_boards_project ON boards(project_id);
 -- Repositories
 CREATE TABLE repositories (
   id          TEXT PRIMARY KEY,
-  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  owner_id    TEXT NOT NULL,
   name        TEXT NOT NULL,
   url         TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_repositories_project ON repositories(project_id);
+CREATE INDEX idx_repositories_owner ON repositories(owner_id);
+CREATE UNIQUE INDEX idx_repositories_owner_url ON repositories(owner_id, url);
 
 -- Machines
 CREATE TABLE machines (

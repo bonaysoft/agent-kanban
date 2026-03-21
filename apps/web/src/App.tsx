@@ -5,6 +5,7 @@ import { MachinesPage } from "./routes/MachinesPage";
 import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { AgentDetailPage } from "./routes/AgentDetailPage";
+import { RepositoriesPage } from "./routes/RepositoriesPage";
 import { AuthPage } from "./routes/AuthPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { useSession } from "./lib/auth-client";
@@ -26,6 +27,7 @@ export function App() {
         <Route path="/" element={<ProtectedRoute><BoardPage /></ProtectedRoute>} />
         <Route path="/machines" element={<ProtectedRoute><MachinesPage /></ProtectedRoute>} />
         <Route path="/machines/:id" element={<ProtectedRoute><MachineDetailPage /></ProtectedRoute>} />
+        <Route path="/repos" element={<ProtectedRoute><RepositoriesPage /></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute><AgentsPage /></ProtectedRoute>} />
         <Route path="/agents/:id" element={<ProtectedRoute><AgentDetailPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

@@ -216,38 +216,6 @@ projectCmd
     output(board, fmt, formatBoard);
   });
 
-// ─── Repo ───
-
-const repoCmd = program.command("repo").description("Manage project repositories");
-
-repoCmd
-  .command("add")
-  .description("Add a repository to a project")
-  .requiredOption("--project <name-or-id>", "Project name or ID")
-  .requiredOption("--name <name>", "Repository name")
-  .requiredOption("--url <url>", "Clone URL")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (opts) => {
-    const client = new ApiClient();
-    const projectId = await resolveProjectId(client, opts.project);
-    const repo = await client.addRepository(projectId, { name: opts.name, url: opts.url });
-    const fmt = getFormat(opts.format);
-    output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
-  });
-
-repoCmd
-  .command("list")
-  .description("List repositories for a project")
-  .requiredOption("--project <name-or-id>", "Project name or ID")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (opts) => {
-    const client = new ApiClient();
-    const projectId = await resolveProjectId(client, opts.project);
-    const repos = await client.listRepositories(projectId);
-    const fmt = getFormat(opts.format);
-    output(repos, fmt, formatRepositoryList);
-  });
-
 async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<string> {
   const projects = await client.listProjects();
   const match = projects.find((p: any) => p.id === nameOrId || p.name === nameOrId);
@@ -257,6 +225,34 @@ async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<st
   }
   return match.id;
 }
+
+// ─── Repo ───
+
+const repoCmd = program.command("repo").description("Manage repositories");
+
+repoCmd
+  .command("add")
+  .description("Add a repository")
+  .requiredOption("--name <name>", "Repository name")
+  .requiredOption("--url <url>", "Clone URL")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const repo = await client.createRepository({ name: opts.name, url: opts.url });
+    const fmt = getFormat(opts.format);
+    output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
+  });
+
+repoCmd
+  .command("list")
+  .description("List repositories")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const repos = await client.listRepositories();
+    const fmt = getFormat(opts.format);
+    output(repos, fmt, formatRepositoryList);
+  });
 
 // ─── Link & Start ───
 

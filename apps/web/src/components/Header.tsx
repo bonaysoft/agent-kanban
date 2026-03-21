@@ -12,6 +12,7 @@ interface HeaderProps {
 
 const navLinks = [
   { to: "/machines", label: "Machines" },
+  { to: "/repos", label: "Repos" },
   { to: "/agents", label: "Agents" },
   { to: "/settings", label: "Settings" },
 ];

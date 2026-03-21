@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -6,7 +6,7 @@ const CONFIG_DIR = join(homedir(), ".agent-kanban");
 const LINKS_FILE = join(CONFIG_DIR, "links.json");
 
 interface Links {
-  [repoPath: string]: string; // repoPath → projectId
+  [repositoryId: string]: string; // repositoryId → localPath
 }
 
 function readLinks(): Links {
@@ -22,9 +22,9 @@ function writeLinks(links: Links): void {
   writeFileSync(LINKS_FILE, JSON.stringify(links, null, 2) + "\n");
 }
 
-export function setLink(repoPath: string, projectId: string): void {
+export function setLink(repositoryId: string, localPath: string): void {
   const links = readLinks();
-  links[repoPath] = projectId;
+  links[repositoryId] = localPath;
   writeLinks(links);
 }
 
@@ -32,15 +32,6 @@ export function getLinks(): Links {
   return readLinks();
 }
 
-export function findProjectIdForRepo(repoPath: string): string | undefined {
-  return readLinks()[repoPath];
-}
-
-export function findRepoForProject(projectId: string): string | undefined {
-  const links = readLinks();
-  return Object.entries(links).find(([, pid]) => pid === projectId)?.[0];
-}
-
-export function getLinkedProjectIds(): string[] {
-  return [...new Set(Object.values(readLinks()))];
+export function findPathForRepository(repositoryId: string): string | undefined {
+  return readLinks()[repositoryId];
 }

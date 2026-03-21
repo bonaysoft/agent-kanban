@@ -5,7 +5,7 @@ import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { ApiClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
-import { getLinkedProjectIds, findRepoForProject } from "./links.js";
+import { getLinks, findPathForRepository } from "./links.js";
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -38,27 +38,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   writeFileSync(PID_FILE, String(process.pid));
 
   const client = new ApiClient();
-  const linkedProjects = getLinkedProjectIds();
+  const links = getLinks();
+  const linkedRepoCount = Object.keys(links).length;
 
-  if (linkedProjects.length === 0) {
-    console.warn("[WARN] No linked projects. Run `ak link --project <name>` in your repo directories.");
-    console.warn("[WARN] Daemon will poll all projects.");
+  if (linkedRepoCount === 0) {
+    console.warn("[WARN] No linked repositories. Run `ak link` in your repo directories.");
   } else {
-    console.log(`[INFO] Linked projects: ${linkedProjects.length}`);
-  }
-
-  // Resolve linked project IDs → board IDs at startup
-  // boardProjectMap: boardId → projectId
-  const boardProjectMap = new Map<string, string>();
-  for (const projectId of linkedProjects) {
-    try {
-      const board = await client.getProjectBoard(projectId) as any;
-      if (board?.id) {
-        boardProjectMap.set(board.id, projectId);
-      }
-    } catch (err: any) {
-      console.warn(`[WARN] Could not resolve board for project ${projectId}: ${err.message}`);
-    }
+    console.log(`[INFO] Linked repositories: ${linkedRepoCount}`);
   }
 
   const pm = new ProcessManager(client, opts.agentCli, () => {
@@ -118,13 +104,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const tasks = await client.listTasks({ status: "Todo" }) as any[];
 
-      // Filter by linked boards (if any links exist)
-      const candidates = boardProjectMap.size > 0
-        ? tasks.filter((t: any) => boardProjectMap.has(t.board_id))
-        : tasks;
-
       // Filter out blocked and already-assigned tasks
-      const available = candidates.filter((t: any) => !t.blocked && !t.assigned_to);
+      const available = tasks.filter((t: any) => !t.blocked && !t.assigned_to);
 
       if (available.length === 0) {
         backoffMs = baseInterval;
@@ -149,11 +130,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
-      // Resolve repo directory via board → project → local link
-      const projectId = boardProjectMap.get(task.board_id);
-      const repoDir = projectId ? findRepoForProject(projectId) : undefined;
+      // Resolve repo directory via task.repository_id → local link
+      const repoDir = task.repository_id ? findPathForRepository(task.repository_id) : undefined;
       if (!repoDir) {
-        console.error(`[ERROR] No linked repo for board ${task.board_id}. Releasing task.`);
+        console.error(`[ERROR] No linked directory for repository ${task.repository_id || "(none)"}. Releasing task.`);
         await client.releaseTask(task.id).catch(() => {});
         schedulePoll(baseInterval);
         return;

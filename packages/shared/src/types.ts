@@ -131,14 +131,11 @@ export interface Project {
 
 export interface Repository {
   id: string;
-  project_id: string;
+  owner_id: string;
   name: string;
   url: string;
   created_at: string;
-}
-
-export interface ProjectWithRepositories extends Project {
-  repositories: Repository[];
+  task_count?: number;
 }
 
 // ─── Message ───
