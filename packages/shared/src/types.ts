@@ -83,6 +83,9 @@ export interface Machine {
   key_hash: string;
   name: string;
   status: MachineStatus;
+  os: string | null;
+  version: string | null;
+  runtimes: string | null;
   last_heartbeat_at: string | null;
   created_at: string;
 }

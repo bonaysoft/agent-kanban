@@ -42,7 +42,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   if (session) {
     c.set("user", session.user);
     c.set("session", session.session);
-    c.set("machine", { id: "web", owner_id: session.user.id, key_hash: "", name: "web", status: "online", last_heartbeat_at: null, created_at: "" } as Machine);
+    c.set("machine", { id: "web", owner_id: session.user.id, key_hash: "", name: "web", status: "online", os: null, version: null, runtimes: null, last_heartbeat_at: null, created_at: "" } as Machine);
     return next();
   }
 
@@ -61,7 +61,7 @@ export async function generateMachineKey(db: D1Database, ownerId: string, name: 
 
   return {
     key: rawKey,
-    machine: { id, owner_id: ownerId, key_hash: hash, name, status: "offline", last_heartbeat_at: null, created_at: now },
+    machine: { id, owner_id: ownerId, key_hash: hash, name, status: "offline", os: null, version: null, runtimes: null, last_heartbeat_at: null, created_at: now },
   };
 }
 

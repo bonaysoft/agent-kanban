@@ -65,8 +65,8 @@ export class ApiClient {
   }
 
   // Machines
-  heartbeat(name: string) {
-    return this.request("POST", "/api/machines/heartbeat", { name });
+  heartbeat(info: { name: string; os?: string; version?: string; runtimes?: string[] }) {
+    return this.request("POST", "/api/machines/heartbeat", info);
   }
 
   // Agents

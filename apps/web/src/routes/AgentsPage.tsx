@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
@@ -66,9 +67,10 @@ export function AgentsPage() {
         ) : (
           <div className="space-y-3">
             {agents.map((agent) => (
-              <div
+              <Link
                 key={agent.id}
-                className={`bg-surface-secondary border rounded-lg px-5 py-4 ${
+                to={`/agents/${agent.id}`}
+                className={`block bg-surface-secondary border rounded-lg px-5 py-4 hover:border-accent/30 transition-colors ${
                   agent.status === "working" ? "border-accent/30 shadow-[0_0_20px_rgba(34,211,238,0.08)]" : "border-border"
                 }`}
               >
@@ -113,7 +115,7 @@ export function AgentsPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

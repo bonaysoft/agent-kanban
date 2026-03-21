@@ -1,6 +1,7 @@
 import { existsSync, writeFileSync, unlinkSync, readFileSync } from "fs";
 import { join } from "path";
-import { homedir, hostname } from "os";
+import { homedir, hostname, platform, arch, release } from "os";
+import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { ApiClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
@@ -88,14 +89,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   console.log(`[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
 
   // Register machine and start heartbeat
-  const machineName = hostname();
-  await client.heartbeat(machineName).catch((err: any) =>
+  const machineInfo = getMachineInfo();
+  await client.heartbeat(machineInfo).catch((err: any) =>
     console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
   );
-  console.log(`[INFO] Machine registered: ${machineName}`);
+  console.log(`[INFO] Machine registered: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(() => {
-    client.heartbeat(machineName).catch((err: any) =>
+    client.heartbeat(machineInfo).catch((err: any) =>
       console.error(`[WARN] Heartbeat failed: ${err.message}`)
     );
   }, 30000);
@@ -193,4 +194,31 @@ function buildTaskContext(task: any): string {
 
 function removePidFile() {
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+}
+
+function detectRuntimes(): string[] {
+  const commands: [string, string][] = [
+    ["claude", "Claude Code"],
+    ["codex", "Codex"],
+    ["gemini", "Gemini CLI"],
+  ];
+  const found: string[] = [];
+  for (const [cmd, label] of commands) {
+    try {
+      execSync(`which ${cmd}`, { stdio: "ignore" });
+      found.push(label);
+    } catch { /* not installed */ }
+  }
+  return found;
+}
+
+function getMachineInfo() {
+  const os = `${platform()} ${arch()} ${release()}`;
+  const runtimes = detectRuntimes();
+  let version = "unknown";
+  try {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
+    version = pkg.version;
+  } catch { /* ignore */ }
+  return { name: hostname(), os, version, runtimes };
 }

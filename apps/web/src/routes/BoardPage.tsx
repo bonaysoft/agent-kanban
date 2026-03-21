@@ -18,7 +18,7 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 };
 
 export function BoardPage() {
-  const { board, loading, error, refresh } = useBoard();
+  const { board, projects, activeProjectId, loading, error, refresh, switchProject } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function BoardPage() {
 
   return (
     <div className="min-h-screen bg-surface-primary">
-      <Header boardName={board.name} />
+      <Header boardName={board.name} projects={projects} activeProjectId={activeProjectId} onProjectChange={switchProject} />
       <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
 
       {error && (

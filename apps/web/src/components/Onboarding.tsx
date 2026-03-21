@@ -100,12 +100,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               CLI configuration
             </label>
             <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
-{`agent-kanban config set api-url ${apiUrl}
-agent-kanban config set api-key ${apiKeyDisplay}`}
+{`npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`}
             </pre>
             <button
               onClick={() => navigator.clipboard.writeText(
-                `agent-kanban config set api-url ${apiUrl}\nagent-kanban config set api-key ${apiKeyDisplay}`
+                `npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`
               )}
               className="w-full border border-border text-content-secondary font-medium text-sm py-2.5 rounded-lg hover:border-content-tertiary"
             >

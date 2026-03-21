@@ -2,12 +2,20 @@ import type { Machine, MachineWithAgents } from "@agent-kanban/shared";
 import { MACHINE_STALE_TIMEOUT_MS } from "@agent-kanban/shared";
 import type { D1 } from "./db";
 
+export interface HeartbeatInfo {
+  name: string;
+  os?: string;
+  version?: string;
+  runtimes?: string[];
+}
+
 export async function upsertMachineHeartbeat(
   db: D1,
   machineId: string,
-  name: string,
+  info: HeartbeatInfo,
 ): Promise<Machine> {
   const now = new Date().toISOString();
+  const runtimesStr = info.runtimes?.join(",") || null;
 
   const existing = await db.prepare(
     "SELECT * FROM machines WHERE id = ?"
@@ -15,16 +23,16 @@ export async function upsertMachineHeartbeat(
 
   if (existing) {
     await db.prepare(
-      "UPDATE machines SET name = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
-    ).bind(name, now, machineId).run();
-    return { ...existing, name, status: "online", last_heartbeat_at: now };
+      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
+    ).bind(info.name, info.os || null, info.version || null, runtimesStr, now, machineId).run();
+    return { ...existing, name: info.name, os: info.os || null, version: info.version || null, runtimes: runtimesStr, status: "online", last_heartbeat_at: now };
   }
 
   await db.prepare(
-    "INSERT INTO machines (id, owner_id, key_hash, name, status, last_heartbeat_at, created_at) VALUES (?, ?, '', ?, 'online', ?, ?)"
-  ).bind(machineId, "", name, now, now).run();
+    "INSERT INTO machines (id, owner_id, key_hash, name, status, os, version, runtimes, last_heartbeat_at, created_at) VALUES (?, ?, '', ?, 'online', ?, ?, ?, ?, ?)"
+  ).bind(machineId, "", info.name, info.os || null, info.version || null, runtimesStr, now, now).run();
 
-  return { id: machineId, owner_id: "", key_hash: "", name, status: "online", last_heartbeat_at: now, created_at: now };
+  return { id: machineId, owner_id: "", key_hash: "", name: info.name, status: "online", os: info.os || null, version: info.version || null, runtimes: runtimesStr, last_heartbeat_at: now, created_at: now };
 }
 
 export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
@@ -41,15 +49,26 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
   return result.results;
 }
 
-export async function getMachine(db: D1, machineId: string): Promise<MachineWithAgents | null> {
+export async function getMachine(db: D1, machineId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
   await detectStaleMachines(db);
 
-  return db.prepare(`
+  const machine = await db.prepare(`
     SELECT m.*,
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id) as agent_count,
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id AND a.status = 'working') as active_agent_count
     FROM machines m WHERE m.id = ?
   `).bind(machineId).first<MachineWithAgents>();
+
+  if (!machine) return null;
+
+  const agents = await db.prepare(`
+    SELECT a.id, a.name, a.status,
+      (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at
+    FROM agents a WHERE a.machine_id = ?
+    ORDER BY last_active_at DESC
+  `).bind(machineId).all();
+
+  return { ...machine, agents: agents.results };
 }
 
 async function detectStaleMachines(db: D1): Promise<void> {

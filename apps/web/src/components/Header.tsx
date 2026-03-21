@@ -5,6 +5,9 @@ import { signOut, clearAuthToken } from "../lib/auth-client";
 
 interface HeaderProps {
   boardName?: string;
+  projects?: { id: string; name: string }[];
+  activeProjectId?: string | null;
+  onProjectChange?: (projectId: string) => void;
 }
 
 const navLinks = [
@@ -47,7 +50,7 @@ function MonitorIcon() {
   );
 }
 
-const themeIcons: Record<Theme, () => JSX.Element> = {
+const themeIcons: Record<Theme, () => React.ReactElement> = {
   light: SunIcon,
   dark: MoonIcon,
   system: MonitorIcon,
@@ -63,8 +66,9 @@ function LogOutIcon() {
   );
 }
 
-export function Header({ boardName }: HeaderProps) {
+export function Header({ boardName, projects, activeProjectId, onProjectChange }: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(getTheme());
+  const [projectOpen, setProjectOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -82,10 +86,40 @@ export function Header({ boardName }: HeaderProps) {
         <Link to="/" className="text-[15px] font-bold tracking-tight text-content-primary">
           Agent <span className="text-accent">Kanban</span>
         </Link>
-        {boardName && (
-          <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-1 rounded-md">
-            {boardName}
-          </span>
+        {projects && projects.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setProjectOpen(!projectOpen)}
+              className="flex items-center gap-1.5 text-xs text-content-secondary bg-surface-tertiary px-2.5 py-1 rounded-md hover:text-content-primary transition-colors"
+            >
+              {boardName || "Select project"}
+              {projects.length > 1 && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
+            </button>
+            {projectOpen && projects.length > 1 && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setProjectOpen(false)} />
+                <div className="absolute top-full left-0 mt-1 w-48 bg-surface-secondary border border-border rounded-lg shadow-lg z-40 py-1">
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => { onProjectChange?.(p.id); setProjectOpen(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                        p.id === activeProjectId
+                          ? "text-accent bg-accent-soft"
+                          : "text-content-secondary hover:bg-surface-tertiary hover:text-content-primary"
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1">

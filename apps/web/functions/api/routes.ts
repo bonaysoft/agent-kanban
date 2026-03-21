@@ -44,10 +44,10 @@ api.use("/api/*", async (c, next) => {
 // ─── Machines ───
 
 api.post("/api/machines/heartbeat", async (c) => {
-  const body = await c.req.json<{ name: string }>();
+  const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[] }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
   const machine = c.get("machine");
-  const updated = await upsertMachineHeartbeat(c.env.DB, machine.id, body.name);
+  const updated = await upsertMachineHeartbeat(c.env.DB, machine.id, body);
   return c.json(updated);
 });
 
@@ -66,8 +66,8 @@ api.get("/api/machines/:id", async (c) => {
 api.post("/api/machines", async (c) => {
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
   const machine = c.get("machine");
-  const { key, record } = await generateMachineKey(c.env.DB, machine.owner_id, body.name || "unnamed");
-  return c.json({ key, id: record.id, name: record.name, created_at: record.created_at }, 201);
+  const { key, machine: created } = await generateMachineKey(c.env.DB, machine.owner_id, body.name || "unnamed");
+  return c.json({ key, id: created.id, name: created.name, created_at: created.created_at }, 201);
 });
 
 api.delete("/api/machines/:id", async (c) => {
