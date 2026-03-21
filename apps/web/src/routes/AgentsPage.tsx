@@ -22,9 +22,9 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function formatCost(usd: number): string {
-  if (!usd) return "$0.00";
-  return `$${usd.toFixed(2)}`;
+function formatCost(microUsd: number): string {
+  if (!microUsd) return "$0.00";
+  return `$${(microUsd / 1_000_000).toFixed(2)}`;
 }
 
 export function AgentsPage() {
@@ -104,7 +104,7 @@ export function AgentsPage() {
                   </div>
                   <div>
                     <span className="text-content-tertiary block">Cost</span>
-                    <span className="font-mono text-content-primary">{formatCost(agent.cost_usd)}</span>
+                    <span className="font-mono text-content-primary">{formatCost(agent.cost_micro_usd)}</span>
                   </div>
                   <div>
                     <span className="text-content-tertiary block">Last Active</span>

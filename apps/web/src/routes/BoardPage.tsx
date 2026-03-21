@@ -7,6 +7,16 @@ import { AgentProfile } from "../components/AgentProfile";
 import { Onboarding } from "../components/Onboarding";
 import { useBoard } from "../hooks/useBoard";
 
+const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  todo: "Todo",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
 export function BoardPage() {
   const { board, loading, error, refresh } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
@@ -15,13 +25,11 @@ export function BoardPage() {
   const [mobileTab, setMobileTab] = useState(0);
 
   const projects = useMemo(() => {
-    if (!board?.columns) return [];
+    if (!board?.tasks) return [];
     const map = new Map<string, string>();
-    for (const col of board.columns) {
-      for (const task of col.tasks) {
-        if (task.project_id && task.project_name) {
-          map.set(task.project_id, task.project_name);
-        }
+    for (const task of board.tasks) {
+      if (task.project_id && task.project_name) {
+        map.set(task.project_id, task.project_name);
       }
     }
     return Array.from(map.entries())
@@ -29,15 +37,16 @@ export function BoardPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [board]);
 
-  const filteredBoard = useMemo(() => {
-    if (!board || !activeProject) return board;
-    return {
-      ...board,
-      columns: board.columns.map((col: any) => ({
-        ...col,
-        tasks: col.tasks.filter((t: any) => t.project_id === activeProject),
-      })),
-    };
+  const columns = useMemo(() => {
+    if (!board?.tasks) return [];
+    const tasks = activeProject
+      ? board.tasks.filter((t: any) => t.project_id === activeProject)
+      : board.tasks;
+    return TASK_STATUSES.map((status) => ({
+      status,
+      name: TASK_STATUS_LABELS[status],
+      tasks: tasks.filter((t: any) => t.status === status),
+    }));
   }, [board, activeProject]);
 
   if (error === "NOT_AUTHENTICATED") {
@@ -103,9 +112,9 @@ export function BoardPage() {
 
       {/* Mobile tab switcher */}
       <div className="flex md:hidden border-b border-border">
-        {(filteredBoard?.columns || []).map((col: any, i: number) => (
+        {columns.map((col, i) => (
           <button
-            key={col.id}
+            key={col.status}
             onClick={() => setMobileTab(i)}
             className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide text-center transition-colors ${
               mobileTab === i ? "text-accent border-b-2 border-accent" : "text-content-tertiary"
@@ -116,11 +125,11 @@ export function BoardPage() {
         ))}
       </div>
 
-      {/* Desktop: dynamic column grid */}
-      <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${filteredBoard?.columns?.length || 5}, minmax(0, 1fr))` }}>
-        {(filteredBoard?.columns || []).map((col: any) => (
+      {/* Desktop: 5-column grid */}
+      <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
+        {columns.map((col) => (
           <KanbanColumn
-            key={col.id}
+            key={col.status}
             column={col}
             onTaskClick={setSelectedTask}
             onAgentClick={setSelectedAgent}
@@ -131,9 +140,9 @@ export function BoardPage() {
 
       {/* Mobile: single column based on tab */}
       <div className="md:hidden min-h-[calc(100vh-160px)]">
-        {(filteredBoard?.columns || []).filter((_: any, i: number) => i === mobileTab).map((col: any) => (
+        {columns.filter((_, i) => i === mobileTab).map((col) => (
           <KanbanColumn
-            key={col.id}
+            key={col.status}
             column={col}
             onTaskClick={setSelectedTask}
             onAgentClick={setSelectedAgent}
@@ -150,7 +159,6 @@ export function BoardPage() {
           />
           <TaskDetail
             taskId={selectedTask}
-            columns={(board?.columns || []).map((c: any) => ({ id: c.id, name: c.name }))}
             onClose={() => setSelectedTask(null)}
             onRefresh={refresh}
             onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}

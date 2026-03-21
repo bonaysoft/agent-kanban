@@ -1,5 +1,6 @@
 import type { Context, Next } from "hono";
-import type { ApiKey } from "@agent-kanban/shared";
+import type { Machine } from "@agent-kanban/shared";
+import { newId, type D1 } from "./db";
 import type { Env } from "./types";
 
 async function hashKey(key: string): Promise<string> {
@@ -11,9 +12,9 @@ async function hashKey(key: string): Promise<string> {
     .join("");
 }
 
-export async function validateToken(db: D1Database, token: string): Promise<ApiKey | null> {
+export async function validateToken(db: D1Database, token: string): Promise<Machine | null> {
   const hash = await hashKey(token);
-  return db.prepare("SELECT * FROM api_keys WHERE key_hash = ?").bind(hash).first<ApiKey>();
+  return db.prepare("SELECT * FROM machines WHERE key_hash = ?").bind(hash).first<Machine>();
 }
 
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
@@ -22,40 +23,33 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return c.json({ error: { code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" } }, 401);
   }
 
-  const key = await validateToken(c.env.DB, header.slice(7));
+  const machine = await validateToken(c.env.DB, header.slice(7));
 
-  if (!key) {
+  if (!machine) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
   }
 
-  c.set("apiKey", key);
+  c.set("machine", machine);
   await next();
 }
 
-export async function generateApiKey(db: D1Database, name: string | null): Promise<{ key: string; record: ApiKey }> {
+export async function generateMachineKey(db: D1Database, ownerId: string, name: string): Promise<{ key: string; machine: Machine }> {
   const rawKey = `ak_${crypto.randomUUID().replace(/-/g, "")}`;
   const hash = await hashKey(rawKey);
-  const id = crypto.randomUUID().slice(0, 8);
+  const id = newId();
   const now = new Date().toISOString();
 
   await db.prepare(
-    "INSERT INTO api_keys (id, key_hash, name, created_at) VALUES (?, ?, ?, ?)"
-  ).bind(id, hash, name, now).run();
+    "INSERT INTO machines (id, owner_id, key_hash, name, status, last_heartbeat_at, created_at) VALUES (?, ?, ?, ?, 'offline', NULL, ?)"
+  ).bind(id, ownerId, hash, name, now).run();
 
   return {
     key: rawKey,
-    record: { id, key_hash: hash, name, created_at: now },
+    machine: { id, owner_id: ownerId, key_hash: hash, name, status: "offline", last_heartbeat_at: null, created_at: now },
   };
 }
 
-export async function revokeApiKey(db: D1Database, keyId: string): Promise<boolean> {
-  const result = await db.prepare("DELETE FROM api_keys WHERE id = ?").bind(keyId).run();
+export async function revokeMachine(db: D1Database, machineId: string): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM machines WHERE id = ?").bind(machineId).run();
   return result.meta.changes > 0;
-}
-
-export async function listApiKeys(db: D1Database): Promise<Omit<ApiKey, "key_hash">[]> {
-  const result = await db.prepare(
-    "SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC"
-  ).all<Omit<ApiKey, "key_hash">>();
-  return result.results;
 }

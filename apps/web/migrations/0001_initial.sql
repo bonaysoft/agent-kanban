@@ -1,67 +1,123 @@
--- Agent Kanban v1 schema
+-- Agent Kanban v2 schema
+-- Auth tables (user, session, account, verification) managed by better-auth
 
+-- Boards
 CREATE TABLE boards (
   id          TEXT PRIMARY KEY,
+  owner_id    TEXT NOT NULL,
   name        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX idx_boards_owner ON boards(owner_id);
 
-CREATE TABLE columns (
-  id          TEXT PRIMARY KEY,
-  board_id    TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  position    INTEGER NOT NULL
+-- Machines (merged api_keys + machines)
+CREATE TABLE machines (
+  id                TEXT PRIMARY KEY,
+  owner_id          TEXT NOT NULL,
+  key_hash          TEXT NOT NULL,
+  name              TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'online',
+  last_heartbeat_at TEXT,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX idx_machines_owner ON machines(owner_id);
 
-CREATE INDEX idx_columns_board ON columns(board_id);
-
-CREATE TABLE api_keys (
-  id          TEXT PRIMARY KEY,
-  key_hash    TEXT NOT NULL,
-  name        TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
+-- Agents
 CREATE TABLE agents (
-  id          TEXT PRIMARY KEY,
-  machine_id  TEXT NOT NULL REFERENCES api_keys(id),
-  name        TEXT NOT NULL,
-  role_id     TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id                    TEXT PRIMARY KEY,
+  machine_id            TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
+  name                  TEXT NOT NULL,
+  role_id               TEXT,
+  status                TEXT NOT NULL DEFAULT 'idle',
+  input_tokens          INTEGER NOT NULL DEFAULT 0,
+  output_tokens         INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens     INTEGER NOT NULL DEFAULT 0,
+  cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micro_usd        INTEGER NOT NULL DEFAULT 0,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE INDEX idx_agents_machine ON agents(machine_id);
-CREATE UNIQUE INDEX idx_agents_machine_name ON agents(machine_id, name);
 
-CREATE TABLE tasks (
+-- Projects
+CREATE TABLE projects (
   id          TEXT PRIMARY KEY,
-  column_id   TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
-  title       TEXT NOT NULL,
+  owner_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
   description TEXT,
-  project     TEXT,
-  labels      TEXT,
-  priority    TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
-  created_by  TEXT,
-  assigned_to TEXT,
-  result      TEXT,
-  pr_url      TEXT,
-  input       TEXT,
-  position    INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX idx_projects_owner_name ON projects(owner_id, name);
 
-CREATE INDEX idx_tasks_column ON tasks(column_id);
-CREATE INDEX idx_tasks_project ON tasks(project);
+-- Project resources
+CREATE TABLE project_resources (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL CHECK(type IN ('git_repo')),
+  name        TEXT NOT NULL,
+  uri         TEXT NOT NULL,
+  config      TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_project_resources_project ON project_resources(project_id);
 
+-- Tasks
+CREATE TABLE tasks (
+  id           TEXT PRIMARY KEY,
+  board_id     TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL DEFAULT 'todo'
+               CHECK(status IN ('todo', 'in_progress', 'in_review', 'done', 'cancelled')),
+  title        TEXT NOT NULL,
+  description  TEXT,
+  project_id   TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  labels       TEXT,
+  priority     TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+  created_by   TEXT,
+  assigned_to  TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  result       TEXT,
+  pr_url       TEXT,
+  input        TEXT,
+  created_from TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_tasks_board ON tasks(board_id);
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_project ON tasks(project_id);
+CREATE INDEX idx_tasks_created_from ON tasks(created_from);
+
+-- Task dependencies (DAG)
+CREATE TABLE task_dependencies (
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  depends_on  TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, depends_on),
+  CHECK(task_id != depends_on)
+);
+CREATE INDEX idx_task_deps_depends ON task_dependencies(depends_on);
+
+-- Task logs
 CREATE TABLE task_logs (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  agent_id    TEXT,
-  action      TEXT NOT NULL CHECK(action IN ('created', 'claimed', 'moved', 'commented', 'completed')),
+  agent_id    TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  action      TEXT NOT NULL CHECK(action IN (
+    'created', 'claimed', 'moved', 'commented', 'completed',
+    'assigned', 'released', 'timed_out', 'cancelled', 'review_requested'
+  )),
   detail      TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
 CREATE INDEX idx_task_logs_task ON task_logs(task_id);
+
+-- Messages
+CREATE TABLE messages (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL CHECK(role IN ('human', 'agent')),
+  content     TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_messages_task ON messages(task_id, created_at);

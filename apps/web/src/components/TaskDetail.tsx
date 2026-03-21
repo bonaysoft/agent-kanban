@@ -7,9 +7,18 @@ import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
 import { AssignDropdown } from "./AssignDropdown";
 
+const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  todo: "Todo",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
 interface TaskDetailProps {
   taskId: string;
-  columns: { id: string; name: string }[];
   onClose: () => void;
   onRefresh: () => void;
   onAgentClick?: (agentId: string) => void;
@@ -19,7 +28,7 @@ const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
 type Tab = "details" | "chat";
 
-export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
+export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
@@ -37,8 +46,8 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
   }, [taskId]);
 
   useEffect(() => {
-    if (!task?.depends_on) return;
-    const depIds: string[] = JSON.parse(task.depends_on);
+    if (!task?.depends_on || task.depends_on.length === 0) return;
+    const depIds: string[] = task.depends_on;
     Promise.all(depIds.map((id) => api.tasks.get(id).then((t: any) => [id, t.title] as const)))
       .then((entries) => setDepTitles(Object.fromEntries(entries)));
   }, [task?.depends_on]);
@@ -49,8 +58,8 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
     onRefresh();
   }
 
-  async function handleColumnChange(columnId: string) {
-    await api.tasks.update(taskId, { column_id: columnId });
+  async function handleStatusChange(status: string) {
+    await api.tasks.update(taskId, { status });
     await reload();
     onRefresh();
   }
@@ -84,12 +93,12 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
     );
   }
 
-  const dependsOn: string[] = task.depends_on ? JSON.parse(task.depends_on) : [];
+  const dependsOn: string[] = task.depends_on || [];
   const hasAgent = !!task.assigned_to;
 
   return (
     <Panel>
-      {/* Header — fixed above tabs */}
+      {/* Header */}
       <div className="flex items-start justify-between p-5 border-b border-border">
         <div className="flex-1 min-w-0 mr-4">
           <div className="flex items-center gap-2">
@@ -162,14 +171,14 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
           {/* Status row */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <FieldLabel>Column</FieldLabel>
+              <FieldLabel>Status</FieldLabel>
               <select
-                value={task.column_id}
-                onChange={(e) => handleColumnChange(e.target.value)}
+                value={task.status}
+                onChange={(e) => handleStatusChange(e.target.value)}
                 className="text-sm bg-transparent text-accent border-none outline-none cursor-pointer"
               >
-                {columns.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {TASK_STATUSES.map((s) => (
+                  <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>
                 ))}
               </select>
             </div>
@@ -280,7 +289,7 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
           <ChatPanel
             taskId={taskId}
             agentId={task.assigned_to}
-            taskDone={columns.find((c) => c.id === task.column_id)?.name === "Done"}
+            taskDone={task.status === "done"}
             initialMessages={initialMessages}
             sseMessages={sseMessages}
           />

@@ -3,17 +3,13 @@ import type { D1 } from "./db";
 export async function detectCycle(db: D1, taskId: string, dependsOn: string[]): Promise<boolean> {
   if (dependsOn.includes(taskId)) return true;
 
-  // Use recursive CTE to walk the dependency graph from each dep
-  // If we ever reach taskId, there's a cycle
   for (const depId of dependsOn) {
     const result = await db.prepare(`
       WITH RECURSIVE dep_chain(tid) AS (
         SELECT ?
         UNION
-        SELECT je.value FROM dep_chain dc
-        JOIN tasks t ON t.id = dc.tid
-        JOIN json_each(t.depends_on) je
-        WHERE t.depends_on IS NOT NULL
+        SELECT td.depends_on FROM dep_chain dc
+        JOIN task_dependencies td ON td.task_id = dc.tid
       )
       SELECT 1 FROM dep_chain WHERE tid = ? LIMIT 1
     `).bind(depId, taskId).first();
@@ -25,26 +21,31 @@ export async function detectCycle(db: D1, taskId: string, dependsOn: string[]): 
 }
 
 export async function computeBlocked(db: D1, taskIds: string[]): Promise<Set<string>> {
-  const blocked = new Set<string>();
+  if (taskIds.length === 0) return new Set();
 
-  for (const taskId of taskIds) {
-    const task = await db.prepare("SELECT depends_on FROM tasks WHERE id = ?").bind(taskId).first<{ depends_on: string | null }>();
-    if (!task?.depends_on) continue;
+  const placeholders = taskIds.map(() => "?").join(",");
+  const result = await db.prepare(`
+    SELECT DISTINCT td.task_id FROM task_dependencies td
+    JOIN tasks dep ON dep.id = td.depends_on
+    WHERE td.task_id IN (${placeholders}) AND dep.status NOT IN ('done', 'cancelled')
+  `).bind(...taskIds).all<{ task_id: string }>();
 
-    const deps: string[] = JSON.parse(task.depends_on);
-    if (deps.length === 0) continue;
+  return new Set(result.results.map((r: { task_id: string }) => r.task_id));
+}
 
-    // Check if any dependency is NOT in a Done column
-    const placeholders = deps.map(() => "?").join(",");
-    const undone = await db.prepare(`
-      SELECT t.id FROM tasks t
-      JOIN columns c ON t.column_id = c.id
-      WHERE t.id IN (${placeholders}) AND c.name NOT IN ('Done', 'Cancelled')
-      LIMIT 1
-    `).bind(...deps).first();
+export async function getDependencies(db: D1, taskId: string): Promise<string[]> {
+  const result = await db.prepare(
+    "SELECT depends_on FROM task_dependencies WHERE task_id = ?"
+  ).bind(taskId).all<{ depends_on: string }>();
+  return result.results.map((r: { depends_on: string }) => r.depends_on);
+}
 
-    if (undone) blocked.add(taskId);
-  }
-
-  return blocked;
+export async function setDependencies(db: D1, taskId: string, deps: string[]): Promise<void> {
+  const stmts = [
+    db.prepare("DELETE FROM task_dependencies WHERE task_id = ?").bind(taskId),
+    ...deps.map((depId) =>
+      db.prepare("INSERT INTO task_dependencies (task_id, depends_on) VALUES (?, ?)").bind(taskId, depId)
+    ),
+  ];
+  await db.batch(stmts);
 }

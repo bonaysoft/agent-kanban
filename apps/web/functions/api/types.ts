@@ -1,4 +1,4 @@
-import type { ApiKey } from "@agent-kanban/shared";
+import type { Machine } from "@agent-kanban/shared";
 
 export interface Env {
   DB: D1Database;
@@ -6,6 +6,6 @@ export interface Env {
 
 declare module "hono" {
   interface ContextVariableMap {
-    apiKey: ApiKey;
+    machine: Machine;
   }
 }

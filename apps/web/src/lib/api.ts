@@ -72,6 +72,8 @@ export const api = {
   machines: {
     list: () => request<any[]>("GET", "/machines"),
     get: (id: string) => request<any>("GET", `/machines/${id}`),
+    create: (name?: string) => request<any>("POST", "/machines", { name }),
+    delete: (id: string) => request<void>("DELETE", `/machines/${id}`),
   },
   projects: {
     list: () => request<any[]>("GET", "/projects"),
@@ -84,13 +86,6 @@ export const api = {
         request<any>("POST", `/projects/${projectId}/resources`, input),
       delete: (projectId: string, resourceId: string) =>
         request<void>("DELETE", `/projects/${projectId}/resources/${resourceId}`),
-    },
-  },
-  auth: {
-    keys: {
-      list: () => request<any[]>("GET", "/auth/keys"),
-      create: (name?: string) => request<any>("POST", "/auth/keys", { name }),
-      revoke: (id: string) => request<void>("DELETE", `/auth/keys/${id}`),
     },
   },
 };

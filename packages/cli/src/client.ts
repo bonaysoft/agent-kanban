@@ -91,7 +91,7 @@ export class ApiClient {
   listResources(projectId: string) { return this.request("GET", `/api/projects/${projectId}/resources`); }
 
   // Agent usage
-  updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_usd: number }) {
+  updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
     return this.request("PATCH", `/api/agents/${agentId}/usage`, usage);
   }
 

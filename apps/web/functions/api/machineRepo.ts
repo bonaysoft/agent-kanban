@@ -21,13 +21,13 @@ export async function upsertMachineHeartbeat(
   }
 
   await db.prepare(
-    "INSERT INTO machines (id, name, status, last_heartbeat_at, created_at) VALUES (?, ?, 'online', ?, ?)"
-  ).bind(machineId, name, now, now).run();
+    "INSERT INTO machines (id, owner_id, key_hash, name, status, last_heartbeat_at, created_at) VALUES (?, ?, '', ?, 'online', ?, ?)"
+  ).bind(machineId, "", name, now, now).run();
 
-  return { id: machineId, name, status: "online", last_heartbeat_at: now, created_at: now };
+  return { id: machineId, owner_id: "", key_hash: "", name, status: "online", last_heartbeat_at: now, created_at: now };
 }
 
-export async function listMachines(db: D1): Promise<MachineWithAgents[]> {
+export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
   await detectStaleMachines(db);
 
   const result = await db.prepare(`
@@ -35,8 +35,9 @@ export async function listMachines(db: D1): Promise<MachineWithAgents[]> {
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id) as agent_count,
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id AND a.status = 'working') as active_agent_count
     FROM machines m
+    WHERE m.owner_id = ?
     ORDER BY m.last_heartbeat_at DESC
-  `).all<MachineWithAgents>();
+  `).bind(ownerId).all<MachineWithAgents>();
   return result.results;
 }
 

@@ -1,38 +1,38 @@
 import { describe, it, expect } from "vitest";
 import {
-  DEFAULT_COLUMNS,
+  TASK_STATUSES,
   TASK_ACTIONS,
 } from "@agent-kanban/shared";
 
-describe("review and cancel columns", () => {
-  it("DEFAULT_COLUMNS includes 'In Review' at position 2", () => {
-    expect(DEFAULT_COLUMNS[2]).toBe("In Review");
+describe("task statuses", () => {
+  it("TASK_STATUSES includes 'in_review' at position 2", () => {
+    expect(TASK_STATUSES[2]).toBe("in_review");
   });
 
-  it("DEFAULT_COLUMNS includes 'Cancelled' at position 4", () => {
-    expect(DEFAULT_COLUMNS[4]).toBe("Cancelled");
+  it("TASK_STATUSES includes 'cancelled' at position 4", () => {
+    expect(TASK_STATUSES[4]).toBe("cancelled");
   });
 
-  it("DEFAULT_COLUMNS has the full ordered list", () => {
-    expect([...DEFAULT_COLUMNS]).toEqual([
-      "Todo",
-      "In Progress",
-      "In Review",
-      "Done",
-      "Cancelled",
+  it("TASK_STATUSES has the full ordered list", () => {
+    expect([...TASK_STATUSES]).toEqual([
+      "todo",
+      "in_progress",
+      "in_review",
+      "done",
+      "cancelled",
     ]);
   });
 
-  it("'In Review' comes after 'In Progress' and before 'Done'", () => {
-    const inProgress = DEFAULT_COLUMNS.indexOf("In Progress");
-    const inReview = DEFAULT_COLUMNS.indexOf("In Review");
-    const done = DEFAULT_COLUMNS.indexOf("Done");
+  it("'in_review' comes after 'in_progress' and before 'done'", () => {
+    const inProgress = TASK_STATUSES.indexOf("in_progress");
+    const inReview = TASK_STATUSES.indexOf("in_review");
+    const done = TASK_STATUSES.indexOf("done");
     expect(inReview).toBe(inProgress + 1);
     expect(inReview).toBe(done - 1);
   });
 
-  it("'Cancelled' is the last column", () => {
-    expect(DEFAULT_COLUMNS[DEFAULT_COLUMNS.length - 1]).toBe("Cancelled");
+  it("'cancelled' is the last status", () => {
+    expect(TASK_STATUSES[TASK_STATUSES.length - 1]).toBe("cancelled");
   });
 });
 

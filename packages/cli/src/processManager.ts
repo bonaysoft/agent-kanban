@@ -166,7 +166,7 @@ export class ProcessManager {
         output_tokens: usage.output_tokens || 0,
         cache_read_tokens: usage.cache_read_input_tokens || 0,
         cache_creation_tokens: usage.cache_creation_input_tokens || 0,
-        cost_usd: cost,
+        cost_micro_usd: Math.round(cost * 1_000_000),
       }).catch(() => {});
     }
   }

@@ -1,5 +1,5 @@
 import type { Agent, AgentStatus, AgentWithActivity } from "@agent-kanban/shared";
-import { newId, type D1 } from "./db";
+import type { D1 } from "./db";
 
 export async function ensureAgent(
   db: D1,
@@ -13,13 +13,13 @@ export async function ensureAgent(
   if (existing) return existing;
 
   const now = new Date().toISOString();
-
   const name = `Agent-${agentId.slice(0, 6)}`;
+
   await db.prepare(
-    "INSERT INTO agents (id, machine_id, name, role_id, status, created_at) VALUES (?, ?, ?, NULL, 'idle', ?)"
+    "INSERT INTO agents (id, machine_id, name, role_id, status, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_micro_usd, created_at) VALUES (?, ?, ?, NULL, 'idle', 0, 0, 0, 0, 0, ?)"
   ).bind(agentId, machineId, name, now).run();
 
-  return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", created_at: now };
+  return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0, created_at: now };
 }
 
 export async function listAgents(db: D1): Promise<AgentWithActivity[]> {
@@ -54,7 +54,7 @@ export interface AgentUsage {
   output_tokens: number;
   cache_read_tokens: number;
   cache_creation_tokens: number;
-  cost_usd: number;
+  cost_micro_usd: number;
 }
 
 export async function updateAgentUsage(db: D1, agentId: string, usage: AgentUsage): Promise<void> {
@@ -64,12 +64,12 @@ export async function updateAgentUsage(db: D1, agentId: string, usage: AgentUsag
       output_tokens = output_tokens + ?,
       cache_read_tokens = cache_read_tokens + ?,
       cache_creation_tokens = cache_creation_tokens + ?,
-      cost_usd = cost_usd + ?
+      cost_micro_usd = cost_micro_usd + ?
     WHERE id = ?
   `).bind(
     usage.input_tokens, usage.output_tokens,
     usage.cache_read_tokens, usage.cache_creation_tokens,
-    usage.cost_usd, agentId,
+    usage.cost_micro_usd, agentId,
   ).run();
 }
 
@@ -84,8 +84,7 @@ export async function setAgentWorkingIfIdle(db: D1, agentId: string): Promise<vo
 export async function setAgentIdleIfNoActiveTasks(db: D1, agentId: string): Promise<void> {
   const active = await db.prepare(`
     SELECT COUNT(*) as cnt FROM tasks t
-    JOIN columns c ON t.column_id = c.id
-    WHERE t.assigned_to = ? AND c.name IN ('In Progress', 'In Review')
+    WHERE t.assigned_to = ? AND t.status IN ('in_progress', 'in_review')
   `).bind(agentId).first<{ cnt: number }>();
 
   if (active && active.cnt === 0) {

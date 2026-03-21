@@ -1,43 +1,52 @@
+// ─── Board ───
+
 export interface Board {
   id: string;
+  owner_id: string;
   name: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface Column {
-  id: string;
-  board_id: string;
-  name: string;
-  position: number;
+export interface BoardWithTasks extends Board {
+  tasks: Task[];
 }
+
+// ─── Task ───
+
+export type TaskStatus = "todo" | "in_progress" | "in_review" | "done" | "cancelled";
 
 export interface Task {
   id: string;
-  column_id: string;
+  board_id: string;
+  status: TaskStatus;
   title: string;
   description: string | null;
   project_id: string | null;
-  labels: string | null; // JSON array stored as TEXT
+  labels: string | null;
   priority: Priority | null;
   created_by: string | null;
   assigned_to: string | null;
   result: string | null;
   pr_url: string | null;
-  input: string | null; // JSON object stored as TEXT
-  depends_on: string | null; // JSON array of task IDs stored as TEXT
-  created_from: string | null; // Parent task ID
+  input: string | null;
+  created_from: string | null;
   position: number;
   created_at: string;
   updated_at: string;
-  blocked?: boolean; // Computed, not stored
-  project_name?: string; // Joined from projects table
+  blocked?: boolean;
+  project_name?: string;
+  agent_name?: string;
 }
 
 export interface TaskWithMeta extends Task {
-  column_name: string;
   duration_minutes: number | null;
-  agent_name: string | null;
+  subtask_count: number;
+  depends_on: string[];
+}
+
+export interface TaskWithLogs extends TaskWithMeta {
+  logs: TaskLog[];
 }
 
 export interface TaskLog {
@@ -46,44 +55,6 @@ export interface TaskLog {
   agent_id: string | null;
   action: TaskAction;
   detail: string | null;
-  created_at: string;
-}
-
-export type MachineStatus = "online" | "offline";
-
-export interface Machine {
-  id: string;
-  name: string;
-  status: MachineStatus;
-  last_heartbeat_at: string;
-  created_at: string;
-}
-
-export interface MachineWithAgents extends Machine {
-  agent_count: number;
-  active_agent_count: number;
-}
-
-export type AgentStatus = "idle" | "working" | "offline";
-
-export interface Agent {
-  id: string;
-  machine_id: string;
-  name: string;
-  role_id: string | null;
-  status: AgentStatus;
-  created_at: string;
-}
-
-export interface AgentWithActivity extends Agent {
-  last_active_at: string | null;
-  task_count: number;
-}
-
-export interface ApiKey {
-  id: string;
-  key_hash: string;
-  name: string | null;
   created_at: string;
 }
 
@@ -101,39 +72,53 @@ export type TaskAction =
   | "cancelled"
   | "review_requested";
 
-export interface BoardWithColumns extends Board {
-  columns: ColumnWithTasks[];
-}
+// ─── Machine ───
 
-export interface ColumnWithTasks extends Column {
-  tasks: Task[];
-}
+export type MachineStatus = "online" | "offline";
 
-export interface TaskWithLogs extends Task {
-  logs: TaskLog[];
-  duration_minutes: number | null;
-}
-
-export type MessageRole = "human" | "agent";
-
-export interface Message {
+export interface Machine {
   id: string;
-  task_id: string;
-  agent_id: string;
-  role: MessageRole;
-  content: string;
+  owner_id: string;
+  key_hash: string;
+  name: string;
+  status: MachineStatus;
+  last_heartbeat_at: string | null;
   created_at: string;
 }
 
-export interface ErrorEnvelope {
-  error: {
-    code: string;
-    message: string;
-  };
+export interface MachineWithAgents extends Machine {
+  agent_count: number;
+  active_agent_count: number;
 }
+
+// ─── Agent ───
+
+export type AgentStatus = "idle" | "working" | "offline";
+
+export interface Agent {
+  id: string;
+  machine_id: string;
+  name: string;
+  role_id: string | null;
+  status: AgentStatus;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_micro_usd: number;
+  created_at: string;
+}
+
+export interface AgentWithActivity extends Agent {
+  last_active_at: string | null;
+  task_count: number;
+}
+
+// ─── Project ───
 
 export interface Project {
   id: string;
+  owner_id: string;
   name: string;
   description: string | null;
   created_at: string;
@@ -154,16 +139,30 @@ export interface ProjectWithResources extends Project {
   resources: ProjectResource[];
 }
 
-export interface CreateProjectInput {
-  name: string;
-  description?: string;
+// ─── Message ───
+
+export type MessageRole = "human" | "agent";
+
+export interface Message {
+  id: string;
+  task_id: string;
+  agent_id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
 }
 
-export interface CreateResourceInput {
-  type: string;
+// ─── API ───
+
+export interface ErrorEnvelope {
+  error: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface CreateBoardInput {
   name: string;
-  uri: string;
-  config?: string;
 }
 
 export interface CreateTaskInput {
@@ -183,16 +182,20 @@ export interface AssignTaskInput {
   agent_id: string;
 }
 
-export interface ClaimTaskInput {
-  agent_id?: string;
-}
-
 export interface CompleteTaskInput {
   result?: string;
   pr_url?: string;
   agent_id?: string;
 }
 
-export interface CreateBoardInput {
+export interface CreateProjectInput {
   name: string;
+  description?: string;
+}
+
+export interface CreateResourceInput {
+  type: string;
+  name: string;
+  uri: string;
+  config?: string;
 }

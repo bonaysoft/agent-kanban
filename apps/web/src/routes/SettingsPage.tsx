@@ -5,27 +5,27 @@ import { api } from "../lib/api";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 
 export function SettingsPage() {
-  const [keys, setKeys] = useState<any[]>([]);
+  const [machines, setMachines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [currentTheme, setCurrentTheme] = useState<Theme>(getTheme());
 
   useEffect(() => {
-    api.auth.keys.list().then(setKeys).finally(() => setLoading(false));
+    api.machines.list().then(setMachines).finally(() => setLoading(false));
   }, []);
 
   async function handleCreate() {
-    const result = await api.auth.keys.create(newKeyName || undefined);
+    const result = await api.machines.create(newKeyName || undefined);
     setCreatedKey(result.key);
     setNewKeyName("");
-    const updated = await api.auth.keys.list();
-    setKeys(updated);
+    const updated = await api.machines.list();
+    setMachines(updated);
   }
 
-  async function handleRevoke(id: string) {
-    await api.auth.keys.revoke(id);
-    setKeys(keys.filter((k) => k.id !== id));
+  async function handleDelete(id: string) {
+    await api.machines.delete(id);
+    setMachines(machines.filter((m) => m.id !== id));
   }
 
   function handleTheme(theme: Theme) {
@@ -62,13 +62,13 @@ export function SettingsPage() {
         {/* Projects */}
         <ProjectSettings />
 
-        {/* API Keys */}
+        {/* Machines (API Keys) */}
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">API Keys</h2>
+          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">Machines</h2>
 
           {createdKey && (
             <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-sm">
-              <p className="text-success font-medium mb-1">Key created! Copy it now — it won't be shown again.</p>
+              <p className="text-success font-medium mb-1">Machine created! Copy the key now — it won't be shown again.</p>
               <code className="font-mono text-xs text-content-primary break-all">{createdKey}</code>
             </div>
           )}
@@ -77,7 +77,7 @@ export function SettingsPage() {
             <input
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
-              placeholder="Key name (e.g. my-macbook)"
+              placeholder="Machine name (e.g. my-macbook)"
               className="flex-1 bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
             />
             <button
@@ -96,22 +96,22 @@ export function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {keys.map((key) => (
-                <div key={key.id} className="flex items-center justify-between bg-surface-secondary border border-border rounded-lg px-4 py-3">
+              {machines.map((machine) => (
+                <div key={machine.id} className="flex items-center justify-between bg-surface-secondary border border-border rounded-lg px-4 py-3">
                   <div>
-                    <span className="text-sm text-content-primary">{key.name || "Unnamed"}</span>
-                    <span className="text-xs text-content-tertiary ml-2">({key.id})</span>
+                    <span className="text-sm text-content-primary">{machine.name || "Unnamed"}</span>
+                    <span className="text-xs text-content-tertiary ml-2">({machine.id})</span>
                   </div>
                   <button
-                    onClick={() => handleRevoke(key.id)}
+                    onClick={() => handleDelete(machine.id)}
                     className="text-xs text-error hover:underline"
                   >
-                    Revoke
+                    Delete
                   </button>
                 </div>
               ))}
-              {keys.length === 0 && (
-                <p className="text-sm text-content-tertiary">No API keys.</p>
+              {machines.length === 0 && (
+                <p className="text-sm text-content-tertiary">No machines registered.</p>
               )}
             </div>
           )}

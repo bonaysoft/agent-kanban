@@ -1,19 +1,21 @@
 import type { Project, ProjectResource, ProjectWithResources, CreateResourceInput } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 
-export async function createProject(db: D1, name: string, description?: string): Promise<Project> {
+export async function createProject(db: D1, ownerId: string, name: string, description?: string): Promise<Project> {
   const id = newId();
   const now = new Date().toISOString();
 
   await db.prepare(
-    "INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-  ).bind(id, name, description || null, now, now).run();
+    "INSERT INTO projects (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(id, ownerId, name, description || null, now, now).run();
 
-  return { id, name, description: description || null, created_at: now, updated_at: now };
+  return { id, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
 }
 
-export async function listProjects(db: D1): Promise<Project[]> {
-  const result = await db.prepare("SELECT * FROM projects ORDER BY created_at DESC").all<Project>();
+export async function listProjects(db: D1, ownerId: string): Promise<Project[]> {
+  const result = await db.prepare(
+    "SELECT * FROM projects WHERE owner_id = ? ORDER BY created_at DESC"
+  ).bind(ownerId).all<Project>();
   return result.results;
 }
 
