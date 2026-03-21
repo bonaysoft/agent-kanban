@@ -2,8 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
 import { authMiddleware, generateMachineKey, revokeMachine } from "./auth";
-import { getBoard, getBoardByProject } from "./boardRepo";
-import { createProject, listProjects, getProject, getProjectByName, deleteProject } from "./projectRepo";
+import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { ensureAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
@@ -330,46 +329,46 @@ api.get("/api/tasks/:id/stream", async (c) => {
   return createSSEResponse(c.env, c.req.param("id"), lastEventId, token);
 });
 
-// ─── Projects ───
+// ─── Boards ───
 
-api.post("/api/projects", async (c) => {
+api.post("/api/boards", async (c) => {
   const body = await c.req.json<{ name: string; description?: string }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
   const machine = c.get("machine");
-  const project = await createProject(c.env.DB, machine.owner_id, body.name, body.description);
-  return c.json(project, 201);
+  const board = await createBoard(c.env.DB, machine.owner_id, body.name, body.description);
+  return c.json(board, 201);
 });
 
-api.get("/api/projects", async (c) => {
+api.get("/api/boards", async (c) => {
   const machine = c.get("machine");
   const name = c.req.query("name");
   if (name) {
-    const project = await getProjectByName(c.env.DB, machine.owner_id, name);
-    if (!project) throw new HTTPException(404, { message: "Project not found" });
-    return c.json(project);
+    const board = await getBoardByName(c.env.DB, machine.owner_id, name);
+    if (!board) throw new HTTPException(404, { message: "Board not found" });
+    return c.json(board);
   }
-  const projects = await listProjects(c.env.DB, machine.owner_id);
-  return c.json(projects);
+  const boards = await listBoards(c.env.DB, machine.owner_id);
+  return c.json(boards);
 });
 
-api.get("/api/projects/:id", async (c) => {
-  const project = await getProject(c.env.DB, c.req.param("id"));
-  if (!project) throw new HTTPException(404, { message: "Project not found" });
-  return c.json(project);
-});
-
-api.delete("/api/projects/:id", async (c) => {
-  const deleted = await deleteProject(c.env.DB, c.req.param("id"));
-  if (!deleted) throw new HTTPException(404, { message: "Project not found" });
-  return c.json({ ok: true });
-});
-
-api.get("/api/projects/:id/board", async (c) => {
-  const board = await getBoardByProject(c.env.DB, c.req.param("id"));
+api.get("/api/boards/:id", async (c) => {
+  await detectAndReleaseStale(c.env.DB, c.req.param("id"));
+  const board = await getBoard(c.env.DB, c.req.param("id"));
   if (!board) throw new HTTPException(404, { message: "Board not found" });
-  await detectAndReleaseStale(c.env.DB, board.id);
-  const full = await getBoard(c.env.DB, board.id);
-  return c.json(full);
+  return c.json(board);
+});
+
+api.patch("/api/boards/:id", async (c) => {
+  const body = await c.req.json<{ name?: string; description?: string }>();
+  const board = await updateBoard(c.env.DB, c.req.param("id"), body);
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return c.json(board);
+});
+
+api.delete("/api/boards/:id", async (c) => {
+  const deleted = await deleteBoard(c.env.DB, c.req.param("id"));
+  if (!deleted) throw new HTTPException(404, { message: "Board not found" });
+  return c.json({ ok: true });
 });
 
 // ─── Repositories ───

@@ -67,12 +67,12 @@ export const api = {
     create: (name?: string) => request<any>("POST", "/machines", { name }),
     delete: (id: string) => request<void>("DELETE", `/machines/${id}`),
   },
-  projects: {
-    list: () => request<any[]>("GET", "/projects"),
-    get: (id: string) => request<any>("GET", `/projects/${id}`),
-    create: (input: { name: string; description?: string }) => request<any>("POST", "/projects", input),
-    delete: (id: string) => request<void>("DELETE", `/projects/${id}`),
-    board: (id: string) => request<any>("GET", `/projects/${id}/board`),
+  boards: {
+    list: () => request<any[]>("GET", "/boards"),
+    get: (id: string) => request<any>("GET", `/boards/${id}`),
+    create: (input: { name: string; description?: string }) => request<any>("POST", "/boards", input),
+    update: (id: string, body: { name?: string; description?: string }) => request<any>("PATCH", `/boards/${id}`, body),
+    delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
   },
   repositories: {
     list: () => request<any[]>("GET", "/repositories"),

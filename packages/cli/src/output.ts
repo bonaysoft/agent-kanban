@@ -21,9 +21,9 @@ export function formatTaskList(tasks: any[]): string {
 
   const lines = tasks.map((t) => {
     const priority = t.priority ? `[${t.priority}]` : "";
-    const project = t.repository_name ? `(${t.repository_name})` : "";
+    const repo = t.repository_name ? `(${t.repository_name})` : "";
     const agent = t.assigned_to ? `→ ${t.assigned_to}` : "";
-    return `  ${t.id}  ${priority.padEnd(8)} ${t.title} ${project} ${agent}`;
+    return `  ${t.id}  ${priority.padEnd(8)} ${t.title} ${repo} ${agent}`;
   });
 
   return lines.join("\n");
@@ -42,12 +42,12 @@ export function formatAgentList(agents: any[]): string {
   return lines.join("\n");
 }
 
-export function formatProjectList(projects: any[]): string {
-  if (projects.length === 0) return "No projects found.";
+export function formatBoardList(boards: any[]): string {
+  if (boards.length === 0) return "No boards found.";
 
-  const lines = projects.map((p) => {
-    const desc = p.description ? ` — ${p.description}` : "";
-    return `  ${p.id}  ${p.name}${desc}`;
+  const lines = boards.map((b) => {
+    const desc = b.description ? ` — ${b.description}` : "";
+    return `  ${b.id}  ${b.name}${desc}`;
   });
 
   return lines.join("\n");

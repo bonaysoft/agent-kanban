@@ -1,8 +1,55 @@
--- Agent Kanban v2 schema
+-- Agent Kanban schema
 -- Auth tables (user, session, account, verification) managed by better-auth
 
--- Projects
-CREATE TABLE projects (
+-- Better Auth
+CREATE TABLE "user" (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  email          TEXT NOT NULL UNIQUE,
+  emailVerified  INTEGER NOT NULL DEFAULT 0,
+  image          TEXT,
+  createdAt      TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE "session" (
+  id        TEXT PRIMARY KEY,
+  expiresAt TEXT NOT NULL,
+  token     TEXT NOT NULL UNIQUE,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  ipAddress TEXT,
+  userAgent TEXT,
+  userId    TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE
+);
+
+CREATE TABLE "account" (
+  id                    TEXT PRIMARY KEY,
+  accountId             TEXT NOT NULL,
+  providerId            TEXT NOT NULL,
+  userId                TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  accessToken           TEXT,
+  refreshToken          TEXT,
+  idToken               TEXT,
+  accessTokenExpiresAt  TEXT,
+  refreshTokenExpiresAt TEXT,
+  scope                 TEXT,
+  password              TEXT,
+  createdAt             TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE "verification" (
+  id         TEXT PRIMARY KEY,
+  identifier TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  expiresAt  TEXT NOT NULL,
+  createdAt  TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Boards
+CREATE TABLE boards (
   id          TEXT PRIMARY KEY,
   owner_id    TEXT NOT NULL,
   name        TEXT NOT NULL,
@@ -10,17 +57,8 @@ CREATE TABLE projects (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE UNIQUE INDEX idx_projects_owner_name ON projects(owner_id, name);
-
--- Boards (1:1 with project)
-CREATE TABLE boards (
-  id          TEXT PRIMARY KEY,
-  project_id  TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX idx_boards_project ON boards(project_id);
+CREATE INDEX idx_boards_owner ON boards(owner_id);
+CREATE UNIQUE INDEX idx_boards_owner_name ON boards(owner_id, name);
 
 -- Repositories
 CREATE TABLE repositories (
@@ -40,6 +78,9 @@ CREATE TABLE machines (
   key_hash          TEXT NOT NULL,
   name              TEXT NOT NULL,
   status            TEXT NOT NULL DEFAULT 'online',
+  os                TEXT,
+  version           TEXT,
+  runtimes          TEXT,
   last_heartbeat_at TEXT,
   created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );

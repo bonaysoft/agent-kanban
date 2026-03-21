@@ -7,15 +7,15 @@ interface OnboardingProps {
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
-  const [projectName, setProjectName] = useState("My Project");
+  const [boardName, setProjectName] = useState("My Project");
   const [taskTitle, setTaskTitle] = useState("First task");
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
   const [apiUrl, setApiUrl] = useState(window.location.origin);
   const [loading, setLoading] = useState(false);
 
-  async function handleCreateProject() {
+  async function handleCreateBoard() {
     setLoading(true);
-    await api.projects.create({ name: projectName });
+    await api.boards.create({ name: boardName });
     setLoading(false);
     setStep(1);
   }
@@ -57,19 +57,19 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {step === 0 && (
           <div className="space-y-4">
             <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
-              Project name
+              Board name
             </label>
             <input
-              value={projectName}
+              value={boardName}
               onChange={(e) => setProjectName(e.target.value)}
               className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2.5 text-sm text-content-primary outline-none focus:border-accent"
             />
             <button
-              onClick={handleCreateProject}
-              disabled={loading || !projectName.trim()}
+              onClick={handleCreateBoard}
+              disabled={loading || !boardName.trim()}
               className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Creating..." : "Create Project"}
+              {loading ? "Creating..." : "Create Board"}
             </button>
           </div>
         )}

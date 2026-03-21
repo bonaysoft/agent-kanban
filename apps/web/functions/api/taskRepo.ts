@@ -115,12 +115,10 @@ export async function listTasks(
 export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | null> {
   const task = await db.prepare(`
     SELECT t.*, a.name as agent_name, r.name as repository_name,
-      b.project_id as project_id,
       (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
-    LEFT JOIN boards b ON t.board_id = b.id
     WHERE t.id = ?
   `).bind(taskId).first<Task & { subtask_count: number }>();
   if (!task) return null;

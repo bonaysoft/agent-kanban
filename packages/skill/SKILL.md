@@ -1,12 +1,12 @@
 # Agent Kanban — Task Management Skill
 
-Use the `agent-kanban` CLI to manage tasks on your kanban board. This skill is available across all projects.
+Use the `agent-kanban` CLI to manage tasks on your kanban board.
 
 ## Setup
 
 ```bash
 npm install -g agent-kanban
-agent-kanban config set api-url https://your-project.pages.dev
+agent-kanban config set api-url https://your-instance.pages.dev
 agent-kanban config set api-key <your-api-key>
 ```
 
@@ -16,7 +16,6 @@ agent-kanban config set api-key <your-api-key>
 
 ```bash
 agent-kanban task list --status todo
-agent-kanban task list --status todo --project <project-name>
 ```
 
 ### 2. Claim a task
@@ -50,7 +49,6 @@ When you discover work that needs to happen separately, **create a task**:
 ```bash
 agent-kanban task create \
   --title "Fix shared-lib JWT claim namespace" \
-  --project shared-lib \
   --priority high \
   --agent-name <your-name>
 ```
@@ -63,45 +61,39 @@ Log the relationship on the original task:
 agent-kanban task log <original-task-id> "Created subtask for shared-lib fix"
 ```
 
-## Projects & Resources
+## Boards
 
-Projects are organizational containers for related resources (repos, etc). Tasks are linked to projects.
+Boards are the workspace unit. Tasks belong to boards.
 
 ```bash
-# Create a project
-agent-kanban project create --name <name> --description "optional desc"
+# Create a board
+agent-kanban board create --name <name> --description "optional desc"
 
-# List projects
-agent-kanban project list
+# List boards
+agent-kanban board list
 
-# Add a git repo resource to a project
-agent-kanban resource add --project <name> --type git_repo --name <name> --uri <clone-url>
-
-# List resources for a project
-agent-kanban resource list --project <name>
+# View a board
+agent-kanban board view --board <name-or-id>
 ```
 
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `task create --title <t>` | Create a task (optional: --project, --priority, --labels, --input) |
-| `task list` | List tasks (optional: --status, --project, --label, --format) |
+| `task create --title <t>` | Create a task (optional: --priority, --labels, --input) |
+| `task list` | List tasks (optional: --status, --label, --format) |
 | `task claim <id>` | Claim a task (optional: --agent-name) |
 | `task log <id> <msg>` | Add a progress log entry |
 | `task review <id>` | Move task to In Review (optional: --agent-name) |
 | `task complete <id>` | Mark task done (optional: --result, --pr-url) |
 | `task cancel <id>` | Cancel a task (optional: --agent-name) |
-| `project create --name <n>` | Create a project (optional: --description) |
-| `project list` | List all projects |
-| `resource add --project <p>` | Add a resource (required: --type, --name, --uri) |
-| `resource list --project <p>` | List resources for a project |
-| `board view` | Show the kanban board (optional: --format json) |
+| `board create --name <n>` | Create a board (optional: --description) |
+| `board list` | List all boards |
+| `board view` | Show the kanban board (optional: --board, --format json) |
 | `config set <key> <val>` | Set api-url or api-key |
 
 ## Smart Defaults
 
-- `--project` auto-detects from git repo name if not specified
 - Output is JSON when piped (not a TTY), text in interactive terminals
 - Use `--format json` to force JSON output
 

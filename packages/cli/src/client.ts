@@ -72,13 +72,13 @@ export class ApiClient {
   // Agents
   listAgents() { return this.request("GET", "/api/agents"); }
 
-  // Projects
-  createProject(input: { name: string; description?: string }) {
-    return this.request("POST", "/api/projects", input);
+  // Boards
+  createBoard(input: { name: string; description?: string }) {
+    return this.request("POST", "/api/boards", input);
   }
-  listProjects() { return this.request<any[]>("GET", "/api/projects"); }
-  getProjectByName(name: string) { return this.request("GET", `/api/projects?name=${encodeURIComponent(name)}`); }
-  getProjectBoard(projectId: string) { return this.request("GET", `/api/projects/${projectId}/board`); }
+  listBoards() { return this.request<any[]>("GET", "/api/boards"); }
+  getBoardByName(name: string) { return this.request("GET", `/api/boards?name=${encodeURIComponent(name)}`); }
+  getBoard(boardId: string) { return this.request("GET", `/api/boards/${boardId}`); }
 
   // Repositories
   createRepository(input: { name: string; url: string }) {

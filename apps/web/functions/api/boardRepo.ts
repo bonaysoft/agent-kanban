@@ -1,6 +1,28 @@
 import type { Board, BoardWithTasks, Task } from "@agent-kanban/shared";
-import { type D1 } from "./db";
+import { newId, type D1 } from "./db";
 import { computeBlocked } from "./taskDeps";
+
+export async function createBoard(db: D1, ownerId: string, name: string, description?: string): Promise<Board> {
+  const id = newId();
+  const now = new Date().toISOString();
+  await db.prepare(
+    "INSERT INTO boards (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(id, ownerId, name, description || null, now, now).run();
+  return { id, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
+}
+
+export async function listBoards(db: D1, ownerId: string): Promise<Board[]> {
+  const result = await db.prepare(
+    "SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at DESC"
+  ).bind(ownerId).all<Board>();
+  return result.results;
+}
+
+export async function getBoardByName(db: D1, ownerId: string, name: string): Promise<Board | null> {
+  return db.prepare(
+    "SELECT * FROM boards WHERE owner_id = ? AND name = ?"
+  ).bind(ownerId, name).first<Board>();
+}
 
 export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks | null> {
   const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
@@ -25,14 +47,28 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
   return { ...board, tasks: tasks.results };
 }
 
-export async function getBoardByProject(db: D1, projectId: string): Promise<Board | null> {
-  return db.prepare(
-    "SELECT * FROM boards WHERE project_id = ? LIMIT 1"
-  ).bind(projectId).first<Board>();
-}
-
 export async function getDefaultBoard(db: D1, ownerId: string): Promise<Board | null> {
   return db.prepare(
-    "SELECT b.* FROM boards b JOIN projects p ON b.project_id = p.id WHERE p.owner_id = ? ORDER BY b.created_at ASC LIMIT 1"
+    "SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1"
   ).bind(ownerId).first<Board>();
+}
+
+export async function updateBoard(db: D1, boardId: string, updates: { name?: string; description?: string }): Promise<Board | null> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (updates.name !== undefined) { sets.push("name = ?"); values.push(updates.name); }
+  if (updates.description !== undefined) { sets.push("description = ?"); values.push(updates.description); }
+  if (sets.length === 0) return db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+
+  sets.push("updated_at = ?");
+  values.push(new Date().toISOString());
+  values.push(boardId);
+
+  await db.prepare(`UPDATE boards SET ${sets.join(", ")} WHERE id = ?`).bind(...values).run();
+  return db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+}
+
+export async function deleteBoard(db: D1, boardId: string): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM boards WHERE id = ?").bind(boardId).run();
+  return result.meta.changes > 0;
 }

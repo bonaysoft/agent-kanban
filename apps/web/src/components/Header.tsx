@@ -2,12 +2,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 import { useState } from "react";
 import { signOut, clearAuthToken } from "../lib/auth-client";
+import { BoardSwitcher } from "./BoardSwitcher";
 
 interface HeaderProps {
   boardName?: string;
-  projects?: { id: string; name: string }[];
-  activeProjectId?: string | null;
-  onProjectChange?: (projectId: string) => void;
+  boards?: { id: string; name: string; description?: string | null }[];
+  activeBoardId?: string | null;
+  onBoardChange?: (boardId: string) => void;
+  onBoardCreate?: (name: string) => void;
 }
 
 const navLinks = [
@@ -67,9 +69,9 @@ function LogOutIcon() {
   );
 }
 
-export function Header({ boardName, projects, activeProjectId, onProjectChange }: HeaderProps) {
+export function Header({ boardName, boards, activeBoardId, onBoardChange, onBoardCreate }: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(getTheme());
-  const [projectOpen, setProjectOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -82,82 +84,70 @@ export function Header({ boardName, projects, activeProjectId, onProjectChange }
   const ThemeIcon = themeIcons[theme];
 
   return (
-    <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-secondary">
-      <div className="flex items-center gap-3">
-        <Link to="/" className="text-[15px] font-bold tracking-tight text-content-primary">
-          Agent <span className="text-accent">Kanban</span>
-        </Link>
-        {projects && projects.length > 0 && (
-          <div className="relative">
-            <button
-              onClick={() => setProjectOpen(!projectOpen)}
-              className="flex items-center gap-1.5 text-xs text-content-secondary bg-surface-tertiary px-2.5 py-1 rounded-md hover:text-content-primary transition-colors"
-            >
-              {boardName || "Select project"}
-              {projects.length > 1 && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              )}
-            </button>
-            {projectOpen && projects.length > 1 && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setProjectOpen(false)} />
-                <div className="absolute top-full left-0 mt-1 w-48 bg-surface-secondary border border-border rounded-lg shadow-lg z-40 py-1">
-                  {projects.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => { onProjectChange?.(p.id); setProjectOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                        p.id === activeProjectId
-                          ? "text-accent bg-accent-soft"
-                          : "text-content-secondary hover:bg-surface-tertiary hover:text-content-primary"
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center gap-1">
-        <nav className="hidden md:flex items-center gap-1">
-          {navLinks.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                location.pathname === to
-                  ? "text-accent bg-accent-soft"
-                  : "text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary"
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <button
-          onClick={cycleTheme}
-          title={`Theme: ${theme}`}
-          className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
-        >
-          <ThemeIcon />
-        </button>
-        <button
-          onClick={async () => {
-            await signOut();
-            clearAuthToken();
-            navigate("/auth");
-          }}
-          title="Sign out"
-          className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
-        >
-          <LogOutIcon />
-        </button>
-      </div>
-    </header>
+    <>
+      <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-secondary">
+        <div className="flex items-center gap-2">
+          <Link to="/" className="text-[15px] font-bold tracking-tight text-content-primary">
+            Agent <span className="text-accent">Kanban</span>
+          </Link>
+          {boards && boardName && (
+            <>
+              <span className="text-content-tertiary text-xs">/</span>
+              <button
+                onClick={() => setSwitcherOpen(true)}
+                className="text-sm font-medium text-content-primary hover:text-accent transition-colors"
+              >
+                {boardName}
+              </button>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1">
+            {navLinks.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  location.pathname === to
+                    ? "text-accent bg-accent-soft"
+                    : "text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <button
+            onClick={cycleTheme}
+            title={`Theme: ${theme}`}
+            className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
+          >
+            <ThemeIcon />
+          </button>
+          <button
+            onClick={async () => {
+              await signOut();
+              clearAuthToken();
+              navigate("/auth");
+            }}
+            title="Sign out"
+            className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
+          >
+            <LogOutIcon />
+          </button>
+        </div>
+      </header>
+
+      {switcherOpen && boards && (
+        <BoardSwitcher
+          boards={boards}
+          activeBoardId={activeBoardId ?? null}
+          onSelect={(id) => onBoardChange?.(id)}
+          onCreate={(name) => onBoardCreate?.(name)}
+          onClose={() => setSwitcherOpen(false)}
+        />
+      )}
+    </>
   );
 }

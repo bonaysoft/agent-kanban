@@ -2,8 +2,9 @@
 
 export interface Board {
   id: string;
-  project_id: string;
+  owner_id: string;
   name: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -35,7 +36,6 @@ export interface Task {
   created_at: string;
   updated_at: string;
   blocked?: boolean;
-  project_id?: string;
   repository_name?: string;
   agent_name?: string;
 }
@@ -118,16 +118,7 @@ export interface AgentWithActivity extends Agent {
   task_count: number;
 }
 
-// ─── Project ───
-
-export interface Project {
-  id: string;
-  owner_id: string;
-  name: string;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// ─── Repository ───
 
 export interface Repository {
   id: string;
@@ -184,7 +175,7 @@ export interface CompleteTaskInput {
   agent_id?: string;
 }
 
-export interface CreateProjectInput {
+export interface CreateBoardInput {
   name: string;
   description?: string;
 }

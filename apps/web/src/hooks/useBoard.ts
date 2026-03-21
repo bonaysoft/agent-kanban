@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 
-const PROJECT_KEY = "ak-active-project";
+const BOARD_KEY = "ak-active-board";
 
 export function useBoard() {
   const [board, setBoard] = useState<any>(null);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(
-    localStorage.getItem(PROJECT_KEY),
+  const [boards, setBoards] = useState<any[]>([]);
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(
+    localStorage.getItem(BOARD_KEY),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,25 +15,25 @@ export function useBoard() {
 
   const fetchBoard = useCallback(async () => {
     try {
-      const allProjects = await api.projects.list();
-      setProjects(allProjects);
+      const allBoards = await api.boards.list();
+      setBoards(allBoards);
 
-      if (allProjects.length === 0) {
+      if (allBoards.length === 0) {
         setBoard(null);
         setLoading(false);
         return;
       }
 
-      const targetId = activeProjectId && allProjects.some((p: any) => p.id === activeProjectId)
-        ? activeProjectId
-        : allProjects[0].id;
+      const targetId = activeBoardId && allBoards.some((b: any) => b.id === activeBoardId)
+        ? activeBoardId
+        : allBoards[0].id;
 
-      if (targetId !== activeProjectId) {
-        setActiveProjectId(targetId);
-        localStorage.setItem(PROJECT_KEY, targetId);
+      if (targetId !== activeBoardId) {
+        setActiveBoardId(targetId);
+        localStorage.setItem(BOARD_KEY, targetId);
       }
 
-      const full = await api.projects.board(targetId);
+      const full = await api.boards.get(targetId);
       setBoard(full);
       failCount.current = 0;
       setError(null);
@@ -47,7 +47,7 @@ export function useBoard() {
     } finally {
       setLoading(false);
     }
-  }, [activeProjectId]);
+  }, [activeBoardId]);
 
   useEffect(() => {
     fetchBoard();
@@ -55,10 +55,10 @@ export function useBoard() {
     return () => clearInterval(interval);
   }, [fetchBoard]);
 
-  function switchProject(projectId: string) {
-    setActiveProjectId(projectId);
-    localStorage.setItem(PROJECT_KEY, projectId);
+  function switchBoard(boardId: string) {
+    setActiveBoardId(boardId);
+    localStorage.setItem(BOARD_KEY, boardId);
   }
 
-  return { board, projects, activeProjectId, loading, error, refresh: fetchBoard, switchProject };
+  return { board, boards, activeBoardId, loading, error, refresh: fetchBoard, switchBoard };
 }

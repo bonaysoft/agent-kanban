@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { api } from "../lib/api";
 import { Header } from "../components/Header";
 import { FilterBar } from "../components/FilterBar";
 import { KanbanColumn } from "../components/KanbanColumn";
@@ -18,7 +19,7 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 };
 
 export function BoardPage() {
-  const { board, projects, activeProjectId, loading, error, refresh, switchProject } = useBoard();
+  const { board, boards, activeBoardId, loading, error, refresh, switchBoard } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
@@ -84,7 +85,13 @@ export function BoardPage() {
 
   return (
     <div className="min-h-screen bg-surface-primary">
-      <Header boardName={board.name} projects={projects} activeProjectId={activeProjectId} onProjectChange={switchProject} />
+      <Header
+        boardName={board.name}
+        boards={boards}
+        activeBoardId={activeBoardId}
+        onBoardChange={switchBoard}
+        onBoardCreate={async (name) => { await api.boards.create({ name }); refresh(); }}
+      />
       <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
 
       {error && (

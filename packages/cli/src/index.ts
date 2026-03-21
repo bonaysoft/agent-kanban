@@ -2,12 +2,12 @@
 import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
 import { ApiClient } from "./client.js";
-import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatProjectList, formatRepositoryList } from "./output.js";
+import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
 import { registerLinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
 
 const program = new Command();
-program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.3.0");
+program.name("agent-kanban").description("Agent-first kanban board").version("1.3.0");
 
 // ─── Config ───
 
@@ -163,64 +163,64 @@ agentCmd
     output(agents, fmt, formatAgentList);
   });
 
-// ─── Project ───
+// ─── Board ───
 
-const projectCmd = program.command("project").description("Manage projects");
+const boardCmd = program.command("board").description("Manage boards");
 
-projectCmd
+boardCmd
   .command("create")
-  .description("Create a new project")
-  .requiredOption("--name <name>", "Project name")
-  .option("--description <desc>", "Project description")
+  .description("Create a new board")
+  .requiredOption("--name <name>", "Board name")
+  .option("--description <desc>", "Board description")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    const project = await client.createProject({ name: opts.name, description: opts.description });
+    const board = await client.createBoard({ name: opts.name, description: opts.description });
     const fmt = getFormat(opts.format);
-    output(project, fmt, (p) => `Created project ${p.id}: ${p.name}`);
+    output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
   });
 
-projectCmd
+boardCmd
   .command("list")
-  .description("List all projects")
+  .description("List all boards")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    const projects = await client.listProjects();
+    const boards = await client.listBoards();
     const fmt = getFormat(opts.format);
-    output(projects, fmt, formatProjectList);
+    output(boards, fmt, formatBoardList);
   });
 
-projectCmd
-  .command("board")
-  .description("View the kanban board for a project")
-  .option("--project <name-or-id>", "Project name or ID (uses first if omitted)")
+boardCmd
+  .command("view")
+  .description("View a kanban board")
+  .option("--board <name-or-id>", "Board name or ID (uses first if omitted)")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    let projectId: string;
+    let boardId: string;
 
-    if (opts.project) {
-      projectId = await resolveProjectId(client, opts.project);
+    if (opts.board) {
+      boardId = await resolveBoardId(client, opts.board);
     } else {
-      const projects = await client.listProjects();
-      if (projects.length === 0) {
-        console.error("No projects. Create one first: agent-kanban project create --name 'My Project'");
+      const boards = await client.listBoards();
+      if (boards.length === 0) {
+        console.error("No boards. Create one first: agent-kanban board create --name 'My Board'");
         process.exit(1);
       }
-      projectId = projects[0].id;
+      boardId = boards[0].id;
     }
 
-    const board = await client.getProjectBoard(projectId);
+    const board = await client.getBoard(boardId);
     const fmt = getFormat(opts.format);
     output(board, fmt, formatBoard);
   });
 
-async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<string> {
-  const projects = await client.listProjects();
-  const match = projects.find((p: any) => p.id === nameOrId || p.name === nameOrId);
+async function resolveBoardId(client: ApiClient, nameOrId: string): Promise<string> {
+  const boards = await client.listBoards();
+  const match = boards.find((b: any) => b.id === nameOrId || b.name === nameOrId);
   if (!match) {
-    console.error(`Project not found: ${nameOrId}`);
+    console.error(`Board not found: ${nameOrId}`);
     process.exit(1);
   }
   return match.id;
