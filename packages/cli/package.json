@@ -8,7 +8,7 @@
     "ak": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r ../skill/skills dist/",
     "dev": "tsc --watch"
   },
   "dependencies": {
