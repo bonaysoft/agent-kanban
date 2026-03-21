@@ -2,10 +2,11 @@ import { spawn, type ChildProcess } from "child_process";
 import type { ApiClient } from "./client.js";
 
 // Agent Process Lifecycle:
-//   SPAWN → stdin JSON message → RUNNING
+//   SPAWN → stdin task notification → RUNNING
+//     agent claims task via CLI, works, completes via CLI
 //     stdout (stream-json) → parse events → POST /messages
-//   EXIT(0) → POST /complete → cleanup
-//   EXIT(N) → POST /release → log stderr → cleanup
+//   EXIT(0) → log success → cleanup
+//   EXIT(N) → POST /release (crash recovery) → cleanup
 //   KILL (shutdown) → POST /release → cleanup
 
 export interface AgentProcess {
@@ -30,6 +31,10 @@ export class ProcessManager {
     return this.agents.size;
   }
 
+  hasTask(taskId: string): boolean {
+    return this.agents.has(taskId);
+  }
+
   async spawnAgent(
     taskId: string,
     sessionId: string,
@@ -37,6 +42,7 @@ export class ProcessManager {
     taskContext: string,
   ): Promise<void> {
     const args = [
+      "--print",
       "--verbose",
       "--input-format", "stream-json",
       "--output-format", "stream-json",
@@ -111,10 +117,7 @@ export class ProcessManager {
       this.agents.delete(taskId);
 
       if (code === 0) {
-        console.log(`[INFO] Agent completed task ${taskId}`);
-        await this.client.completeTask(taskId, { agent_id: sessionId }).catch((err: any) => {
-          console.error(`[WARN] Failed to complete task ${taskId}: ${err.message}`);
-        });
+        console.log(`[INFO] Agent finished task ${taskId}`);
       } else {
         console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {

@@ -213,8 +213,8 @@ api.post("/api/tasks/:id/assign", async (c) => {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
 
+  // Assign only locks the task — agent status stays idle until they claim
   const task = await assignTask(c.env.DB, c.req.param("id"), agent.id);
-  await setAgentWorkingIfIdle(c.env.DB, agent.id);
   return c.json(task);
 });
 

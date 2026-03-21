@@ -173,30 +173,29 @@ export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
 export async function claimTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
-  if (task.assigned_to) throw new HTTPException(409, { message: "Task is already claimed" });
-
-  const blockedSet = await computeBlocked(db, [taskId]);
-  if (blockedSet.has(taskId)) throw new HTTPException(409, { message: "Task is blocked by unfinished dependencies" });
+  if (task.assigned_to !== agentId) throw new HTTPException(409, { message: "Task is not assigned to this agent" });
+  if (task.status !== "todo") throw new HTTPException(409, { message: "Task is not in todo status" });
 
   const now = new Date().toISOString();
   const logId = newId();
 
+  // Claim moves the task to in_progress — agent confirms they are starting work
   await db.batch([
     db.prepare(
-      "UPDATE tasks SET assigned_to = ?, status = 'in_progress', updated_at = ? WHERE id = ? AND assigned_to IS NULL"
-    ).bind(agentId, now, taskId),
+      "UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"
+    ).bind(now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'claimed', NULL, ?)"
     ).bind(logId, taskId, agentId, now),
   ]);
 
-  return { ...task, assigned_to: agentId, status: "in_progress", updated_at: now };
+  return { ...task, status: "in_progress", updated_at: now };
 }
 
 export async function assignTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
-  if (task.assigned_to) throw new HTTPException(409, { message: "Task is already claimed" });
+  if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
 
   const blockedSet = await computeBlocked(db, [taskId]);
   if (blockedSet.has(taskId)) throw new HTTPException(409, { message: "Task is blocked by unfinished dependencies" });
@@ -204,16 +203,17 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   const now = new Date().toISOString();
   const logId = newId();
 
+  // Assign only locks the task to the agent — status stays as-is (todo)
   await db.batch([
     db.prepare(
-      "UPDATE tasks SET assigned_to = ?, status = 'in_progress', updated_at = ? WHERE id = ? AND assigned_to IS NULL"
+      "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ? AND assigned_to IS NULL"
     ).bind(agentId, now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'assigned', NULL, ?)"
     ).bind(logId, taskId, agentId, now),
   ]);
 
-  return { ...task, assigned_to: agentId, status: "in_progress", updated_at: now };
+  return { ...task, assigned_to: agentId, updated_at: now };
 }
 
 export async function completeTask(db: D1, taskId: string, agentId: string | null, result: string | null, prUrl: string | null): Promise<Task | null> {

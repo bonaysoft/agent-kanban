@@ -93,6 +93,18 @@ taskCmd
   });
 
 taskCmd
+  .command("claim <id>")
+  .description("Claim an assigned task — start working on it")
+  .option("--agent-name <name>", "Agent identity")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (id, opts) => {
+    const client = new ApiClient();
+    const task = await client.claimTask(id, opts.agentName);
+    const fmt = getFormat(opts.format);
+    output(task, fmt, (t: any) => `Claimed task ${t.id}: ${t.title} (now in progress)`);
+  });
+
+taskCmd
   .command("log <id> <message>")
   .description("Add a log entry to a task")
   .option("--agent-name <name>", "Agent identity")

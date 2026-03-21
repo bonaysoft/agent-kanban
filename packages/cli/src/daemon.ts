@@ -102,10 +102,19 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
-      const tasks = await client.listTasks({ status: "Todo" }) as any[];
+      const tasks = await client.listTasks({ status: "todo" }) as any[];
 
-      // Filter out blocked and already-assigned tasks
-      const available = tasks.filter((t: any) => !t.blocked && !t.assigned_to);
+      // Filter out blocked, already-assigned, already-spawned, and tasks without a linked repo
+      const available = tasks.filter((t: any) => {
+        if (t.blocked || t.assigned_to) return false;
+        if (pm.hasTask(t.id)) return false;
+        if (!t.repository_id) return false;
+        if (!findPathForRepository(t.repository_id)) {
+          console.warn(`[WARN] Skipping task ${t.id}: no linked directory for repository ${t.repository_id}`);
+          return false;
+        }
+        return true;
+      });
 
       if (available.length === 0) {
         backoffMs = baseInterval;
@@ -113,14 +122,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
-      // Assign the first available task to a new agent
+      // Pick the first available task
       const task = available[0];
+      const repoDir = findPathForRepository(task.repository_id)!;
       const sessionId = randomUUID();
 
+      // Assign locks the task to this agent (status stays todo)
       try {
         await client.assignTask(task.id, sessionId);
       } catch (err: any) {
-        // Already assigned or blocked — skip
         if (err.message.includes("409") || err.message.includes("assigned") || err.message.includes("blocked")) {
           schedulePoll(1000);
           return;
@@ -130,18 +140,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
-      // Resolve repo directory via task.repository_id → local link
-      const repoDir = task.repository_id ? findPathForRepository(task.repository_id) : undefined;
-      if (!repoDir) {
-        console.error(`[ERROR] No linked directory for repository ${task.repository_id || "(none)"}. Releasing task.`);
-        await client.releaseTask(task.id).catch(() => {});
-        schedulePoll(baseInterval);
-        return;
-      }
-
-      // Build task context for agent stdin
-      const context = buildTaskContext(task);
-      await pm.spawnAgent(task.id, sessionId, repoDir, context);
+      // Notify the agent — it will claim, work, and complete via CLI
+      const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nUse the agent-kanban CLI to view the task, claim it, do the work, and mark it complete.`;
+      await pm.spawnAgent(task.id, sessionId, repoDir, prompt);
 
       // Reset backoff on success
       backoffMs = baseInterval;
@@ -158,19 +159,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   schedulePoll(0);
 }
 
-function buildTaskContext(task: any): string {
-  const parts = [`Task: ${task.title}`];
-  if (task.description) parts.push(`Description: ${task.description}`);
-  if (task.input) {
-    try {
-      const input = typeof task.input === "string" ? JSON.parse(task.input) : task.input;
-      parts.push(`Input: ${JSON.stringify(input, null, 2)}`);
-    } catch {
-      parts.push(`Input: ${task.input}`);
-    }
-  }
-  return parts.join("\n\n");
-}
 
 function removePidFile() {
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }

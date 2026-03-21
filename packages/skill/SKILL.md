@@ -1,79 +1,84 @@
 # Agent Kanban — Task Management Skill
 
-Use the `agent-kanban` CLI to manage tasks on your kanban board.
+Use the `agent-kanban` CLI (alias `ak`) to manage tasks on your kanban board.
 
 ## Setup
 
 ```bash
 npm install -g agent-kanban
-agent-kanban config set api-url https://your-instance.pages.dev
-agent-kanban config set api-key <your-api-key>
+ak config set api-url https://your-instance.pages.dev
+ak config set api-key <your-api-key>
 ```
 
 ## Workflow
 
-### 1. Find available work
+When the daemon assigns you a task, you receive the task ID. Follow this flow:
+
+### 1. View the task
 
 ```bash
-agent-kanban task list --status todo
+ak task list --format json
 ```
 
-### 2. Claim a task
+Find your assigned task and read the details.
+
+### 2. Claim the task
 
 ```bash
-agent-kanban task claim <task-id> --agent-name <your-name>
+ak task claim <task-id> --agent-name <your-name>
 ```
 
-This atomically assigns the task to you and moves it to "In Progress."
+This confirms you are starting work and moves the task to "In Progress."
 
-### 3. Log progress
+### 3. Do the work
+
+Read the task description, implement the changes, run tests, etc.
+
+### 4. Log progress
 
 ```bash
-agent-kanban task log <task-id> "Investigating the auth flow..."
-agent-kanban task log <task-id> "Root cause: breaking change in v2.3"
+ak task log <task-id> "Investigating the auth flow..."
+ak task log <task-id> "Root cause: breaking change in v2.3"
 ```
 
-### 4. Complete the task
+### 5. Complete the task
 
 ```bash
-agent-kanban task complete <task-id> \
+ak task complete <task-id> \
   --result "Fixed JWT claim namespace" \
   --pr-url "https://github.com/org/repo/pull/42" \
   --agent-name <your-name>
 ```
 
-### 5. Create new tasks
+## Task Lifecycle
 
-When you discover work that needs to happen separately, **create a task**:
+```
+Todo ──assign(daemon)──→ Todo (assigned) ──claim(agent)──→ In Progress
+  → In Review (review) → Done (complete)
+  → Cancelled (cancel at any stage)
+  → Todo (release — on crash or timeout)
+```
+
+- **assign**: Daemon locks the task to you. Status stays `todo`, but no other agent can take it.
+- **claim**: You confirm you're starting. Status moves to `in_progress`.
+- **complete**: You're done. Status moves to `done`.
+- **review**: Move to `in_review` for human review before completing.
+
+## Creating Subtasks
+
+When you discover follow-up work, create a task:
 
 ```bash
-agent-kanban task create \
+ak task create \
   --title "Fix shared-lib JWT claim namespace" \
   --priority high \
   --agent-name <your-name>
 ```
 
-This is a foundational capability. When working on a task and you discover a dependency gap, a subtask, or follow-up work — create a task for it. Other agents (or humans) will pick it up.
-
-Log the relationship on the original task:
+Log the relationship:
 
 ```bash
-agent-kanban task log <original-task-id> "Created subtask for shared-lib fix"
-```
-
-## Boards
-
-Boards are the workspace unit. Tasks belong to boards.
-
-```bash
-# Create a board
-agent-kanban board create --name <name> --description "optional desc"
-
-# List boards
-agent-kanban board list
-
-# View a board
-agent-kanban board view --board <name-or-id>
+ak task log <original-task-id> "Created subtask for shared-lib fix"
 ```
 
 ## CLI Reference
@@ -82,14 +87,13 @@ agent-kanban board view --board <name-or-id>
 |---------|-------------|
 | `task create --title <t>` | Create a task (optional: --priority, --labels, --input) |
 | `task list` | List tasks (optional: --status, --label, --format) |
-| `task claim <id>` | Claim a task (optional: --agent-name) |
+| `task claim <id>` | Claim an assigned task — start working |
 | `task log <id> <msg>` | Add a progress log entry |
-| `task review <id>` | Move task to In Review (optional: --agent-name) |
+| `task review <id>` | Move task to In Review |
 | `task complete <id>` | Mark task done (optional: --result, --pr-url) |
-| `task cancel <id>` | Cancel a task (optional: --agent-name) |
-| `board create --name <n>` | Create a board (optional: --description) |
+| `task cancel <id>` | Cancel a task |
 | `board list` | List all boards |
-| `board view` | Show the kanban board (optional: --board, --format json) |
+| `board view` | Show the kanban board |
 | `config set <key> <val>` | Set api-url or api-key |
 
 ## Smart Defaults
@@ -99,10 +103,9 @@ agent-kanban board view --board <name-or-id>
 
 ## Error Handling
 
-- **401 Unauthorized**: Check your API key with `agent-kanban config get api-key`
-- **409 Conflict**: Task is already claimed by another agent
+- **401 Unauthorized**: Check your API key with `ak config get api-key`
+- **409 Conflict**: Task is already claimed or not assigned to you
 - **404 Not Found**: Task ID doesn't exist — check with `task list`
-- **Network errors**: CLI uses a 10-second timeout. Retry if the server is cold-starting.
 
 ## Best Practices
 
