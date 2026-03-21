@@ -25,9 +25,14 @@ api.onError((err, c) => {
 });
 
 // Better Auth handler — must be before auth middleware
-api.on(["GET", "POST"], "/api/auth/*", (c) => {
-  const auth = createAuth(c.env);
-  return auth.handler(c.req.raw);
+api.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  try {
+    const auth = createAuth(c.env);
+    return await auth.handler(c.req.raw);
+  } catch (err: any) {
+    console.error("better-auth error:", err.message, err.stack);
+    return c.json({ error: { code: "AUTH_ERROR", message: err.message } }, 500);
+  }
 });
 
 // Auth middleware for all routes except SSE and auth endpoints
