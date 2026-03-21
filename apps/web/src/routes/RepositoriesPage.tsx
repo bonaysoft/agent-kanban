@@ -63,7 +63,7 @@ export function RepositoriesPage() {
               Repositories are added when you run <code className="font-mono text-accent">ak link</code> in a project directory.
             </p>
             <pre className="inline-block bg-surface-secondary border border-border rounded-lg px-4 py-2 text-xs font-mono text-content-secondary mt-2">
-              npx agent-kanban link --project my-project
+              npx agent-kanban link
             </pre>
             <p className="text-content-tertiary text-xs mt-3">
               Or{" "}
