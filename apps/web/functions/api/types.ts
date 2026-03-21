@@ -1,3 +1,4 @@
+import type { Machine } from "@agent-kanban/shared";
 import type { Session, User } from "better-auth";
 
 export interface Env {
@@ -11,10 +12,8 @@ export interface Env {
 
 declare module "hono" {
   interface ContextVariableMap {
-    userId: string;
-    identityType: "user" | "machine";
-    machineId?: string;
-    user?: User;
-    session?: Session;
+    machine: Machine;
+    user: User;
+    session: Session;
   }
 }

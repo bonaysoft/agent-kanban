@@ -1,4 +1,5 @@
 import type { D1 } from "./db";
+import { validateToken } from "./auth";
 import { createAuth } from "./betterAuth";
 import type { Env } from "./types";
 import { getTaskLogs } from "./taskRepo";
@@ -29,12 +30,12 @@ export async function createSSEResponse(
   lastEventId: string | null,
   token: string,
 ): Promise<Response> {
-  const auth = createAuth(env);
+  // Try machine API key first (ak_ prefix), then better-auth session token
   let authenticated = false;
   if (token.startsWith("ak_")) {
-    const result = await auth.api.verifyApiKey({ body: { key: token } });
-    authenticated = !!result?.valid;
+    authenticated = !!(await validateToken(env.DB, token));
   } else {
+    const auth = createAuth(env);
     const session = await auth.api.getSession({
       headers: new Headers({ Authorization: `Bearer ${token}` }),
     });

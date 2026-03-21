@@ -2,26 +2,26 @@ import type { Board, BoardWithTasks, Task } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 import { computeBlocked } from "./taskDeps";
 
-export async function createBoard(db: D1, userId: string, name: string, description?: string): Promise<Board> {
+export async function createBoard(db: D1, ownerId: string, name: string, description?: string): Promise<Board> {
   const id = newId();
   const now = new Date().toISOString();
   await db.prepare(
-    "INSERT INTO boards (id, user_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(id, userId, name, description || null, now, now).run();
-  return { id, user_id: userId, name, description: description || null, created_at: now, updated_at: now };
+    "INSERT INTO boards (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(id, ownerId, name, description || null, now, now).run();
+  return { id, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
 }
 
-export async function listBoards(db: D1, userId: string): Promise<Board[]> {
+export async function listBoards(db: D1, ownerId: string): Promise<Board[]> {
   const result = await db.prepare(
-    "SELECT * FROM boards WHERE user_id = ? ORDER BY created_at DESC"
-  ).bind(userId).all<Board>();
+    "SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at DESC"
+  ).bind(ownerId).all<Board>();
   return result.results;
 }
 
-export async function getBoardByName(db: D1, userId: string, name: string): Promise<Board | null> {
+export async function getBoardByName(db: D1, ownerId: string, name: string): Promise<Board | null> {
   return db.prepare(
-    "SELECT * FROM boards WHERE user_id = ? AND name = ?"
-  ).bind(userId, name).first<Board>();
+    "SELECT * FROM boards WHERE owner_id = ? AND name = ?"
+  ).bind(ownerId, name).first<Board>();
 }
 
 export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks | null> {
@@ -47,10 +47,10 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
   return { ...board, tasks: tasks.results };
 }
 
-export async function getDefaultBoard(db: D1, userId: string): Promise<Board | null> {
+export async function getDefaultBoard(db: D1, ownerId: string): Promise<Board | null> {
   return db.prepare(
-    "SELECT * FROM boards WHERE user_id = ? ORDER BY created_at ASC LIMIT 1"
-  ).bind(userId).first<Board>();
+    "SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1"
+  ).bind(ownerId).first<Board>();
 }
 
 export async function updateBoard(db: D1, boardId: string, updates: { name?: string; description?: string }): Promise<Board | null> {
