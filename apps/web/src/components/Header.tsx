@@ -1,6 +1,7 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 import { useState } from "react";
+import { signOut, clearAuthToken } from "../lib/auth-client";
 
 interface HeaderProps {
   boardName?: string;
@@ -52,9 +53,20 @@ const themeIcons: Record<Theme, () => JSX.Element> = {
   system: MonitorIcon,
 };
 
+function LogOutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
 export function Header({ boardName }: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(getTheme());
   const location = useLocation();
+  const navigate = useNavigate();
 
   function cycleTheme() {
     const next: Theme = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
@@ -98,6 +110,17 @@ export function Header({ boardName }: HeaderProps) {
           className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
         >
           <ThemeIcon />
+        </button>
+        <button
+          onClick={async () => {
+            await signOut();
+            clearAuthToken();
+            navigate("/auth");
+          }}
+          title="Sign out"
+          className="text-content-tertiary hover:text-content-secondary p-1.5 rounded-md hover:bg-surface-tertiary transition-colors"
+        >
+          <LogOutIcon />
         </button>
       </div>
     </header>

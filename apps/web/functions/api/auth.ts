@@ -2,6 +2,7 @@ import type { Context, Next } from "hono";
 import type { Machine } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 import type { Env } from "./types";
+import { createAuth } from "./betterAuth";
 
 async function hashKey(key: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -23,14 +24,29 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return c.json({ error: { code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" } }, 401);
   }
 
-  const machine = await validateToken(c.env.DB, header.slice(7));
+  const token = header.slice(7);
 
-  if (!machine) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+  // Machine API key (ak_ prefix)
+  if (token.startsWith("ak_")) {
+    const machine = await validateToken(c.env.DB, token);
+    if (!machine) {
+      return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+    }
+    c.set("machine", machine);
+    return next();
   }
 
-  c.set("machine", machine);
-  await next();
+  // Better-auth session token
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (session) {
+    c.set("user", session.user);
+    c.set("session", session.session);
+    c.set("machine", { id: "web", owner_id: session.user.id, key_hash: "", name: "web", status: "online", last_heartbeat_at: null, created_at: "" } as Machine);
+    return next();
+  }
+
+  return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
 }
 
 export async function generateMachineKey(db: D1Database, ownerId: string, name: string): Promise<{ key: string; machine: Machine }> {

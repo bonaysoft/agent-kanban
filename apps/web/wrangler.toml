@@ -1,6 +1,9 @@
 name = "agent-kanban"
 compatibility_date = "2024-12-01"
 
+# Auth secrets: set in .dev.vars (local) or `wrangler secret put` (production)
+# Required: AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"

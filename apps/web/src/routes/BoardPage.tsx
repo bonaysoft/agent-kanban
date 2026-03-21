@@ -49,26 +49,10 @@ export function BoardPage() {
     }));
   }, [board, activeProject]);
 
-  if (error === "NOT_AUTHENTICATED") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-4 p-8">
-          <h1 className="text-xl font-bold text-content-primary">Agent <span className="text-accent">Kanban</span></h1>
-          <p className="text-sm text-content-secondary">Enter your API key to continue.</p>
-          <input
-            type="password"
-            placeholder="API key"
-            className="w-64 bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                localStorage.setItem("api-key", (e.target as HTMLInputElement).value);
-                refresh();
-              }
-            }}
-          />
-        </div>
-      </div>
-    );
+  if (error === "NOT_AUTHENTICATED" || (error as any)?.status === 401) {
+    // Session expired or invalid — redirect to auth page
+    window.location.href = "/auth";
+    return null;
   }
 
   if (loading) {

@@ -1,5 +1,7 @@
 import type { D1 } from "./db";
 import { validateToken } from "./auth";
+import { createAuth } from "./betterAuth";
+import type { Env } from "./types";
 import { getTaskLogs } from "./taskRepo";
 import { listMessages } from "./messageRepo";
 
@@ -23,18 +25,31 @@ function mergeByTime(logs: SSEEvent[], messages: SSEEvent[]): SSEEvent[] {
 }
 
 export async function createSSEResponse(
-  db: D1,
+  env: Env,
   taskId: string,
   lastEventId: string | null,
   token: string,
 ): Promise<Response> {
-  const apiKey = await validateToken(db, token);
-  if (!apiKey) {
+  // Try machine API key first (ak_ prefix), then better-auth session token
+  let authenticated = false;
+  if (token.startsWith("ak_")) {
+    authenticated = !!(await validateToken(env.DB, token));
+  } else {
+    const auth = createAuth(env);
+    const session = await auth.api.getSession({
+      headers: new Headers({ Authorization: `Bearer ${token}` }),
+    });
+    authenticated = !!session;
+  }
+
+  if (!authenticated) {
     return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Invalid token" } }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  const db = env.DB;
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();

@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@agent-kanban/shared": "workspace:*",
+    "better-auth": "^1.5.5",
     "hono": "^4.7.0",
+    "kysely": "^0.28.14",
+    "kysely-d1": "^0.4.0",
     "nanoid": "^5.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

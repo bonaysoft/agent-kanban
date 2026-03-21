@@ -25,7 +25,7 @@ export function useBoard() {
       setError(null);
     } catch (e: any) {
       failCount.current++;
-      if (e.message === "NOT_AUTHENTICATED") {
+      if (e.status === 401 || e.message === "NOT_AUTHENTICATED") {
         setError("NOT_AUTHENTICATED");
       } else if (failCount.current >= 3) {
         setError("Can't reach server");

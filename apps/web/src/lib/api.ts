@@ -1,11 +1,9 @@
+import { getAuthToken } from "./auth-client";
+
 const API_BASE = "/api";
 
-function getToken(): string | null {
-  return localStorage.getItem("api-key");
-}
-
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = getToken();
+  const token = getAuthToken();
   if (!token) throw new Error("NOT_AUTHENTICATED");
 
   const res = await fetch(`${API_BASE}${path}`, {

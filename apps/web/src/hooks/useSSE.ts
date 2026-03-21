@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { getAuthToken } from "../lib/auth-client";
 
 interface UseSSEOptions {
   taskId: string;
@@ -14,7 +15,7 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const lastEventId = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
-  const token = localStorage.getItem("api-key");
+  const token = getAuthToken();
 
   const connectSSE = useCallback(() => {
     if (!token || !enabled) return;
