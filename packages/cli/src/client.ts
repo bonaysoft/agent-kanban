@@ -48,7 +48,7 @@ export class ApiClient {
   }
   getTask(id: string) { return this.request("GET", `/api/tasks/${id}`); }
   claimTask(id: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${id}/claim`, agentName ? { agent_name: agentName } : {});
+    return this.request("POST", `/api/tasks/${id}/claim`, agentName ? { agent_id: agentName } : {});
   }
   completeTask(id: string, body: Record<string, unknown>) {
     return this.request("POST", `/api/tasks/${id}/complete`, body);
@@ -66,7 +66,7 @@ export class ApiClient {
     return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
   }
   addLog(taskId: string, detail: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_name: agentName });
+    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_id: agentName });
   }
 
   // Agents
@@ -84,4 +84,13 @@ export class ApiClient {
     return this.request("POST", `/api/projects/${projectId}/resources`, input);
   }
   listResources(projectId: string) { return this.request("GET", `/api/projects/${projectId}/resources`); }
+
+  // Messages
+  sendMessage(taskId: string, body: { agent_id: string; role: string; content: string }) {
+    return this.request("POST", `/api/tasks/${taskId}/messages`, body);
+  }
+  getMessages(taskId: string, since?: string) {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+    return this.request<any[]>("GET", `/api/tasks/${taskId}/messages${qs}`);
+  }
 }

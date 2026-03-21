@@ -18,7 +18,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Agent skill: packages/skill/ — installed to ~/.claude/skills/agent-kanban/
 
 ## Patterns
-- Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, projectRepo.ts) — no raw SQL in route handlers
+- Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, projectRepo.ts, messageRepo.ts) — no raw SQL in route handlers
 - Error handling: Hono onError + HTTPException — centralized error envelope { error: { code, message } }
 - Claim atomicity: db.batch() for race-condition-free task claims
 - Auth: API key = Machine level (one key per computer, all agents share it). SHA-256 hashed in D1. Bootstrap via wrangler d1 execute. SSE uses `?token=` query param (validated via `validateToken()`).
@@ -28,7 +28,10 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Task dependencies: `depends_on` JSON array, cycle detection via recursive CTE (taskDeps.ts), `blocked` computed on read
 - Task origin: `created_from` for single-level subtask tracking
 - Stale detection: write-on-read in GET /api/boards/:id and inline before assign (taskStale.ts). 2h timeout, idempotent.
-- SSE: TransformStream-based, 2s poll for 25s (CF Workers limit), Last-Event-ID resume via log ID → timestamp resolution (sse.ts)
+- SSE: TransformStream-based, 2s poll for 25s (CF Workers limit), Last-Event-ID resume via log ID → timestamp resolution (sse.ts). Emits typed events (`event: log` for task_logs, `event: message` for messages).
+- Messages: `messages` table for human ↔ agent chat. `agent_id` = agent CLI session ID (used for `claude --resume`). D1 as message bus — daemon polls for human messages, browser reads via SSE.
+- Machine daemon: `ak start` — poll loop, auto-claim todo tasks, spawn agent CLI per task. PID lock, graceful shutdown, exponential backoff. `processManager.ts` handles spawn/monitor/kill/chat relay.
+- Repo linking: `ak link --project <name>` binds local repo to project. Stored in `~/.agent-kanban/links.json`. Auto-adds git_repo resource.
 
 ## Testing
 - Framework: vitest (root `vitest.config.ts`)

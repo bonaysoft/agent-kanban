@@ -1,25 +1,25 @@
 import type { Agent, AgentStatus, AgentWithActivity } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 
-export async function findOrCreateAgent(
+export async function ensureAgent(
   db: D1,
   machineId: string,
-  agentName: string,
+  agentId: string,
 ): Promise<Agent> {
   const existing = await db.prepare(
-    "SELECT * FROM agents WHERE machine_id = ? AND name = ?"
-  ).bind(machineId, agentName).first<Agent>();
+    "SELECT * FROM agents WHERE id = ?"
+  ).bind(agentId).first<Agent>();
 
   if (existing) return existing;
 
-  const id = newId();
   const now = new Date().toISOString();
 
+  const name = `Agent-${agentId.slice(0, 6)}`;
   await db.prepare(
     "INSERT INTO agents (id, machine_id, name, role_id, status, created_at) VALUES (?, ?, ?, NULL, 'idle', ?)"
-  ).bind(id, machineId, agentName, now).run();
+  ).bind(agentId, machineId, name, now).run();
 
-  return { id, machine_id: machineId, name: agentName, role_id: null, status: "idle", created_at: now };
+  return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", created_at: now };
 }
 
 export async function listAgents(db: D1): Promise<AgentWithActivity[]> {

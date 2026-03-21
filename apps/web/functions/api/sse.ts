@@ -1,6 +1,26 @@
 import type { D1 } from "./db";
 import { validateToken } from "./auth";
 import { getTaskLogs } from "./taskRepo";
+import { listMessages } from "./messageRepo";
+
+interface SSEEvent {
+  id: string;
+  type: "log" | "message";
+  data: string;
+  created_at: string;
+}
+
+function mergeByTime(logs: SSEEvent[], messages: SSEEvent[]): SSEEvent[] {
+  const merged: SSEEvent[] = [];
+  let i = 0, j = 0;
+  while (i < logs.length && j < messages.length) {
+    if (logs[i].created_at <= messages[j].created_at) merged.push(logs[i++]);
+    else merged.push(messages[j++]);
+  }
+  while (i < logs.length) merged.push(logs[i++]);
+  while (j < messages.length) merged.push(messages[j++]);
+  return merged;
+}
 
 export async function createSSEResponse(
   db: D1,
@@ -20,41 +40,62 @@ export async function createSSEResponse(
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
 
-  const write = (data: string, id?: string) => {
-    let msg = "";
-    if (id) msg += `id: ${id}\n`;
-    msg += `data: ${data}\n\n`;
+  const write = (event: SSEEvent) => {
+    let msg = `id: ${event.id}\n`;
+    msg += `event: ${event.type}\n`;
+    msg += `data: ${event.data}\n\n`;
     return writer.write(encoder.encode(msg));
   };
 
   const run = async () => {
-    // Resolve lastEventId (a log ID) to a timestamp for since-based filtering
+    // Resolve lastEventId to a timestamp for since-based filtering
     let since: string | undefined;
     if (lastEventId) {
-      const ref = await db.prepare("SELECT created_at FROM task_logs WHERE id = ?").bind(lastEventId).first<{ created_at: string }>();
+      const ref = await db.prepare(
+        "SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?",
+      ).bind(lastEventId, lastEventId).first<{ created_at: string }>();
       since = ref?.created_at;
     }
-    const initialLogs = await getTaskLogs(db, taskId, since);
-    const batch = since ? initialLogs : initialLogs.slice(-50);
 
-    for (const log of batch) {
-      await write(JSON.stringify(log), log.id);
+    const [initialLogs, initialMessages] = await Promise.all([
+      getTaskLogs(db, taskId, since),
+      listMessages(db, taskId, since),
+    ]);
+
+    const logEvents: SSEEvent[] = (since ? initialLogs : initialLogs.slice(-50))
+      .map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
+    const msgEvents: SSEEvent[] = (since ? initialMessages : initialMessages.slice(-50))
+      .map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
+
+    const batch = mergeByTime(logEvents, msgEvents);
+    for (const event of batch) {
+      await write(event);
     }
 
-    let lastSeen = batch.length > 0 ? batch[batch.length - 1].created_at : (since || new Date().toISOString());
+    let lastSeen = batch.length > 0
+      ? batch[batch.length - 1].created_at
+      : (since || new Date().toISOString());
 
     // Poll every 2s for up to 25s (CF Workers 30s limit)
     const deadline = Date.now() + 25000;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const newLogs = await getTaskLogs(db, taskId, lastSeen);
-      for (const log of newLogs) {
-        await write(JSON.stringify(log), log.id);
+      const [newLogs, newMessages] = await Promise.all([
+        getTaskLogs(db, taskId, lastSeen),
+        listMessages(db, taskId, lastSeen),
+      ]);
+
+      const newLogEvents = newLogs.map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
+      const newMsgEvents = newMessages.map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
+      const merged = mergeByTime(newLogEvents, newMsgEvents);
+
+      for (const event of merged) {
+        await write(event);
       }
 
-      if (newLogs.length > 0) {
-        lastSeen = newLogs[newLogs.length - 1].created_at;
+      if (merged.length > 0) {
+        lastSeen = merged[merged.length - 1].created_at;
       }
     }
 

@@ -22,3 +22,5 @@ export const STALE_TIMEOUT_MS = 7200000; // 2 hours
 export const DEFAULT_BOARD_NAME = "My Board";
 
 export const RESOURCE_TYPES = ["git_repo"] as const;
+
+export const MESSAGE_ROLES = ["human", "agent"] as const;

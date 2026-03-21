@@ -1,0 +1,160 @@
+import { useState, useRef, useEffect } from "react";
+import { api } from "../lib/api";
+import { formatRelative } from "./TaskDetailFields";
+
+interface ChatPanelProps {
+  taskId: string;
+  agentId: string | null;
+  taskDone: boolean;
+  initialMessages: any[];
+  sseMessages: any[];
+}
+
+export function ChatPanel({ taskId, agentId, taskDone, initialMessages, sseMessages }: ChatPanelProps) {
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Merge initial + SSE messages, dedup by ID
+  const allMessages = (() => {
+    const seen = new Set<string>();
+    const merged: any[] = [];
+    for (const msg of [...initialMessages, ...sseMessages]) {
+      if (!seen.has(msg.id)) {
+        seen.add(msg.id);
+        merged.push(msg);
+      }
+    }
+    return merged.sort((a: any, b: any) => a.created_at.localeCompare(b.created_at));
+  })();
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [allMessages.length]);
+
+  async function handleSend() {
+    if (!input.trim() || !agentId) return;
+
+    setSending(true);
+    setSendError(null);
+    try {
+      await api.messages.create(taskId, {
+        agent_id: agentId,
+        role: "human",
+        content: input.trim(),
+      });
+      setInput("");
+    } catch (err: any) {
+      setSendError("Failed to send. Try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }
+
+  if (!agentId) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-content-tertiary">
+          No agent assigned. Chat is available when an agent is working on this task.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-3">
+      {/* Session ID for resume */}
+      <div className="flex items-center gap-2 text-[11px] font-mono text-content-tertiary shrink-0">
+        <span>Session:</span>
+        <code className="bg-surface-primary px-1.5 py-0.5 rounded text-accent select-all">
+          {agentId}
+        </code>
+        <button
+          onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)}
+          className="text-content-tertiary hover:text-content-secondary transition-colors"
+          title="Copy resume command"
+        >
+          ⎘
+        </button>
+      </div>
+
+      {/* Messages — fills available space */}
+      <div
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-y-auto space-y-2"
+      >
+        {allMessages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-content-tertiary">
+              {taskDone ? "No messages were exchanged." : "No messages yet. Send a message to the agent."}
+            </p>
+          </div>
+        )}
+        {allMessages.map((msg: any) => (
+          <div
+            key={msg.id}
+            className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
+              msg.role === "agent" ? "border-accent" : "border-border"
+            }`}
+          >
+            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
+              {formatRelative(msg.created_at)}
+            </span>
+            <div className="flex-1 min-w-0">
+              <span className={`text-[11px] font-mono uppercase tracking-wider ${
+                msg.role === "agent" ? "text-accent" : "text-content-tertiary"
+              }`}>
+                {msg.role}
+              </span>
+              <p className={`text-[13px] mt-0.5 whitespace-pre-wrap break-words ${
+                msg.role === "agent"
+                  ? "font-mono text-xs text-content-secondary"
+                  : "text-content-primary"
+              }`}>
+                {msg.content}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Send error */}
+      {sendError && (
+        <p className="text-xs text-error shrink-0">{sendError}</p>
+      )}
+
+      {/* Input — pinned at bottom, hidden when task is done */}
+      {!taskDone && (
+        <div className="flex gap-2 shrink-0">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Message the agent..."
+            disabled={sending}
+            className="flex-1 bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            className="px-4 py-2 bg-accent text-surface-primary rounded-md text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
+          >
+            {sending ? "..." : "Send"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

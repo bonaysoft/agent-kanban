@@ -99,6 +99,17 @@ export interface TaskWithLogs extends Task {
   duration_minutes: number | null;
 }
 
+export type MessageRole = "human" | "agent";
+
+export interface Message {
+  id: string;
+  task_id: string;
+  agent_id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+}
+
 export interface ErrorEnvelope {
   error: {
     code: string;
@@ -148,7 +159,7 @@ export interface CreateTaskInput {
   priority?: Priority;
   input?: Record<string, unknown>;
   board_id?: string;
-  agent_name?: string;
+  agent_id?: string;
   depends_on?: string[];
   created_from?: string;
 }
@@ -158,13 +169,13 @@ export interface AssignTaskInput {
 }
 
 export interface ClaimTaskInput {
-  agent_name?: string;
+  agent_id?: string;
 }
 
 export interface CompleteTaskInput {
   result?: string;
   pr_url?: string;
-  agent_name?: string;
+  agent_id?: string;
 }
 
 export interface CreateBoardInput {

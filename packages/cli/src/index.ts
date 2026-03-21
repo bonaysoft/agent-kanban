@@ -4,6 +4,8 @@ import { setConfigValue, getConfigValue } from "./config.js";
 import { ApiClient } from "./client.js";
 import { detectProjectId } from "./project.js";
 import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatProjectList, formatResourceList } from "./output.js";
+import { registerLinkCommand } from "./commands/link.js";
+import { registerStartCommand } from "./commands/start.js";
 
 const program = new Command();
 program.name("agent-kanban").description("Agent-first cross-project kanban board").version("1.3.0");
@@ -58,7 +60,7 @@ taskCmd
     if (projectId) body.project_id = projectId;
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
-    if (opts.agentName) body.agent_name = opts.agentName;
+    if (opts.agentName) body.agent_id = opts.agentName;
     if (opts.parent) body.created_from = opts.parent;
     if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
     if (opts.input) {
@@ -91,41 +93,6 @@ taskCmd
     const tasks = await client.listTasks(params);
     const fmt = getFormat(opts.format);
     output(tasks, fmt, formatTaskList);
-  });
-
-taskCmd
-  .command("claim <id>")
-  .description("Claim a task")
-  .option("--agent-name <name>", "Agent identity")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (id, opts) => {
-    const client = new ApiClient();
-    const task = await client.claimTask(id, opts.agentName);
-    const fmt = getFormat(opts.format);
-    output(task, fmt, (t) => `Claimed task ${t.id}: ${t.title}`);
-  });
-
-taskCmd
-  .command("release <id>")
-  .description("Release a claimed task back to Todo")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (id, opts) => {
-    const client = new ApiClient();
-    const task = await client.releaseTask(id);
-    const fmt = getFormat(opts.format);
-    output(task, fmt, (t) => `Released task ${t.id}: ${t.title}`);
-  });
-
-taskCmd
-  .command("assign <id>")
-  .description("Assign a task to an agent")
-  .requiredOption("--agent <agent-id>", "Agent ID to assign to")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (id, opts) => {
-    const client = new ApiClient();
-    const task = await client.assignTask(id, opts.agent);
-    const fmt = getFormat(opts.format);
-    output(task, fmt, (t) => `Assigned task ${t.id}: ${t.title}`);
   });
 
 taskCmd
@@ -178,7 +145,7 @@ taskCmd
     const body: Record<string, unknown> = {};
     if (opts.result) body.result = opts.result;
     if (opts.prUrl) body.pr_url = opts.prUrl;
-    if (opts.agentName) body.agent_name = opts.agentName;
+    if (opts.agentName) body.agent_id = opts.agentName;
     const task = await client.completeTask(id, body);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Completed task ${t.id}: ${t.title}`);
@@ -313,5 +280,10 @@ async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<st
   }
   return match.id;
 }
+
+// ─── Link & Start ───
+
+registerLinkCommand(program);
+registerStartCommand(program);
 
 program.parseAsync();

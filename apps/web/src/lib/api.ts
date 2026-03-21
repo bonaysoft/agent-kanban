@@ -57,6 +57,14 @@ export const api = {
       return request<any[]>("GET", `/tasks/${id}/logs${qs}`);
     },
   },
+  messages: {
+    list: (taskId: string, since?: string) => {
+      const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+      return request<any[]>("GET", `/tasks/${taskId}/messages${qs}`);
+    },
+    create: (taskId: string, body: { agent_id: string; role: string; content: string }) =>
+      request<any>("POST", `/tasks/${taskId}/messages`, body),
+  },
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),

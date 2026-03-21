@@ -7,6 +7,7 @@ interface UseSSEOptions {
 
 export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const [logs, setLogs] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const failCount = useRef(0);
@@ -27,11 +28,18 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       failCount.current = 0;
     };
 
-    es.onmessage = (e) => {
+    // Named event handlers for typed SSE events
+    es.addEventListener("log", (e: MessageEvent) => {
       const log = JSON.parse(e.data);
       lastEventId.current = e.lastEventId;
       setLogs((prev) => [...prev, log]);
-    };
+    });
+
+    es.addEventListener("message", (e: MessageEvent) => {
+      const msg = JSON.parse(e.data);
+      lastEventId.current = e.lastEventId;
+      setMessages((prev) => [...prev, msg]);
+    });
 
     es.onerror = () => {
       es.close();
@@ -39,12 +47,10 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       failCount.current++;
 
       if (failCount.current >= 3) {
-        // Fall back to polling
         setReconnecting(true);
         return;
       }
 
-      // Reconnect after brief delay
       setReconnecting(true);
       setTimeout(connectSSE, 2000);
     };
@@ -56,13 +62,12 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const poll = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`/api/tasks/${taskId}/logs`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const allLogs = await res.json();
-        setLogs(allLogs);
-      }
+      const [logsRes, msgsRes] = await Promise.all([
+        fetch(`/api/tasks/${taskId}/logs`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/tasks/${taskId}/messages`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (logsRes.ok) setLogs(await logsRes.json());
+      if (msgsRes.ok) setMessages(await msgsRes.json());
     } catch { /* ignore polling errors */ }
   }, [taskId, token]);
 
@@ -81,12 +86,12 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   useEffect(() => {
     if (reconnecting && failCount.current >= 3) {
       intervalRef.current = setInterval(poll, 5000);
-      poll(); // Immediate first poll
+      poll();
       return () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
     }
   }, [reconnecting, poll]);
 
-  return { logs, connected, reconnecting };
+  return { logs, messages, connected, reconnecting };
 }

@@ -81,44 +81,55 @@ projects:                  # only claim tasks from these projects (empty = all)
 
 **Scheduling is decentralized.** Each Machine daemon decides what to claim based on its local config (project filter, concurrency limit). Multiple Machines compete for claims — `db.batch()` atomicity ensures first-to-claim wins. No central orchestrator needed.
 
-### Agent Behavior Stream (Pass-Through)
+### Agent Behavior Data
 
-The platform does **not** store agent behavior data. The Machine streams agent output to the platform in real-time, and the platform relays it to the Web UI as a transparent pipe. When nobody is watching, nothing is transmitted.
+The platform does **not** store agent behavior data (stdout, tool use, thinking). Behavior data stays on the Machine locally, managed by the agent CLI itself (e.g., Claude Code session files).
 
 ```
 Platform stores (lightweight structured events):
   task_logs: claimed, commented, completed, moved
   → existing mechanism, unchanged
 
+Platform stores (persistent):
+  messages: human ↔ agent chat messages
+  → agent_id field = agent CLI session ID (e.g., Claude Code session ID)
+
 Machine local storage (agent CLI's own):
   Claude Code session data, stdout history
   → not managed by platform
-
-Real-time stream (pass-through, no storage):
-  Web UI opens task detail
-    → Platform connects to Machine
-    → Machine forwards agent stdout
-  Web UI closes
-    → stream disconnects, platform stores nothing
+  → user can review via: claude --resume <agent_id>
 ```
 
 | Direction | Data | Platform stores? |
 |-----------|------|-----------------|
-| Up (agent → web) | thinking, tool use, output | No — pass-through relay |
-| Down (web → agent) | user chat messages | No — relay to Machine stdin |
+| Up (agent → web) | chat replies | Yes — messages table (role='agent') |
+| Down (web → agent) | user chat messages | Yes — messages table (role='human') |
+| Agent behavior | thinking, tool use, output | No — stays on Machine, resume via session ID |
 | Structured events | claimed, completed, commented | Yes — task_logs table |
-| History review | past agent session data | No — pulled from Machine on demand |
 
-Key constraint: we don't control the agent's output. We consume it. The communication channel must work with agents as black boxes that speak CLI. The Machine process captures and parses stdout; the platform never interprets or stores it.
+Key constraint: we don't control the agent's output. We consume it. The `agent_id` in the messages table doubles as the agent CLI session ID — it's used both for message routing (daemon knows which process to pipe stdin to) and for session resume (`claude --resume <agent_id>`).
 
 ### Chat with Agent
 
-Chat and behavior stream share the same bidirectional channel through the Machine process:
+Chat is a bidirectional message channel through the Machine daemon, using D1 as the message bus:
 
-- **Up (agent → web):** Machine captures agent stdout → relays through platform → Web UI renders
-- **Down (web → agent):** User types in Web UI → platform relays to Machine → Machine writes to agent stdin → agent responds → back up
+- **Down (web → agent):** User sends message in Web UI → POST to platform → stored in `messages` (role='human') → daemon polls for new messages → pipes to agent stdin
+- **Up (agent → web):** Agent responds via stdout → daemon captures → POST to platform → stored in `messages` (role='agent') → Web UI reads via SSE
 
-**Idle agents:** When a task completes, the agent CLI process doesn't exit — it stays in interactive mode, waiting for input. The Machine manages agent lifecycle: task complete ≠ process exit, just status change to idle. If the process has exited, the Machine can resume the session (Claude Code supports session resume) when the user initiates a chat.
+**Data model:**
+```sql
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,  -- = agent CLI session ID
+  role TEXT NOT NULL,       -- 'human' | 'agent'
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+```
+
+**Idle agents:** When a task completes, the agent CLI process may exit. The `agent_id` (session ID) is preserved in the messages table. If the user wants to review what the agent did, they can `claude --resume <agent_id>` on the Machine to see the full session history. If the user wants to chat with a completed task's agent, the Machine can resume the session.
 
 ### Project-Repo Linking (`ak link`)
 
