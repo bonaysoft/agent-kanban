@@ -13,6 +13,8 @@ declare module "hono" {
   interface ContextVariableMap {
     ownerId: string;
     identityType: "user" | "machine";
+    apiKeyId?: string;
+    machineId?: string;
     user?: User;
     session?: Session;
   }

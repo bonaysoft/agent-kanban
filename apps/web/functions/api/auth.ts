@@ -20,6 +20,9 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
 
     c.set("ownerId", result.key.userId);
     c.set("identityType", "machine");
+    c.set("apiKeyId", result.key.id);
+    const metadata = result.key.metadata as Record<string, any> | null;
+    if (metadata?.machineId) c.set("machineId", metadata.machineId);
     return next();
   }
 
