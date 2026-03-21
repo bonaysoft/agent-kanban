@@ -10,7 +10,7 @@ Repo: agent-kanban
 ## Vision
 
 ### 10x Check
-Agent Kanban becomes the universal agent coordination layer — not just a task board, a protocol. Optional structured input fields on tasks, dependency chains for multi-step workflows, and smart CLI defaults that remove friction. The 10x vision (agent capability registry, event webhooks, multi-board orchestration) is the v2/v3 trajectory — v1 lays the data model foundation.
+Agent Kanban becomes the universal agent coordination layer — not just a task board, a protocol. Optional structured input fields on tasks, dependency chains for multi-step workflows, and smart CLI defaults that remove friction. The 10x vision (agent capability registry, event webhooks, multi-board orchestration) is the v2 trajectory — v1 lays the data model foundation.
 
 ### Platonic Ideal
 A mission control for your personal AI workforce. You open the browser and see what every agent across every project is doing right now. A timeline shows history. You drag a card from "Idea" to "Todo" and an agent picks it up within seconds. Live progress streams in. When it's done, the card turns green with a PR link. The emotional arc: **confidence** — you trust your agents are working, you can see proof, you can intervene if needed.
