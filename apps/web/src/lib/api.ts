@@ -69,6 +69,10 @@ export const api = {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
   },
+  machines: {
+    list: () => request<any[]>("GET", "/machines"),
+    get: (id: string) => request<any>("GET", `/machines/${id}`),
+  },
   projects: {
     list: () => request<any[]>("GET", "/projects"),
     get: (id: string) => request<any>("GET", `/projects/${id}`),

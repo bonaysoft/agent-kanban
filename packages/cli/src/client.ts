@@ -69,6 +69,11 @@ export class ApiClient {
     return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_id: agentName });
   }
 
+  // Machines
+  heartbeat(name: string) {
+    return this.request("POST", "/api/machines/heartbeat", { name });
+  }
+
   // Agents
   listAgents() { return this.request("GET", "/api/agents"); }
 

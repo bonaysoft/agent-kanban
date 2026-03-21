@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync, unlinkSync, readFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, hostname } from "os";
 import { randomUUID } from "crypto";
 import { ApiClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
@@ -61,6 +61,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     if (!running) return;
     running = false;
     console.log("\n[INFO] Shutting down daemon...");
+    clearInterval(heartbeatInterval);
     if (pollTimer) clearTimeout(pollTimer);
     await pm.killAll();
     removePidFile();
@@ -71,6 +72,19 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   console.log(`[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
+
+  // Register machine and start heartbeat
+  const machineName = hostname();
+  await client.heartbeat(machineName).catch((err: any) =>
+    console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
+  );
+  console.log(`[INFO] Machine registered: ${machineName}`);
+
+  const heartbeatInterval = setInterval(() => {
+    client.heartbeat(machineName).catch((err: any) =>
+      console.error(`[WARN] Heartbeat failed: ${err.message}`)
+    );
+  }, 30000);
 
   function schedulePoll(delayMs: number) {
     if (!running) return;

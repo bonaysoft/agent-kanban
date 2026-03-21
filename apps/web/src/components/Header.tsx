@@ -29,7 +29,19 @@ export function Header({ boardName }: HeaderProps) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        <Link
+          to="/machines"
+          className="text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
+        >
+          Machines
+        </Link>
+        <Link
+          to="/agents"
+          className="text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
+        >
+          Agents
+        </Link>
         <button
           onClick={cycleTheme}
           className="text-xs text-content-tertiary hover:text-content-secondary px-2 py-1 rounded border border-border hover:border-content-tertiary transition-colors"
@@ -38,7 +50,7 @@ export function Header({ boardName }: HeaderProps) {
         </button>
         <Link
           to="/settings"
-          className="text-content-tertiary hover:text-content-secondary text-sm px-2 py-1"
+          className="text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
         >
           Settings
         </Link>

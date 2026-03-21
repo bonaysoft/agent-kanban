@@ -49,6 +49,21 @@ export interface TaskLog {
   created_at: string;
 }
 
+export type MachineStatus = "online" | "offline";
+
+export interface Machine {
+  id: string;
+  name: string;
+  status: MachineStatus;
+  last_heartbeat_at: string;
+  created_at: string;
+}
+
+export interface MachineWithAgents extends Machine {
+  agent_count: number;
+  active_agent_count: number;
+}
+
 export type AgentStatus = "idle" | "working" | "offline";
 
 export interface Agent {

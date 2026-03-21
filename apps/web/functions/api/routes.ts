@@ -10,6 +10,7 @@ import { findOrCreateAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingI
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
+import { upsertMachineHeartbeat, listMachines, getMachine } from "./machineRepo";
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -75,6 +76,27 @@ api.patch("/api/agents/:id/usage", async (c) => {
   const body = await c.req.json<{ input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_usd: number }>();
   await updateAgentUsage(c.env.DB, c.req.param("id"), body);
   return c.json({ ok: true });
+});
+
+// ─── Machines ───
+
+api.post("/api/machines/heartbeat", async (c) => {
+  const body = await c.req.json<{ name: string }>();
+  if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  const apiKey = c.get("apiKey");
+  const machine = await upsertMachineHeartbeat(c.env.DB, apiKey.id, body.name);
+  return c.json(machine);
+});
+
+api.get("/api/machines", async (c) => {
+  const machines = await listMachines(c.env.DB);
+  return c.json(machines);
+});
+
+api.get("/api/machines/:id", async (c) => {
+  const machine = await getMachine(c.env.DB, c.req.param("id"));
+  if (!machine) throw new HTTPException(404, { message: "Machine not found" });
+  return c.json(machine);
 });
 
 // ─── Tasks ───
