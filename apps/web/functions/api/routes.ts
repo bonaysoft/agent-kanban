@@ -243,7 +243,7 @@ api.post("/api/tasks/:id/cancel", async (c) => {
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
+  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
   const machine = c.get("machine");
 
   let agentId: string | null = null;
@@ -255,7 +255,7 @@ api.post("/api/tasks/:id/review", async (c) => {
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
 
-  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null);
+  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null);
   return c.json(task);
 });
 

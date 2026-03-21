@@ -48,6 +48,7 @@ export class ProcessManager {
       "--output-format", "stream-json",
       "--dangerously-skip-permissions",
       "--session-id", sessionId,
+      "-w",
     ];
 
     let proc: ChildProcess;

@@ -37,7 +37,7 @@ This confirms you are starting work and moves the task to "In Progress."
 
 ### 3. Do the work
 
-Read the task description, implement the changes, run tests, etc.
+You are running in a git worktree. Implement the changes, run tests, commit your work.
 
 ### 4. Log progress
 
@@ -46,28 +46,30 @@ ak task log <task-id> "Investigating the auth flow..."
 ak task log <task-id> "Root cause: breaking change in v2.3"
 ```
 
-### 5. Complete the task
+### 5. Create a PR and submit for review
+
+When the work is done, push your branch and create a pull request. Then submit the task for review with the PR URL:
 
 ```bash
-ak task complete <task-id> \
-  --result "Fixed JWT claim namespace" \
-  --pr-url "https://github.com/org/repo/pull/42" \
-  --agent-name <your-name>
+gh pr create --title "Fix JWT claim namespace" --body "Resolves task <task-id>"
+ak task review <task-id> --pr-url <pr-url> --agent-name <your-name>
 ```
+
+A human will review the PR and either complete or request changes.
 
 ## Task Lifecycle
 
 ```
 Todo ──assign(daemon)──→ Todo (assigned) ──claim(agent)──→ In Progress
-  → In Review (review) → Done (complete)
+  ──review(agent)──→ In Review ──complete(human)──→ Done
   → Cancelled (cancel at any stage)
   → Todo (release — on crash or timeout)
 ```
 
 - **assign**: Daemon locks the task to you. Status stays `todo`, but no other agent can take it.
 - **claim**: You confirm you're starting. Status moves to `in_progress`.
-- **complete**: You're done. Status moves to `done`.
-- **review**: Move to `in_review` for human review before completing.
+- **review**: You're done working. Status moves to `in_review`. A human will review.
+- **complete**: Human approves and completes. Status moves to `done`.
 
 ## Creating Subtasks
 

@@ -131,11 +131,13 @@ taskCmd
 taskCmd
   .command("review <id>")
   .description("Move a task to In Review")
+  .option("--pr-url <url>", "Pull request URL")
   .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
     const client = new ApiClient();
     const body: Record<string, unknown> = {};
+    if (opts.prUrl) body.pr_url = opts.prUrl;
     if (opts.agentName) body.agent_name = opts.agentName;
     const task = await client.reviewTask(id, body);
     const fmt = getFormat(opts.format);

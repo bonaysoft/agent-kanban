@@ -254,7 +254,7 @@ export async function cancelTask(db: D1, taskId: string, agentId: string | null)
   return { ...task, status: "cancelled", assigned_to: null, updated_at: now };
 }
 
-export async function reviewTask(db: D1, taskId: string, agentId: string | null): Promise<Task | null> {
+export async function reviewTask(db: D1, taskId: string, agentId: string | null, prUrl: string | null = null): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
 
@@ -263,14 +263,14 @@ export async function reviewTask(db: D1, taskId: string, agentId: string | null)
 
   await db.batch([
     db.prepare(
-      "UPDATE tasks SET status = 'in_review', updated_at = ? WHERE id = ?"
-    ).bind(now, taskId),
+      "UPDATE tasks SET status = 'in_review', pr_url = COALESCE(?, pr_url), updated_at = ? WHERE id = ?"
+    ).bind(prUrl, now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'review_requested', NULL, ?)"
     ).bind(logId, taskId, agentId, now),
   ]);
 
-  return { ...task, status: "in_review", updated_at: now };
+  return { ...task, status: "in_review", pr_url: prUrl || task.pr_url, updated_at: now };
 }
 
 export async function releaseTask(db: D1, taskId: string, agentId: string | null, action: "released" | "timed_out" = "released"): Promise<Task | null> {
