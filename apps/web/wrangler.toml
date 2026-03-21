@@ -2,8 +2,8 @@ name = "agent-kanban"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Auth config: set in .dev.vars (local) or `wrangler secret put` (production)
-# Required: AUTH_SECRET, BETTER_AUTH_URL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+# Auth config: production uses `wrangler secret put`
+# Dev values are passed via --binding in the dev script (package.json)
 
 [[d1_databases]]
 binding = "DB"
