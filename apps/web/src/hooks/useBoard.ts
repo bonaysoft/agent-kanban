@@ -1,40 +1,35 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 
-const BOARD_KEY = "ak-active-board";
+const LAST_BOARD_KEY = "ak-last-board";
 
-export function useBoard() {
+/** Remember last visited board for redirect from "/" */
+export function getLastBoardId(): string | null {
+  return localStorage.getItem(LAST_BOARD_KEY);
+}
+
+export function setLastBoardId(id: string) {
+  localStorage.setItem(LAST_BOARD_KEY, id);
+}
+
+/** Fetch a single board by ID (from URL params) */
+export function useBoard(boardId: string | undefined) {
   const [board, setBoard] = useState<any>(null);
-  const [boards, setBoards] = useState<any[]>([]);
-  const [activeBoardId, setActiveBoardId] = useState<string | null>(
-    localStorage.getItem(BOARD_KEY),
-  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const failCount = useRef(0);
 
   const fetchBoard = useCallback(async () => {
+    if (!boardId) {
+      setBoard(null);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const allBoards = await api.boards.list();
-      setBoards(allBoards);
-
-      if (allBoards.length === 0) {
-        setBoard(null);
-        setLoading(false);
-        return;
-      }
-
-      const targetId = activeBoardId && allBoards.some((b: any) => b.id === activeBoardId)
-        ? activeBoardId
-        : allBoards[0].id;
-
-      if (targetId !== activeBoardId) {
-        setActiveBoardId(targetId);
-        localStorage.setItem(BOARD_KEY, targetId);
-      }
-
-      const full = await api.boards.get(targetId);
+      const full = await api.boards.get(boardId);
       setBoard(full);
+      setLastBoardId(boardId);
       failCount.current = 0;
       setError(null);
     } catch (e: any) {
@@ -47,18 +42,37 @@ export function useBoard() {
     } finally {
       setLoading(false);
     }
-  }, [activeBoardId]);
+  }, [boardId]);
 
   useEffect(() => {
+    setLoading(true);
     fetchBoard();
     const interval = setInterval(fetchBoard, 30000);
     return () => clearInterval(interval);
   }, [fetchBoard]);
 
-  function switchBoard(boardId: string) {
-    setActiveBoardId(boardId);
-    localStorage.setItem(BOARD_KEY, boardId);
-  }
+  return { board, loading, error, refresh: fetchBoard };
+}
 
-  return { board, boards, activeBoardId, loading, error, refresh: fetchBoard, switchBoard };
+/** Fetch the list of all boards (for switcher, redirect) */
+export function useBoards() {
+  const [boards, setBoards] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBoards = useCallback(async () => {
+    try {
+      const list = await api.boards.list();
+      setBoards(list);
+    } catch {
+      // silent — boards list is non-critical
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBoards();
+  }, [fetchBoards]);
+
+  return { boards, loading, refresh: fetchBoards };
 }

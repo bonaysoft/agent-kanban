@@ -1,0 +1,20 @@
+import { Navigate } from "react-router-dom";
+import { useBoards, getLastBoardId } from "../hooks/useBoard";
+
+export function BoardRedirect() {
+  const { boards, loading } = useBoards();
+
+  if (loading) return null;
+
+  const lastId = getLastBoardId();
+  const target = lastId && boards.some((b: any) => b.id === lastId)
+    ? lastId
+    : boards[0]?.id;
+
+  if (target) {
+    return <Navigate to={`/boards/${target}`} replace />;
+  }
+
+  // No boards exist — redirect to first board route with empty state
+  return <Navigate to="/boards/_new" replace />;
+}

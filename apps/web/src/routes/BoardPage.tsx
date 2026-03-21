@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { Header } from "../components/Header";
 import { FilterBar } from "../components/FilterBar";
@@ -19,7 +20,9 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 };
 
 export function BoardPage() {
-  const { board, boards, activeBoardId, loading, error, refresh, switchBoard } = useBoard();
+  const { boardId } = useParams<{ boardId: string }>();
+  const navigate = useNavigate();
+  const { board, loading, error, refresh } = useBoard(boardId);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
@@ -50,8 +53,7 @@ export function BoardPage() {
     }));
   }, [board, activeRepository]);
 
-  if (error === "NOT_AUTHENTICATED" || (error as any)?.status === 401) {
-    // Session expired or invalid — redirect to auth page
+  if (error === "NOT_AUTHENTICATED") {
     window.location.href = "/auth";
     return null;
   }
@@ -74,24 +76,22 @@ export function BoardPage() {
     );
   }
 
-  if (!board) {
+  // _new is a sentinel for "no boards exist yet"
+  if (!board || boardId === "_new") {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <Onboarding onComplete={refresh} />
+        <Onboarding onComplete={async () => {
+          const boards = await api.boards.list();
+          if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
+        }} />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-surface-primary">
-      <Header
-        boardName={board.name}
-        boards={boards}
-        activeBoardId={activeBoardId}
-        onBoardChange={switchBoard}
-        onBoardCreate={async (name) => { await api.boards.create({ name }); refresh(); }}
-      />
+      <Header />
       <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
 
       {error && (
