@@ -80,7 +80,6 @@ export type MachineStatus = "online" | "offline";
 export interface Machine {
   id: string;
   owner_id: string;
-  key_hash: string;
   name: string;
   status: MachineStatus;
   os: string | null;

@@ -1,12 +1,26 @@
 import type { Machine, MachineWithAgents } from "@agent-kanban/shared";
 import { MACHINE_STALE_TIMEOUT_MS } from "@agent-kanban/shared";
-import type { D1 } from "./db";
+import { newId, type D1 } from "./db";
 
 export interface HeartbeatInfo {
   name: string;
   os?: string;
   version?: string;
   runtimes?: string[];
+}
+
+export async function createMachine(db: D1, ownerId: string, name: string): Promise<Machine> {
+  const id = newId();
+  const now = new Date().toISOString();
+  await db.prepare(
+    "INSERT INTO machines (id, owner_id, name, status, created_at) VALUES (?, ?, ?, 'offline', ?)"
+  ).bind(id, ownerId, name, now).run();
+  return { id, owner_id: ownerId, name, status: "offline", os: null, version: null, runtimes: null, last_heartbeat_at: null, created_at: now };
+}
+
+export async function deleteMachine(db: D1, machineId: string): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM machines WHERE id = ?").bind(machineId).run();
+  return result.meta.changes > 0;
 }
 
 export async function upsertMachineHeartbeat(
@@ -17,22 +31,12 @@ export async function upsertMachineHeartbeat(
   const now = new Date().toISOString();
   const runtimesStr = info.runtimes?.join(",") || null;
 
-  const existing = await db.prepare(
-    "SELECT * FROM machines WHERE id = ?"
-  ).bind(machineId).first<Machine>();
-
-  if (existing) {
-    await db.prepare(
-      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
-    ).bind(info.name, info.os || null, info.version || null, runtimesStr, now, machineId).run();
-    return { ...existing, name: info.name, os: info.os || null, version: info.version || null, runtimes: runtimesStr, status: "online", last_heartbeat_at: now };
-  }
-
   await db.prepare(
-    "INSERT INTO machines (id, owner_id, key_hash, name, status, os, version, runtimes, last_heartbeat_at, created_at) VALUES (?, ?, '', ?, 'online', ?, ?, ?, ?, ?)"
-  ).bind(machineId, "", info.name, info.os || null, info.version || null, runtimesStr, now, now).run();
+    "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
+  ).bind(info.name, info.os || null, info.version || null, runtimesStr, now, machineId).run();
 
-  return { id: machineId, owner_id: "", key_hash: "", name: info.name, status: "online", os: info.os || null, version: info.version || null, runtimes: runtimesStr, last_heartbeat_at: now, created_at: now };
+  const machine = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine>();
+  return machine!;
 }
 
 export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
