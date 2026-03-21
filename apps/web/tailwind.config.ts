@@ -45,10 +45,15 @@ export default {
           "0%": { borderColor: "var(--accent)" },
           "100%": { borderColor: "var(--border)" },
         },
+        "breathe": {
+          "0%, 100%": { boxShadow: "var(--breathe-shadow-max)" },
+          "50%": { boxShadow: "var(--breathe-shadow-min)" },
+        },
       },
       animation: {
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
         "card-highlight": "card-highlight 1s ease-out forwards",
+        "breathe": "breathe 3s ease-in-out infinite",
       },
     },
   },

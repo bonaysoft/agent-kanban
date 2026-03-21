@@ -63,7 +63,7 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
     <Panel onClose={onClose}>
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-3">
-          <AgentIdenticon publicKey={agent.public_key} name={agent.name} size={40} />
+          <AgentIdenticon publicKey={agent.public_key} size={40} />
           <div>
             <h2 className="font-mono text-lg text-accent font-semibold">{agent.name}</h2>
             <div className="flex items-center gap-1.5 mt-0.5">

@@ -76,7 +76,7 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
                 disabled={assigning}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-surface-tertiary flex items-center gap-2"
               >
-                <AgentIdenticon publicKey={agent.public_key} name={agent.name} size={20} />
+                <AgentIdenticon publicKey={agent.public_key} size={20} />
                 <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status] || "bg-content-tertiary"}`} />
                 <span className="font-mono text-[13px] text-content-primary">{agent.name}</span>
                 <span className="text-[10px] text-content-tertiary ml-auto">{agent.status}</span>

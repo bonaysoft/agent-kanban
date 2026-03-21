@@ -60,7 +60,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
 
       {isAgentActive && (
         <div className="flex items-center gap-1.5 mt-2 text-accent">
-          <AgentIdenticon publicKey={task.agent_public_key} name={task.agent_name} size={12} />
+          {task.agent_public_key && <AgentIdenticon publicKey={task.agent_public_key} size={12} />}
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />
           <span
             className="font-mono text-[11px] hover:underline"

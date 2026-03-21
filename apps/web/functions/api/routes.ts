@@ -99,8 +99,8 @@ api.get("/api/agents/:id", async (c) => {
 
 api.post("/api/agents", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
-  const body = await c.req.json<{ agent_id: string; public_key?: string }>();
-  if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
+  const body = await c.req.json<{ agent_id: string; public_key: string }>();
+  if (!body.agent_id || !body.public_key) throw new HTTPException(400, { message: "agent_id and public_key are required" });
   if (!c.get("machineId")) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
   const agent = await createAgent(c.env.DB, c.get("machineId")!, body.agent_id, body.public_key);
   return c.json(agent, 201);
@@ -128,8 +128,8 @@ api.post("/api/tasks", async (c) => {
 });
 
 api.get("/api/tasks", async (c) => {
-  const { repository_id, status, label, board_id, parent } = c.req.query();
-  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent });
+  const { repository_id, status, label, board_id, parent, assigned_to } = c.req.query();
+  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent, assigned_to });
   return c.json(tasks);
 });
 

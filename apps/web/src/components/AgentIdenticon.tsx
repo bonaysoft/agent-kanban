@@ -1,48 +1,72 @@
 import { agentIdenticon, agentColor } from "../lib/agentIdentity";
 
 interface AgentIdenticonProps {
-  publicKey: string | null | undefined;
-  name?: string;
+  publicKey: string;
   size?: number;
+  glow?: boolean;
+  crystallize?: boolean;
 }
 
-export function AgentIdenticon({ publicKey, name, size = 40 }: AgentIdenticonProps) {
-  if (!publicKey) {
-    return (
-      <div
-        className="rounded-full bg-accent/20 flex items-center justify-center"
-        style={{ width: size, height: size }}
-      >
-        <span className="font-mono text-accent font-bold" style={{ fontSize: size * 0.35 }}>
-          {(name || "??").slice(0, 2).toUpperCase()}
-        </span>
-      </div>
-    );
-  }
-
+export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: AgentIdenticonProps) {
   const grid = agentIdenticon(publicKey);
   const color = agentColor(publicKey);
-  const cellSize = size / 6;
-  const padding = cellSize / 2;
+  const cellSize = size / 7;
+  const padding = cellSize;
+  const gap = cellSize * 0.12;
+
+  let cellIndex = 0;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <rect width={size} height={size} rx={size * 0.2} fill="var(--surface-tertiary, #27272A)" />
-      {grid.map((row, y) =>
-        row.map((filled, x) =>
-          filled ? (
-            <rect
-              key={`${y}-${x}`}
-              x={padding + x * cellSize}
-              y={padding + y * cellSize}
-              width={cellSize * 0.85}
-              height={cellSize * 0.85}
-              rx={cellSize * 0.15}
-              fill={color}
-            />
-          ) : null,
-        ),
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0"
+    >
+      {glow && (
+        <defs>
+          <filter id={`glow-${publicKey.slice(0, 8)}`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
       )}
+      {crystallize && (
+        <style>{`
+          @keyframes cell-in {
+            from { opacity: 0; transform: scale(0.3); }
+            to { opacity: 0.9; transform: scale(1); }
+          }
+        `}</style>
+      )}
+      <rect width={size} height={size} rx={size * 0.18} fill="#18181B" />
+      <g filter={glow ? `url(#glow-${publicKey.slice(0, 8)})` : undefined}>
+        {grid.map((row, y) =>
+          row.map((filled, x) => {
+            if (!filled) return null;
+            const idx = cellIndex++;
+            return (
+              <rect
+                key={`${y}-${x}`}
+                x={padding + x * cellSize + gap}
+                y={padding + y * cellSize + gap}
+                width={cellSize - gap * 2}
+                height={cellSize - gap * 2}
+                rx={cellSize * 0.2}
+                fill={color}
+                opacity={crystallize ? 0 : 0.9}
+                style={crystallize ? {
+                  animation: `cell-in 0.4s ease-out ${idx * 60}ms forwards`,
+                  transformOrigin: `${padding + x * cellSize + cellSize / 2}px ${padding + y * cellSize + cellSize / 2}px`,
+                } : undefined}
+              />
+            );
+          }),
+        )}
+      </g>
     </svg>
   );
 }
