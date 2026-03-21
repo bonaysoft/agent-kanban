@@ -2,9 +2,8 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
 import { authMiddleware, generateMachineKey, revokeMachine } from "./auth";
-import { createBoard, listBoards, getBoard, deleteBoard } from "./boardRepo";
-import { createProject, listProjects, getProject, getProjectByName, deleteProject, addResource, listResources, deleteResource } from "./projectRepo";
-import { RESOURCE_TYPES } from "@agent-kanban/shared";
+import { getBoard, getBoardByProject } from "./boardRepo";
+import { createProject, listProjects, getProject, getProjectByName, deleteProject, addRepository, listRepositories, deleteRepository } from "./projectRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { ensureAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
@@ -40,36 +39,6 @@ api.use("/api/*", async (c, next) => {
   if (c.req.path.match(/\/api\/tasks\/[^/]+\/stream$/)) return next();
   if (c.req.path.startsWith("/api/auth/")) return next();
   return authMiddleware(c, next);
-});
-
-// ─── Boards ───
-
-api.post("/api/boards", async (c) => {
-  const body = await c.req.json<{ name: string }>();
-  if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const machine = c.get("machine");
-  const board = await createBoard(c.env.DB, machine.owner_id, body.name);
-  return c.json(board, 201);
-});
-
-api.get("/api/boards", async (c) => {
-  const machine = c.get("machine");
-  const boards = await listBoards(c.env.DB, machine.owner_id);
-  return c.json(boards);
-});
-
-api.get("/api/boards/:id", async (c) => {
-  const boardId = c.req.param("id");
-  await detectAndReleaseStale(c.env.DB, boardId);
-  const board = await getBoard(c.env.DB, boardId);
-  if (!board) throw new HTTPException(404, { message: "Board not found" });
-  return c.json(board);
-});
-
-api.delete("/api/boards/:id", async (c) => {
-  const deleted = await deleteBoard(c.env.DB, c.req.param("id"));
-  if (!deleted) throw new HTTPException(404, { message: "Board not found" });
-  return c.json({ ok: true });
 });
 
 // ─── Machines ───
@@ -149,8 +118,8 @@ api.post("/api/tasks", async (c) => {
 });
 
 api.get("/api/tasks", async (c) => {
-  const { project_id, status, label, board_id, parent } = c.req.query();
-  const tasks = await listTasks(c.env.DB, { project_id, status, label, board_id, parent });
+  const { repository_id, status, label, board_id, parent } = c.req.query();
+  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent });
   return c.json(tasks);
 });
 
@@ -394,28 +363,33 @@ api.delete("/api/projects/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-api.post("/api/projects/:id/resources", async (c) => {
-  const body = await c.req.json<{ type: string; name: string; uri: string; config?: string }>();
-  if (!body.type || !body.name || !body.uri) {
-    throw new HTTPException(400, { message: "type, name, and uri are required" });
-  }
-  if (!(RESOURCE_TYPES as readonly string[]).includes(body.type)) {
-    throw new HTTPException(400, { message: `Invalid resource type. Allowed: ${RESOURCE_TYPES.join(", ")}` });
+api.get("/api/projects/:id/board", async (c) => {
+  const board = await getBoardByProject(c.env.DB, c.req.param("id"));
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  await detectAndReleaseStale(c.env.DB, board.id);
+  const full = await getBoard(c.env.DB, board.id);
+  return c.json(full);
+});
+
+api.post("/api/projects/:id/repositories", async (c) => {
+  const body = await c.req.json<{ name: string; url: string }>();
+  if (!body.name || !body.url) {
+    throw new HTTPException(400, { message: "name and url are required" });
   }
   const project = await getProject(c.env.DB, c.req.param("id"));
   if (!project) throw new HTTPException(404, { message: "Project not found" });
-  const resource = await addResource(c.env.DB, c.req.param("id"), body);
-  return c.json(resource, 201);
+  const repository = await addRepository(c.env.DB, c.req.param("id"), body);
+  return c.json(repository, 201);
 });
 
-api.get("/api/projects/:id/resources", async (c) => {
-  const resources = await listResources(c.env.DB, c.req.param("id"));
-  return c.json(resources);
+api.get("/api/projects/:id/repositories", async (c) => {
+  const repositories = await listRepositories(c.env.DB, c.req.param("id"));
+  return c.json(repositories);
 });
 
-api.delete("/api/projects/:id/resources/:resourceId", async (c) => {
-  const deleted = await deleteResource(c.env.DB, c.req.param("resourceId"));
-  if (!deleted) throw new HTTPException(404, { message: "Resource not found" });
+api.delete("/api/projects/:id/repositories/:repoId", async (c) => {
+  const deleted = await deleteRepository(c.env.DB, c.req.param("repoId"));
+  if (!deleted) throw new HTTPException(404, { message: "Repository not found" });
   return c.json({ ok: true });
 });
 

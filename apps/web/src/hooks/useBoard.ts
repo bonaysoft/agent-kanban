@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 
 export function useBoard() {
-  const [boards, setBoards] = useState<any[]>([]);
   const [board, setBoard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -10,16 +9,15 @@ export function useBoard() {
 
   const fetchBoard = useCallback(async () => {
     try {
-      const allBoards = await api.boards.list();
-      setBoards(allBoards);
+      const projects = await api.projects.list();
 
-      if (allBoards.length === 0) {
+      if (projects.length === 0) {
         setBoard(null);
         setLoading(false);
         return;
       }
 
-      const full = await api.boards.get(allBoards[0].id);
+      const full = await api.projects.board(projects[0].id);
       setBoard(full);
       failCount.current = 0;
       setError(null);
@@ -41,5 +39,5 @@ export function useBoard() {
     return () => clearInterval(interval);
   }, [fetchBoard]);
 
-  return { boards, board, loading, error, refresh: fetchBoard };
+  return { board, loading, error, refresh: fetchBoard };
 }

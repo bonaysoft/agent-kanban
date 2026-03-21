@@ -33,8 +33,4 @@ export const MACHINE_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 
 export const MACHINE_STALE_TIMEOUT_MS = 60000; // 60 seconds (miss 2 heartbeats)
 
-export const DEFAULT_BOARD_NAME = "My Board";
-
-export const RESOURCE_TYPES = ["git_repo"] as const;
-
 export const MESSAGE_ROLES = ["human", "agent"] as const;

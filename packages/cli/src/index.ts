@@ -2,8 +2,7 @@
 import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
 import { ApiClient } from "./client.js";
-import { detectProjectId } from "./project.js";
-import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatProjectList, formatResourceList } from "./output.js";
+import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatProjectList, formatRepositoryList } from "./output.js";
 import { registerLinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
 
@@ -43,7 +42,7 @@ taskCmd
   .description("Create a new task")
   .requiredOption("--title <title>", "Task title")
   .option("--description <desc>", "Task description")
-  .option("--project <project>", "Project name")
+  .option("--repo <repo>", "Repository name or ID")
   .option("--priority <priority>", "Priority (low, medium, high, urgent)")
   .option("--labels <labels>", "Comma-separated labels")
   .option("--input <json>", "JSON input payload")
@@ -53,11 +52,10 @@ taskCmd
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    const projectId = await detectProjectId(client, opts.project);
 
     const body: Record<string, unknown> = { title: opts.title };
     if (opts.description) body.description = opts.description;
-    if (projectId) body.project_id = projectId;
+    if (opts.repo) body.repository_id = opts.repo;
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
     if (opts.agentName) body.agent_id = opts.agentName;
@@ -76,7 +74,7 @@ taskCmd
 taskCmd
   .command("list")
   .description("List tasks")
-  .option("--project <project>", "Filter by project")
+  .option("--repo <repo>", "Filter by repository ID")
   .option("--status <status>", "Filter by status (column name)")
   .option("--label <label>", "Filter by label")
   .option("--parent <id>", "Filter subtasks of a parent task")
@@ -84,8 +82,7 @@ taskCmd
   .action(async (opts) => {
     const client = new ApiClient();
     const params: Record<string, string> = {};
-    const projectId = await detectProjectId(client, opts.project);
-    if (projectId) params.project_id = projectId;
+    if (opts.repo) params.repository_id = opts.repo;
     if (opts.status) params.status = opts.status;
     if (opts.label) params.label = opts.label;
     if (opts.parent) params.parent = opts.parent;
@@ -166,50 +163,6 @@ agentCmd
     output(agents, fmt, formatAgentList);
   });
 
-// ─── Board ───
-
-const boardCmd = program.command("board").description("Manage boards");
-
-boardCmd
-  .command("view")
-  .description("View the kanban board")
-  .option("--board <id>", "Board ID (uses default if omitted)")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (opts) => {
-    const client = new ApiClient();
-    let board: any;
-
-    if (opts.board) {
-      board = await client.getBoard(opts.board);
-    } else {
-      const boards = await client.listBoards() as any[];
-      if (boards.length === 0) {
-        console.error("No boards. Create one first: agent-kanban board create --name 'My Board'");
-        process.exit(1);
-      }
-      if (boards.length > 1) {
-        console.error("Multiple boards exist. Use --board <id> to specify.");
-        process.exit(1);
-      }
-      board = await client.getBoard(boards[0].id);
-    }
-
-    const fmt = getFormat(opts.format);
-    output(board, fmt, formatBoard);
-  });
-
-boardCmd
-  .command("create")
-  .description("Create a new board")
-  .requiredOption("--name <name>", "Board name")
-  .option("--format <format>", "Output format (json, text)")
-  .action(async (opts) => {
-    const client = new ApiClient();
-    const board = await client.createBoard(opts.name);
-    const fmt = getFormat(opts.format);
-    output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
-  });
-
 // ─── Project ───
 
 const projectCmd = program.command("project").description("Manage projects");
@@ -238,37 +191,61 @@ projectCmd
     output(projects, fmt, formatProjectList);
   });
 
-// ─── Resource ───
-
-const resourceCmd = program.command("resource").description("Manage project resources");
-
-resourceCmd
-  .command("add")
-  .description("Add a resource to a project")
-  .requiredOption("--project <name-or-id>", "Project name or ID")
-  .requiredOption("--type <type>", "Resource type (git_repo)")
-  .requiredOption("--name <name>", "Resource name")
-  .requiredOption("--uri <uri>", "Resource URI (e.g. clone URL)")
+projectCmd
+  .command("board")
+  .description("View the kanban board for a project")
+  .option("--project <name-or-id>", "Project name or ID (uses first if omitted)")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
-    const projectId = await resolveProjectId(client, opts.project);
-    const resource = await client.addResource(projectId, { type: opts.type, name: opts.name, uri: opts.uri });
+    let projectId: string;
+
+    if (opts.project) {
+      projectId = await resolveProjectId(client, opts.project);
+    } else {
+      const projects = await client.listProjects();
+      if (projects.length === 0) {
+        console.error("No projects. Create one first: agent-kanban project create --name 'My Project'");
+        process.exit(1);
+      }
+      projectId = projects[0].id;
+    }
+
+    const board = await client.getProjectBoard(projectId);
     const fmt = getFormat(opts.format);
-    output(resource, fmt, (r) => `Added resource ${r.id}: ${r.name} (${r.type})`);
+    output(board, fmt, formatBoard);
   });
 
-resourceCmd
+// ─── Repo ───
+
+const repoCmd = program.command("repo").description("Manage project repositories");
+
+repoCmd
+  .command("add")
+  .description("Add a repository to a project")
+  .requiredOption("--project <name-or-id>", "Project name or ID")
+  .requiredOption("--name <name>", "Repository name")
+  .requiredOption("--url <url>", "Clone URL")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new ApiClient();
+    const projectId = await resolveProjectId(client, opts.project);
+    const repo = await client.addRepository(projectId, { name: opts.name, url: opts.url });
+    const fmt = getFormat(opts.format);
+    output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
+  });
+
+repoCmd
   .command("list")
-  .description("List resources for a project")
+  .description("List repositories for a project")
   .requiredOption("--project <name-or-id>", "Project name or ID")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = new ApiClient();
     const projectId = await resolveProjectId(client, opts.project);
-    const resources = await client.listResources(projectId);
+    const repos = await client.listRepositories(projectId);
     const fmt = getFormat(opts.format);
-    output(resources, fmt, formatResourceList);
+    output(repos, fmt, formatRepositoryList);
   });
 
 async function resolveProjectId(client: ApiClient, nameOrId: string): Promise<string> {

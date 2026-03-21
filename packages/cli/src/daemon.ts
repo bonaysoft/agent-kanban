@@ -46,6 +46,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     console.log(`[INFO] Linked projects: ${linkedProjects.length}`);
   }
 
+  // Resolve linked project IDs → board IDs at startup
+  // boardProjectMap: boardId → projectId
+  const boardProjectMap = new Map<string, string>();
+  for (const projectId of linkedProjects) {
+    try {
+      const board = await client.getProjectBoard(projectId) as any;
+      if (board?.id) {
+        boardProjectMap.set(board.id, projectId);
+      }
+    } catch (err: any) {
+      console.warn(`[WARN] Could not resolve board for project ${projectId}: ${err.message}`);
+    }
+  }
+
   const pm = new ProcessManager(client, opts.agentCli, () => {
     // Slot freed — trigger immediate poll
     schedulePoll(0);
@@ -103,9 +117,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const tasks = await client.listTasks({ status: "Todo" }) as any[];
 
-      // Filter by linked projects (if any links exist)
-      const candidates = linkedProjects.length > 0
-        ? tasks.filter((t: any) => t.project_id && linkedProjects.includes(t.project_id))
+      // Filter by linked boards (if any links exist)
+      const candidates = boardProjectMap.size > 0
+        ? tasks.filter((t: any) => boardProjectMap.has(t.board_id))
         : tasks;
 
       // Filter out blocked and already-assigned tasks
@@ -134,10 +148,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
-      // Resolve repo directory
-      const repoDir = task.project_id ? findRepoForProject(task.project_id) : undefined;
+      // Resolve repo directory via board → project → local link
+      const projectId = boardProjectMap.get(task.board_id);
+      const repoDir = projectId ? findRepoForProject(projectId) : undefined;
       if (!repoDir) {
-        console.error(`[ERROR] No linked repo for project ${task.project_id}. Releasing task.`);
+        console.error(`[ERROR] No linked repo for board ${task.board_id}. Releasing task.`);
         await client.releaseTask(task.id).catch(() => {});
         schedulePoll(baseInterval);
         return;

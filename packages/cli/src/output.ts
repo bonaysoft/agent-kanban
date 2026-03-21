@@ -21,7 +21,7 @@ export function formatTaskList(tasks: any[]): string {
 
   const lines = tasks.map((t) => {
     const priority = t.priority ? `[${t.priority}]` : "";
-    const project = t.project_name ? `(${t.project_name})` : "";
+    const project = t.repository_name ? `(${t.repository_name})` : "";
     const agent = t.assigned_to ? `→ ${t.assigned_to}` : "";
     return `  ${t.id}  ${priority.padEnd(8)} ${t.title} ${project} ${agent}`;
   });
@@ -53,11 +53,11 @@ export function formatProjectList(projects: any[]): string {
   return lines.join("\n");
 }
 
-export function formatResourceList(resources: any[]): string {
-  if (resources.length === 0) return "No resources found.";
+export function formatRepositoryList(repos: any[]): string {
+  if (repos.length === 0) return "No repositories found.";
 
-  const lines = resources.map((r) => {
-    return `  ${r.id}  [${r.type}] ${r.name}  ${r.uri}`;
+  const lines = repos.map((r) => {
+    return `  ${r.id}  ${r.name}  ${r.url}`;
   });
 
   return lines.join("\n");

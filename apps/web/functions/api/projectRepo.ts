@@ -1,15 +1,21 @@
-import type { Project, ProjectResource, ProjectWithResources, CreateResourceInput } from "@agent-kanban/shared";
+import type { Project, Repository, ProjectWithRepositories, CreateRepositoryInput } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 
 export async function createProject(db: D1, ownerId: string, name: string, description?: string): Promise<Project> {
-  const id = newId();
+  const projectId = newId();
+  const boardId = newId();
   const now = new Date().toISOString();
 
-  await db.prepare(
-    "INSERT INTO projects (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(id, ownerId, name, description || null, now, now).run();
+  await db.batch([
+    db.prepare(
+      "INSERT INTO projects (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(projectId, ownerId, name, description || null, now, now),
+    db.prepare(
+      "INSERT INTO boards (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+    ).bind(boardId, projectId, name, now, now),
+  ]);
 
-  return { id, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
+  return { id: projectId, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
 }
 
 export async function listProjects(db: D1, ownerId: string): Promise<Project[]> {
@@ -19,19 +25,19 @@ export async function listProjects(db: D1, ownerId: string): Promise<Project[]> 
   return result.results;
 }
 
-export async function getProject(db: D1, id: string): Promise<ProjectWithResources | null> {
+export async function getProject(db: D1, id: string): Promise<ProjectWithRepositories | null> {
   const project = await db.prepare("SELECT * FROM projects WHERE id = ?").bind(id).first<Project>();
   if (!project) return null;
 
-  const resources = await db.prepare(
-    "SELECT * FROM project_resources WHERE project_id = ? ORDER BY created_at DESC"
-  ).bind(id).all<ProjectResource>();
+  const repositories = await db.prepare(
+    "SELECT * FROM repositories WHERE project_id = ? ORDER BY created_at DESC"
+  ).bind(id).all<Repository>();
 
-  return { ...project, resources: resources.results };
+  return { ...project, repositories: repositories.results };
 }
 
-export async function getProjectByName(db: D1, name: string): Promise<Project | null> {
-  return db.prepare("SELECT * FROM projects WHERE name = ?").bind(name).first<Project>();
+export async function getProjectByName(db: D1, ownerId: string, name: string): Promise<Project | null> {
+  return db.prepare("SELECT * FROM projects WHERE owner_id = ? AND name = ?").bind(ownerId, name).first<Project>();
 }
 
 export async function deleteProject(db: D1, id: string): Promise<boolean> {
@@ -39,25 +45,25 @@ export async function deleteProject(db: D1, id: string): Promise<boolean> {
   return result.meta.changes > 0;
 }
 
-export async function addResource(db: D1, projectId: string, input: CreateResourceInput): Promise<ProjectResource> {
+export async function addRepository(db: D1, projectId: string, input: CreateRepositoryInput): Promise<Repository> {
   const id = newId();
   const now = new Date().toISOString();
 
   await db.prepare(
-    "INSERT INTO project_resources (id, project_id, type, name, uri, config, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(id, projectId, input.type, input.name, input.uri, input.config || null, now).run();
+    "INSERT INTO repositories (id, project_id, name, url, created_at) VALUES (?, ?, ?, ?, ?)"
+  ).bind(id, projectId, input.name, input.url, now).run();
 
-  return { id, project_id: projectId, type: input.type, name: input.name, uri: input.uri, config: input.config || null, created_at: now };
+  return { id, project_id: projectId, name: input.name, url: input.url, created_at: now };
 }
 
-export async function listResources(db: D1, projectId: string): Promise<ProjectResource[]> {
+export async function listRepositories(db: D1, projectId: string): Promise<Repository[]> {
   const result = await db.prepare(
-    "SELECT * FROM project_resources WHERE project_id = ? ORDER BY created_at DESC"
-  ).bind(projectId).all<ProjectResource>();
+    "SELECT * FROM repositories WHERE project_id = ? ORDER BY created_at DESC"
+  ).bind(projectId).all<Repository>();
   return result.results;
 }
 
-export async function deleteResource(db: D1, id: string): Promise<boolean> {
-  const result = await db.prepare("DELETE FROM project_resources WHERE id = ?").bind(id).run();
+export async function deleteRepository(db: D1, id: string): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM repositories WHERE id = ?").bind(id).run();
   return result.meta.changes > 0;
 }

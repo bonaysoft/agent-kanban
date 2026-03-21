@@ -41,22 +41,21 @@ export function registerLinkCommand(program: Command) {
       setLink(repoRoot, project.id);
       console.log(`Linked ${repoRoot} → project "${project.name}" (${project.id})`);
 
-      // Auto-add git_repo resource if remote exists
+      // Auto-add repository if remote exists
       const remoteUrl = getGitRemoteUrl();
       if (remoteUrl) {
         try {
-          const resources = await client.listResources(project.id) as any[];
-          const exists = resources.some((r: any) => r.type === "git_repo" && r.uri === remoteUrl);
+          const repositories = await client.listRepositories(project.id) as any[];
+          const exists = repositories.some((r: any) => r.url === remoteUrl);
           if (!exists) {
-            await client.addResource(project.id, {
-              type: "git_repo",
+            await client.addRepository(project.id, {
               name: basename(repoRoot),
-              uri: remoteUrl,
+              url: remoteUrl,
             });
-            console.log(`Added git_repo resource: ${remoteUrl}`);
+            console.log(`Added repository: ${remoteUrl}`);
           }
         } catch (err: any) {
-          console.warn(`Warning: could not add git_repo resource: ${err.message}`);
+          console.warn(`Warning: could not add repository: ${err.message}`);
         }
       }
     });

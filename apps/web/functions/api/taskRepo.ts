@@ -34,11 +34,11 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
 
   const stmts = [
     db.prepare(`
-      INSERT INTO tasks (id, board_id, status, title, description, project_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
+      INSERT INTO tasks (id, board_id, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
       VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?)
     `).bind(
       taskId, board.id, input.title, input.description || null,
-      input.project_id || null, labelsJson, input.priority || null,
+      input.repository_id || null, labelsJson, input.priority || null,
       input.agentId || "human", inputJson, input.created_from || null,
       position, now, now,
     ),
@@ -54,7 +54,7 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
 
   return {
     id: taskId, board_id: board.id, status: "todo", title: input.title,
-    description: input.description || null, project_id: input.project_id || null,
+    description: input.description || null, repository_id: input.repository_id || null,
     labels: labelsJson, priority: input.priority || null,
     created_by: input.agentId || "human", assigned_to: null,
     result: null, pr_url: null, input: inputJson,
@@ -65,11 +65,11 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
 
 export async function listTasks(
   db: D1,
-  filters: { project_id?: string; status?: string; label?: string; board_id?: string; parent?: string },
+  filters: { repository_id?: string; status?: string; label?: string; board_id?: string; parent?: string },
 ): Promise<Task[]> {
   let query = `
-    SELECT t.*, p.name as project_name FROM tasks t
-    LEFT JOIN projects p ON t.project_id = p.id
+    SELECT t.*, r.name as repository_name FROM tasks t
+    LEFT JOIN repositories r ON t.repository_id = r.id
     WHERE 1=1
   `;
   const binds: unknown[] = [];
@@ -78,9 +78,9 @@ export async function listTasks(
     query += " AND t.board_id = ?";
     binds.push(filters.board_id);
   }
-  if (filters.project_id) {
-    query += " AND t.project_id = ?";
-    binds.push(filters.project_id);
+  if (filters.repository_id) {
+    query += " AND t.repository_id = ?";
+    binds.push(filters.repository_id);
   }
   if (filters.status) {
     query += " AND t.status = ?";
@@ -114,11 +114,13 @@ export async function listTasks(
 
 export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | null> {
   const task = await db.prepare(`
-    SELECT t.*, a.name as agent_name, p.name as project_name,
+    SELECT t.*, a.name as agent_name, r.name as repository_name,
+      b.project_id as project_id,
       (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
-    LEFT JOIN projects p ON t.project_id = p.id
+    LEFT JOIN repositories r ON t.repository_id = r.id
+    LEFT JOIN boards b ON t.board_id = b.id
     WHERE t.id = ?
   `).bind(taskId).first<Task & { subtask_count: number }>();
   if (!task) return null;
@@ -135,7 +137,7 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | nu
   return { ...task, logs: logs.results, duration_minutes: duration, depends_on: deps, subtask_count: task.subtask_count };
 }
 
-export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<Task, "title" | "description" | "project_id" | "labels" | "priority" | "result" | "pr_url" | "input">> & { depends_on?: string[] }): Promise<Task | null> {
+export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input">> & { depends_on?: string[] }): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
 
@@ -151,7 +153,7 @@ export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<T
   const sets: string[] = ["updated_at = ?"];
   const binds: unknown[] = [now];
 
-  const allowedFields = ["title", "description", "project_id", "labels", "priority", "result", "pr_url", "input"] as const;
+  const allowedFields = ["title", "description", "repository_id", "labels", "priority", "result", "pr_url", "input"] as const;
   for (const field of allowedFields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);

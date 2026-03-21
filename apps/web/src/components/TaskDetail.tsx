@@ -31,7 +31,7 @@ type Tab = "details" | "chat";
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
   const [depTitles, setDepTitles] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
@@ -41,9 +41,13 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
-    api.projects.list().then(setProjects);
     api.messages.list(taskId).then(setInitialMessages).catch(() => {});
   }, [taskId]);
+
+  useEffect(() => {
+    if (!task?.project_id) return;
+    api.projects.repositories.list(task.project_id).then(setRepositories).catch(() => {});
+  }, [task?.project_id]);
 
   useEffect(() => {
     if (!task?.depends_on || task.depends_on.length === 0) return;
@@ -115,13 +119,13 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
           </div>
           <div className="flex gap-1.5 mt-2 flex-wrap">
             <select
-              value={task.project_id || ""}
-              onChange={(e) => handleUpdate("project_id", e.target.value || null)}
+              value={task.repository_id || ""}
+              onChange={(e) => handleUpdate("repository_id", e.target.value || null)}
               className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent border-none outline-none cursor-pointer"
             >
-              <option value="">no project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">no repo</option>
+              {repositories.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
             <select

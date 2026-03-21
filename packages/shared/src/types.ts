@@ -2,7 +2,7 @@
 
 export interface Board {
   id: string;
-  owner_id: string;
+  project_id: string;
   name: string;
   created_at: string;
   updated_at: string;
@@ -22,7 +22,7 @@ export interface Task {
   status: TaskStatus;
   title: string;
   description: string | null;
-  project_id: string | null;
+  repository_id: string | null;
   labels: string | null;
   priority: Priority | null;
   created_by: string | null;
@@ -35,7 +35,8 @@ export interface Task {
   created_at: string;
   updated_at: string;
   blocked?: boolean;
-  project_name?: string;
+  project_id?: string;
+  repository_name?: string;
   agent_name?: string;
 }
 
@@ -125,18 +126,16 @@ export interface Project {
   updated_at: string;
 }
 
-export interface ProjectResource {
+export interface Repository {
   id: string;
   project_id: string;
-  type: string;
   name: string;
-  uri: string;
-  config: string | null;
+  url: string;
   created_at: string;
 }
 
-export interface ProjectWithResources extends Project {
-  resources: ProjectResource[];
+export interface ProjectWithRepositories extends Project {
+  repositories: Repository[];
 }
 
 // ─── Message ───
@@ -161,14 +160,11 @@ export interface ErrorEnvelope {
   };
 }
 
-export interface CreateBoardInput {
-  name: string;
-}
 
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  project_id?: string;
+  repository_id?: string;
   labels?: string[];
   priority?: Priority;
   input?: Record<string, unknown>;
@@ -193,9 +189,7 @@ export interface CreateProjectInput {
   description?: string;
 }
 
-export interface CreateResourceInput {
-  type: string;
+export interface CreateRepositoryInput {
   name: string;
-  uri: string;
-  config?: string;
+  url: string;
 }

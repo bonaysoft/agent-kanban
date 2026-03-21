@@ -35,11 +35,6 @@ export class ApiClient {
     return data;
   }
 
-  // Boards
-  createBoard(name: string) { return this.request("POST", "/api/boards", { name }); }
-  listBoards() { return this.request("GET", "/api/boards"); }
-  getBoard(id: string) { return this.request("GET", `/api/boards/${id}`); }
-
   // Tasks
   createTask(input: Record<string, unknown>) { return this.request("POST", "/api/tasks", input); }
   listTasks(params?: Record<string, string>) {
@@ -83,12 +78,13 @@ export class ApiClient {
   }
   listProjects() { return this.request<any[]>("GET", "/api/projects"); }
   getProjectByName(name: string) { return this.request("GET", `/api/projects?name=${encodeURIComponent(name)}`); }
+  getProjectBoard(projectId: string) { return this.request("GET", `/api/projects/${projectId}/board`); }
 
-  // Resources
-  addResource(projectId: string, input: { type: string; name: string; uri: string; config?: string }) {
-    return this.request("POST", `/api/projects/${projectId}/resources`, input);
+  // Repositories
+  addRepository(projectId: string, input: { name: string; url: string }) {
+    return this.request("POST", `/api/projects/${projectId}/repositories`, input);
   }
-  listResources(projectId: string) { return this.request("GET", `/api/projects/${projectId}/resources`); }
+  listRepositories(projectId: string) { return this.request("GET", `/api/projects/${projectId}/repositories`); }
 
   // Agent usage
   updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {

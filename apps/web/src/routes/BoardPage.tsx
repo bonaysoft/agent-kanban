@@ -21,15 +21,15 @@ export function BoardPage() {
   const { board, loading, error, refresh } = useBoard();
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [activeProject, setActiveProject] = useState<string | null>(null);
+  const [activeRepository, setActiveRepository] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState(0);
 
-  const projects = useMemo(() => {
+  const repositories = useMemo(() => {
     if (!board?.tasks) return [];
     const map = new Map<string, string>();
     for (const task of board.tasks) {
-      if (task.project_id && task.project_name) {
-        map.set(task.project_id, task.project_name);
+      if (task.repository_id && task.repository_name) {
+        map.set(task.repository_id, task.repository_name);
       }
     }
     return Array.from(map.entries())
@@ -39,15 +39,15 @@ export function BoardPage() {
 
   const columns = useMemo(() => {
     if (!board?.tasks) return [];
-    const tasks = activeProject
-      ? board.tasks.filter((t: any) => t.project_id === activeProject)
+    const tasks = activeRepository
+      ? board.tasks.filter((t: any) => t.repository_id === activeRepository)
       : board.tasks;
     return TASK_STATUSES.map((status) => ({
       status,
       name: TASK_STATUS_LABELS[status],
       tasks: tasks.filter((t: any) => t.status === status),
     }));
-  }, [board, activeProject]);
+  }, [board, activeRepository]);
 
   if (error === "NOT_AUTHENTICATED" || (error as any)?.status === 401) {
     // Session expired or invalid — redirect to auth page
@@ -85,7 +85,7 @@ export function BoardPage() {
   return (
     <div className="min-h-screen bg-surface-primary">
       <Header boardName={board.name} />
-      <FilterBar projects={projects} activeProject={activeProject} onProjectChange={setActiveProject} />
+      <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
 
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">

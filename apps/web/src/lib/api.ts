@@ -28,12 +28,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  boards: {
-    list: () => request<any[]>("GET", "/boards"),
-    get: (id: string) => request<any>("GET", `/boards/${id}`),
-    create: (name: string) => request<any>("POST", "/boards", { name }),
-    delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
-  },
   tasks: {
     list: (params?: Record<string, string>) => {
       const qs = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -78,12 +72,13 @@ export const api = {
     get: (id: string) => request<any>("GET", `/projects/${id}`),
     create: (input: { name: string; description?: string }) => request<any>("POST", "/projects", input),
     delete: (id: string) => request<void>("DELETE", `/projects/${id}`),
-    resources: {
-      list: (projectId: string) => request<any[]>("GET", `/projects/${projectId}/resources`),
-      add: (projectId: string, input: { type: string; name: string; uri: string }) =>
-        request<any>("POST", `/projects/${projectId}/resources`, input),
-      delete: (projectId: string, resourceId: string) =>
-        request<void>("DELETE", `/projects/${projectId}/resources/${resourceId}`),
+    board: (id: string) => request<any>("GET", `/projects/${id}/board`),
+    repositories: {
+      list: (projectId: string) => request<any[]>("GET", `/projects/${projectId}/repositories`),
+      add: (projectId: string, input: { name: string; url: string }) =>
+        request<any>("POST", `/projects/${projectId}/repositories`, input),
+      delete: (projectId: string, repoId: string) =>
+        request<void>("DELETE", `/projects/${projectId}/repositories/${repoId}`),
     },
   },
 };

@@ -7,8 +7,8 @@ export function ProjectSettings() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [resources, setResources] = useState<Record<string, any[]>>({});
-  const [newResource, setNewResource] = useState({ name: "", uri: "" });
+  const [repositories, setRepositories] = useState<Record<string, any[]>>({});
+  const [newRepo, setNewRepo] = useState({ name: "", url: "" });
 
   useEffect(() => {
     loadProjects();
@@ -39,29 +39,28 @@ export function ProjectSettings() {
       return;
     }
     setExpandedId(id);
-    if (!resources[id]) {
-      const res = await api.projects.resources.list(id);
-      setResources((prev) => ({ ...prev, [id]: res }));
+    if (!repositories[id]) {
+      const res = await api.projects.repositories.list(id);
+      setRepositories((prev) => ({ ...prev, [id]: res }));
     }
   }
 
-  async function handleAddResource(projectId: string) {
-    if (!newResource.name.trim() || !newResource.uri.trim()) return;
-    await api.projects.resources.add(projectId, {
-      type: "git_repo",
-      name: newResource.name.trim(),
-      uri: newResource.uri.trim(),
+  async function handleAddRepo(projectId: string) {
+    if (!newRepo.name.trim() || !newRepo.url.trim()) return;
+    await api.projects.repositories.add(projectId, {
+      name: newRepo.name.trim(),
+      url: newRepo.url.trim(),
     });
-    setNewResource({ name: "", uri: "" });
-    const res = await api.projects.resources.list(projectId);
-    setResources((prev) => ({ ...prev, [projectId]: res }));
+    setNewRepo({ name: "", url: "" });
+    const res = await api.projects.repositories.list(projectId);
+    setRepositories((prev) => ({ ...prev, [projectId]: res }));
   }
 
-  async function handleDeleteResource(projectId: string, resourceId: string) {
-    await api.projects.resources.delete(projectId, resourceId);
-    setResources((prev) => ({
+  async function handleDeleteRepo(projectId: string, repoId: string) {
+    await api.projects.repositories.delete(projectId, repoId);
+    setRepositories((prev) => ({
       ...prev,
-      [projectId]: (prev[projectId] || []).filter((r) => r.id !== resourceId),
+      [projectId]: (prev[projectId] || []).filter((r) => r.id !== repoId),
     }));
   }
 
@@ -121,16 +120,16 @@ export function ProjectSettings() {
 
               {expandedId === project.id && (
                 <div className="border-t border-border px-4 py-3 space-y-3">
-                  <h3 className="text-xs font-semibold text-content-tertiary uppercase">Git Repos</h3>
+                  <h3 className="text-xs font-semibold text-content-tertiary uppercase">Repositories</h3>
 
-                  {(resources[project.id] || []).map((r) => (
+                  {(repositories[project.id] || []).map((r) => (
                     <div key={r.id} className="flex items-center justify-between text-sm">
                       <div>
                         <span className="text-content-primary">{r.name}</span>
-                        <span className="text-xs text-content-tertiary ml-2 font-mono">{r.uri}</span>
+                        <span className="text-xs text-content-tertiary ml-2 font-mono">{r.url}</span>
                       </div>
                       <button
-                        onClick={() => handleDeleteResource(project.id, r.id)}
+                        onClick={() => handleDeleteRepo(project.id, r.id)}
                         className="text-xs text-error hover:underline"
                       >
                         Remove
@@ -140,19 +139,19 @@ export function ProjectSettings() {
 
                   <div className="flex gap-2">
                     <input
-                      value={newResource.name}
-                      onChange={(e) => setNewResource((prev) => ({ ...prev, name: e.target.value }))}
+                      value={newRepo.name}
+                      onChange={(e) => setNewRepo((prev) => ({ ...prev, name: e.target.value }))}
                       placeholder="Repo name"
                       className="flex-1 bg-surface-primary border border-border rounded-lg px-3 py-1.5 text-xs text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
                     />
                     <input
-                      value={newResource.uri}
-                      onChange={(e) => setNewResource((prev) => ({ ...prev, uri: e.target.value }))}
+                      value={newRepo.url}
+                      onChange={(e) => setNewRepo((prev) => ({ ...prev, url: e.target.value }))}
                       placeholder="Clone URL"
                       className="flex-1 bg-surface-primary border border-border rounded-lg px-3 py-1.5 text-xs text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
                     />
                     <button
-                      onClick={() => handleAddResource(project.id)}
+                      onClick={() => handleAddRepo(project.id)}
                       className="text-xs text-accent hover:underline px-2"
                     >
                       Add

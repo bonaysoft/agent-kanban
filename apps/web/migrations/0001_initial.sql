@@ -1,17 +1,38 @@
 -- Agent Kanban v2 schema
 -- Auth tables (user, session, account, verification) managed by better-auth
 
--- Boards
-CREATE TABLE boards (
+-- Projects
+CREATE TABLE projects (
   id          TEXT PRIMARY KEY,
   owner_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  description TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX idx_projects_owner_name ON projects(owner_id, name);
+
+-- Boards (1:1 with project)
+CREATE TABLE boards (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_boards_owner ON boards(owner_id);
+CREATE INDEX idx_boards_project ON boards(project_id);
 
--- Machines (merged api_keys + machines)
+-- Repositories
+CREATE TABLE repositories (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_repositories_project ON repositories(project_id);
+
+-- Machines
 CREATE TABLE machines (
   id                TEXT PRIMARY KEY,
   owner_id          TEXT NOT NULL,
@@ -39,29 +60,6 @@ CREATE TABLE agents (
 );
 CREATE INDEX idx_agents_machine ON agents(machine_id);
 
--- Projects
-CREATE TABLE projects (
-  id          TEXT PRIMARY KEY,
-  owner_id    TEXT NOT NULL,
-  name        TEXT NOT NULL,
-  description TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE UNIQUE INDEX idx_projects_owner_name ON projects(owner_id, name);
-
--- Project resources
-CREATE TABLE project_resources (
-  id          TEXT PRIMARY KEY,
-  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL CHECK(type IN ('git_repo')),
-  name        TEXT NOT NULL,
-  uri         TEXT NOT NULL,
-  config      TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX idx_project_resources_project ON project_resources(project_id);
-
 -- Tasks
 CREATE TABLE tasks (
   id           TEXT PRIMARY KEY,
@@ -70,7 +68,7 @@ CREATE TABLE tasks (
                CHECK(status IN ('todo', 'in_progress', 'in_review', 'done', 'cancelled')),
   title        TEXT NOT NULL,
   description  TEXT,
-  project_id   TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  repository_id TEXT REFERENCES repositories(id) ON DELETE SET NULL,
   labels       TEXT,
   priority     TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
   created_by   TEXT,
@@ -85,7 +83,7 @@ CREATE TABLE tasks (
 );
 CREATE INDEX idx_tasks_board ON tasks(board_id);
 CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_project ON tasks(project_id);
+CREATE INDEX idx_tasks_repository ON tasks(repository_id);
 CREATE INDEX idx_tasks_created_from ON tasks(created_from);
 
 -- Task dependencies (DAG)
