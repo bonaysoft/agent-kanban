@@ -11,6 +11,7 @@ export function createAuth(env: Env) {
       type: "sqlite",
     },
     basePath: "/api/auth",
+    baseURL: env.BETTER_AUTH_URL,
     secret: env.AUTH_SECRET,
     emailAndPassword: {
       enabled: true,

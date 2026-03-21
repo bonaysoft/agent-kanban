@@ -4,6 +4,7 @@ import type { Session, User } from "better-auth";
 export interface Env {
   DB: D1Database;
   AUTH_SECRET: string;
+  BETTER_AUTH_URL: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
 }

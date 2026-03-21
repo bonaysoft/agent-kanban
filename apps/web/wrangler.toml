@@ -1,9 +1,9 @@
 name = "agent-kanban"
-compatibility_date = "2024-12-01"
+compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Auth secrets: set in .dev.vars (local) or `wrangler secret put` (production)
-# Required: AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+# Auth config: set in .dev.vars (local) or `wrangler secret put` (production)
+# Required: AUTH_SECRET, BETTER_AUTH_URL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 
 [[d1_databases]]
 binding = "DB"
