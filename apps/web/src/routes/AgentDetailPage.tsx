@@ -171,9 +171,6 @@ export function AgentDetailPage() {
                     </Link>
                     {machine.os && <span className="text-[10px] text-content-tertiary bg-surface-tertiary/50 rounded px-2 py-1">{machine.os}</span>}
                     {machine.version && <span className="text-[10px] text-content-tertiary font-mono bg-surface-tertiary/50 rounded px-2 py-1">v{machine.version}</span>}
-                    {machine.runtimes?.split(",").map((rt: string) => (
-                      <span key={rt} className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{rt.trim()}</span>
-                    ))}
                   </div>
                 )}
               </div>
