@@ -280,7 +280,7 @@ export function TaskDetail({ taskId, columns, onClose, onRefresh, onAgentClick }
           <ChatPanel
             taskId={taskId}
             agentId={task.assigned_to}
-            taskDone={task.column_name === "Done"}
+            taskDone={columns.find((c) => c.id === task.column_id)?.name === "Done"}
             initialMessages={initialMessages}
             sseMessages={sseMessages}
           />
