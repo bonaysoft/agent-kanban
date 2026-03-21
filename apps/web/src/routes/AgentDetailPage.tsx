@@ -46,7 +46,7 @@ export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<any>(null);
   const [machine, setMachine] = useState<any>(null);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,11 +54,11 @@ export function AgentDetailPage() {
     api.agents.get(id).then((a) => {
       setAgent(a);
       if (a.machine_id) api.machines.get(a.machine_id).then(setMachine).catch(() => {});
-      api.tasks.list({ assigned_to: id }).then(setTasks).catch(() => {});
+      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
     }).finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.agents.get(id).then(setAgent);
-      api.tasks.list({ assigned_to: id }).then(setTasks).catch(() => {});
+      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, [id]);
@@ -89,8 +89,6 @@ export function AgentDetailPage() {
   const rgb = agent.public_key ? agentColorRgb(agent.public_key) : "34, 211, 238";
   const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
   const isWorking = agent.status === "working";
-  const activeTasks = tasks.filter((t: any) => t.status === "in_progress" || t.status === "in_review");
-  const completedTasks = tasks.filter((t: any) => t.status === "done");
   const totalTokens = agent.input_tokens + agent.output_tokens + agent.cache_read_tokens;
   const grantedCaps = ["claim_task", "complete_task", "review_task", "send_message", "read_task"];
   const created = new Date(agent.created_at).getTime();
@@ -135,8 +133,14 @@ export function AgentDetailPage() {
                     />
                     <span className="text-sm text-content-secondary">{statusLabels[agent.status]}</span>
                   </span>
-                  <span className="text-content-tertiary text-xs">&middot;</span>
-                  <span className="text-xs text-content-tertiary">{agent.task_count} tasks</span>
+                  {task && (
+                    <>
+                      <span className="text-content-tertiary text-xs">&middot;</span>
+                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
+                        {task.status.replace("_", " ")}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 {/* Fingerprint badge */}
@@ -239,52 +243,28 @@ export function AgentDetailPage() {
           </div>
         </div>
 
-        {/* ─── Active Tasks ─── */}
-        {activeTasks.length > 0 && (
-          <div>
-            <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">
-              Active <span className="font-mono ml-1" style={{ color }}>{activeTasks.length}</span>
-            </div>
-            <div className="space-y-1.5">
-              {activeTasks.map((task: any) => (
-                <Link
-                  key={task.id}
-                  to={`/boards/${task.board_id}`}
-                  className="flex items-center gap-3 bg-surface-secondary rounded-lg px-4 py-3 hover:bg-surface-tertiary/50 transition-colors"
-                  style={{ borderLeft: `2px solid rgba(${rgb}, 0.5)` }}
-                >
-                  <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
-                    {task.status.replace("_", " ")}
-                  </span>
-                  <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
-                  {task.pr_url && (
-                    <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} className="text-[11px] font-mono px-2 py-0.5 rounded hover:underline" style={{ color, background: `rgba(${rgb}, 0.1)` }}>PR</a>
-                  )}
-                  {task.repository_name && <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ─── Completed Tasks ─── */}
-        {completedTasks.length > 0 && (
-          <div>
-            <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">
-              Completed <span className="font-mono text-success ml-1">{completedTasks.length}</span>
-            </div>
-            <div className="space-y-1">
-              {completedTasks.slice(0, 5).map((task: any) => (
-                <div key={task.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-                  <span className="text-success text-[11px] font-mono">done</span>
-                  <span className="text-content-secondary flex-1 truncate">{task.title}</span>
-                  {task.pr_url && <a href={task.pr_url} target="_blank" rel="noopener" className="text-[11px] font-mono hover:underline" style={{ color }}>PR</a>}
-                </div>
-              ))}
-              {completedTasks.length > 5 && <span className="text-[11px] text-content-tertiary px-4">+{completedTasks.length - 5} more</span>}
-            </div>
-          </div>
-        )}
+        {/* ─── Mission ─── */}
+        <div>
+          <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">Mission</div>
+          {task ? (
+            <Link
+              to={`/boards/${task.board_id}`}
+              className="flex items-center gap-3 bg-surface-secondary rounded-lg px-4 py-3 hover:bg-surface-tertiary/50 transition-colors"
+              style={{ borderLeft: `2px solid rgba(${rgb}, 0.5)` }}
+            >
+              <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
+                {task.status.replace("_", " ")}
+              </span>
+              <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
+              {task.pr_url && (
+                <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} className="text-[11px] font-mono px-2 py-0.5 rounded hover:underline" style={{ color, background: `rgba(${rgb}, 0.1)` }}>PR</a>
+              )}
+              {task.repository_name && <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>}
+            </Link>
+          ) : (
+            <p className="text-sm text-content-tertiary">No task assigned.</p>
+          )}
+        </div>
 
         {/* ─── Activity ─── */}
         <div>
