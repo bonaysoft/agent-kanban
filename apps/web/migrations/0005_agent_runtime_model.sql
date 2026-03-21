@@ -1,0 +1,2 @@
+ALTER TABLE agents ADD COLUMN runtime TEXT;
+ALTER TABLE agents ADD COLUMN model TEXT;

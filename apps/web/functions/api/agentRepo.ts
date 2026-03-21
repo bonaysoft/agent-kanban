@@ -6,15 +6,17 @@ export async function createAgent(
   machineId: string,
   agentId: string,
   publicKey: string,
+  runtime?: string,
+  model?: string,
 ): Promise<Agent> {
   const now = new Date().toISOString();
   const name = `Agent-${agentId.slice(0, 6)}`;
 
   await db.prepare(
-    "INSERT INTO agents (id, machine_id, name, role_id, status, public_key, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_micro_usd, created_at) VALUES (?, ?, ?, NULL, 'idle', ?, 0, 0, 0, 0, 0, ?)"
-  ).bind(agentId, machineId, name, publicKey, now).run();
+    "INSERT INTO agents (id, machine_id, name, role_id, status, public_key, runtime, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_micro_usd, created_at) VALUES (?, ?, ?, NULL, 'idle', ?, ?, ?, 0, 0, 0, 0, 0, ?)"
+  ).bind(agentId, machineId, name, publicKey, runtime ?? null, model ?? null, now).run();
 
-  return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", public_key: publicKey, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0, created_at: now };
+  return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", public_key: publicKey, runtime: runtime ?? null, model: model ?? null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0, created_at: now };
 }
 
 export async function listAgents(db: D1): Promise<AgentWithActivity[]> {

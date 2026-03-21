@@ -106,6 +106,8 @@ export interface Agent {
   role_id: string | null;
   status: AgentStatus;
   public_key: string;
+  runtime: string | null;
+  model: string | null;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;

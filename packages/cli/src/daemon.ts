@@ -151,9 +151,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
       const pubKeyBase64 = pubKeyJwk.x;
 
-      // Register agent with public key, then assign the task
+      // Register agent with public key, runtime, then assign the task
       try {
-        await client.registerAgent(sessionId, pubKeyBase64);
+        await client.registerAgent(sessionId, pubKeyBase64, opts.agentCli);
         await client.assignTask(task.id, sessionId);
       } catch (err: any) {
         if (err.message.includes("409") || err.message.includes("assigned") || err.message.includes("blocked")) {

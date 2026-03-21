@@ -79,8 +79,8 @@ export class ApiClient {
   }
 
   // Agents
-  registerAgent(agentId: string, publicKey?: string) {
-    return this.request("POST", "/api/agents", { agent_id: agentId, public_key: publicKey });
+  registerAgent(agentId: string, publicKey?: string, runtime?: string, model?: string) {
+    return this.request("POST", "/api/agents", { agent_id: agentId, public_key: publicKey, runtime, model });
   }
   listAgents() { return this.request("GET", "/api/agents"); }
 

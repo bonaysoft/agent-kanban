@@ -99,10 +99,10 @@ api.get("/api/agents/:id", async (c) => {
 
 api.post("/api/agents", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
-  const body = await c.req.json<{ agent_id: string; public_key: string }>();
+  const body = await c.req.json<{ agent_id: string; public_key: string; runtime?: string; model?: string }>();
   if (!body.agent_id || !body.public_key) throw new HTTPException(400, { message: "agent_id and public_key are required" });
   if (!c.get("machineId")) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
-  const agent = await createAgent(c.env.DB, c.get("machineId")!, body.agent_id, body.public_key);
+  const agent = await createAgent(c.env.DB, c.get("machineId")!, body.agent_id, body.public_key, body.runtime, body.model);
   return c.json(agent, 201);
 });
 

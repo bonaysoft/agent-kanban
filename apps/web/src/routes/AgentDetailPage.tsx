@@ -162,17 +162,24 @@ export function AgentDetailPage() {
                   </div>
                 )}
 
-                {/* Machine info */}
-                {machine && (
-                  <div className="mt-3 flex items-center gap-2 flex-wrap">
-                    <Link to={`/machines/${machine.id}`} className="inline-flex items-center gap-1.5 text-xs hover:text-content-secondary transition-colors bg-surface-tertiary/50 rounded px-2 py-1">
-                      <span className={`w-1.5 h-1.5 rounded-full ${machine.status === "online" ? "bg-success" : "bg-warning"}`} />
-                      <span className="font-mono text-content-secondary">{machine.name}</span>
-                    </Link>
-                    {machine.os && <span className="text-[10px] text-content-tertiary bg-surface-tertiary/50 rounded px-2 py-1">{machine.os}</span>}
-                    {machine.version && <span className="text-[10px] text-content-tertiary font-mono bg-surface-tertiary/50 rounded px-2 py-1">v{machine.version}</span>}
-                  </div>
-                )}
+                {/* Runtime / Model / Machine */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {agent.runtime && (
+                    <span className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{agent.runtime}</span>
+                  )}
+                  {agent.model && (
+                    <span className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{agent.model}</span>
+                  )}
+                  {machine && (
+                    <>
+                      <Link to={`/machines/${machine.id}`} className="inline-flex items-center gap-1.5 text-xs hover:text-content-secondary transition-colors bg-surface-tertiary/50 rounded px-2 py-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${machine.status === "online" ? "bg-success" : "bg-warning"}`} />
+                        <span className="font-mono text-content-secondary">{machine.name}</span>
+                      </Link>
+                      {machine.os && <span className="text-[10px] text-content-tertiary bg-surface-tertiary/50 rounded px-2 py-1">{machine.os}</span>}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
