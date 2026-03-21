@@ -32,13 +32,13 @@ export function Header({ boardName }: HeaderProps) {
       <div className="flex items-center gap-1">
         <Link
           to="/machines"
-          className="text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
+          className="hidden md:inline text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
         >
           Machines
         </Link>
         <Link
           to="/agents"
-          className="text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
+          className="hidden md:inline text-content-tertiary hover:text-content-secondary text-xs px-2 py-1"
         >
           Agents
         </Link>
