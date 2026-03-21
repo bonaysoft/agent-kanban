@@ -5,6 +5,7 @@ export interface Env {
   DB: D1Database;
   AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  TRUSTED_ORIGINS: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
 }

@@ -13,6 +13,7 @@ export function createAuth(env: Env) {
     basePath: "/api/auth",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.AUTH_SECRET,
+    trustedOrigins: env.TRUSTED_ORIGINS ? env.TRUSTED_ORIGINS.split(",") : [],
     emailAndPassword: {
       enabled: true,
     },
