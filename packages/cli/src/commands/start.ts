@@ -1,30 +1,19 @@
-import { mkdirSync, cpSync, existsSync, readdirSync } from "fs";
+import { mkdirSync, copyFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { Command } from "commander";
 import { startDaemon } from "../daemon.js";
 import { setConfigValue, getConfigValue } from "../config.js";
 
-function installSkills() {
-  // dist/commands/ → dist/skills/ (copied at build time from packages/skill/skills/)
-  const skillsDir = join(import.meta.dirname, "../skills");
-  if (!existsSync(skillsDir)) return;
-
-  const destRoot = join(homedir(), ".claude/skills");
-  const names = readdirSync(skillsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
-
-  for (const name of names) {
-    const src = join(skillsDir, name);
-    const dest = join(destRoot, name);
-    mkdirSync(dest, { recursive: true });
-    cpSync(src, dest, { recursive: true });
-  }
-
-  if (names.length > 0) {
-    console.log(`[INFO] Skills synced: ${names.join(", ")}`);
-  }
+function installSkill() {
+  // import.meta.dirname → dist/commands/, go up to package root then to sibling skill package
+  const cliRoot = join(import.meta.dirname, "../..");
+  const src = join(cliRoot, "../skill/SKILL.md");
+  if (!existsSync(src)) return;
+  const dest = join(homedir(), ".claude/skills/agent-kanban");
+  mkdirSync(dest, { recursive: true });
+  copyFileSync(src, join(dest, "SKILL.md"));
+  console.log("[INFO] Skill installed to ~/.claude/skills/agent-kanban/");
 }
 
 export function registerStartCommand(program: Command) {
@@ -45,7 +34,7 @@ export function registerStartCommand(program: Command) {
         process.exit(1);
       }
 
-      installSkills();
+      installSkill();
 
       await startDaemon({
         maxConcurrent: parseInt(opts.maxConcurrent, 10),
