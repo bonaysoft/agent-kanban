@@ -40,3 +40,4 @@ coverage/
 
 # Root wrangler config (local dev workaround)
 /wrangler.jsonc
+.claude/worktrees/

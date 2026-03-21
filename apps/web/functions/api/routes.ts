@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
-import { authMiddleware, generateMachineKey, revokeMachine } from "./auth";
+import { authMiddleware, requireUser, requireMachine } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
@@ -9,7 +9,7 @@ import { ensureAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle,
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
-import { upsertMachineHeartbeat, listMachines, getMachine } from "./machineRepo";
+import { upsertMachineHeartbeat, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
 import { createAuth } from "./betterAuth";
 
 const api = new Hono<{ Bindings: Env }>();
@@ -44,16 +44,15 @@ api.use("/api/*", async (c, next) => {
 // ─── Machines ───
 
 api.post("/api/machines/heartbeat", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[] }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const machine = c.get("machine");
-  const updated = await upsertMachineHeartbeat(c.env.DB, machine.id, body);
+  const updated = await upsertMachineHeartbeat(c.env.DB, c.get("machineId")!, body);
   return c.json(updated);
 });
 
 api.get("/api/machines", async (c) => {
-  const machine = c.get("machine");
-  const machines = await listMachines(c.env.DB, machine.owner_id);
+  const machines = await listMachines(c.env.DB, c.get("userId"));
   return c.json(machines);
 });
 
@@ -64,14 +63,26 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
+  const guard = requireUser(c); if (guard) return guard;
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-  const machine = c.get("machine");
-  const { key, machine: created } = await generateMachineKey(c.env.DB, machine.owner_id, body.name || "unnamed");
-  return c.json({ key, id: created.id, name: created.name, created_at: created.created_at }, 201);
+  const name = body.name || "unnamed";
+  const userId = c.get("userId");
+
+  // Create machine record
+  const machine = await createMachine(c.env.DB, userId, name);
+
+  // Create API key via Better Auth, store machineId in metadata
+  const auth = createAuth(c.env);
+  const apiKeyResult = await auth.api.createApiKey({
+    body: { userId, metadata: { machineId: machine.id } },
+  });
+
+  return c.json({ key: apiKeyResult.key, id: machine.id, name: machine.name, created_at: machine.created_at }, 201);
 });
 
 api.delete("/api/machines/:id", async (c) => {
-  const deleted = await revokeMachine(c.env.DB, c.req.param("id"));
+  const guard = requireUser(c); if (guard) return guard;
+  const deleted = await deleteMachine(c.env.DB, c.req.param("id"));
   if (!deleted) throw new HTTPException(404, { message: "Machine not found" });
   return c.json({ ok: true });
 });
@@ -91,6 +102,7 @@ api.get("/api/agents/:id", async (c) => {
 });
 
 api.patch("/api/agents/:id/usage", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json();
   await updateAgentUsage(c.env.DB, c.req.param("id"), body);
   return c.json({ ok: true });
@@ -106,14 +118,14 @@ api.post("/api/tasks", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
-  const machine = c.get("machine");
+  const machineId = c.get("machineId");
   let agentId: string | undefined;
-  if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+  if (body.agent_id && machineId) {
+    const agent = await ensureAgent(c.env.DB, machineId, body.agent_id);
     agentId = agent.id;
   }
 
-  const task = await createTask(c.env.DB, machine.owner_id, { ...body, agentId });
+  const task = await createTask(c.env.DB, c.get("userId"), { ...body, agentId });
   return c.json(task, 201);
 });
 
@@ -157,11 +169,11 @@ api.delete("/api/tasks/:id", async (c) => {
 // ─── Task Lifecycle ───
 
 api.post("/api/tasks/:id/claim", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
   const agentId = body.agent_id || crypto.randomUUID();
-  const machine = c.get("machine");
 
-  const agent = await ensureAgent(c.env.DB, machine.id, agentId);
+  const agent = await ensureAgent(c.env.DB, c.get("machineId")!, agentId);
   const task = await claimTask(c.env.DB, c.req.param("id"), agent.id);
   await setAgentWorkingIfIdle(c.env.DB, agent.id);
   return c.json(task);
@@ -169,11 +181,10 @@ api.post("/api/tasks/:id/claim", async (c) => {
 
 api.post("/api/tasks/:id/complete", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
-  const machine = c.get("machine");
 
   let agentId: string | null = null;
-  if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+  if (body.agent_id && c.get("machineId")) {
+    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -191,6 +202,7 @@ api.post("/api/tasks/:id/complete", async (c) => {
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
   if (!existing?.assigned_to) throw new HTTPException(400, { message: "Task is not claimed" });
@@ -201,11 +213,11 @@ api.post("/api/tasks/:id/release", async (c) => {
 });
 
 api.post("/api/tasks/:id/assign", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json<{ agent_id: string }>();
   if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const machine = c.get("machine");
-  const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+  const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
 
   const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ board_id: string }>();
@@ -213,18 +225,16 @@ api.post("/api/tasks/:id/assign", async (c) => {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
 
-  // Assign only locks the task — agent status stays idle until they claim
   const task = await assignTask(c.env.DB, c.req.param("id"), agent.id);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
-  const machine = c.get("machine");
 
   let agentId: string | null = null;
-  if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+  if (body.agent_id && c.get("machineId")) {
+    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -243,12 +253,12 @@ api.post("/api/tasks/:id/cancel", async (c) => {
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
+  const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
-  const machine = c.get("machine");
 
   let agentId: string | null = null;
   if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -265,10 +275,9 @@ api.post("/api/tasks/:id/logs", async (c) => {
   const body = await c.req.json<{ detail: string; agent_id?: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
-  const machine = c.get("machine");
   let agentId: string | null = null;
-  if (body.agent_id) {
-    const agent = await ensureAgent(c.env.DB, machine.id, body.agent_id);
+  if (body.agent_id && c.get("machineId")) {
+    const agent = await ensureAgent(c.env.DB, c.get("machineId")!, body.agent_id);
     agentId = agent.id;
   }
 
@@ -334,20 +343,19 @@ api.get("/api/tasks/:id/stream", async (c) => {
 api.post("/api/boards", async (c) => {
   const body = await c.req.json<{ name: string; description?: string }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const machine = c.get("machine");
-  const board = await createBoard(c.env.DB, machine.owner_id, body.name, body.description);
+  const board = await createBoard(c.env.DB, c.get("userId"), body.name, body.description);
   return c.json(board, 201);
 });
 
 api.get("/api/boards", async (c) => {
-  const machine = c.get("machine");
+  const userId = c.get("userId");
   const name = c.req.query("name");
   if (name) {
-    const board = await getBoardByName(c.env.DB, machine.owner_id, name);
+    const board = await getBoardByName(c.env.DB, userId, name);
     if (!board) throw new HTTPException(404, { message: "Board not found" });
     return c.json(board);
   }
-  const boards = await listBoards(c.env.DB, machine.owner_id);
+  const boards = await listBoards(c.env.DB, userId);
   return c.json(boards);
 });
 
@@ -378,22 +386,20 @@ api.post("/api/repositories", async (c) => {
   if (!body.name || !body.url) {
     throw new HTTPException(400, { message: "name and url are required" });
   }
-  const machine = c.get("machine");
-  const repository = await createRepository(c.env.DB, machine.owner_id, body);
+  const repository = await createRepository(c.env.DB, c.get("userId"), body);
   return c.json(repository, 201);
 });
 
 api.get("/api/repositories", async (c) => {
-  const machine = c.get("machine");
-  const repositories = await listRepositories(c.env.DB, machine.owner_id);
+  const repositories = await listRepositories(c.env.DB, c.get("userId"));
   return c.json(repositories);
 });
 
 api.delete("/api/repositories/:id", async (c) => {
-  const machine = c.get("machine");
-  const repo = await c.env.DB.prepare("SELECT owner_id FROM repositories WHERE id = ?").bind(c.req.param("id")).first<{ owner_id: string }>();
+  const userId = c.get("userId");
+  const repo = await c.env.DB.prepare("SELECT user_id FROM repositories WHERE id = ?").bind(c.req.param("id")).first<{ user_id: string }>();
   if (!repo) throw new HTTPException(404, { message: "Repository not found" });
-  if (repo.owner_id !== machine.owner_id) throw new HTTPException(403, { message: "Forbidden" });
+  if (repo.user_id !== userId) throw new HTTPException(403, { message: "Forbidden" });
   await deleteRepository(c.env.DB, c.req.param("id"));
   return c.json({ ok: true });
 });

@@ -4,10 +4,10 @@ import { newId, type D1 } from "./db";
 import { getDefaultBoard } from "./boardRepo";
 import { detectCycle, computeBlocked, getDependencies, setDependencies } from "./taskDeps";
 
-export async function createTask(db: D1, ownerId: string, input: CreateTaskInput & { agentId?: string }): Promise<Task> {
+export async function createTask(db: D1, userId: string, input: CreateTaskInput & { agentId?: string }): Promise<Task> {
   const board = input.board_id
     ? { id: input.board_id }
-    : await getDefaultBoard(db, ownerId);
+    : await getDefaultBoard(db, userId);
 
   if (!board) throw new HTTPException(400, { message: "No board exists. Create a board first." });
 

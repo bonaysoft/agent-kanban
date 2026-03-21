@@ -2,7 +2,7 @@
 
 export interface Board {
   id: string;
-  owner_id: string;
+  user_id: string;
   name: string;
   description: string | null;
   created_at: string;
@@ -79,8 +79,7 @@ export type MachineStatus = "online" | "offline";
 
 export interface Machine {
   id: string;
-  owner_id: string;
-  key_hash: string;
+  user_id: string;
   name: string;
   status: MachineStatus;
   os: string | null;
@@ -122,7 +121,7 @@ export interface AgentWithActivity extends Agent {
 
 export interface Repository {
   id: string;
-  owner_id: string;
+  user_id: string;
   name: string;
   url: string;
   created_at: string;
