@@ -11,22 +11,15 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   const token = header.slice(7);
   const auth = createAuth(c.env);
 
-  // Machine API key (ak_ prefix)
   if (token.startsWith("ak_")) {
-    const result = await auth.api.verifyApiKey({ body: { key: token } });
-    if (!result?.valid) {
-      return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
-    }
-
-    c.set("ownerId", result.key.userId);
-    c.set("identityType", "machine");
-    c.set("apiKeyId", result.key.id);
-    const metadata = result.key.metadata as Record<string, any> | null;
-    if (metadata?.machineId) c.set("machineId", metadata.machineId);
-    return next();
+    return handleApiKey(c, auth, token, next);
   }
 
-  // Better-auth session token
+  const agentIdentity = await auth.api.getAgentSession({ headers: c.req.raw.headers });
+  if (agentIdentity) {
+    return handleAgentIdentity(c, agentIdentity, next);
+  }
+
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (session) {
     c.set("ownerId", session.user.id);
@@ -37,6 +30,28 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 
   return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
+}
+
+async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: string, next: Next) {
+  const result = await auth.api.verifyApiKey({ body: { key: token } });
+  if (!result?.valid) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+  }
+
+  c.set("ownerId", result.key.userId);
+  c.set("identityType", "machine");
+  c.set("apiKeyId", result.key.id);
+  const metadata = result.key.metadata as Record<string, any> | null;
+  if (metadata?.machineId) c.set("machineId", metadata.machineId);
+  return next();
+}
+
+function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, next: Next) {
+  c.set("ownerId", identity.host?.userId || identity.user?.id);
+  c.set("identityType", "agent");
+  c.set("agentId", identity.agent.id);
+  c.set("machineId", identity.agent.hostId);
+  return next();
 }
 
 export function requireUser(c: Context) {
@@ -50,3 +65,10 @@ export function requireMachine(c: Context) {
     return c.json({ error: { code: "FORBIDDEN", message: "Machine API key required" } }, 403);
   }
 }
+
+export function requireAgent(c: Context) {
+  if (c.get("identityType") !== "agent") {
+    return c.json({ error: { code: "FORBIDDEN", message: "Agent session required" } }, 403);
+  }
+}
+

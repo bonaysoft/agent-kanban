@@ -29,7 +29,7 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
   if (!board) return null;
 
   const tasks = await db.prepare(`
-    SELECT t.*, a.name as agent_name, r.name as repository_name FROM tasks t
+    SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, r.name as repository_name FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
     WHERE t.board_id = ?

@@ -30,15 +30,19 @@ export async function createSSEResponse(
   token: string,
 ): Promise<Response> {
   const auth = createAuth(env);
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
   let authenticated = false;
   if (token.startsWith("ak_")) {
     const result = await auth.api.verifyApiKey({ body: { key: token } });
     authenticated = !!result?.valid;
   } else {
-    const session = await auth.api.getSession({
-      headers: new Headers({ Authorization: `Bearer ${token}` }),
-    });
-    authenticated = !!session;
+    const agentIdentity = await auth.api.getAgentSession({ headers });
+    if (agentIdentity) {
+      authenticated = true;
+    } else {
+      const session = await auth.api.getSession({ headers });
+      authenticated = !!session;
+    }
   }
 
   if (!authenticated) {

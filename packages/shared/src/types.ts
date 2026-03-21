@@ -38,6 +38,7 @@ export interface Task {
   blocked?: boolean;
   repository_name?: string;
   agent_name?: string;
+  agent_public_key?: string | null;
 }
 
 export interface TaskWithMeta extends Task {
@@ -104,6 +105,7 @@ export interface Agent {
   name: string;
   role_id: string | null;
   status: AgentStatus;
+  public_key: string | null;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;

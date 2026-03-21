@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
-import type { ApiClient } from "./client.js";
+import type { ApiClient, AgentClient } from "./client.js";
 
 // Agent Process Lifecycle:
 //   SPAWN → stdin task notification → RUNNING
@@ -13,6 +13,7 @@ export interface AgentProcess {
   taskId: string;
   sessionId: string;
   process: ChildProcess;
+  agentClient?: AgentClient;
 }
 
 export class ProcessManager {
@@ -40,6 +41,7 @@ export class ProcessManager {
     sessionId: string,
     cwd: string,
     taskContext: string,
+    agentClient?: AgentClient,
   ): Promise<void> {
     const args = [
       "--print",
@@ -70,7 +72,7 @@ export class ProcessManager {
       return;
     }
 
-    const agent: AgentProcess = { taskId, sessionId, process: proc };
+    const agent: AgentProcess = { taskId, sessionId, process: proc, agentClient };
     this.agents.set(taskId, agent);
 
     // Send task context as JSON message via stdin, then close
@@ -93,7 +95,7 @@ export class ProcessManager {
         if (!line.trim()) continue;
         try {
           const event = JSON.parse(line);
-          this.handleEvent(taskId, sessionId, event);
+          this.handleEvent(taskId, sessionId, event, agentClient);
         } catch { /* non-JSON line, skip */ }
       }
     });
@@ -111,7 +113,7 @@ export class ProcessManager {
       if (stdoutBuffer.trim()) {
         try {
           const event = JSON.parse(stdoutBuffer);
-          this.handleEvent(taskId, sessionId, event);
+          this.handleEvent(taskId, sessionId, event, agentClient);
         } catch { /* skip */ }
       }
 
@@ -151,12 +153,12 @@ export class ProcessManager {
     }
   }
 
-  private handleEvent(taskId: string, sessionId: string, event: any): void {
+  private handleEvent(taskId: string, sessionId: string, event: any, agentClient?: AgentClient): void {
     // Extract text from assistant messages → post as agent chat messages
     if (event.type === "assistant" && Array.isArray(event.message?.content)) {
       for (const block of event.message.content) {
         if (block.type === "text" && block.text) {
-          this.postMessage(taskId, sessionId, "agent", block.text).catch(() => {});
+          this.postMessage(taskId, sessionId, "agent", block.text, agentClient).catch(() => {});
         }
       }
     }
@@ -165,18 +167,28 @@ export class ProcessManager {
       const cost = event.total_cost_usd || 0;
       const usage = event.usage || {};
       console.log(`[INFO] Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
-      this.client.updateAgentUsage(sessionId, {
+      const usageData = {
         input_tokens: usage.input_tokens || 0,
         output_tokens: usage.output_tokens || 0,
         cache_read_tokens: usage.cache_read_input_tokens || 0,
         cache_creation_tokens: usage.cache_creation_input_tokens || 0,
         cost_micro_usd: Math.round(cost * 1_000_000),
-      }).catch(() => {});
+      };
+      if (agentClient) {
+        agentClient.updateAgentUsage(usageData).catch(() => {});
+      } else {
+        this.client.updateAgentUsage(sessionId, usageData).catch(() => {});
+      }
     }
   }
 
-  private async postMessage(taskId: string, sessionId: string, role: string, content: string): Promise<void> {
-    await this.client.sendMessage(taskId, { agent_id: sessionId, role, content });
+  private async postMessage(taskId: string, sessionId: string, role: string, content: string, agentClient?: AgentClient): Promise<void> {
+    const body = { agent_id: sessionId, role, content };
+    if (agentClient) {
+      await agentClient.sendMessage(taskId, body);
+    } else {
+      await this.client.sendMessage(taskId, body);
+    }
   }
 
   private async releaseTask(taskId: string): Promise<void> {

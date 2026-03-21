@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
+import { agentFingerprint } from "../lib/agentIdentity";
+import { AgentIdenticon } from "./AgentIdenticon";
 import { formatRelative } from "./TaskDetailFields";
 
 interface AgentProfileProps {
@@ -61,18 +63,18 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
     <Panel onClose={onClose}>
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-3">
-          {/* Identicon-style avatar using initials */}
-          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-            <span className="font-mono text-accent text-sm font-bold">
-              {agent.name.slice(0, 2).toUpperCase()}
-            </span>
-          </div>
+          <AgentIdenticon publicKey={agent.public_key} name={agent.name} size={40} />
           <div>
             <h2 className="font-mono text-lg text-accent font-semibold">{agent.name}</h2>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status]}`} />
               <span className="text-xs text-content-secondary">{statusLabels[agent.status] || agent.status}</span>
             </div>
+            {agent.public_key && (
+              <span className="font-mono text-[10px] text-content-tertiary">
+                {agentFingerprint(agent.public_key)}
+              </span>
+            )}
           </div>
         </div>
       </div>

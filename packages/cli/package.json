@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@agent-kanban/shared": "workspace:*",
-    "commander": "^13.0.0"
+    "@auth/agent": "^0.3.0",
+    "commander": "^13.0.0",
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
+import { AgentIdenticon } from "../components/AgentIdenticon";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
 
@@ -76,11 +77,7 @@ export function AgentsPage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-                      <span className="font-mono text-accent text-xs font-bold">
-                        {agent.name.slice(0, 2).toUpperCase()}
-                      </span>
-                    </div>
+                    <AgentIdenticon publicKey={agent.public_key} name={agent.name} size={32} />
                     <div>
                       <span className="font-mono text-sm text-accent font-medium">{agent.name}</span>
                       <div className="flex items-center gap-1.5 mt-0.5">

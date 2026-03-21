@@ -21,8 +21,8 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, messageRepo.ts) — no raw SQL in route handlers
 - Error handling: Hono onError + HTTPException — centralized error envelope { error: { code, message } }
 - Claim atomicity: db.batch() for race-condition-free task claims
-- Auth: Two identity types — **user** (Better Auth session) and **machine** (@better-auth/api-key). Users manage boards/repos/machines; machines execute tasks (assign/claim/review/release). Data scoped by `owner_id` (user.id now, org.id later). SSE validates tokens via Better Auth.
-- Agent identity: auto-registered in `agents` table on first claim/create. Not tied to API key 1:1.
+- Auth: Three identity types — **user** (Better Auth session), **machine** (@better-auth/api-key), **agent** (@better-auth/agent-auth Ed25519 JWT). Machines assign tasks; agents claim/review with own JWT. Data scoped by `owner_id`.
+- Agent identity: registered via `POST /api/agents` with Ed25519 public key. Each agent has a cryptographic identity (identicon, fingerprint). Daemon generates ephemeral keypair per spawn.
 - Agent status: idle → working (on claim/assign) → idle (on complete/release/cancel with no other active tasks) → offline (on stale timeout)
 - Task lifecycle: Todo → Todo+assigned (daemon assign) → In Progress (agent claim) → In Review (agent review+PR) → Done (human complete) or Cancelled (cancel at any stage)
 - Task dependencies: `depends_on` JSON array, cycle detection via recursive CTE (taskDeps.ts), `blocked` computed on read

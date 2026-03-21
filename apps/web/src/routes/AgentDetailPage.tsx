@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Header } from "../components/Header";
+import { AgentIdenticon } from "../components/AgentIdenticon";
 import { api } from "../lib/api";
+import { agentFingerprint } from "../lib/agentIdentity";
 import { formatRelative } from "../components/TaskDetailFields";
 
 const statusDotColors: Record<string, string> = {
@@ -86,17 +88,18 @@ export function AgentDetailPage() {
 
         {/* Agent header */}
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
-            <span className="font-mono text-accent text-base font-bold">
-              {agent.name.slice(0, 2).toUpperCase()}
-            </span>
-          </div>
+          <AgentIdenticon publicKey={agent.public_key} name={agent.name} size={48} />
           <div>
             <h1 className="font-mono text-xl text-accent font-bold">{agent.name}</h1>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status]}`} />
               <span className="text-xs text-content-secondary">{statusLabels[agent.status] || agent.status}</span>
             </div>
+            {agent.public_key && (
+              <span className="font-mono text-[10px] text-content-tertiary">
+                {agentFingerprint(agent.public_key)}
+              </span>
+            )}
           </div>
         </div>
 

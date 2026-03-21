@@ -1,3 +1,4 @@
+import { SignJWT } from "jose";
 import { getConfigValue } from "./config.js";
 
 export class ApiClient {
@@ -72,9 +73,14 @@ export class ApiClient {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
+  // Hosts
+  registerHost(machineId: string) {
+    return this.request<{ id: string }>("POST", "/api/auth/agent/host/create", { machineId });
+  }
+
   // Agents
-  registerAgent(agentId: string) {
-    return this.request("POST", "/api/agents", { agent_id: agentId });
+  registerAgent(agentId: string, publicKey?: string) {
+    return this.request("POST", "/api/agents", { agent_id: agentId, public_key: publicKey });
   }
   listAgents() { return this.request("GET", "/api/agents"); }
 
@@ -104,5 +110,59 @@ export class ApiClient {
   getMessages(taskId: string, since?: string) {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
     return this.request<any[]>("GET", `/api/tasks/${taskId}/messages${qs}`);
+  }
+}
+
+export class AgentClient {
+  private baseUrl: string;
+  private agentId: string;
+  private privateKey: CryptoKey;
+
+  constructor(baseUrl: string, agentId: string, privateKey: CryptoKey) {
+    this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.agentId = agentId;
+    this.privateKey = privateKey;
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const jwt = await new SignJWT({ sub: this.agentId })
+      .setProtectedHeader({ alg: "EdDSA" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(this.privateKey);
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const data = await res.json() as T & { error?: { code: string; message: string } };
+
+    if (!res.ok) {
+      const msg = (data as any).error?.message || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  // Tasks
+  releaseTask(id: string) {
+    return this.request("POST", `/api/tasks/${id}/release`);
+  }
+
+  // Agent usage
+  updateAgentUsage(usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
+    return this.request("PATCH", `/api/agents/${this.agentId}/usage`, usage);
+  }
+
+  // Messages
+  sendMessage(taskId: string, body: { agent_id: string; role: string; content: string }) {
+    return this.request("POST", `/api/tasks/${taskId}/messages`, body);
   }
 }

@@ -3,7 +3,7 @@ import { join } from "path";
 import { homedir, hostname, platform, arch, release } from "os";
 import { execSync } from "child_process";
 import { randomUUID } from "crypto";
-import { ApiClient } from "./client.js";
+import { ApiClient, AgentClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository } from "./links.js";
 import { getConfigValue, setConfigValue } from "./config.js";
@@ -85,6 +85,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     console.log(`[INFO] Machine registered: ${machineId}`);
   }
 
+  let hostId = getConfigValue("host-id");
+  if (!hostId) {
+    const host = await client.registerHost(machineId);
+    hostId = host.id;
+    setConfigValue("host-id", hostId);
+    console.log(`[INFO] Host registered: ${hostId}`);
+  }
+
   await client.heartbeat(machineId, machineInfo).catch((err: any) =>
     console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
   );
@@ -136,9 +144,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const repoDir = findPathForRepository(task.repository_id)!;
       const sessionId = randomUUID();
 
-      // Register agent, then assign the task
+      // Generate ephemeral Ed25519 keypair for this agent
+      const { publicKey, privateKey } = await crypto.subtle.generateKey(
+        { name: "Ed25519" } as any, true, ["sign", "verify"]
+      );
+      const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
+      const pubKeyBase64 = pubKeyJwk.x;
+
+      // Register agent with public key, then assign the task
       try {
-        await client.registerAgent(sessionId);
+        await client.registerAgent(sessionId, pubKeyBase64);
         await client.assignTask(task.id, sessionId);
       } catch (err: any) {
         if (err.message.includes("409") || err.message.includes("assigned") || err.message.includes("blocked")) {
@@ -153,9 +168,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       // Ensure the agent-kanban skill is installed in the target repo
       ensureSkill(repoDir);
 
+      // Create agent-specific client with JWT auth
+      const agentClient = new AgentClient(
+        getConfigValue("api-url")!,
+        sessionId,
+        privateKey,
+      );
+
       // Notify the agent — it will claim, work, create PR, and submit for review
       const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nFollow the agent-kanban skill workflow: claim the task, do the work, create a PR with gh, then submit for review with ak task review --pr-url <url>. Do NOT call task complete — only humans can complete tasks.`;
-      await pm.spawnAgent(task.id, sessionId, repoDir, prompt);
+      await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient);
 
       // Reset backoff on success
       backoffMs = baseInterval;
