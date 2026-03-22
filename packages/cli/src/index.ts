@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { readFileSync } from "fs";
+import { join } from "path";
 import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
 import { type ApiClient, MachineClient, createClient } from "./client.js";
@@ -20,8 +22,10 @@ async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string
   return repos[0].id;
 }
 
+const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
+
 const program = new Command();
-program.name("agent-kanban").description("Agent-first kanban board").version("1.3.0");
+program.name("agent-kanban").description("Agent-first kanban board").version(pkg.version);
 
 // ─── Config ───
 
