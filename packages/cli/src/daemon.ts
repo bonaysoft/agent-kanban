@@ -150,6 +150,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const task = available[0];
       const repoDir = findPathForRepository(task.repository_id)!;
+
+      // Ensure lefthook quality gates before first real task
+      if (await ensureLefthookTask(client, task, repoDir, tasks)) {
+        schedulePoll(baseInterval);
+        return;
+      }
       const sessionId = randomUUID();
 
       const { publicKey, privateKey } = await crypto.subtle.generateKey(
@@ -243,6 +249,50 @@ function ensureSkill(repoDir: string): boolean {
     console.error(`[ERROR] Failed to ensure skill: ${err.message}`);
     return false;
   }
+}
+
+const LEFTHOOK_LABEL = "setup:lefthook";
+
+/** Returns true if a lefthook setup task was created (caller should skip this poll cycle). */
+async function ensureLefthookTask(client: MachineClient, task: any, repoDir: string, allTasks: any[]): Promise<boolean> {
+  if (existsSync(join(repoDir, "lefthook.yml"))) return false;
+
+  console.log(`[INFO] No lefthook.yml in ${repoDir}, creating setup task`);
+
+  const setupTask = await client.createTask({
+    title: "Setup lefthook quality gates",
+    description: [
+      "Analyze this project's tech stack and set up quality gates via lefthook.",
+      "",
+      "Phase 1 — Setup tools and full scan:",
+      "1. Detect the project type (language, framework, package manager, build tools)",
+      "2. Determine what quality checks this project SHOULD have (linting, formatting, type checking, etc.)",
+      "3. If any required tools are missing (e.g. no linter configured), install and configure them",
+      "4. Run a full check against the entire codebase and collect all issues",
+      "5. Group the issues by module/area and create follow-up tasks via `ak task create` for each group",
+      "",
+      "Phase 2 — Enforce on future commits:",
+      "6. Generate `lefthook.yml` with pre-commit hooks that only check staged files (not the full codebase)",
+      "7. Run `lefthook install`",
+      "8. Commit all changes (lefthook.yml, tool configs, dependency updates)",
+    ].join("\n"),
+    board_id: task.board_id,
+    repository_id: task.repository_id,
+    labels: [LEFTHOOK_LABEL],
+  }) as any;
+
+  console.log(`[INFO] Created lefthook setup task ${setupTask.id}`);
+
+  // Block all todo tasks in this repo on the setup task
+  const repoTasks = allTasks.filter((t: any) => t.repository_id === task.repository_id);
+  for (const t of repoTasks) {
+    await client.updateTask(t.id, {
+      depends_on: [...(t.depends_on || []), setupTask.id],
+    });
+  }
+
+  console.log(`[INFO] Blocked ${repoTasks.length} tasks on lefthook setup task ${setupTask.id}`);
+  return true;
 }
 
 function cloneAndLink(repo: any): void {
