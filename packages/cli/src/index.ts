@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
-import { ApiClient } from "./client.js";
+import { type ApiClient, MachineClient, createClient } from "./client.js";
 import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
 import { registerLinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
@@ -51,7 +51,7 @@ taskCmd
   .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
 
     const body: Record<string, unknown> = { title: opts.title };
     if (opts.description) body.description = opts.description;
@@ -80,7 +80,7 @@ taskCmd
   .option("--parent <id>", "Filter subtasks of a parent task")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     const params: Record<string, string> = {};
     if (opts.repo) params.repository_id = opts.repo;
     if (opts.status) params.status = opts.status;
@@ -98,7 +98,7 @@ taskCmd
   .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     const task = await client.claimTask(id, opts.agentName);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t: any) => `Claimed task ${t.id}: ${t.title} (now in progress)`);
@@ -109,7 +109,7 @@ taskCmd
   .description("Add a log entry to a task")
   .option("--agent-name <name>", "Agent identity")
   .action(async (id, message, opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     await client.addLog(id, message, opts.agentName);
     console.log("Log entry added.");
   });
@@ -120,7 +120,7 @@ taskCmd
   .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.agentName) body.agent_name = opts.agentName;
     const task = await client.cancelTask(id, body);
@@ -135,7 +135,7 @@ taskCmd
   .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.prUrl) body.pr_url = opts.prUrl;
     if (opts.agentName) body.agent_name = opts.agentName;
@@ -152,7 +152,7 @@ taskCmd
   .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
-    const client = new ApiClient();
+    const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.result) body.result = opts.result;
     if (opts.prUrl) body.pr_url = opts.prUrl;
@@ -171,7 +171,7 @@ agentCmd
   .description("List all agents")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     const agents = await client.listAgents();
     const fmt = getFormat(opts.format);
     output(agents, fmt, formatAgentList);
@@ -188,7 +188,7 @@ boardCmd
   .option("--description <desc>", "Board description")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     const board = await client.createBoard({ name: opts.name, description: opts.description });
     const fmt = getFormat(opts.format);
     output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
@@ -199,7 +199,7 @@ boardCmd
   .description("List all boards")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     const boards = await client.listBoards();
     const fmt = getFormat(opts.format);
     output(boards, fmt, formatBoardList);
@@ -211,7 +211,7 @@ boardCmd
   .option("--board <name-or-id>", "Board name or ID (uses first if omitted)")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     let boardId: string;
 
     if (opts.board) {
@@ -251,7 +251,7 @@ repoCmd
   .requiredOption("--url <url>", "Clone URL")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     const repo = await client.createRepository({ name: opts.name, url: opts.url });
     const fmt = getFormat(opts.format);
     output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
@@ -262,7 +262,7 @@ repoCmd
   .description("List repositories")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new ApiClient();
+    const client = new MachineClient();
     const repos = await client.listRepositories();
     const fmt = getFormat(opts.format);
     output(repos, fmt, formatRepositoryList);

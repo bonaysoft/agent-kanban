@@ -3,7 +3,7 @@ import { join } from "path";
 import { hostname, platform, arch, release } from "os";
 import { execSync } from "child_process";
 import { randomUUID } from "crypto";
-import { ApiClient, AgentClient } from "./client.js";
+import { MachineClient, AgentClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
@@ -37,7 +37,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
   writeFileSync(PID_FILE, String(process.pid));
 
-  const client = new ApiClient();
+  const client = new MachineClient();
   const links = getLinks();
   const linkedRepoCount = Object.keys(links).length;
 
@@ -135,6 +135,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         { name: "Ed25519" } as any, true, ["sign", "verify"]
       );
       const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
+      const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
       const pubKeyBase64 = pubKeyJwk.x;
 
       try {
@@ -165,8 +166,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         privateKey,
       );
 
+      const agentEnv = {
+        AK_AGENT_ID: sessionId,
+        AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+        AK_API_URL: getConfigValue("api-url")!,
+      };
+
       const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nFollow the agent-kanban skill workflow: claim the task, do the work, create a PR with gh, then submit for review with ak task review --pr-url <url>. Do NOT call task complete — only humans can complete tasks.`;
-      await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient);
+      await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient, agentEnv);
 
       backoffMs = baseInterval;
       schedulePoll(1000);

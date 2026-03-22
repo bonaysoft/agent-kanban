@@ -29,7 +29,7 @@ export async function deleteMachine(db: D1, machineId: string, ownerId: string):
   return result.meta.changes > 0;
 }
 
-export async function heartbeat(
+export async function updateMachine(
   db: D1,
   machineId: string,
   ownerId: string,

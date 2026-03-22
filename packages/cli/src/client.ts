@@ -1,28 +1,24 @@
 import { SignJWT } from "jose";
 import { randomUUID } from "crypto";
-import type { UsageInfo } from "@agent-kanban/shared";
+import type { UsageInfo } from "./types.js";
 import { getConfigValue } from "./config.js";
 
-export class ApiClient {
-  private baseUrl: string;
-  private apiKey: string;
+export abstract class ApiClient {
+  protected baseUrl: string;
 
-  constructor() {
-    const url = getConfigValue("api-url");
-    const key = getConfigValue("api-key");
-    if (!url) throw new Error("API URL not configured. Run: agent-kanban config set api-url <url>");
-    if (!key) throw new Error("API key not configured. Run: agent-kanban config set api-key <key>");
-    this.baseUrl = url.replace(/\/$/, "");
-    this.apiKey = key;
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
+  protected abstract authorize(): Promise<string>;
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
-    const res = await fetch(url, {
+    const authorization = await this.authorize();
+    const res = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: authorization,
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(10000),
@@ -110,56 +106,59 @@ export class ApiClient {
   }
 }
 
-export class AgentClient {
-  private baseUrl: string;
+export class MachineClient extends ApiClient {
+  private apiKey: string;
+
+  constructor() {
+    const url = getConfigValue("api-url");
+    const key = getConfigValue("api-key");
+    if (!url) throw new Error("API URL not configured. Run: agent-kanban config set api-url <url>");
+    if (!key) throw new Error("API key not configured. Run: agent-kanban config set api-key <key>");
+    super(url);
+    this.apiKey = key;
+  }
+
+  protected async authorize(): Promise<string> {
+    return `Bearer ${this.apiKey}`;
+  }
+}
+
+export class AgentClient extends ApiClient {
   private agentId: string;
   private privateKey: CryptoKey;
 
   constructor(baseUrl: string, agentId: string, privateKey: CryptoKey) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
+    super(baseUrl);
     this.agentId = agentId;
     this.privateKey = privateKey;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  static async fromEnv(): Promise<AgentClient | null> {
+    const agentId = process.env.AK_AGENT_ID;
+    const keyJson = process.env.AK_AGENT_KEY;
+    const apiUrl = process.env.AK_API_URL;
+    if (!agentId || !keyJson || !apiUrl) return null;
+
+    const privateKey = await crypto.subtle.importKey(
+      "jwk", JSON.parse(keyJson), { name: "Ed25519" } as any, false, ["sign"],
+    );
+    return new AgentClient(apiUrl, agentId, privateKey);
+  }
+
+  protected async authorize(): Promise<string> {
     const jwt = await new SignJWT({ sub: this.agentId, jti: randomUUID(), aud: this.baseUrl })
       .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
       .sign(this.privateKey);
-
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10000),
-    });
-
-    const data = await res.json() as T & { error?: { code: string; message: string } };
-
-    if (!res.ok) {
-      const msg = (data as any).error?.message || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
-
-    return data;
+    return `Bearer ${jwt}`;
   }
+}
 
-  // Tasks
-  releaseTask(id: string) {
-    return this.request("POST", `/api/tasks/${id}/release`);
-  }
-
-  // Agent usage
-  updateAgentUsage(usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
-    return this.request("PATCH", `/api/agents/${this.agentId}/usage`, usage);
-  }
-
-  // Messages
-  sendMessage(taskId: string, body: { agent_id: string; role: string; content: string }) {
-    return this.request("POST", `/api/tasks/${taskId}/messages`, body);
-  }
+/**
+ * Returns AgentClient if running as a spawned agent (AK_AGENT_* env vars),
+ * otherwise MachineClient (API key from config).
+ */
+export async function createClient(): Promise<ApiClient> {
+  return await AgentClient.fromEnv() ?? new MachineClient();
 }

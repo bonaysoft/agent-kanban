@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir, platform } from "os";
-import type { UsageInfo } from "@agent-kanban/shared";
+import type { UsageInfo } from "./types.js";
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";

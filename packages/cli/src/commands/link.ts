@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import { basename } from "path";
 import type { Command } from "commander";
-import { ApiClient } from "../client.js";
+import { MachineClient } from "../client.js";
 import { setLink } from "../links.js";
 
 function getGitRepoRoot(): string {
@@ -35,7 +35,7 @@ export function registerLinkCommand(program: Command) {
         process.exit(1);
       }
 
-      const client = new ApiClient();
+      const client = new MachineClient();
       let repo: any;
       try {
         repo = await client.createRepository({

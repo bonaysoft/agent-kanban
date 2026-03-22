@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @agent-kanban/web dev",
     "build": "pnpm --filter @agent-kanban/shared build && pnpm --filter @agent-kanban/web build",
     "test": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "pnpm -r --parallel run lint"
   },
   "keywords": [
     "kanban",

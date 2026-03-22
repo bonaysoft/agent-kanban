@@ -15,7 +15,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json();
+  const data = await res.json() as any;
 
   if (!res.ok) {
     const err = new Error(data.error?.message || `HTTP ${res.status}`);

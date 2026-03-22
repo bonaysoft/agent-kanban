@@ -1,6 +1,6 @@
 {
   "name": "agent-kanban",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "CLI for Agent Kanban — agent-first cross-project task board",
   "type": "module",
   "bin": {
@@ -9,11 +9,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-kanban/shared": "workspace:*",
-    "@auth/agent": "^0.3.0",
+"@auth/agent": "^0.3.0",
     "commander": "^13.0.0",
     "jose": "^6.2.2"
   },

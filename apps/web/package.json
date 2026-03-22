@@ -7,7 +7,8 @@
     "dev": "B=$(awk 'NF{printf \"-b %s \", $0}' .dev.vars) && wrangler pages dev --compatibility-flags nodejs_compat $B -- vite",
     "build": "vite build",
     "preview": "wrangler pages dev dist",
-    "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local"
+    "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@agent-kanban/shared": "workspace:*",

@@ -50,20 +50,20 @@ describe("machine usage tracking", () => {
   });
 
   it("heartbeat without usage_info keeps it null", async () => {
-    const { heartbeat } = await import("../apps/web/functions/api/machineRepo");
-    const machine = await heartbeat(db, machineId, {});
+    const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
+    const machine = await heartbeat(db, machineId, "user-001", {});
     expect(machine.usage_info).toBeNull();
     expect(machine.status).toBe("online");
   });
 
   it("heartbeat with usage_info stores and returns parsed object", async () => {
-    const { heartbeat } = await import("../apps/web/functions/api/machineRepo");
+    const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
     const usageInfo: UsageInfo = {
       five_hour: { utilization: 23.5, resets_at: "2026-03-21T15:00:00Z" },
       seven_day: { utilization: 8.2, resets_at: "2026-03-25T00:00:00Z" },
       updated_at: "2026-03-21T10:00:00Z",
     };
-    const machine = await heartbeat(db, machineId, { usage_info: usageInfo });
+    const machine = await heartbeat(db, machineId, "user-001", { usage_info: usageInfo });
 
     expect(typeof machine.usage_info).toBe("object");
     expect(machine.usage_info!.five_hour!.utilization).toBe(23.5);
@@ -73,7 +73,7 @@ describe("machine usage tracking", () => {
 
   it("getMachine returns parsed usage_info and runtimes", async () => {
     const { getMachine } = await import("../apps/web/functions/api/machineRepo");
-    const machine = await getMachine(db, machineId);
+    const machine = await getMachine(db, machineId, "user-001");
 
     expect(machine).toBeTruthy();
     expect(machine!.runtimes).toEqual(["Claude Code"]);
@@ -92,13 +92,13 @@ describe("machine usage tracking", () => {
   });
 
   it("heartbeat overwrites usage_info with new data", async () => {
-    const { heartbeat } = await import("../apps/web/functions/api/machineRepo");
+    const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
     const newUsage: UsageInfo = {
       five_hour: { utilization: 75.0, resets_at: "2026-03-21T20:00:00Z" },
       seven_day_opus: { utilization: 45.0, resets_at: "2026-03-28T00:00:00Z" },
       updated_at: "2026-03-21T15:00:00Z",
     };
-    const machine = await heartbeat(db, machineId, { usage_info: newUsage });
+    const machine = await heartbeat(db, machineId, "user-001", { usage_info: newUsage });
 
     expect(machine.usage_info!.five_hour!.utilization).toBe(75.0);
     expect(machine.usage_info!.seven_day_opus!.utilization).toBe(45.0);
@@ -106,8 +106,8 @@ describe("machine usage tracking", () => {
   });
 
   it("heartbeat updates version and runtimes", async () => {
-    const { heartbeat } = await import("../apps/web/functions/api/machineRepo");
-    const machine = await heartbeat(db, machineId, {
+    const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
+    const machine = await heartbeat(db, machineId, "user-001", {
       version: "2.0.0", runtimes: ["Claude Code", "Codex"],
     });
 
@@ -116,8 +116,8 @@ describe("machine usage tracking", () => {
   });
 
   it("heartbeat updating only version preserves runtimes", async () => {
-    const { heartbeat } = await import("../apps/web/functions/api/machineRepo");
-    const machine = await heartbeat(db, machineId, { version: "2.1.0" });
+    const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
+    const machine = await heartbeat(db, machineId, "user-001", { version: "2.1.0" });
 
     expect(machine.version).toBe("2.1.0");
     expect(machine.runtimes).toEqual(["Claude Code", "Codex"]);
@@ -126,7 +126,7 @@ describe("machine usage tracking", () => {
   it("runtimes are parsed as JSON array from DB reads", async () => {
     const { getMachine, listMachines } = await import("../apps/web/functions/api/machineRepo");
 
-    const single = await getMachine(db, machineId);
+    const single = await getMachine(db, machineId, "user-001");
     expect(Array.isArray(single!.runtimes)).toBe(true);
     expect(single!.runtimes).toEqual(["Claude Code", "Codex"]);
 

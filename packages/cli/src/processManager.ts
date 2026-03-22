@@ -13,7 +13,7 @@ export interface AgentProcess {
   taskId: string;
   sessionId: string;
   process: ChildProcess;
-  agentClient?: AgentClient;
+  agentClient: AgentClient;
   timeoutTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -44,7 +44,8 @@ export class ProcessManager {
     sessionId: string,
     cwd: string,
     taskContext: string,
-    agentClient?: AgentClient,
+    agentClient: AgentClient,
+    agentEnv: Record<string, string>,
   ): Promise<void> {
     const args = [
       "--print",
@@ -61,7 +62,7 @@ export class ProcessManager {
       proc = spawn(this.agentCli, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env },
+        env: { ...process.env, ...agentEnv },
       });
     } catch (err: any) {
       console.error(`[ERROR] Failed to spawn ${this.agentCli}: ${err.message}`);
@@ -78,7 +79,6 @@ export class ProcessManager {
     const agent: AgentProcess = { taskId, sessionId, process: proc, agentClient };
     this.agents.set(taskId, agent);
 
-    // Kill agent if it exceeds the task timeout
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
         console.warn(`[WARN] Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
@@ -86,7 +86,6 @@ export class ProcessManager {
       }, this.taskTimeoutMs);
     }
 
-    // Send task context as JSON message via stdin, then close
     proc.on("spawn", () => {
       const payload = JSON.stringify({
         type: "user",
@@ -96,7 +95,6 @@ export class ProcessManager {
       proc.stdin?.end();
     });
 
-    // Parse stdout (stream-json): each line is a JSON event
     let stdoutBuffer = "";
     proc.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
@@ -111,19 +109,15 @@ export class ProcessManager {
       }
     });
 
-    // Capture stderr for crash diagnostics
     let stderrBuffer = "";
     proc.stderr?.on("data", (chunk: Buffer) => {
       stderrBuffer += chunk.toString();
       if (stderrBuffer.length > 10000) stderrBuffer = stderrBuffer.slice(-5000);
     });
 
-    // Handle exit
     proc.on("close", async (code) => {
-      // Clear timeout timer
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
 
-      // Flush remaining stdout
       if (stdoutBuffer.trim()) {
         try {
           const event = JSON.parse(stdoutBuffer);
@@ -169,41 +163,26 @@ export class ProcessManager {
     }
   }
 
-  private handleEvent(taskId: string, sessionId: string, event: any, agentClient?: AgentClient): void {
-    // Extract text from assistant messages → post as agent chat messages
+  private handleEvent(taskId: string, sessionId: string, event: any, agentClient: AgentClient): void {
     if (event.type === "assistant" && Array.isArray(event.message?.content)) {
       for (const block of event.message.content) {
         if (block.type === "text" && block.text) {
-          this.postMessage(taskId, sessionId, "agent", block.text, agentClient).catch(() => {});
+          agentClient.sendMessage(taskId, { agent_id: sessionId, role: "agent", content: block.text })
+            .catch((err: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${err.message}`));
         }
       }
     }
-    // Report usage on result event
     if (event.type === "result") {
       const cost = event.total_cost_usd || 0;
       const usage = event.usage || {};
       console.log(`[INFO] Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
-      const usageData = {
+      agentClient.updateAgentUsage(sessionId, {
         input_tokens: usage.input_tokens || 0,
         output_tokens: usage.output_tokens || 0,
         cache_read_tokens: usage.cache_read_input_tokens || 0,
         cache_creation_tokens: usage.cache_creation_input_tokens || 0,
         cost_micro_usd: Math.round(cost * 1_000_000),
-      };
-      if (agentClient) {
-        agentClient.updateAgentUsage(usageData).catch(() => {});
-      } else {
-        this.client.updateAgentUsage(sessionId, usageData).catch(() => {});
-      }
-    }
-  }
-
-  private async postMessage(taskId: string, sessionId: string, role: string, content: string, agentClient?: AgentClient): Promise<void> {
-    const body = { agent_id: sessionId, role, content };
-    if (agentClient) {
-      await agentClient.sendMessage(taskId, body);
-    } else {
-      await this.client.sendMessage(taskId, body);
+      }).catch((err: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${err.message}`));
     }
   }
 

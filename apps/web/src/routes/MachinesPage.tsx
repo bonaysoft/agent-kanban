@@ -60,7 +60,7 @@ export function MachinesPage() {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       if (!res.ok) return;
-      const keyData = await res.json();
+      const keyData = await res.json() as any;
       const machineId = keyData?.metadata?.machineId;
       if (!machineId) return;
       const m = await api.machines.get(machineId);

@@ -9,7 +9,7 @@ import { createAgent, listAgents, getAgent, getAgentLogs, updateAgentUsage } fro
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
-import { heartbeat as machineHeartbeat, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
+import { updateMachine, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
 import { createAuth } from "./betterAuth";
 
 const api = new Hono<{ Bindings: Env }>();
@@ -44,7 +44,7 @@ api.use("/api/*", async (c, next) => {
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
   const body = await c.req.json<{ version?: string; runtimes?: string[]; usage_info?: any }>();
-  const updated = await machineHeartbeat(c.env.DB, c.req.param("id"), c.get("ownerId"), body);
+  const updated = await updateMachine(c.env.DB, c.req.param("id"), c.get("ownerId"), body);
   if (!updated) throw new HTTPException(404, { message: "Machine not found" });
   return c.json(updated);
 });

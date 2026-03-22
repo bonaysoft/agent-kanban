@@ -13,7 +13,7 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const [reconnecting, setReconnecting] = useState(false);
   const failCount = useRef(0);
   const lastEventId = useRef<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const token = getAuthToken();
 

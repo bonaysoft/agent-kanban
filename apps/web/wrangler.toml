@@ -7,5 +7,5 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"
-database_id = "placeholder-replace-after-create"
+database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"

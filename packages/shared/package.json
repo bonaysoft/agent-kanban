@@ -1,12 +1,13 @@
 {
   "name": "@agent-kanban/shared",
   "version": "1.0.0",
-  "private": true,
+  "publishConfig": { "access": "public" },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
