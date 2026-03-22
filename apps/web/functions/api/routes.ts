@@ -421,7 +421,8 @@ api.post("/api/repositories", async (c) => {
 });
 
 api.get("/api/repositories", async (c) => {
-  const repositories = await listRepositories(c.env.DB, c.get("ownerId"));
+  const { url } = c.req.query();
+  const repositories = await listRepositories(c.env.DB, c.get("ownerId"), { url });
   return c.json(repositories);
 });
 

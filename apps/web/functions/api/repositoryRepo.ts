@@ -42,15 +42,21 @@ export async function findOrCreateRepository(db: D1, ownerId: string, input: Cre
   }
 }
 
-export async function listRepositories(db: D1, ownerId: string): Promise<Repository[]> {
-  const result = await db.prepare(`
+export async function listRepositories(db: D1, ownerId: string, filters?: { url?: string }): Promise<Repository[]> {
+  let query = `
     SELECT r.*, COUNT(t.id) as task_count
     FROM repositories r
     LEFT JOIN tasks t ON t.repository_id = r.id
-    WHERE r.owner_id = ?
-    GROUP BY r.id
-    ORDER BY r.created_at DESC
-  `).bind(ownerId).all<Repository>();
+    WHERE r.owner_id = ?`;
+  const binds: string[] = [ownerId];
+
+  if (filters?.url) {
+    query += " AND r.url = ?";
+    binds.push(normalizeGitUrl(filters.url));
+  }
+
+  query += " GROUP BY r.id ORDER BY r.created_at DESC";
+  const result = await db.prepare(query).bind(...binds).all<Repository>();
   return result.results.map(withFullName);
 }
 

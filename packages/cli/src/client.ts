@@ -89,7 +89,12 @@ export abstract class ApiClient {
   createRepository(input: { name: string; url: string }) {
     return this.request("POST", "/api/repositories", input);
   }
-  listRepositories() { return this.request<any[]>("GET", "/api/repositories"); }
+  listRepositories(filters?: { url?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.url) params.set("url", filters.url);
+    const qs = params.toString();
+    return this.request<any[]>("GET", `/api/repositories${qs ? `?${qs}` : ""}`);
+  }
 
   // Agent usage
   updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {

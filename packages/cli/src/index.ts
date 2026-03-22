@@ -6,6 +6,20 @@ import { getFormat, output, formatTaskList, formatBoard, formatAgentList, format
 import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
 
+function isUrl(value: string): boolean {
+  return value.includes("://") || value.startsWith("git@");
+}
+
+async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string> {
+  if (!isUrl(repoRef)) return repoRef;
+  const repos = await client.listRepositories({ url: repoRef });
+  if (repos.length === 0) {
+    console.error(`Repository not found for URL: ${repoRef}`);
+    process.exit(1);
+  }
+  return repos[0].id;
+}
+
 const program = new Command();
 program.name("agent-kanban").description("Agent-first kanban board").version("1.3.0");
 
@@ -42,7 +56,7 @@ taskCmd
   .description("Create a new task")
   .requiredOption("--title <title>", "Task title")
   .option("--description <desc>", "Task description")
-  .option("--repo <repo>", "Repository name or ID")
+  .option("--repo <repo>", "Repository ID or URL")
   .option("--priority <priority>", "Priority (low, medium, high, urgent)")
   .option("--labels <labels>", "Comma-separated labels")
   .option("--input <json>", "JSON input payload")
@@ -55,7 +69,9 @@ taskCmd
 
     const body: Record<string, unknown> = { title: opts.title };
     if (opts.description) body.description = opts.description;
-    if (opts.repo) body.repository_id = opts.repo;
+    if (opts.repo) {
+      body.repository_id = await resolveRepoId(client, opts.repo);
+    }
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
     if (opts.agentName) body.agent_id = opts.agentName;
