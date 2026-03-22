@@ -5,9 +5,10 @@ import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { MachineClient, AgentClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
-import { getLinks, findPathForRepository } from "./links.js";
+import { getLinks, findPathForRepository, setLink } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
 import { getUsage } from "./usage.js";
+import { REPOS_DIR } from "./paths.js";
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -36,6 +37,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     }
   }
   writeFileSync(PID_FILE, String(process.pid));
+
+  // Preflight: gh must be installed and authenticated
+  try {
+    execSync("gh auth status", { stdio: "pipe" });
+  } catch {
+    removePidFile();
+    console.error("[FATAL] `gh` is not installed or not authenticated. Run `gh auth login` first.");
+    process.exit(1);
+  }
 
   const client = new MachineClient();
   const links = getLinks();
@@ -110,14 +120,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const tasks = await client.listTasks({ status: "todo" }) as any[];
 
+      // Auto-clone repos that have no local link
+      const repoCache = new Map<string, string | null>();
+      for (const t of tasks) {
+        if (t.blocked || t.assigned_to || pm.hasTask(t.id) || !t.repository_id) continue;
+        if (findPathForRepository(t.repository_id) || repoCache.has(t.repository_id)) continue;
+        const cloned = await autoCloneRepo(client, t.repository_id);
+        repoCache.set(t.repository_id, cloned);
+      }
+
       const available = tasks.filter((t: any) => {
         if (t.blocked || t.assigned_to) return false;
         if (pm.hasTask(t.id)) return false;
         if (!t.repository_id) return false;
-        if (!findPathForRepository(t.repository_id)) {
-          console.warn(`[WARN] Skipping task ${t.id}: no linked directory for repository ${t.repository_id}`);
-          return false;
-        }
+        if (!findPathForRepository(t.repository_id)) return false;
         return true;
       });
 
@@ -216,6 +232,30 @@ function ensureSkill(repoDir: string): boolean {
   } catch (err: any) {
     console.error(`[ERROR] Failed to ensure skill: ${err.message}`);
     return false;
+  }
+}
+
+async function autoCloneRepo(client: MachineClient, repositoryId: string): Promise<string | null> {
+  try {
+    const repos = await client.listRepositories();
+    const repo = repos.find((r: any) => r.id === repositoryId);
+    if (!repo?.full_name) return null;
+
+    const repoDir = join(REPOS_DIR, repo.name);
+    if (existsSync(repoDir)) {
+      console.log(`[INFO] Directory exists, linking repository ${repo.name} → ${repoDir}`);
+      setLink(repositoryId, repoDir);
+      return repoDir;
+    }
+
+    console.log(`[INFO] Cloning ${repo.full_name} → ${repoDir}`);
+    execSync(`gh repo clone ${repo.full_name} ${repoDir}`, { stdio: "pipe" });
+    setLink(repositoryId, repoDir);
+    console.log(`[INFO] Linked repository ${repo.name} → ${repoDir}`);
+    return repoDir;
+  } catch (err: any) {
+    console.error(`[ERROR] Auto-clone failed for repository ${repositoryId}: ${err.message}`);
+    return null;
   }
 }
 

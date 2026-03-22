@@ -1,9 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
-
-const CONFIG_DIR = join(homedir(), ".agent-kanban");
-const LINKS_FILE = join(CONFIG_DIR, "links.json");
+import { dirname } from "path";
+import { LINKS_FILE } from "./paths.js";
 
 interface Links {
   [repositoryId: string]: string; // repositoryId → localPath
@@ -18,13 +15,19 @@ function readLinks(): Links {
 }
 
 function writeLinks(links: Links): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
+  mkdirSync(dirname(LINKS_FILE), { recursive: true });
   writeFileSync(LINKS_FILE, JSON.stringify(links, null, 2) + "\n");
 }
 
 export function setLink(repositoryId: string, localPath: string): void {
   const links = readLinks();
   links[repositoryId] = localPath;
+  writeLinks(links);
+}
+
+export function removeLink(repositoryId: string): void {
+  const links = readLinks();
+  delete links[repositoryId];
   writeLinks(links);
 }
 

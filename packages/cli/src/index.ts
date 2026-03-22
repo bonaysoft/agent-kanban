@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { setConfigValue, getConfigValue } from "./config.js";
 import { type ApiClient, MachineClient, createClient } from "./client.js";
 import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
-import { registerLinkCommand } from "./commands/link.js";
+import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
 
 const program = new Command();
@@ -271,6 +271,7 @@ repoCmd
 // ─── Link & Start ───
 
 registerLinkCommand(program);
+registerUnlinkCommand(program);
 registerStartCommand(program);
 
 program.parseAsync();

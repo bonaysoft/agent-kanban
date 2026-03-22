@@ -1,9 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
-
-const CONFIG_DIR = join(homedir(), ".agent-kanban");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+import { dirname } from "path";
+import { CONFIG_FILE, PID_FILE } from "./paths.js";
 
 interface Config {
   "api-url"?: string;
@@ -20,7 +17,7 @@ export function readConfig(): Config {
 }
 
 export function writeConfig(config: Config): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
+  mkdirSync(dirname(CONFIG_FILE), { recursive: true });
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
 }
 
@@ -40,4 +37,4 @@ export function deleteConfigValue(key: string): void {
   writeConfig(config);
 }
 
-export const PID_FILE = join(CONFIG_DIR, "daemon.pid");
+export { PID_FILE };
