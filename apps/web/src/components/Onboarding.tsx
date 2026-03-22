@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import { authClient } from "../lib/auth-client";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -12,6 +13,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
   const [apiUrl, setApiUrl] = useState(window.location.origin);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleCreateBoard() {
     setLoading(true);
@@ -22,9 +24,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   async function handleCreateTask() {
     setLoading(true);
+    setError("");
     await api.tasks.create({ title: taskTitle, priority: "high" });
+
+    const { data, error: keyError } = await authClient.apiKey.create({ name: "onboarding" });
+    if (keyError || !data?.key) {
+      setError("Failed to create API key. You can create one later from Machines page.");
+      setLoading(false);
+      return;
+    }
+    setApiKeyDisplay(data.key);
+
     setLoading(false);
-    setApiKeyDisplay(localStorage.getItem("api-key") || "");
     setStep(2);
   }
 
@@ -84,6 +95,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               onChange={(e) => setTaskTitle(e.target.value)}
               className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2.5 text-sm text-content-primary outline-none focus:border-accent"
             />
+            {error && (
+              <p className="text-xs text-red-400">{error}</p>
+            )}
             <button
               onClick={handleCreateTask}
               disabled={loading || !taskTitle.trim()}

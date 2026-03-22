@@ -74,17 +74,3 @@ export async function updateAgentStatus(db: D1, agentId: string, status: AgentSt
   await db.prepare("UPDATE agents SET status = ? WHERE id = ?").bind(status, agentId).run();
 }
 
-export async function setAgentWorkingIfIdle(db: D1, agentId: string): Promise<void> {
-  await db.prepare("UPDATE agents SET status = 'working' WHERE id = ? AND status = 'idle'").bind(agentId).run();
-}
-
-export async function setAgentIdleIfNoActiveTasks(db: D1, agentId: string): Promise<void> {
-  const active = await db.prepare(`
-    SELECT COUNT(*) as cnt FROM tasks t
-    WHERE t.assigned_to = ? AND t.status IN ('in_progress', 'in_review')
-  `).bind(agentId).first<{ cnt: number }>();
-
-  if (active && active.cnt === 0) {
-    await db.prepare("UPDATE agents SET status = 'idle' WHERE id = ?").bind(agentId).run();
-  }
-}

@@ -5,7 +5,7 @@ import { authMiddleware } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
-import { createAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle, setAgentIdleIfNoActiveTasks, updateAgentUsage } from "./agentRepo";
+import { createAgent, listAgents, getAgent, getAgentLogs, updateAgentUsage } from "./agentRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -244,7 +244,6 @@ api.post("/api/tasks/:id/claim", async (c) => {
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
   const task = await claimTask(c.env.DB, c.req.param("id"), agentId);
-  await setAgentWorkingIfIdle(c.env.DB, agentId);
   return c.json(task);
 });
 
@@ -252,16 +251,7 @@ api.post("/api/tasks/:id/complete", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
-  const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
-
   const task = await completeTask(c.env.DB, c.req.param("id"), agentId || null, body.result || null, body.pr_url || null);
-
-  const effectiveAgentId = agentId || existing?.assigned_to;
-  if (effectiveAgentId) {
-    await setAgentIdleIfNoActiveTasks(c.env.DB, effectiveAgentId);
-  }
-
   return c.json(task);
 });
 
@@ -272,7 +262,6 @@ api.post("/api/tasks/:id/release", async (c) => {
   if (!existing?.assigned_to) throw new HTTPException(400, { message: "Task is not claimed" });
 
   const task = await releaseTask(c.env.DB, c.req.param("id"), existing.assigned_to);
-  await setAgentIdleIfNoActiveTasks(c.env.DB, existing.assigned_to);
   return c.json(task);
 });
 
@@ -301,12 +290,6 @@ api.post("/api/tasks/:id/cancel", async (c) => {
   if (existing?.status === "done") throw new HTTPException(400, { message: "Cannot cancel a completed task" });
 
   const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null);
-
-  const effectiveAgentId = agentId || existing?.assigned_to;
-  if (effectiveAgentId) {
-    await setAgentIdleIfNoActiveTasks(c.env.DB, effectiveAgentId);
-  }
-
   return c.json(task);
 });
 

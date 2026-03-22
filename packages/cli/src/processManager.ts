@@ -14,6 +14,7 @@ export interface AgentProcess {
   sessionId: string;
   process: ChildProcess;
   agentClient?: AgentClient;
+  timeoutTimer?: ReturnType<typeof setTimeout>;
 }
 
 export class ProcessManager {
@@ -21,11 +22,13 @@ export class ProcessManager {
   private client: ApiClient;
   private agentCli: string;
   private onSlotFreed: () => void;
+  private taskTimeoutMs: number;
 
-  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void) {
+  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void, taskTimeoutMs = 2 * 60 * 60 * 1000) {
     this.client = client;
     this.agentCli = agentCli;
     this.onSlotFreed = onSlotFreed;
+    this.taskTimeoutMs = taskTimeoutMs;
   }
 
   get activeCount(): number {
@@ -75,6 +78,14 @@ export class ProcessManager {
     const agent: AgentProcess = { taskId, sessionId, process: proc, agentClient };
     this.agents.set(taskId, agent);
 
+    // Kill agent if it exceeds the task timeout
+    if (this.taskTimeoutMs > 0) {
+      agent.timeoutTimer = setTimeout(() => {
+        console.warn(`[WARN] Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
+        proc.kill("SIGTERM");
+      }, this.taskTimeoutMs);
+    }
+
     // Send task context as JSON message via stdin, then close
     proc.on("spawn", () => {
       const payload = JSON.stringify({
@@ -109,6 +120,9 @@ export class ProcessManager {
 
     // Handle exit
     proc.on("close", async (code) => {
+      // Clear timeout timer
+      if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+
       // Flush remaining stdout
       if (stdoutBuffer.trim()) {
         try {
@@ -135,6 +149,7 @@ export class ProcessManager {
 
     proc.on("error", async (err) => {
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
+      if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
       await this.releaseTask(taskId);
       this.onSlotFreed();
@@ -147,6 +162,7 @@ export class ProcessManager {
     const entries = [...this.agents.entries()];
     for (const [taskId, agent] of entries) {
       console.log(`[INFO] Killing agent for task ${taskId}`);
+      if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       agent.process.kill("SIGTERM");
       this.agents.delete(taskId);
       await this.releaseTask(taskId);
@@ -191,9 +207,16 @@ export class ProcessManager {
     }
   }
 
-  private async releaseTask(taskId: string): Promise<void> {
-    await this.client.releaseTask(taskId).catch((err: any) => {
-      console.error(`[WARN] Failed to release task ${taskId}: ${err.message}`);
-    });
+  private async releaseTask(taskId: string, retries = 3): Promise<void> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        await this.client.releaseTask(taskId);
+        return;
+      } catch (err: any) {
+        console.error(`[WARN] Failed to release task ${taskId} (attempt ${i + 1}/${retries}): ${err.message}`);
+        if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    console.error(`[ERROR] Could not release task ${taskId} after ${retries} attempts. Task will remain locked until stale detection.`);
   }
 }

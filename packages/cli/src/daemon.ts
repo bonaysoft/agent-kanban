@@ -22,6 +22,7 @@ export interface DaemonOptions {
   maxConcurrent: number;
   agentCli: string;
   pollInterval?: number;
+  taskTimeout?: number; // ms, default 2h
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<void> {
@@ -52,7 +53,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const pm = new ProcessManager(client, opts.agentCli, () => {
     // Slot freed — trigger immediate poll
     schedulePoll(0);
-  });
+  }, opts.taskTimeout);
 
   let running = true;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,7 +161,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
       // Ensure the agent-kanban skill is installed in the target repo
-      ensureSkill(repoDir);
+      if (!ensureSkill(repoDir)) {
+        console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
+        await client.releaseTask(task.id).catch((err: any) =>
+          console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`)
+        );
+        schedulePoll(baseInterval);
+        return;
+      }
 
       // Create agent-specific client with JWT auth
       const agentClient = new AgentClient(
@@ -192,7 +200,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 const SKILL_SOURCE = "bonaysoft/agent-kanban";
 const SKILL_NAME = "agent-kanban";
 
-function ensureSkill(repoDir: string) {
+function ensureSkill(repoDir: string): boolean {
   const skillFile = join(repoDir, `.claude/skills/${SKILL_NAME}/SKILL.md`);
 
   try {
@@ -205,7 +213,7 @@ function ensureSkill(repoDir: string) {
     } else {
       // Check for updates
       const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
-      if (result.includes("up to date")) return;
+      if (result.includes("up to date")) return true;
       console.log(`[INFO] Skill "${SKILL_NAME}" updated in ${repoDir}`);
     }
 
@@ -214,8 +222,10 @@ function ensureSkill(repoDir: string) {
       cwd: repoDir,
       stdio: "pipe",
     });
+    return true;
   } catch (err: any) {
-    console.error(`[WARN] Failed to ensure skill: ${err.message}`);
+    console.error(`[ERROR] Failed to ensure skill: ${err.message}`);
+    return false;
   }
 }
 

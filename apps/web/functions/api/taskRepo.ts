@@ -184,6 +184,7 @@ export async function claimTask(db: D1, taskId: string, agentId: string): Promis
   const logId = newId();
 
   // Claim moves the task to in_progress — agent confirms they are starting work
+  // Agent status update is batched for atomicity
   await db.batch([
     db.prepare(
       "UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"
@@ -191,6 +192,9 @@ export async function claimTask(db: D1, taskId: string, agentId: string): Promis
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'claimed', NULL, ?)"
     ).bind(logId, taskId, agentId, now),
+    db.prepare(
+      "UPDATE agents SET status = 'working' WHERE id = ? AND status = 'idle'"
+    ).bind(agentId),
   ]);
 
   return { ...task, status: "in_progress", updated_at: now };
@@ -226,15 +230,27 @@ export async function completeTask(db: D1, taskId: string, agentId: string | nul
 
   const now = new Date().toISOString();
   const logId = newId();
+  const effectiveAgentId = agentId || task.assigned_to;
 
-  await db.batch([
+  const stmts = [
     db.prepare(
       "UPDATE tasks SET status = 'done', result = ?, pr_url = ?, updated_at = ? WHERE id = ?"
     ).bind(result, prUrl, now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'completed', ?, ?)"
     ).bind(logId, taskId, agentId, result, now),
-  ]);
+  ];
+
+  // Set agent idle if this was their last active task (atomic with task update)
+  if (effectiveAgentId) {
+    stmts.push(db.prepare(`
+      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
+        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
+      )
+    `).bind(effectiveAgentId, effectiveAgentId, taskId));
+  }
+
+  await db.batch(stmts);
 
   return { ...task, status: "done", result, pr_url: prUrl, updated_at: now };
 }
@@ -245,15 +261,26 @@ export async function cancelTask(db: D1, taskId: string, agentId: string | null)
 
   const now = new Date().toISOString();
   const logId = newId();
+  const effectiveAgentId = agentId || task.assigned_to;
 
-  await db.batch([
+  const stmts = [
     db.prepare(
       "UPDATE tasks SET status = 'cancelled', assigned_to = NULL, updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'cancelled', NULL, ?)"
     ).bind(logId, taskId, agentId, now),
-  ]);
+  ];
+
+  if (effectiveAgentId) {
+    stmts.push(db.prepare(`
+      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
+        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
+      )
+    `).bind(effectiveAgentId, effectiveAgentId, taskId));
+  }
+
+  await db.batch(stmts);
 
   return { ...task, status: "cancelled", assigned_to: null, updated_at: now };
 }
@@ -284,14 +311,24 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
   const now = new Date().toISOString();
   const logId = newId();
 
-  await db.batch([
+  const stmts = [
     db.prepare(
       "UPDATE tasks SET assigned_to = NULL, status = 'todo', updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, ?, NULL, ?)"
     ).bind(logId, taskId, agentId, action, now),
-  ]);
+  ];
+
+  if (agentId) {
+    stmts.push(db.prepare(`
+      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
+        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
+      )
+    `).bind(agentId, agentId, taskId));
+  }
+
+  await db.batch(stmts);
 
   return { ...task, assigned_to: null, status: "todo", updated_at: now };
 }

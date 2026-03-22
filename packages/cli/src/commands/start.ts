@@ -11,6 +11,7 @@ export function registerStartCommand(program: Command) {
     .option("--max-concurrent <n>", "Max concurrent agents", "3")
     .option("--agent-cli <cmd>", "Agent CLI command to spawn", "claude")
     .option("--poll-interval <ms>", "Poll interval in ms", "10000")
+    .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
       if (opts.apiUrl) setConfigValue("api-url", opts.apiUrl);
       if (opts.apiKey) setConfigValue("api-key", opts.apiKey);
@@ -24,6 +25,7 @@ export function registerStartCommand(program: Command) {
         maxConcurrent: parseInt(opts.maxConcurrent, 10),
         agentCli: opts.agentCli,
         pollInterval: parseInt(opts.pollInterval, 10),
+        taskTimeout: parseInt(opts.taskTimeout, 10),
       });
     });
 }
