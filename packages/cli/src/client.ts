@@ -3,6 +3,12 @@ import { randomUUID } from "crypto";
 import type { UsageInfo } from "./types.js";
 import { getConfigValue } from "./config.js";
 
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 export abstract class ApiClient {
   protected baseUrl: string;
 
@@ -28,7 +34,7 @@ export abstract class ApiClient {
 
     if (!res.ok) {
       const msg = (data as any).error?.message || `HTTP ${res.status}`;
-      throw new Error(msg);
+      throw new ApiError(res.status, msg);
     }
 
     return data;

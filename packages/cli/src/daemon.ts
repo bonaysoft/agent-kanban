@@ -3,7 +3,7 @@ import { join } from "path";
 import { hostname, platform, arch, release } from "os";
 import { execSync } from "child_process";
 import { randomUUID } from "crypto";
-import { MachineClient, AgentClient } from "./client.js";
+import { MachineClient, AgentClient, ApiError } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository, setLink } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
@@ -58,7 +58,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
 
   const pm = new ProcessManager(client, opts.agentCli, () => {
-    schedulePoll(0);
+    schedulePoll(baseInterval);
   }, opts.taskTimeout);
 
   let running = true;
@@ -121,12 +121,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const tasks = await client.listTasks({ status: "todo" }) as any[];
 
       // Auto-clone repos that have no local link
-      const repoCache = new Map<string, string | null>();
+      const unlinkedRepoIds = new Set<string>();
       for (const t of tasks) {
         if (t.blocked || t.assigned_to || pm.hasTask(t.id) || !t.repository_id) continue;
-        if (findPathForRepository(t.repository_id) || repoCache.has(t.repository_id)) continue;
-        const cloned = await autoCloneRepo(client, t.repository_id);
-        repoCache.set(t.repository_id, cloned);
+        if (!findPathForRepository(t.repository_id)) unlinkedRepoIds.add(t.repository_id);
+      }
+      if (unlinkedRepoIds.size > 0) {
+        const repos = await client.listRepositories();
+        for (const repoId of unlinkedRepoIds) {
+          const repo = repos.find((r: any) => r.id === repoId);
+          if (repo?.full_name) await cloneAndLink(repo);
+        }
       }
 
       const available = tasks.filter((t: any) => {
@@ -192,11 +197,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient, agentEnv);
 
       backoffMs = baseInterval;
-      schedulePoll(1000);
+      schedulePoll(baseInterval);
 
     } catch (err: any) {
-      console.error(`[WARN] Poll error: ${err.message}`);
-      backoffMs = Math.min(backoffMs * 2, 60000);
+      if (err instanceof ApiError && err.status === 429) {
+        console.warn(`[WARN] Rate limited, backing off`);
+        backoffMs = Math.min(Math.max(backoffMs * 2, 30000), 60000);
+      } else {
+        console.error(`[WARN] Poll error: ${err.message}`);
+        backoffMs = Math.min(backoffMs * 2, 60000);
+      }
       schedulePoll(backoffMs);
     }
   }
@@ -235,29 +245,22 @@ function ensureSkill(repoDir: string): boolean {
   }
 }
 
-async function autoCloneRepo(client: MachineClient, repositoryId: string): Promise<string | null> {
+function cloneAndLink(repo: any): void {
   try {
-    const repos = await client.listRepositories();
-    const repo = repos.find((r: any) => r.id === repositoryId);
-    if (!repo?.full_name) return null;
-
-    // e.g. https://github.com/saltbo/repo → github.com/saltbo/repo
     const repoPath = repo.url.replace(/^https?:\/\//, "");
     const repoDir = join(REPOS_DIR, repoPath);
     if (existsSync(repoDir)) {
       console.log(`[INFO] Directory exists, linking repository ${repo.name} → ${repoDir}`);
-      setLink(repositoryId, repoDir);
-      return repoDir;
+      setLink(repo.id, repoDir);
+      return;
     }
 
     console.log(`[INFO] Cloning ${repo.full_name} → ${repoDir}`);
     execSync(`gh repo clone ${repo.full_name} ${repoDir}`, { stdio: "pipe" });
-    setLink(repositoryId, repoDir);
+    setLink(repo.id, repoDir);
     console.log(`[INFO] Linked repository ${repo.name} → ${repoDir}`);
-    return repoDir;
   } catch (err: any) {
-    console.error(`[ERROR] Auto-clone failed for repository ${repositoryId}: ${err.message}`);
-    return null;
+    console.error(`[ERROR] Auto-clone failed for repository ${repo.id}: ${err.message}`);
   }
 }
 
