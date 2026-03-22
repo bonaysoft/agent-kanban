@@ -94,8 +94,15 @@ api.post("/api/machines", async (c) => {
 
 api.delete("/api/machines/:id", async (c) => {
 
-  const deleted = await deleteMachine(c.env.DB, c.req.param("id"));
+  const machineId = c.req.param("id");
+  const deleted = await deleteMachine(c.env.DB, machineId);
   if (!deleted) throw new HTTPException(404, { message: "Machine not found" });
+
+  // Clean up BA data: delete agentHost (cascades to agent + agentCapabilityGrant via FK)
+  const auth = createAuth(c.env);
+  const authCtx = await auth.$context;
+  await authCtx.adapter.delete({ model: "agentHost", where: [{ field: "id", value: machineId }] });
+
   return c.json({ ok: true });
 });
 
