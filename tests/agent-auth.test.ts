@@ -79,7 +79,7 @@ describe("agent-auth bridge", () => {
 
     const env = { DB: db, AUTH_SECRET, BETTER_AUTH_URL, TRUSTED_ORIGINS: "", GITHUB_CLIENT_ID: "", GITHUB_CLIENT_SECRET: "" };
     const auth = createAuth(env);
-    const machine = await createMachine(db, userId, "test-machine");
+    const machine = await createMachine(db, userId, { name: "test-machine", os: "darwin arm64", version: "1.0.0", runtimes: ["Claude Code"] });
     machineId = machine.id;
 
     const authCtx = await auth.$context;

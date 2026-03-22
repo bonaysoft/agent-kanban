@@ -87,7 +87,7 @@ export function MachineDetailPage() {
 
   const isOffline = machine.status === "offline";
   const apiUrl = window.location.origin;
-  const runtimes = machine.runtimes ? machine.runtimes.split(",") : [];
+  const runtimes = machine.runtimes || [];
 
   return (
     <div className="min-h-screen bg-surface-primary">

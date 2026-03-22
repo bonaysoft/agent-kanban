@@ -173,7 +173,7 @@ export function MachinesPage() {
                   </div>
                   {machine.runtimes && (
                     <div className="flex gap-1 ml-auto">
-                      {machine.runtimes.split(",").map((r: string) => (
+                      {machine.runtimes.map((r: string) => (
                         <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">{r}</span>
                       ))}
                     </div>
@@ -280,7 +280,7 @@ export function MachinesPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Runtimes</span>
                           <div className="flex gap-1">
-                            {connectedMachine.runtimes.split(",").map((r: string) => (
+                            {connectedMachine.runtimes.map((r: string) => (
                               <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">{r}</span>
                             ))}
                           </div>

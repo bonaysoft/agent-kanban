@@ -96,9 +96,9 @@ export interface Machine {
   owner_id: string;
   name: string;
   status: MachineStatus;
-  os: string | null;
-  version: string | null;
-  runtimes: string | null;
+  os: string;
+  version: string;
+  runtimes: string[];
   usage_info: UsageInfo | null;
   last_heartbeat_at: string | null;
   created_at: string;

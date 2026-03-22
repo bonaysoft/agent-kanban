@@ -108,13 +108,26 @@ describe("machine → agent online flow", () => {
     expect(apiKey.startsWith("ak_")).toBe(true);
   });
 
+  // Step 1.5: Creating machine without required fields returns 400
+  it("rejects machine creation missing required fields", async () => {
+    const res1 = await apiRequest("POST", "/api/machines", { name: "incomplete" }, apiKey);
+    expect(res1.status).toBe(400);
+
+    const res2 = await apiRequest("POST", "/api/machines", { name: "x", os: "linux", version: "1.0" }, apiKey);
+    expect(res2.status).toBe(400);
+  });
+
   // Step 2: Machine creates itself via POST /api/machines
   it("creates a machine via API", async () => {
-    const res = await apiRequest("POST", "/api/machines", { name: "test-machine-01" }, apiKey);
+    const res = await apiRequest("POST", "/api/machines", {
+      name: "test-machine-01", os: "darwin arm64", version: "1.0.0", runtimes: ["Claude Code"],
+    }, apiKey);
     expect(res.status).toBe(201);
     const machine = await res.json() as any;
     machineId = machine.id;
     expect(machine.name).toBe("test-machine-01");
+    expect(machine.os).toBe("darwin arm64");
+    expect(machine.runtimes).toEqual(["Claude Code"]);
     expect(machine.status).toBe("offline");
 
     // Verify agentHost was created in BA
@@ -128,12 +141,13 @@ describe("machine → agent online flow", () => {
     const res = await apiRequest(
       "POST",
       `/api/machines/${machineId}/heartbeat`,
-      { name: "test-machine-01", os: "darwin arm64", runtimes: ["Claude Code"] },
+      {},
       apiKey,
     );
     expect(res.status).toBe(200);
     const machine = await res.json() as any;
     expect(machine.status).toBe("online");
+    expect(machine.os).toBe("darwin arm64");
   });
 
   // Step 4: Machine registers an agent via POST /api/agents

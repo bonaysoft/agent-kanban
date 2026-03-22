@@ -68,10 +68,10 @@ export class ApiClient {
   }
 
   // Machines
-  registerMachine(name: string) {
-    return this.request<{ id: string; name: string }>("POST", "/api/machines", { name });
+  registerMachine(info: { name: string; os: string; version: string; runtimes: string[] }) {
+    return this.request<{ id: string; name: string }>("POST", "/api/machines", info);
   }
-  heartbeat(machineId: string, info: { name: string; os?: string; version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
+  heartbeat(machineId: string, info: { version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 

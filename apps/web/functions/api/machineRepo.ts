@@ -2,21 +2,26 @@ import type { Machine, MachineWithAgents, UsageInfo } from "@agent-kanban/shared
 import { MACHINE_STALE_TIMEOUT_MS } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 
-export interface HeartbeatInfo {
+export interface CreateMachineInfo {
   name: string;
-  os?: string;
+  os: string;
+  version: string;
+  runtimes: string[];
+}
+
+export interface HeartbeatInfo {
   version?: string;
   runtimes?: string[];
   usage_info?: UsageInfo | null;
 }
 
-export async function createMachine(db: D1, ownerId: string, name: string): Promise<Machine> {
+export async function createMachine(db: D1, ownerId: string, info: CreateMachineInfo): Promise<Machine> {
   const id = newId();
   const now = new Date().toISOString();
   await db.prepare(
-    "INSERT INTO machines (id, owner_id, name, status, created_at) VALUES (?, ?, ?, 'offline', ?)"
-  ).bind(id, ownerId, name, now).run();
-  return { id, owner_id: ownerId, name, status: "offline", os: null, version: null, runtimes: null, usage_info: null, last_heartbeat_at: null, created_at: now };
+    "INSERT INTO machines (id, owner_id, name, os, version, runtimes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'offline', ?)"
+  ).bind(id, ownerId, info.name, info.os, info.version, JSON.stringify(info.runtimes), now).run();
+  return { id, owner_id: ownerId, name: info.name, status: "offline", os: info.os, version: info.version, runtimes: info.runtimes, usage_info: null, last_heartbeat_at: null, created_at: now };
 }
 
 export async function deleteMachine(db: D1, machineId: string): Promise<boolean> {
@@ -24,26 +29,24 @@ export async function deleteMachine(db: D1, machineId: string): Promise<boolean>
   return result.meta.changes > 0;
 }
 
-export async function upsertMachineHeartbeat(
+export async function heartbeat(
   db: D1,
   machineId: string,
   info: HeartbeatInfo,
 ): Promise<Machine> {
   const now = new Date().toISOString();
-  const runtimesStr = info.runtimes?.join(",") || null;
+  const sets: string[] = ["status = 'online'", "last_heartbeat_at = ?"];
+  const binds: any[] = [now];
 
-  if (info.usage_info) {
-    await db.prepare(
-      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, usage_info = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
-    ).bind(info.name, info.os || null, info.version || null, runtimesStr, JSON.stringify(info.usage_info), now, machineId).run();
-  } else {
-    await db.prepare(
-      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
-    ).bind(info.name, info.os || null, info.version || null, runtimesStr, now, machineId).run();
-  }
+  if (info.version) { sets.push("version = ?"); binds.push(info.version); }
+  if (info.runtimes) { sets.push("runtimes = ?"); binds.push(JSON.stringify(info.runtimes)); }
+  if (info.usage_info) { sets.push("usage_info = ?"); binds.push(JSON.stringify(info.usage_info)); }
+
+  binds.push(machineId);
+  await db.prepare(`UPDATE machines SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
 
   const row = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine & { usage_info: string | null }>();
-  return parseMachineUsage(row!);
+  return parseMachineJson(row!);
 }
 
 export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
@@ -57,7 +60,7 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
     WHERE m.owner_id = ?
     ORDER BY m.last_heartbeat_at DESC
   `).bind(ownerId).all<MachineWithAgents>();
-  return result.results.map(parseMachineUsage);
+  return result.results.map(parseMachineJson);
 }
 
 export async function getMachine(db: D1, machineId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
@@ -79,10 +82,13 @@ export async function getMachine(db: D1, machineId: string): Promise<(MachineWit
     ORDER BY last_active_at DESC
   `).bind(machineId).all();
 
-  return { ...parseMachineUsage(machine), agents: agents.results };
+  return { ...parseMachineJson(machine), agents: agents.results };
 }
 
-function parseMachineUsage<T extends { usage_info: any }>(row: T): T {
+function parseMachineJson<T extends { runtimes: any; usage_info: any }>(row: T): T {
+  if (typeof row.runtimes === "string") {
+    try { row.runtimes = JSON.parse(row.runtimes); } catch { row.runtimes = null; }
+  }
   if (typeof row.usage_info === "string") {
     try { row.usage_info = JSON.parse(row.usage_info); } catch { row.usage_info = null; }
   }

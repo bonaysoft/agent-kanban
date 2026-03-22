@@ -80,20 +80,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const machineInfo = getMachineInfo();
   let machineId = getConfigValue("machine-id");
   if (!machineId) {
-    const machine = await client.registerMachine(machineInfo.name);
+    const machine = await client.registerMachine(machineInfo);
     machineId = machine.id;
     setConfigValue("machine-id", machineId);
     console.log(`[INFO] Machine registered: ${machineId}`);
   }
 
-  await client.heartbeat(machineId, machineInfo).catch((err: any) =>
+  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes }).catch((err: any) =>
     console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
   );
   console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
     const usageInfo = await getUsage();
-    client.heartbeat(machineId!, { ...machineInfo, usage_info: usageInfo }).catch((err: any) =>
+    client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo }).catch((err: any) =>
       console.error(`[WARN] Heartbeat failed: ${err.message}`)
     );
   }, 30000);

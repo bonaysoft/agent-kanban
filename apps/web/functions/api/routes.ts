@@ -9,7 +9,7 @@ import { createAgent, listAgents, getAgent, getAgentLogs, setAgentWorkingIfIdle,
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
-import { upsertMachineHeartbeat, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
+import { heartbeat as machineHeartbeat, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
 import { createAuth } from "./betterAuth";
 
 const api = new Hono<{ Bindings: Env }>();
@@ -43,10 +43,8 @@ api.use("/api/*", async (c, next) => {
 // ─── Machines ───
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
-
-  const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[]; usage_info?: any }>();
-  if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const updated = await upsertMachineHeartbeat(c.env.DB, c.req.param("id"), body);
+  const body = await c.req.json<{ version?: string; runtimes?: string[]; usage_info?: any }>();
+  const updated = await machineHeartbeat(c.env.DB, c.req.param("id"), body);
   return c.json(updated);
 });
 
@@ -63,8 +61,11 @@ api.get("/api/machines/:id", async (c) => {
 
 api.post("/api/machines", async (c) => {
 
-  const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-  const machine = await createMachine(c.env.DB, c.get("ownerId"), body.name || "unnamed");
+  const body = await c.req.json<{ name: string; os: string; version: string; runtimes: string[] }>();
+  if (!body.name || !body.os || !body.version || !body.runtimes) {
+    throw new HTTPException(400, { message: "name, os, version, and runtimes are required" });
+  }
+  const machine = await createMachine(c.env.DB, c.get("ownerId"), body);
 
   // Bind this API key to the machine via metadata, and create BA agentHost
   const auth = createAuth(c.env);
