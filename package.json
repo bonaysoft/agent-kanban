@@ -22,7 +22,9 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.5.0",
+    "jose": "^6.2.2",
     "jsdom": "^29.0.1",
+    "miniflare": "^4.20260317.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

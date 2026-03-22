@@ -121,8 +121,8 @@ export class AgentClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const jwt = await new SignJWT({ sub: this.agentId, jti: randomUUID() })
-      .setProtectedHeader({ alg: "EdDSA" })
+    const jwt = await new SignJWT({ sub: this.agentId, jti: randomUUID(), aud: this.baseUrl })
+      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
       .sign(this.privateKey);

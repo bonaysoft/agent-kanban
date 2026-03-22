@@ -87,6 +87,7 @@ api.post("/api/machines", async (c) => {
       createdAt: now,
       updatedAt: now,
     },
+    forceAllowId: true,
   });
 
   return c.json(machine, 201);
@@ -143,6 +144,7 @@ api.post("/api/agents", async (c) => {
       createdAt: now,
       updatedAt: now,
     },
+    forceAllowId: true,
   });
 
   return c.json(agent, 201);
