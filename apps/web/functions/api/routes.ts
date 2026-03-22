@@ -34,9 +34,8 @@ api.on(["GET", "POST"], "/api/auth/*", async (c) => {
   }
 });
 
-// Auth middleware for all routes except SSE and auth endpoints
+// Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
-  if (c.req.path.match(/\/api\/tasks\/[^/]+\/stream$/)) return next();
   if (c.req.path.startsWith("/api/auth/")) return next();
   return authMiddleware(c, next);
 });
@@ -146,6 +145,26 @@ api.post("/api/agents", async (c) => {
     },
     forceAllowId: true,
   });
+
+  // Grant all capabilities to the agent
+  const capabilities = ["task:claim", "task:review", "task:log", "task:message", "agent:usage"];
+  for (const cap of capabilities) {
+    await authCtx.adapter.create({
+      model: "agentCapabilityGrant",
+      data: {
+        agentId: body.agent_id,
+        capability: cap,
+        grantedBy: c.get("ownerId") ?? null,
+        deniedBy: null,
+        expiresAt: null,
+        status: "active",
+        reason: null,
+        constraints: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
 
   return c.json(agent, 201);
 });
@@ -353,11 +372,8 @@ api.get("/api/tasks/:id/messages", async (c) => {
 // ─── SSE Stream ───
 
 api.get("/api/tasks/:id/stream", async (c) => {
-  const token = c.req.query("token");
-  if (!token) throw new HTTPException(400, { message: "token query param required" });
-
   const lastEventId = c.req.header("Last-Event-ID") || null;
-  return createSSEResponse(c.env, c.req.param("id"), lastEventId, token);
+  return createSSEResponse(c.env, c.req.param("id"), lastEventId);
 });
 
 // ─── Boards ───

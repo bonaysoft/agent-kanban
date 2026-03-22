@@ -2,25 +2,42 @@ import type { Context, Next } from "hono";
 import type { Env } from "./types";
 import { createAuth } from "./betterAuth";
 
+function detectTokenType(token: string): "apikey" | "agent" | "user" {
+  if (token.startsWith("ak_")) return "apikey";
+  const parts = token.split(".");
+  if (parts.length === 3) {
+    try {
+      const header = JSON.parse(atob(parts[0]));
+      if (header.typ === "agent+jwt") return "agent";
+    } catch { /* not a valid JWT header */ }
+  }
+  return "user";
+}
+
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
   const header = c.req.header("Authorization");
-  if (!header?.startsWith("Bearer ")) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" } }, 401);
+  const queryToken = c.req.query("token");
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : queryToken;
+  if (!token) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Missing token" } }, 401);
   }
 
-  const token = header.slice(7);
   const auth = createAuth(c.env);
+  const type = detectTokenType(token);
 
-  if (token.startsWith("ak_")) {
+  if (type === "apikey") {
     return handleApiKey(c, auth, token, next);
   }
 
-  const agentIdentity = await auth.api.getAgentSession({ headers: c.req.raw.headers });
-  if (agentIdentity) {
+  // Build headers with the token for BA API calls (handles both header and query param tokens)
+  const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
+
+  if (type === "agent") {
+    const agentIdentity = await auth.api.getAgentSession({ headers: authHeaders });
     return handleAgentIdentity(c, agentIdentity, next);
   }
 
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const session = await auth.api.getSession({ headers: authHeaders });
   if (session) {
     c.set("ownerId", session.user.id);
     c.set("identityType", "user");

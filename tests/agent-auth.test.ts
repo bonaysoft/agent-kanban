@@ -290,4 +290,69 @@ describe("agent-auth bridge", () => {
     const headers = new Headers({ Authorization: `Bearer ${jwt}` });
     await expect(auth.api.getAgentSession({ headers })).rejects.toThrow();
   });
+
+  it("getAgentSession returns capabilities in session", async () => {
+    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const env = { DB: db, AUTH_SECRET, BETTER_AUTH_URL, TRUSTED_ORIGINS: "", GITHUB_CLIENT_ID: "", GITHUB_CLIENT_SECRET: "" };
+    const auth = createAuth(env);
+
+    const agentId = randomUUID();
+    const { publicKey, privateKey } = await crypto.subtle.generateKey(
+      { name: "Ed25519" } as any, true, ["sign", "verify"]
+    );
+    const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
+    const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: pubKeyJwk.x });
+
+    const authCtx = await auth.$context;
+    const now = new Date();
+    await (authCtx.adapter.create as any)({
+      model: "agent",
+      data: {
+        id: agentId,
+        name: `Agent-${agentId.slice(0, 6)}`,
+        userId,
+        hostId: machineId,
+        status: "active",
+        mode: "autonomous",
+        publicKey: jwk,
+        activatedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      },
+      forceAllowId: true,
+    });
+
+    // Grant capabilities
+    for (const cap of ["task:claim", "task:review", "agent:usage"]) {
+      await authCtx.adapter.create({
+        model: "agentCapabilityGrant",
+        data: {
+          agentId,
+          capability: cap,
+          grantedBy: userId,
+          deniedBy: null,
+          expiresAt: null,
+          status: "active",
+          reason: null,
+          constraints: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    }
+
+    const jwt = await new SignJWT({ sub: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(privateKey);
+
+    const headers = new Headers({ Authorization: `Bearer ${jwt}` });
+    const session = await auth.api.getAgentSession({ headers });
+
+    expect(session).toBeTruthy();
+    expect(session!.agent.capabilityGrants).toHaveLength(3);
+    const capNames = session!.agent.capabilityGrants.map((g: any) => g.capability).sort();
+    expect(capNames).toEqual(["agent:usage", "task:claim", "task:review"]);
+  });
 });

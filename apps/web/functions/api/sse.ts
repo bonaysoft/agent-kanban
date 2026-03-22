@@ -1,5 +1,4 @@
 import type { D1 } from "./db";
-import { createAuth } from "./betterAuth";
 import type { Env } from "./types";
 import { getTaskLogs } from "./taskRepo";
 import { listMessages } from "./messageRepo";
@@ -27,31 +26,7 @@ export async function createSSEResponse(
   env: Env,
   taskId: string,
   lastEventId: string | null,
-  token: string,
 ): Promise<Response> {
-  const auth = createAuth(env);
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
-  let authenticated = false;
-  if (token.startsWith("ak_")) {
-    const result = await auth.api.verifyApiKey({ body: { key: token } });
-    authenticated = !!result?.valid;
-  } else {
-    const agentIdentity = await auth.api.getAgentSession({ headers });
-    if (agentIdentity) {
-      authenticated = true;
-    } else {
-      const session = await auth.api.getSession({ headers });
-      authenticated = !!session;
-    }
-  }
-
-  if (!authenticated) {
-    return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Invalid token" } }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   const db = env.DB;
 
   const { readable, writable } = new TransformStream();
