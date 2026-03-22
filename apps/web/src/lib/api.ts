@@ -64,7 +64,6 @@ export const api = {
   machines: {
     list: () => request<any[]>("GET", "/machines"),
     get: (id: string) => request<any>("GET", `/machines/${id}`),
-    create: (name?: string) => request<any>("POST", "/machines", { name }),
     delete: (id: string) => request<void>("DELETE", `/machines/${id}`),
   },
   boards: {

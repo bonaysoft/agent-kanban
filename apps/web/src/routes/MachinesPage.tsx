@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { api } from "../lib/api";
+import { authClient } from "../lib/auth-client";
 import { formatRelative } from "../components/TaskDetailFields";
 
 const statusDotColors: Record<string, string> = {
@@ -24,7 +25,7 @@ export function MachinesPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [dialogStep, setDialogStep] = useState<DialogStep>("choose");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
-  const [createdMachineId, setCreatedMachineId] = useState<string | null>(null);
+  const [createdKeyId, setCreatedKeyId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [connectedMachine, setConnectedMachine] = useState<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,14 +46,20 @@ export function MachinesPage() {
   }, []);
 
   async function handleChooseLocal() {
-    const result = await api.machines.create(randomName());
-    setCreatedKey(result.key);
-    setCreatedMachineId(result.id);
+    const name = randomName();
+    const { data, error } = await authClient.apiKey.create({ name });
+    if (error || !data) return;
+    setCreatedKey(data.key);
+    setCreatedKeyId(data.id);
     setDialogStep("waiting");
 
-    // Poll for connection
+    // Poll API key metadata — daemon registers machineId on first heartbeat
+    const keyId = data.id;
     pollRef.current = setInterval(async () => {
-      const m = await api.machines.get(result.id);
+      const { data: keyData } = await authClient.apiKey.get({ id: keyId });
+      const machineId = keyData?.metadata?.machineId;
+      if (!machineId) return;
+      const m = await api.machines.get(machineId);
       if (m && m.status === "online") {
         setConnected(true);
         setConnectedMachine(m);
@@ -66,16 +73,14 @@ export function MachinesPage() {
 
   async function closeDialog() {
     stopPolling();
-    // If machine was created but never connected, clean it up
-    if (createdMachineId && !connected) {
-      await api.machines.delete(createdMachineId).catch(() => {});
-      const updated = await api.machines.list();
-      setMachines(updated);
+    // If API key was created but never connected, clean it up
+    if (createdKeyId && !connected) {
+      await authClient.apiKey.delete({ keyId: createdKeyId }).catch(() => {});
     }
     setShowDialog(false);
     setDialogStep("choose");
     setCreatedKey(null);
-    setCreatedMachineId(null);
+    setCreatedKeyId(null);
     setConnected(false);
     setConnectedMachine(null);
   }
@@ -85,7 +90,7 @@ export function MachinesPage() {
     setShowDialog(false);
     setDialogStep("choose");
     setCreatedKey(null);
-    setCreatedMachineId(null);
+    setCreatedKeyId(null);
     setConnected(false);
     setConnectedMachine(null);
   }
