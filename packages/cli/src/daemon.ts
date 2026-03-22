@@ -241,7 +241,9 @@ async function autoCloneRepo(client: MachineClient, repositoryId: string): Promi
     const repo = repos.find((r: any) => r.id === repositoryId);
     if (!repo?.full_name) return null;
 
-    const repoDir = join(REPOS_DIR, repo.name);
+    // e.g. https://github.com/saltbo/repo → github.com/saltbo/repo
+    const repoPath = repo.url.replace(/^https?:\/\//, "");
+    const repoDir = join(REPOS_DIR, repoPath);
     if (existsSync(repoDir)) {
       console.log(`[INFO] Directory exists, linking repository ${repo.name} → ${repoDir}`);
       setLink(repositoryId, repoDir);

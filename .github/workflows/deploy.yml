@@ -40,7 +40,7 @@ jobs:
         working-directory: apps/web
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            npx wrangler pages deploy --commit-dirty=true
+            npx wrangler pages deploy --branch master --commit-dirty=true
           else
             npx wrangler pages deploy --branch preview --commit-dirty=true
           fi
