@@ -62,13 +62,19 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return handleApiKey(c, auth, token, next);
   }
 
-  const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
-
   if (type === "agent") {
-    const agentIdentity = await auth.api.getAgentSession({ headers: authHeaders });
+    const sessionReq = new Request(new URL("/api/auth/agent/session", c.req.url), {
+      headers: c.req.raw.headers,
+    });
+    const sessionRes = await auth.handler(sessionReq);
+    if (!sessionRes.ok) {
+      return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid agent session" } }, 401);
+    }
+    const agentIdentity = await sessionRes.json();
     return handleAgentIdentity(c, agentIdentity, next);
   }
 
+  const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
   const session = await auth.api.getSession({ headers: authHeaders });
   if (session) {
     c.set("ownerId", session.user.id);

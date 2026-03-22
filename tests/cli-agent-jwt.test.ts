@@ -16,10 +16,9 @@ const BETTER_AUTH_URL = "http://localhost:8788";
 const testEnv = {
   DB: null as any as D1Database,
   AUTH_SECRET,
-  BETTER_AUTH_URL,
-  TRUSTED_ORIGINS: "",
-  GITHUB_CLIENT_ID: "",
-  GITHUB_CLIENT_SECRET: "",
+  ALLOWED_HOSTS: "localhost:8788",
+  GITHUB_CLIENT_ID: "x",
+  GITHUB_CLIENT_SECRET: "x",
 };
 
 let mf: Miniflare;
@@ -53,7 +52,7 @@ async function createApiKeyForUser(db: D1Database, userId: string): Promise<stri
 
 async function honoRequest(method: string, path: string, body?: any, token?: string) {
   const { api } = await import("../apps/web/functions/api/routes");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
   if (body) init.body = JSON.stringify(body);

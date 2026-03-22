@@ -4,8 +4,7 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-BETTER_AUTH_URL = "https://ak.tftt.cc"
-TRUSTED_ORIGINS = "https://ak.tftt.cc,https://agent-kanban-6zd.pages.dev"
+ALLOWED_HOSTS = "ak.tftt.cc,agent-kanban-6zd.pages.dev"
 GITHUB_CLIENT_ID = "Ov23liANLtdNTjSpoPzl"
 
 # Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET) are set via `wrangler pages secret put`
@@ -18,6 +17,5 @@ database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"
 
 [env.preview.vars]
-BETTER_AUTH_URL = "https://agent-kanban-6zd.pages.dev"
-TRUSTED_ORIGINS = "https://agent-kanban-6zd.pages.dev"
+ALLOWED_HOSTS = "*.agent-kanban-6zd.pages.dev"
 GITHUB_CLIENT_ID = "Ov23liANLtdNTjSpoPzl"
