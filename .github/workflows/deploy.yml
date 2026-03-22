@@ -18,6 +18,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @agent-kanban/shared build
       - run: pnpm run lint
       - run: pnpm run test -- --run
 
