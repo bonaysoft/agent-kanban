@@ -16,6 +16,14 @@ database_name = "agent-kanban-db"
 database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"
 
+[env.preview]
+compatibility_flags = ["nodejs_compat"]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "agent-kanban-db"
+database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
+
 [env.preview.vars]
 ALLOWED_HOSTS = "*.agent-kanban-6zd.pages.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
