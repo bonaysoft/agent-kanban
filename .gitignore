@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .wrangler/
+.pages-dev/
 *.local
 
 # Build output
