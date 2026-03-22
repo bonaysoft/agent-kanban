@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import { agentAuthClient } from "@better-auth/agent-auth/client";
 
 const TOKEN_KEY = "auth-token";
 
@@ -15,6 +16,7 @@ export function clearAuthToken() {
 }
 
 export const authClient = createAuthClient({
+  plugins: [agentAuthClient()],
   fetchOptions: {
     auth: {
       type: "Bearer",

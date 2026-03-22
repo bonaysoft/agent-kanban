@@ -2,6 +2,39 @@ import type { Context, Next } from "hono";
 import type { Env } from "./types";
 import { createAuth } from "./betterAuth";
 
+type IdentityType = "user" | "machine" | "agent";
+
+interface RouteRule {
+  allow: IdentityType[];
+  capability?: string; // required agent capability (only checked for "agent")
+}
+
+// Route permission rules: method + path pattern → allowed identity types + required capability
+// Routes not listed here are open to any authenticated identity.
+const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
+  // Machines — machine-only
+  { method: "POST", pattern: /^\/api\/machines$/, rule: { allow: ["machine"] } },
+  { method: "POST", pattern: /^\/api\/machines\/[^/]+\/heartbeat$/, rule: { allow: ["machine"] } },
+  { method: "DELETE", pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ["user"] } },
+
+  // Agents — machine registers, agent acts
+  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["machine"] } },
+  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+\/usage$/, rule: { allow: ["agent"], capability: "agent:usage" } },
+
+  // Task lifecycle
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent"], capability: "task:claim" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent"], capability: "task:review" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
+];
+
+function matchRouteRule(method: string, path: string): RouteRule | null {
+  for (const { method: m, pattern, rule } of ROUTE_RULES) {
+    if (m === method && pattern.test(path)) return rule;
+  }
+  return null;
+}
+
 function detectTokenType(token: string): "apikey" | "agent" | "user" {
   if (token.startsWith("ak_")) return "apikey";
   const parts = token.split(".");
@@ -29,7 +62,6 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return handleApiKey(c, auth, token, next);
   }
 
-  // Build headers with the token for BA API calls (handles both header and query param tokens)
   const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
 
   if (type === "agent") {
@@ -43,7 +75,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     c.set("identityType", "user");
     c.set("user", session.user);
     c.set("session", session.session);
-    return next();
+    return enforceRouteRule(c, next);
   }
 
   return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
@@ -60,7 +92,7 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   c.set("apiKeyId", result.key.id);
   const metadata = result.key.metadata as Record<string, any> | null;
   if (metadata?.machineId) c.set("machineId", metadata.machineId);
-  return next();
+  return enforceRouteRule(c, next);
 }
 
 function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, next: Next) {
@@ -68,24 +100,27 @@ function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, next:
   c.set("identityType", "agent");
   c.set("agentId", identity.agent.id);
   c.set("machineId", identity.agent.hostId);
+  const caps = (identity.agent.capabilityGrants || []).map((g: any) => g.capability as string);
+  c.set("agentCapabilities", caps);
+  return enforceRouteRule(c, next);
+}
+
+function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {
+  const rule = matchRouteRule(c.req.method, c.req.path);
+  if (!rule) return next(); // no rule = open to any authenticated identity
+
+  const identity = c.get("identityType") as IdentityType;
+  if (!rule.allow.includes(identity)) {
+    return c.json({ error: { code: "FORBIDDEN", message: `${rule.allow.join(" or ")} required` } }, 403);
+  }
+
+  if (rule.capability && identity === "agent") {
+    const caps: string[] = c.get("agentCapabilities") || [];
+    if (!caps.includes(rule.capability)) {
+      return c.json({ error: { code: "FORBIDDEN", message: `Missing capability: ${rule.capability}` } }, 403);
+    }
+  }
+
   return next();
-}
-
-export function requireUser(c: Context) {
-  if (c.get("identityType") !== "user") {
-    return c.json({ error: { code: "FORBIDDEN", message: "User session required" } }, 403);
-  }
-}
-
-export function requireMachine(c: Context) {
-  if (c.get("identityType") !== "machine") {
-    return c.json({ error: { code: "FORBIDDEN", message: "Machine API key required" } }, 403);
-  }
-}
-
-export function requireAgent(c: Context) {
-  if (c.get("identityType") !== "agent") {
-    return c.json({ error: { code: "FORBIDDEN", message: "Agent session required" } }, 403);
-  }
 }
 

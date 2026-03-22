@@ -3,18 +3,17 @@ import { useParams, Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { api } from "../lib/api";
+import { authClient } from "../lib/auth-client";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { formatRelative } from "../components/TaskDetailFields";
 
-const CAPABILITIES = [
-  { name: "claim_task", label: "Claim" },
-  { name: "complete_task", label: "Complete" },
-  { name: "review_task", label: "Review" },
-  { name: "create_task", label: "Create" },
-  { name: "cancel_task", label: "Cancel" },
-  { name: "send_message", label: "Chat" },
-  { name: "read_task", label: "Read" },
-];
+const CAPABILITY_LABELS: Record<string, string> = {
+  "task:claim": "Claim",
+  "task:review": "Review",
+  "task:log": "Log",
+  "task:message": "Chat",
+  "agent:usage": "Usage",
+};
 
 const statusLabels: Record<string, string> = { idle: "Idle", working: "Working", offline: "Offline" };
 const statusDotClass: Record<string, string> = { idle: "bg-content-tertiary", working: "animate-pulse-glow", offline: "bg-warning" };
@@ -47,6 +46,7 @@ export function AgentDetailPage() {
   const [agent, setAgent] = useState<any>(null);
   const [machine, setMachine] = useState<any>(null);
   const [task, setTask] = useState<any>(null);
+  const [capabilities, setCapabilities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,6 +55,11 @@ export function AgentDetailPage() {
       setAgent(a);
       if (a.machine_id) api.machines.get(a.machine_id).then(setMachine).catch(() => {});
       api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
+      authClient.agent.get({ query: { agent_id: id } }).then(({ data }) => {
+        if (data?.agent_capability_grants) {
+          setCapabilities(data.agent_capability_grants.filter((g: any) => g.status === "active").map((g: any) => g.capability));
+        }
+      }).catch(() => {});
     }).finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.agents.get(id).then(setAgent);
@@ -90,7 +95,7 @@ export function AgentDetailPage() {
   const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
   const isWorking = agent.status === "working";
   const totalTokens = agent.input_tokens + agent.output_tokens + agent.cache_read_tokens;
-  const grantedCaps = ["claim_task", "complete_task", "review_task", "send_message", "read_task"];
+  // capabilities loaded from BA via authClient.agent.get
   const created = new Date(agent.created_at).getTime();
   const maxLife = 24 * 60 * 60 * 1000;
   const lifePct = Math.min(((Date.now() - created) / maxLife) * 100, 100);
@@ -184,20 +189,19 @@ export function AgentDetailPage() {
             </div>
 
             {/* Capabilities — part of identity */}
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {CAPABILITIES.map((cap) => {
-                const granted = grantedCaps.includes(cap.name);
-                return (
+            {capabilities.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {capabilities.map((cap) => (
                   <span
-                    key={cap.name}
-                    className={`text-[10px] font-mono rounded px-2 py-1 ${!granted ? "text-content-tertiary/40 bg-surface-tertiary/30" : ""}`}
-                    style={granted ? { color, background: `rgba(${rgb}, 0.1)` } : undefined}
+                    key={cap}
+                    className="text-[10px] font-mono rounded px-2 py-1"
+                    style={{ color, background: `rgba(${rgb}, 0.1)` }}
                   >
-                    {cap.label}
+                    {CAPABILITY_LABELS[cap] || cap}
                   </span>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Lifecycle bar — bottom of hero */}

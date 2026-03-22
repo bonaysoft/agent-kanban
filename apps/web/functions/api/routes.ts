@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "./types";
-import { authMiddleware, requireUser, requireMachine, requireAgent } from "./auth";
+import { authMiddleware } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
@@ -43,7 +43,7 @@ api.use("/api/*", async (c, next) => {
 // ─── Machines ───
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
-  const guard = requireMachine(c); if (guard) return guard;
+
   const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[] }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
   const updated = await upsertMachineHeartbeat(c.env.DB, c.req.param("id"), body);
@@ -62,7 +62,7 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
-  const guard = requireMachine(c); if (guard) return guard;
+
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
   const machine = await createMachine(c.env.DB, c.get("ownerId"), body.name || "unnamed");
 
@@ -93,7 +93,7 @@ api.post("/api/machines", async (c) => {
 });
 
 api.delete("/api/machines/:id", async (c) => {
-  const guard = requireUser(c); if (guard) return guard;
+
   const deleted = await deleteMachine(c.env.DB, c.req.param("id"));
   if (!deleted) throw new HTTPException(404, { message: "Machine not found" });
   return c.json({ ok: true });
@@ -114,7 +114,7 @@ api.get("/api/agents/:id", async (c) => {
 });
 
 api.post("/api/agents", async (c) => {
-  const guard = requireMachine(c); if (guard) return guard;
+
   const body = await c.req.json<{ agent_id: string; public_key: string; runtime?: string; model?: string }>();
   if (!body.agent_id || !body.public_key) throw new HTTPException(400, { message: "agent_id and public_key are required" });
   const machineId = c.get("machineId");
@@ -170,7 +170,7 @@ api.post("/api/agents", async (c) => {
 });
 
 api.patch("/api/agents/:id/usage", async (c) => {
-  const guard = requireAgent(c); if (guard) return guard;
+
   const body = await c.req.json();
   await updateAgentUsage(c.env.DB, c.req.param("id"), body);
   return c.json({ ok: true });
@@ -230,7 +230,7 @@ api.delete("/api/tasks/:id", async (c) => {
 // ─── Task Lifecycle ───
 
 api.post("/api/tasks/:id/claim", async (c) => {
-  const guard = requireAgent(c); if (guard) return guard;
+
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
@@ -258,7 +258,7 @@ api.post("/api/tasks/:id/complete", async (c) => {
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
-  const guard = requireMachine(c); if (guard) return guard;
+
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
   if (!existing?.assigned_to) throw new HTTPException(400, { message: "Task is not claimed" });
@@ -269,7 +269,7 @@ api.post("/api/tasks/:id/release", async (c) => {
 });
 
 api.post("/api/tasks/:id/assign", async (c) => {
-  const guard = requireMachine(c); if (guard) return guard;
+
   const body = await c.req.json<{ agent_id: string }>();
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
@@ -303,7 +303,7 @@ api.post("/api/tasks/:id/cancel", async (c) => {
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
-  const guard = requireAgent(c); if (guard) return guard;
+
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
