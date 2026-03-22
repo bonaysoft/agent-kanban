@@ -40,9 +40,9 @@ jobs:
         working-directory: apps/web
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            npx wrangler pages deploy dist --project-name agent-kanban --commit-dirty=true
+            npx wrangler pages deploy --commit-dirty=true
           else
-            npx wrangler pages deploy dist --project-name agent-kanban --branch preview --commit-dirty=true
+            npx wrangler pages deploy --branch preview --commit-dirty=true
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
