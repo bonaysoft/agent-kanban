@@ -252,12 +252,21 @@ function ensureSkill(repoDir: string): boolean {
 }
 
 const LEFTHOOK_LABEL = "setup:lefthook";
+const LEFTHOOK_CONFIG_FILES = [
+  "lefthook.yml", "lefthook.yaml", "lefthook.json", "lefthook.toml",
+  ".lefthook.yml", ".lefthook.yaml", ".lefthook.json", ".lefthook.toml",
+];
+
+function hasLefthookConfig(repoDir: string): boolean {
+  return LEFTHOOK_CONFIG_FILES.some((f) => existsSync(join(repoDir, f)));
+}
 
 /** Returns true if a lefthook setup task was created (caller should skip this poll cycle). */
 async function ensureLefthookTask(client: MachineClient, task: any, repoDir: string, allTasks: any[]): Promise<boolean> {
-  if (existsSync(join(repoDir, "lefthook.yml"))) return false;
+  if (hasLefthookConfig(repoDir)) return false;
+  if (task.labels?.includes(LEFTHOOK_LABEL)) return false;
 
-  console.log(`[INFO] No lefthook.yml in ${repoDir}, creating setup task`);
+  console.log(`[INFO] No lefthook config in ${repoDir}, creating setup task`);
 
   const setupTask = await client.createTask({
     title: "Setup lefthook quality gates",
