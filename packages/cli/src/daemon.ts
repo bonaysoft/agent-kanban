@@ -85,14 +85,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     console.log(`[INFO] Machine registered: ${machineId}`);
   }
 
-  let hostId = getConfigValue("host-id");
-  if (!hostId) {
-    const host = await client.registerHost(machineId);
-    hostId = host.id;
-    setConfigValue("host-id", hostId);
-    console.log(`[INFO] Host registered: ${hostId}`);
-  }
-
   await client.heartbeat(machineId, machineInfo).catch((err: any) =>
     console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
   );

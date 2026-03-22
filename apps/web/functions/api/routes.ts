@@ -73,6 +73,22 @@ api.post("/api/machines", async (c) => {
     body: { keyId: c.get("apiKeyId")!, metadata: { machineId: machine.id } },
   });
 
+  // Create a Better Auth agentHost using the same ID as the machine
+  const authCtx = await auth.$context;
+  const now = new Date();
+  await authCtx.adapter.create({
+    model: "agentHost",
+    data: {
+      id: machine.id,
+      name: machine.name,
+      userId: c.get("ownerId"),
+      status: "active",
+      activatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+
   return c.json(machine, 201);
 });
 
@@ -101,8 +117,34 @@ api.post("/api/agents", async (c) => {
   const guard = requireMachine(c); if (guard) return guard;
   const body = await c.req.json<{ agent_id: string; public_key: string; runtime?: string; model?: string }>();
   if (!body.agent_id || !body.public_key) throw new HTTPException(400, { message: "agent_id and public_key are required" });
-  if (!c.get("machineId")) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
-  const agent = await createAgent(c.env.DB, c.get("machineId")!, body.agent_id, body.public_key, body.runtime, body.model);
+  const machineId = c.get("machineId");
+  if (!machineId) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
+
+  // Write to custom agents table (business data)
+  const agent = await createAgent(c.env.DB, machineId, body.agent_id, body.public_key, body.runtime, body.model);
+
+  // Write to Better Auth agent table (auth data) so getAgentSession() works
+  // machineId == agentHost.id (same ID shared between custom machines and BA hosts)
+  const auth = createAuth(c.env);
+  const authCtx = await auth.$context;
+  const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: body.public_key });
+  const now = new Date();
+  await authCtx.adapter.create({
+    model: "agent",
+    data: {
+      id: body.agent_id,
+      name: agent.name,
+      userId: c.get("ownerId") ?? null,
+      hostId: machineId,
+      status: "active",
+      mode: "autonomous",
+      publicKey: jwk,
+      activatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+
   return c.json(agent, 201);
 });
 

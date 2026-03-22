@@ -1,4 +1,5 @@
 import { SignJWT } from "jose";
+import { randomUUID } from "crypto";
 import { getConfigValue } from "./config.js";
 
 export class ApiClient {
@@ -73,11 +74,6 @@ export class ApiClient {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
-  // Hosts
-  registerHost(machineId: string) {
-    return this.request<{ id: string }>("POST", "/api/auth/agent/host/create", { machineId });
-  }
-
   // Agents
   registerAgent(agentId: string, publicKey?: string, runtime?: string, model?: string) {
     return this.request("POST", "/api/agents", { agent_id: agentId, public_key: publicKey, runtime, model });
@@ -125,7 +121,7 @@ export class AgentClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const jwt = await new SignJWT({ sub: this.agentId })
+    const jwt = await new SignJWT({ sub: this.agentId, jti: randomUUID() })
       .setProtectedHeader({ alg: "EdDSA" })
       .setIssuedAt()
       .setExpirationTime("60s")
