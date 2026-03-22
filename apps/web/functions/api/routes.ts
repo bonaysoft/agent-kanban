@@ -44,7 +44,7 @@ api.use("/api/*", async (c, next) => {
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
 
-  const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[] }>();
+  const body = await c.req.json<{ name: string; os?: string; version?: string; runtimes?: string[]; usage_info?: any }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
   const updated = await upsertMachineHeartbeat(c.env.DB, c.req.param("id"), body);
   return c.json(updated);

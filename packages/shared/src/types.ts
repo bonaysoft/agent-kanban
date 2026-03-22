@@ -78,6 +78,19 @@ export type TaskAction =
 
 export type MachineStatus = "online" | "offline";
 
+export interface UsageWindow {
+  utilization: number;
+  resets_at: string;
+}
+
+export interface UsageInfo {
+  five_hour?: UsageWindow;
+  seven_day?: UsageWindow;
+  seven_day_sonnet?: UsageWindow;
+  seven_day_opus?: UsageWindow;
+  updated_at: string;
+}
+
 export interface Machine {
   id: string;
   owner_id: string;
@@ -86,6 +99,7 @@ export interface Machine {
   os: string | null;
   version: string | null;
   runtimes: string | null;
+  usage_info: UsageInfo | null;
   last_heartbeat_at: string | null;
   created_at: string;
 }

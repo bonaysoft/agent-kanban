@@ -1,8 +1,31 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import type { UsageWindow } from "@agent-kanban/shared";
 import { Header } from "../components/Header";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
+
+const USAGE_LABELS: Record<string, string> = {
+  five_hour: "5-Hour",
+  seven_day: "7-Day",
+  seven_day_sonnet: "7-Day Sonnet",
+  seven_day_opus: "7-Day Opus",
+};
+
+function usageBarColor(pct: number): string {
+  if (pct >= 75) return "bg-error";
+  if (pct >= 40) return "bg-warning";
+  return "bg-success";
+}
+
+function formatResetCountdown(resetsAt: string): string {
+  const diff = new Date(resetsAt).getTime() - Date.now();
+  if (diff <= 0) return "resetting...";
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
 
 const statusDotColors: Record<string, string> = {
   online: "bg-success",
@@ -143,6 +166,43 @@ export function MachineDetailPage() {
             <span className="font-mono text-lg text-accent">{machine.active_agent_count}</span>
           </div>
         </div>
+
+        {/* Usage quota */}
+        {machine.usage_info && (() => {
+          const windows = Object.entries(machine.usage_info)
+            .filter(([k]) => k !== "updated_at" && USAGE_LABELS[k])
+            .map(([k, v]) => ({ key: k, label: USAGE_LABELS[k], ...(v as UsageWindow) }));
+          if (windows.length === 0) return null;
+          return (
+            <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
+                <span className="text-[11px] font-mono text-content-tertiary">
+                  {machine.usage_info.updated_at ? formatRelative(machine.usage_info.updated_at) : ""}
+                </span>
+              </div>
+              <div className="space-y-2.5">
+                {windows.map(w => (
+                  <div key={w.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-content-secondary">{w.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-content-primary">{Math.round(w.utilization)}%</span>
+                        <span className="text-[11px] text-content-tertiary">resets {formatResetCountdown(w.resets_at)}</span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
+                        style={{ width: `${Math.min(w.utilization, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Offline reconnect guide */}
         {isOffline && (

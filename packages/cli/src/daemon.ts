@@ -7,6 +7,7 @@ import { ApiClient, AgentClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository } from "./links.js";
 import { getConfigValue, setConfigValue } from "./config.js";
+import { getUsage } from "./usage.js";
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -90,8 +91,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   );
   console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
-  const heartbeatInterval = setInterval(() => {
-    client.heartbeat(machineId!, machineInfo).catch((err: any) =>
+  const heartbeatInterval = setInterval(async () => {
+    const usageInfo = await getUsage();
+    client.heartbeat(machineId!, { ...machineInfo, usage_info: usageInfo }).catch((err: any) =>
       console.error(`[WARN] Heartbeat failed: ${err.message}`)
     );
   }, 30000);

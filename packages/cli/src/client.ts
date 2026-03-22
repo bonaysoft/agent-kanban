@@ -1,5 +1,6 @@
 import { SignJWT } from "jose";
 import { randomUUID } from "crypto";
+import type { UsageInfo } from "@agent-kanban/shared";
 import { getConfigValue } from "./config.js";
 
 export class ApiClient {
@@ -70,7 +71,7 @@ export class ApiClient {
   registerMachine(name: string) {
     return this.request<{ id: string; name: string }>("POST", "/api/machines", { name });
   }
-  heartbeat(machineId: string, info: { name: string; os?: string; version?: string; runtimes?: string[] }) {
+  heartbeat(machineId: string, info: { name: string; os?: string; version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
