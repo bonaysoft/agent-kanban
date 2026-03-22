@@ -15,6 +15,7 @@ declare module "hono" {
     apiKeyId?: string;
     machineId?: string;
     agentId?: string;
+    sessionId?: string;
     agentCapabilities?: string[];
     user?: User;
     session?: Session;

@@ -54,12 +54,17 @@ export const api = {
       const qs = since ? `?since=${encodeURIComponent(since)}` : "";
       return request<any[]>("GET", `/tasks/${taskId}/messages${qs}`);
     },
-    create: (taskId: string, body: { agent_id: string; role: string; content: string }) =>
+    create: (taskId: string, body: { sender_type: string; sender_id: string; content: string }) =>
       request<any>("POST", `/tasks/${taskId}/messages`, body),
   },
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
+    create: (input: { name: string; bio?: string; soul?: string; runtime?: string; model?: string; skills?: string[] }) =>
+      request<any>("POST", "/agents", input),
+    update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
+    delete: (id: string) => request<void>("DELETE", `/agents/${id}`),
+    sessions: (agentId: string) => request<any[]>("GET", `/agents/${agentId}/sessions`),
   },
   machines: {
     list: () => request<any[]>("GET", "/machines"),

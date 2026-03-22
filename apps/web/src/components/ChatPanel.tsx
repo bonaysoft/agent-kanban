@@ -5,12 +5,13 @@ import { formatRelative } from "./TaskDetailFields";
 interface ChatPanelProps {
   taskId: string;
   agentId: string | null;
+  userId: string | null;
   taskDone: boolean;
   initialMessages: any[];
   sseMessages: any[];
 }
 
-export function ChatPanel({ taskId, agentId, taskDone, initialMessages, sseMessages }: ChatPanelProps) {
+export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, sseMessages }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -43,8 +44,8 @@ export function ChatPanel({ taskId, agentId, taskDone, initialMessages, sseMessa
     setSendError(null);
     try {
       await api.messages.create(taskId, {
-        agent_id: agentId,
-        role: "human",
+        sender_type: "user",
+        sender_id: userId || "",
         content: input.trim(),
       });
       setInput("");
@@ -105,7 +106,7 @@ export function ChatPanel({ taskId, agentId, taskDone, initialMessages, sseMessa
           <div
             key={msg.id}
             className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
-              msg.role === "agent" ? "border-accent" : "border-border"
+              msg.sender_type === "agent" ? "border-accent" : "border-border"
             }`}
           >
             <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
@@ -113,12 +114,12 @@ export function ChatPanel({ taskId, agentId, taskDone, initialMessages, sseMessa
             </span>
             <div className="flex-1 min-w-0">
               <span className={`text-[11px] font-mono uppercase tracking-wider ${
-                msg.role === "agent" ? "text-accent" : "text-content-tertiary"
+                msg.sender_type === "agent" ? "text-accent" : "text-content-tertiary"
               }`}>
-                {msg.role}
+                {msg.sender_type}
               </span>
               <p className={`text-[13px] mt-0.5 whitespace-pre-wrap break-words ${
-                msg.role === "agent"
+                msg.sender_type === "agent"
                   ? "font-mono text-xs text-content-secondary"
                   : "text-content-primary"
               }`}>

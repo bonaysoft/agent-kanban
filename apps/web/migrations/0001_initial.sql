@@ -202,24 +202,42 @@ CREATE TABLE machines (
 );
 CREATE INDEX idx_machines_owner ON machines(owner_id);
 
--- Agents
+-- Agents (persistent identity, owned by tenant)
 CREATE TABLE agents (
+  id              TEXT PRIMARY KEY,
+  owner_id        TEXT NOT NULL,
+  name            TEXT NOT NULL,
+  bio             TEXT,
+  soul            TEXT,
+  runtime         TEXT,
+  model           TEXT,
+  skills          TEXT,
+  public_key      TEXT NOT NULL,
+  private_key     TEXT NOT NULL,
+  fingerprint     TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_agents_owner ON agents(owner_id);
+
+-- Agent Sessions (ephemeral, PGP subkey delegation)
+CREATE TABLE agent_sessions (
   id                    TEXT PRIMARY KEY,
+  agent_id              TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   machine_id            TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
-  name                  TEXT NOT NULL,
-  role_id               TEXT,
-  status                TEXT NOT NULL DEFAULT 'idle',
-  public_key            TEXT,
-  runtime               TEXT,
-  model                 TEXT,
+  status                TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'closed')),
+  public_key            TEXT NOT NULL,
+  delegation_proof      TEXT NOT NULL,
   input_tokens          INTEGER NOT NULL DEFAULT 0,
   output_tokens         INTEGER NOT NULL DEFAULT 0,
   cache_read_tokens     INTEGER NOT NULL DEFAULT 0,
   cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
   cost_micro_usd        INTEGER NOT NULL DEFAULT 0,
-  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at             TEXT
 );
-CREATE INDEX idx_agents_machine ON agents(machine_id);
+CREATE INDEX idx_agent_sessions_agent ON agent_sessions(agent_id);
+CREATE INDEX idx_agent_sessions_machine ON agent_sessions(machine_id);
 
 -- Tasks
 CREATE TABLE tasks (
@@ -260,7 +278,8 @@ CREATE INDEX idx_task_deps_depends ON task_dependencies(depends_on);
 CREATE TABLE task_logs (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  agent_id    TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  agent_id    TEXT,
+  session_id  TEXT,
   action      TEXT NOT NULL CHECK(action IN (
     'created', 'claimed', 'moved', 'commented', 'completed',
     'assigned', 'released', 'timed_out', 'cancelled', 'review_requested'
@@ -274,8 +293,8 @@ CREATE INDEX idx_task_logs_task ON task_logs(task_id);
 CREATE TABLE messages (
   id          TEXT PRIMARY KEY,
   task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-  role        TEXT NOT NULL CHECK(role IN ('human', 'agent')),
+  sender_type TEXT NOT NULL CHECK(sender_type IN ('user', 'agent')),
+  sender_id   TEXT NOT NULL,
   content     TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

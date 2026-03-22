@@ -7,14 +7,12 @@ import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
 
 const statusDotColors: Record<string, string> = {
-  idle: "bg-content-tertiary",
-  working: "bg-accent animate-pulse-glow",
-  offline: "bg-warning",
+  online: "bg-accent animate-pulse-glow",
+  offline: "bg-content-tertiary",
 };
 
 const statusLabels: Record<string, string> = {
-  idle: "Idle",
-  working: "Working",
+  online: "Online",
   offline: "Offline",
 };
 
@@ -33,16 +31,17 @@ function formatCost(microUsd: number): string {
 export function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const refresh = () => api.agents.list().then(setAgents);
 
   useEffect(() => {
-    api.agents.list().then(setAgents).finally(() => setLoading(false));
-    const interval = setInterval(() => {
-      api.agents.list().then(setAgents);
-    }, 15000);
+    refresh().finally(() => setLoading(false));
+    const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  const working = agents.filter((a) => a.status === "working").length;
+  const online = agents.filter((a) => a.status === "online").length;
 
   return (
     <div className="min-h-screen bg-surface-primary">
@@ -50,8 +49,23 @@ export function AgentsPage() {
       <div className="max-w-4xl mx-auto p-8 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-content-primary">Agents</h1>
-          <span className="text-xs text-content-tertiary font-mono">{working} working</span>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-content-tertiary font-mono">{online} online</span>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="px-3 py-1.5 bg-accent text-surface-primary rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Create Agent
+            </button>
+          </div>
         </div>
+
+        {showCreate && (
+          <CreateAgentDialog
+            onClose={() => setShowCreate(false)}
+            onCreated={() => { setShowCreate(false); refresh(); }}
+          />
+        )}
 
         {loading ? (
           <div className="space-y-3">
@@ -61,25 +75,30 @@ export function AgentsPage() {
           </div>
         ) : agents.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-content-secondary text-sm">No agents registered.</p>
-            <p className="text-content-tertiary text-xs mt-1">Agents appear when a daemon assigns tasks.</p>
+            <p className="text-content-secondary text-sm">No agents yet.</p>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="mt-2 text-sm text-accent hover:underline"
+            >
+              Create your first agent
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
             {agents.map((agent) => {
-              const isWorking = agent.status === "working";
+              const isOnline = agent.status === "online";
               return (
                 <Link
                   key={agent.id}
                   to={`/agents/${agent.id}`}
                   className={`block bg-surface-secondary rounded-lg px-5 py-4 transition-all border ${
-                    isWorking
+                    isOnline
                       ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
                       : "border-border hover:border-content-tertiary/30"
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <AgentIdenticon publicKey={agent.public_key} size={44} glow={isWorking} />
+                    <AgentIdenticon publicKey={agent.public_key} size={44} glow={isOnline} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-sm text-accent font-semibold">{agent.name}</span>
@@ -124,5 +143,111 @@ export function AgentsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [bio, setBio] = useState("");
+  const [soul, setSoul] = useState("");
+  const [runtime, setRuntime] = useState("claude");
+  const [model, setModel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    if (!name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await api.agents.create({
+        name: name.trim(),
+        bio: bio.trim() || undefined,
+        soul: soul.trim() || undefined,
+        runtime: runtime || undefined,
+        model: model.trim() || undefined,
+      });
+      onCreated();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-secondary border border-border rounded-lg w-full max-w-md p-6 space-y-4">
+          <h2 className="text-lg font-bold text-content-primary">Create Agent</h2>
+
+          <div>
+            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Name *</label>
+            <input
+              value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Bolt"
+              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Bio</label>
+            <input
+              value={bio} onChange={(e) => setBio(e.target.value)}
+              placeholder="Short description"
+              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Soul</label>
+            <textarea
+              value={soul} onChange={(e) => setSoul(e.target.value)}
+              placeholder="Personality prompt..."
+              rows={3}
+              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Runtime</label>
+              <select
+                value={runtime} onChange={(e) => setRuntime(e.target.value)}
+                className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Model</label>
+              <input
+                value={model} onChange={(e) => setModel(e.target.value)}
+                placeholder="e.g. claude-sonnet-4-20250514"
+                className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-error">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-content-secondary hover:text-content-primary transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!name.trim() || creating}
+              className="px-4 py-2 bg-accent text-surface-primary rounded-md text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
+            >
+              {creating ? "Creating..." : "Create"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

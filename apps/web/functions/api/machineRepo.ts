@@ -56,8 +56,8 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
 
   const result = await db.prepare(`
     SELECT m.*,
-      (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id) as agent_count,
-      (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id AND a.status = 'working') as active_agent_count
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id) as session_count,
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id AND s.status = 'active') as active_session_count
     FROM machines m
     WHERE m.owner_id = ?
     ORDER BY m.last_heartbeat_at DESC
@@ -70,21 +70,22 @@ export async function getMachine(db: D1, machineId: string, ownerId: string): Pr
 
   const machine = await db.prepare(`
     SELECT m.*,
-      (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id) as agent_count,
-      (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id AND a.status = 'working') as active_agent_count
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id) as session_count,
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id AND s.status = 'active') as active_session_count
     FROM machines m WHERE m.id = ? AND m.owner_id = ?
   `).bind(machineId, ownerId).first<MachineWithAgents>();
 
   if (!machine) return null;
 
-  const agents = await db.prepare(`
-    SELECT a.id, a.name, a.status,
-      (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at
-    FROM agents a WHERE a.machine_id = ?
-    ORDER BY last_active_at DESC
+  const sessions = await db.prepare(`
+    SELECT s.id, s.agent_id, s.status, s.created_at, a.name as agent_name
+    FROM agent_sessions s
+    JOIN agents a ON s.agent_id = a.id
+    WHERE s.machine_id = ?
+    ORDER BY s.created_at DESC
   `).bind(machineId).all();
 
-  return { ...parseMachineJson(machine), agents: agents.results };
+  return { ...parseMachineJson(machine), agents: sessions.results };
 }
 
 function parseMachineJson<T extends { runtimes: any; usage_info: any }>(row: T): T {

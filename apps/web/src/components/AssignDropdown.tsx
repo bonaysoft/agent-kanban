@@ -10,9 +10,8 @@ interface AssignDropdownProps {
 }
 
 const statusDotColors: Record<string, string> = {
-  idle: "bg-content-tertiary",
-  working: "bg-accent animate-pulse-glow",
-  offline: "bg-warning",
+  online: "bg-accent animate-pulse-glow",
+  offline: "bg-content-tertiary",
 };
 
 export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropdownProps) {

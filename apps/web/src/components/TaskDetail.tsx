@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import { useSSE } from "../hooks/useSSE";
+import { useSession } from "../lib/auth-client";
 import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
 import { ActivityLog } from "./ActivityLog";
 import { ChatPanel } from "./ChatPanel";
@@ -29,6 +30,7 @@ const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 type Tab = "details" | "chat";
 
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
+  const { data: session } = useSession();
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
@@ -292,6 +294,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
           <ChatPanel
             taskId={taskId}
             agentId={task.assigned_to}
+            userId={session?.user?.id || null}
             taskDone={task.status === "done"}
             initialMessages={initialMessages}
             sseMessages={sseMessages}

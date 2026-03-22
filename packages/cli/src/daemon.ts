@@ -123,7 +123,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       // Auto-clone repos that have no local link
       const unlinkedRepoIds = new Set<string>();
       for (const t of tasks) {
-        if (t.blocked || t.assigned_to || pm.hasTask(t.id) || !t.repository_id) continue;
+        if (t.blocked || !t.assigned_to || pm.hasTask(t.id) || !t.repository_id) continue;
         if (!findPathForRepository(t.repository_id)) unlinkedRepoIds.add(t.repository_id);
       }
       if (unlinkedRepoIds.size > 0) {
@@ -135,7 +135,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       }
 
       const available = tasks.filter((t: any) => {
-        if (t.blocked || t.assigned_to) return false;
+        if (t.blocked || !t.assigned_to) return false;  // must be assigned to an agent
         if (pm.hasTask(t.id)) return false;
         if (!t.repository_id) return false;
         if (!findPathForRepository(t.repository_id)) return false;
@@ -156,6 +156,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         schedulePoll(baseInterval);
         return;
       }
+      // Task must already be assigned to an agent (persistent ID)
+      const agentId = task.assigned_to;
+      if (!agentId) {
+        schedulePoll(baseInterval);
+        return;
+      }
+
       const sessionId = randomUUID();
 
       const { publicKey, privateKey } = await crypto.subtle.generateKey(
@@ -163,38 +170,40 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       );
       const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
       const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
-      const pubKeyBase64 = pubKeyJwk.x;
+      const pubKeyBase64 = pubKeyJwk.x!;
 
       try {
-        await client.registerAgent(sessionId, pubKeyBase64, opts.agentCli);
-        await client.assignTask(task.id, sessionId);
+        await client.createSession(agentId, sessionId, pubKeyBase64);
       } catch (err: any) {
-        if (err.message.includes("409") || err.message.includes("assigned") || err.message.includes("blocked")) {
+        if (err.message.includes("409") || err.message.includes("not found")) {
           schedulePoll(1000);
           return;
         }
         throw err;
       }
 
-      console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
+      console.log(`[INFO] Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`);
 
       if (!ensureSkill(repoDir)) {
         console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
         await client.releaseTask(task.id).catch((err: any) =>
           console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`)
         );
+        await client.closeSession(agentId, sessionId).catch(() => {});
         schedulePoll(baseInterval);
         return;
       }
 
       const agentClient = new AgentClient(
         getConfigValue("api-url")!,
+        agentId,
         sessionId,
         privateKey,
       );
 
       const agentEnv = {
-        AK_AGENT_ID: sessionId,
+        AK_AGENT_ID: agentId,
+        AK_SESSION_ID: sessionId,
         AK_AGENT_KEY: JSON.stringify(privKeyJwk),
         AK_API_URL: getConfigValue("api-url")!,
       };

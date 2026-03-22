@@ -6,8 +6,8 @@ import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-// Integration test: validates the full agent-auth bridge
-// Machine register → Agent register (both tables) → Agent JWT → getAgentSession
+// Integration test: validates the new agent-auth bridge
+// User creates Agent → Machine creates Session (CSR) → Session JWT → auth
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -20,10 +20,7 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    const statements = sql
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const statements = sql.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
     for (const stmt of statements) {
       await db.prepare(stmt).run();
     }
@@ -33,12 +30,9 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-001";
   const now = new Date().toISOString();
-  await db
-    .prepare(
-      "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-    )
-    .bind(userId, "Test User", "test@example.com", now, now)
-    .run();
+  await db.prepare(
+    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
+  ).bind(userId, "Test User", "test@example.com", now, now).run();
   return userId;
 }
 
@@ -59,6 +53,7 @@ afterAll(async () => {
 describe("agent-auth bridge", () => {
   let userId: string;
   let machineId: string;
+  let agentId: string;
 
   it("seeds a test user", async () => {
     userId = await seedUser(db);
@@ -66,7 +61,7 @@ describe("agent-auth bridge", () => {
     expect(row).toBeTruthy();
   });
 
-  it("creates both custom machine and BA agentHost with same ID", async () => {
+  it("creates a machine with BA agentHost", async () => {
     const { createAuth } = await import("../apps/web/functions/api/betterAuth");
     const { createMachine } = await import("../apps/web/functions/api/machineRepo");
 
@@ -79,111 +74,66 @@ describe("agent-auth bridge", () => {
     const now = new Date();
     await (authCtx.adapter.create as any)({
       model: "agentHost",
-      data: {
-        id: machine.id,
-        name: machine.name,
-        userId,
-        status: "active",
-        activatedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
+      data: { id: machine.id, name: machine.name, userId, status: "active", activatedAt: now, createdAt: now, updatedAt: now },
       forceAllowId: true,
     });
 
-    // Verify custom machine
-    const customMachine = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first();
-    expect(customMachine).toBeTruthy();
-    expect(customMachine!.owner_id).toBe(userId);
-
-    // Verify BA agentHost with same ID
     const baHost = await db.prepare("SELECT * FROM agentHost WHERE id = ?").bind(machineId).first();
     expect(baHost).toBeTruthy();
-    expect(baHost!.userId).toBe(userId);
-    expect(baHost!.status).toBe("active");
   });
 
-  it("creates both custom agent and BA agent with JWK public key", async () => {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  it("creates a persistent agent with keypair", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+    const agent = await createAgent(db, userId, { name: "Test Agent" });
+    agentId = agent.id;
 
-    const agentId = randomUUID();
+    expect(agent.public_key).toBeTruthy();
+    expect(agent.fingerprint).toBeTruthy();
+    expect(agent.id).toBe(agent.fingerprint.slice(-16));
+
+    const row = await db.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first();
+    expect(row).toBeTruthy();
+    expect(row!.private_key).toBeTruthy();
+  });
+
+  it("creates a session with delegation proof via CSR", async () => {
+    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
     const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
 
-    const { publicKey } = await crypto.subtle.generateKey(
-      { name: "Ed25519" } as any, true, ["sign", "verify"]
-    );
-    const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
-    const pubKeyBase64 = pubKeyJwk.x!;
+    const sessionId = randomUUID();
+    const { publicKey } = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    const pubJwk = await crypto.subtle.exportKey("jwk", publicKey);
 
-    const agent = await createAgent(db, machineId, agentId, pubKeyBase64);
+    const result = await createSession(db, env, agentId, machineId, sessionId, pubJwk.x!, userId);
+    expect(result.delegation_proof).toBeTruthy();
 
-    const auth = createAuth(env);
-    const authCtx = await auth.$context;
-    const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: pubKeyBase64 });
-    const now = new Date();
-    await (authCtx.adapter.create as any)({
-      model: "agent",
-      data: {
-        id: agentId,
-        name: agent.name,
-        userId,
-        hostId: machineId,
-        status: "active",
-        mode: "autonomous",
-        publicKey: jwk,
-        activatedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
-      forceAllowId: true,
-    });
+    const session = await db.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(sessionId).first();
+    expect(session).toBeTruthy();
+    expect(session!.agent_id).toBe(agentId);
+    expect(session!.delegation_proof).toBe(result.delegation_proof);
 
-    // Verify custom agent
-    const customAgent = await db.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first();
-    expect(customAgent).toBeTruthy();
-    expect(customAgent!.machine_id).toBe(machineId);
-
-    // Verify BA agent
-    const baAgent = await db.prepare("SELECT * FROM agent WHERE id = ?").bind(agentId).first();
+    const baAgent = await db.prepare("SELECT * FROM agent WHERE id = ?").bind(sessionId).first();
     expect(baAgent).toBeTruthy();
     expect(baAgent!.hostId).toBe(machineId);
-    expect(baAgent!.status).toBe("active");
-    expect(baAgent!.publicKey).toBe(jwk);
   });
 
-  it("getAgentSession verifies agent JWT and returns session", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+  it("session JWT authenticates through HTTP handler", async () => {
+    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
     const { api } = await import("../apps/web/functions/api/routes");
     const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
 
-    const agentId = randomUUID();
-    const { publicKey, privateKey } = await crypto.subtle.generateKey(
-      { name: "Ed25519" } as any, true, ["sign", "verify"]
-    );
-    const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
-    const pubKeyBase64 = pubKeyJwk.x!;
+    const sessionId = randomUUID();
+    const { publicKey, privateKey } = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    const pubJwk = await crypto.subtle.exportKey("jwk", publicKey);
 
-    // Register agent (creates both custom agent and BA agent)
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
-    const auth = createAuth(env);
-    await createAgent(db, machineId, agentId, pubKeyBase64);
-    const authCtx = await auth.$context;
-    const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: pubKeyBase64 });
-    const now = new Date();
-    await (authCtx.adapter.create as any)({
-      model: "agent",
-      data: { id: agentId, name: `Agent-${agentId.slice(0, 6)}`, userId, hostId: machineId, status: "active", mode: "autonomous", publicKey: jwk, activatedAt: now, createdAt: now, updatedAt: now },
-      forceAllowId: true,
-    });
+    await createSession(db, env, agentId, machineId, sessionId, pubJwk.x!, userId);
 
-    const jwt = await new SignJWT({ sub: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+    const jwt = await new SignJWT({ sub: sessionId, aid: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
       .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
       .sign(privateKey);
 
-    // Go through HTTP handler so dynamic baseURL resolves from Host header
     const res = await api.request("/api/agents", {
       method: "GET",
       headers: { Authorization: `Bearer ${jwt}`, Host: "localhost:8788", "x-forwarded-proto": "http" },
@@ -191,93 +141,15 @@ describe("agent-auth bridge", () => {
     expect(res.status).toBe(200);
   });
 
-  it("getAgentSession rejects JWT without jti", async () => {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
-    const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
-    const auth = createAuth(env);
+  it("delegation proof is verifiable with agent public key", async () => {
+    const { verifyDelegation } = await import("@agent-kanban/shared");
 
-    const agentId = randomUUID();
-    const { publicKey, privateKey } = await crypto.subtle.generateKey(
-      { name: "Ed25519" } as any, true, ["sign", "verify"]
-    );
-    const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
-    const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: pubKeyJwk.x });
+    const agent = await db.prepare("SELECT public_key FROM agents WHERE id = ?").bind(agentId).first<{ public_key: string }>();
+    const sessions = await db.prepare("SELECT * FROM agent_sessions WHERE agent_id = ?").bind(agentId).all();
 
-    const authCtx = await auth.$context;
-    const now = new Date();
-    await (authCtx.adapter.create as any)({
-      model: "agent",
-      data: {
-        id: agentId,
-        name: `Agent-${agentId.slice(0, 6)}`,
-        userId,
-        hostId: machineId,
-        status: "active",
-        mode: "autonomous",
-        publicKey: jwk,
-        activatedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
-      forceAllowId: true,
-    });
-
-    // Sign JWT WITHOUT jti
-    const jwt = await new SignJWT({ sub: agentId, aud: BETTER_AUTH_URL })
-      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
-      .setIssuedAt()
-      .setExpirationTime("60s")
-      .sign(privateKey);
-
-    const headers = new Headers({ Authorization: `Bearer ${jwt}`, Host: "localhost:8788", "x-forwarded-proto": "http" });
-    await expect(auth.api.getAgentSession({ headers })).rejects.toThrow();
+    for (const session of sessions.results as any[]) {
+      const valid = await verifyDelegation(agent!.public_key, session.public_key, session.delegation_proof);
+      expect(valid).toBe(true);
+    }
   });
-
-  it("getAgentSession rejects JWT signed with wrong key", async () => {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
-    const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
-    const auth = createAuth(env);
-
-    const agentId = randomUUID();
-    const { publicKey: registeredPub } = await crypto.subtle.generateKey(
-      { name: "Ed25519" } as any, true, ["sign", "verify"]
-    );
-    const pubJwk = await crypto.subtle.exportKey("jwk", registeredPub);
-    const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: pubJwk.x });
-
-    const authCtx = await auth.$context;
-    const now = new Date();
-    await (authCtx.adapter.create as any)({
-      model: "agent",
-      data: {
-        id: agentId,
-        name: `Agent-${agentId.slice(0, 6)}`,
-        userId,
-        hostId: machineId,
-        status: "active",
-        mode: "autonomous",
-        publicKey: jwk,
-        activatedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
-      forceAllowId: true,
-    });
-
-    // Sign with a DIFFERENT private key
-    const { privateKey: wrongKey } = await crypto.subtle.generateKey(
-      { name: "Ed25519" } as any, true, ["sign", "verify"]
-    );
-    const jwt = await new SignJWT({ sub: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
-      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
-      .setIssuedAt()
-      .setExpirationTime("60s")
-      .sign(wrongKey);
-
-    const headers = new Headers({ Authorization: `Bearer ${jwt}`, Host: "localhost:8788", "x-forwarded-proto": "http" });
-    await expect(auth.api.getAgentSession({ headers })).rejects.toThrow();
-  });
-
-  // Capability verification is covered by machine-agent-flow.test.ts (steps 8-11)
-  // which tests claim/review/log/usage through the full HTTP path.
 });

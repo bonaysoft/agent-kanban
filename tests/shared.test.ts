@@ -8,8 +8,8 @@ describe("shared constants", () => {
     expect(TASK_ACTIONS).toContain("timed_out");
   });
 
-  it("AGENT_STATUSES has idle, working, offline", () => {
-    expect(AGENT_STATUSES).toEqual(["idle", "working", "offline"]);
+  it("AGENT_STATUSES has online, offline", () => {
+    expect(AGENT_STATUSES).toEqual(["online", "offline"]);
   });
 
   it("STALE_TIMEOUT_MS is 2 hours", () => {

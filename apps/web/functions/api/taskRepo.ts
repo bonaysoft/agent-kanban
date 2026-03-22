@@ -1,6 +1,6 @@
 import type { Task, TaskLog, TaskWithLogs, CreateTaskInput } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
-import { newId, type D1 } from "./db";
+import { newLongId, type D1 } from "./db";
 import { getDefaultBoard } from "./boardRepo";
 import { detectCycle, computeBlocked, getDependencies, setDependencies } from "./taskDeps";
 
@@ -15,8 +15,8 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
     "SELECT COALESCE(MAX(position), -1) as max_pos FROM tasks WHERE board_id = ? AND status = 'todo'"
   ).bind(board.id).first<{ max_pos: number }>();
 
-  const taskId = newId();
-  const logId = newId();
+  const taskId = newLongId();
+  const logId = newLongId();
   const now = new Date().toISOString();
   const labelsJson = input.labels ? JSON.stringify(input.labels) : null;
   const inputJson = input.input ? JSON.stringify(input.input) : null;
@@ -43,8 +43,8 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
       position, now, now,
     ),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'created', NULL, ?)"
-    ).bind(logId, taskId, input.agentId || null, now),
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'created', NULL, ?)"
+    ).bind(logId, taskId, input.agentId || null, null, now),
     ...(input.depends_on || []).map((depId) =>
       db.prepare("INSERT INTO task_dependencies (task_id, depends_on) VALUES (?, ?)").bind(taskId, depId)
     ),
@@ -118,7 +118,8 @@ export async function listTasks(
 
 export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | null> {
   const task = await db.prepare(`
-    SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, r.name as repository_name,
+    SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, a.fingerprint as agent_fingerprint,
+      r.name as repository_name,
       (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
@@ -181,20 +182,15 @@ export async function claimTask(db: D1, taskId: string, agentId: string): Promis
   if (task.status !== "todo") throw new HTTPException(409, { message: "Task is not in todo status" });
 
   const now = new Date().toISOString();
-  const logId = newId();
+  const logId = newLongId();
 
-  // Claim moves the task to in_progress — agent confirms they are starting work
-  // Agent status update is batched for atomicity
   await db.batch([
     db.prepare(
       "UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'claimed', NULL, ?)"
-    ).bind(logId, taskId, agentId, now),
-    db.prepare(
-      "UPDATE agents SET status = 'working' WHERE id = ? AND status = 'idle'"
-    ).bind(agentId),
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'claimed', NULL, ?)"
+    ).bind(logId, taskId, agentId, null, now),
   ]);
 
   return { ...task, status: "in_progress", updated_at: now };
@@ -209,16 +205,15 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   if (blockedSet.has(taskId)) throw new HTTPException(409, { message: "Task is blocked by unfinished dependencies" });
 
   const now = new Date().toISOString();
-  const logId = newId();
+  const logId = newLongId();
 
-  // Assign only locks the task to the agent — status stays as-is (todo)
   await db.batch([
     db.prepare(
       "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ? AND assigned_to IS NULL"
     ).bind(agentId, now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'assigned', NULL, ?)"
-    ).bind(logId, taskId, agentId, now),
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, ?)"
+    ).bind(logId, taskId, agentId, null, now),
   ]);
 
   return { ...task, assigned_to: agentId, updated_at: now };
@@ -229,28 +224,16 @@ export async function completeTask(db: D1, taskId: string, agentId: string | nul
   if (!task) return null;
 
   const now = new Date().toISOString();
-  const logId = newId();
-  const effectiveAgentId = agentId || task.assigned_to;
+  const logId = newLongId();
 
-  const stmts = [
+  await db.batch([
     db.prepare(
       "UPDATE tasks SET status = 'done', result = ?, pr_url = ?, updated_at = ? WHERE id = ?"
     ).bind(result, prUrl, now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'completed', ?, ?)"
-    ).bind(logId, taskId, agentId, result, now),
-  ];
-
-  // Set agent idle if this was their last active task (atomic with task update)
-  if (effectiveAgentId) {
-    stmts.push(db.prepare(`
-      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
-        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
-      )
-    `).bind(effectiveAgentId, effectiveAgentId, taskId));
-  }
-
-  await db.batch(stmts);
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'completed', ?, ?)"
+    ).bind(logId, taskId, agentId, null, result, now),
+  ]);
 
   return { ...task, status: "done", result, pr_url: prUrl, updated_at: now };
 }
@@ -260,27 +243,16 @@ export async function cancelTask(db: D1, taskId: string, agentId: string | null)
   if (!task) return null;
 
   const now = new Date().toISOString();
-  const logId = newId();
-  const effectiveAgentId = agentId || task.assigned_to;
+  const logId = newLongId();
 
-  const stmts = [
+  await db.batch([
     db.prepare(
       "UPDATE tasks SET status = 'cancelled', assigned_to = NULL, updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'cancelled', NULL, ?)"
-    ).bind(logId, taskId, agentId, now),
-  ];
-
-  if (effectiveAgentId) {
-    stmts.push(db.prepare(`
-      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
-        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
-      )
-    `).bind(effectiveAgentId, effectiveAgentId, taskId));
-  }
-
-  await db.batch(stmts);
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'cancelled', NULL, ?)"
+    ).bind(logId, taskId, agentId, null, now),
+  ]);
 
   return { ...task, status: "cancelled", assigned_to: null, updated_at: now };
 }
@@ -290,15 +262,15 @@ export async function reviewTask(db: D1, taskId: string, agentId: string | null,
   if (!task) return null;
 
   const now = new Date().toISOString();
-  const logId = newId();
+  const logId = newLongId();
 
   await db.batch([
     db.prepare(
       "UPDATE tasks SET status = 'in_review', pr_url = COALESCE(?, pr_url), updated_at = ? WHERE id = ?"
     ).bind(prUrl, now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, 'review_requested', NULL, ?)"
-    ).bind(logId, taskId, agentId, now),
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'review_requested', NULL, ?)"
+    ).bind(logId, taskId, agentId, null, now),
   ]);
 
   return { ...task, status: "in_review", pr_url: prUrl || task.pr_url, updated_at: now };
@@ -309,26 +281,16 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
   if (!task) return null;
 
   const now = new Date().toISOString();
-  const logId = newId();
+  const logId = newLongId();
 
-  const stmts = [
+  await db.batch([
     db.prepare(
       "UPDATE tasks SET assigned_to = NULL, status = 'todo', updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, ?, NULL, ?)"
-    ).bind(logId, taskId, agentId, action, now),
-  ];
-
-  if (agentId) {
-    stmts.push(db.prepare(`
-      UPDATE agents SET status = 'idle' WHERE id = ? AND NOT EXISTS (
-        SELECT 1 FROM tasks WHERE assigned_to = ? AND id != ? AND status IN ('in_progress', 'in_review')
-      )
-    `).bind(agentId, agentId, taskId));
-  }
-
-  await db.batch(stmts);
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+    ).bind(logId, taskId, agentId, null, action, now),
+  ]);
 
   return { ...task, assigned_to: null, status: "todo", updated_at: now };
 }
@@ -340,14 +302,14 @@ export async function addTaskLog(
   action: string,
   detail: string | null,
 ): Promise<TaskLog> {
-  const logId = newId();
+  const logId = newLongId();
   const now = new Date().toISOString();
 
   await db.prepare(
-    "INSERT INTO task_logs (id, task_id, agent_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(logId, taskId, agentId, action, detail, now).run();
+    "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(logId, taskId, agentId, null, action, detail, now).run();
 
-  return { id: logId, task_id: taskId, agent_id: agentId, action: action as any, detail, created_at: now };
+  return { id: logId, task_id: taskId, agent_id: agentId, session_id: null, action: action as any, detail, created_at: now };
 }
 
 export async function getTaskLogs(db: D1, taskId: string, since?: string): Promise<TaskLog[]> {

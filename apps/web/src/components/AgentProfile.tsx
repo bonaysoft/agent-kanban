@@ -11,14 +11,12 @@ interface AgentProfileProps {
 }
 
 const statusDotColors: Record<string, string> = {
-  idle: "bg-content-tertiary",
-  working: "bg-accent animate-pulse-glow",
-  offline: "bg-warning",
+  online: "bg-accent animate-pulse-glow",
+  offline: "bg-content-tertiary",
 };
 
 const statusLabels: Record<string, string> = {
-  idle: "Idle",
-  working: "Working",
+  online: "Online",
   offline: "Offline",
 };
 

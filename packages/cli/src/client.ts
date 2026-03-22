@@ -80,9 +80,14 @@ export abstract class ApiClient {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
-  // Agents
-  registerAgent(agentId: string, publicKey?: string, runtime?: string, model?: string) {
-    return this.request("POST", "/api/agents", { agent_id: agentId, public_key: publicKey, runtime, model });
+  // Agent Sessions
+  createSession(agentId: string, sessionId: string, sessionPublicKey: string) {
+    return this.request<{ delegation_proof: string }>("POST", `/api/agents/${agentId}/sessions`, {
+      session_id: sessionId, session_public_key: sessionPublicKey,
+    });
+  }
+  closeSession(agentId: string, sessionId: string) {
+    return this.request("DELETE", `/api/agents/${agentId}/sessions/${sessionId}`);
   }
   listAgents() { return this.request("GET", "/api/agents"); }
 
@@ -105,13 +110,13 @@ export abstract class ApiClient {
     return this.request<any[]>("GET", `/api/repositories${qs ? `?${qs}` : ""}`);
   }
 
-  // Agent usage
-  updateAgentUsage(agentId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
-    return this.request("PATCH", `/api/agents/${agentId}/usage`, usage);
+  // Session usage
+  updateSessionUsage(agentId: string, sessionId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
+    return this.request("PATCH", `/api/agents/${agentId}/sessions/${sessionId}/usage`, usage);
   }
 
   // Messages
-  sendMessage(taskId: string, body: { agent_id: string; role: string; content: string }) {
+  sendMessage(taskId: string, body: { sender_type: string; sender_id: string; content: string }) {
     return this.request("POST", `/api/tasks/${taskId}/messages`, body);
   }
   getMessages(taskId: string, since?: string) {
@@ -139,34 +144,40 @@ export class MachineClient extends ApiClient {
 
 export class AgentClient extends ApiClient {
   private agentId: string;
+  private sessionId: string;
   private privateKey: CryptoKey;
 
-  constructor(baseUrl: string, agentId: string, privateKey: CryptoKey) {
+  constructor(baseUrl: string, agentId: string, sessionId: string, privateKey: CryptoKey) {
     super(baseUrl);
     this.agentId = agentId;
+    this.sessionId = sessionId;
     this.privateKey = privateKey;
   }
 
   static async fromEnv(): Promise<AgentClient | null> {
     const agentId = process.env.AK_AGENT_ID;
+    const sessionId = process.env.AK_SESSION_ID;
     const keyJson = process.env.AK_AGENT_KEY;
     const apiUrl = process.env.AK_API_URL;
-    if (!agentId || !keyJson || !apiUrl) return null;
+    if (!agentId || !sessionId || !keyJson || !apiUrl) return null;
 
     const privateKey = await crypto.subtle.importKey(
       "jwk", JSON.parse(keyJson), { name: "Ed25519" } as any, false, ["sign"],
     );
-    return new AgentClient(apiUrl, agentId, privateKey);
+    return new AgentClient(apiUrl, agentId, sessionId, privateKey);
   }
 
   protected async authorize(): Promise<string> {
-    const jwt = await new SignJWT({ sub: this.agentId, jti: randomUUID(), aud: this.baseUrl })
+    const jwt = await new SignJWT({ sub: this.sessionId, aid: this.agentId, jti: randomUUID(), aud: this.baseUrl })
       .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
       .sign(this.privateKey);
     return `Bearer ${jwt}`;
   }
+
+  getAgentId(): string { return this.agentId; }
+  getSessionId(): string { return this.sessionId; }
 }
 
 /**

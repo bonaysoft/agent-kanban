@@ -38,3 +38,7 @@ export function getLinks(): Links {
 export function findPathForRepository(repositoryId: string): string | undefined {
   return readLinks()[repositoryId];
 }
+
+export function clearLinks(): void {
+  writeLinks({});
+}

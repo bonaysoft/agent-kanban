@@ -8,7 +8,7 @@ describe("enum completeness", () => {
   });
 
   it("AGENT_STATUSES covers all valid states", () => {
-    expect([...AGENT_STATUSES]).toEqual(["idle", "working", "offline"]);
+    expect([...AGENT_STATUSES]).toEqual(["online", "offline"]);
   });
 
   it("TaskAction type union matches TASK_ACTIONS constant", () => {

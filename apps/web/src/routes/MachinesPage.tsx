@@ -158,12 +158,12 @@ export function MachinesPage() {
 
                 <div className="mt-3 flex items-center gap-6 text-xs text-content-secondary">
                   <div>
-                    <span className="text-content-tertiary">Agents: </span>
-                    <span className="font-mono text-content-primary">{machine.agent_count}</span>
+                    <span className="text-content-tertiary">Sessions: </span>
+                    <span className="font-mono text-content-primary">{machine.session_count}</span>
                   </div>
                   <div>
                     <span className="text-content-tertiary">Active: </span>
-                    <span className="font-mono text-accent">{machine.active_agent_count}</span>
+                    <span className="font-mono text-accent">{machine.active_session_count}</span>
                   </div>
                   <div>
                     <span className="text-content-tertiary">Heartbeat: </span>

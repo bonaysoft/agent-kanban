@@ -23,7 +23,7 @@ export const TASK_ACTIONS = [
   "review_requested",
 ] as const;
 
-export const AGENT_STATUSES = ["idle", "working", "offline"] as const;
+export const AGENT_STATUSES = ["online", "offline"] as const;
 
 export const MACHINE_STATUSES = ["online", "offline"] as const;
 
@@ -33,4 +33,4 @@ export const MACHINE_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 
 export const MACHINE_STALE_TIMEOUT_MS = 60000; // 60 seconds (miss 2 heartbeats)
 
-export const MESSAGE_ROLES = ["human", "agent"] as const;
+export const SENDER_TYPES = ["user", "agent"] as const;

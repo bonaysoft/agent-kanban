@@ -17,15 +17,21 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   { method: "POST", pattern: /^\/api\/machines\/[^/]+\/heartbeat$/, rule: { allow: ["machine"] } },
   { method: "DELETE", pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ["user"] } },
 
-  // Agents — machine registers, agent acts
-  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["machine"] } },
-  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+\/usage$/, rule: { allow: ["agent"], capability: "agent:usage" } },
+  // Agents — user manages persistent agents
+  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user"] } },
+  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
+  { method: "DELETE", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
+
+  // Agent Sessions — machine creates/closes, agent reports usage
+  { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions$/, rule: { allow: ["machine"] } },
+  { method: "DELETE", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+$/, rule: { allow: ["machine"] } },
+  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/, rule: { allow: ["agent"], capability: "agent:usage" } },
 
   // Task lifecycle
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent"], capability: "task:claim" } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent"], capability: "task:review" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["user", "machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["user", "machine"] } },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {
@@ -71,7 +77,9 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
       return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid agent session" } }, 401);
     }
     const agentIdentity = await sessionRes.json();
-    return handleAgentIdentity(c, agentIdentity, next);
+    // Extract persistent agent ID from JWT `aid` claim
+    const aid = decodeJwtClaim(token, "aid");
+    return handleAgentIdentity(c, agentIdentity, aid, next);
   }
 
   const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
@@ -109,14 +117,24 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   return enforceRouteRule(c, next);
 }
 
-function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, next: Next) {
+function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, persistentAgentId: string | null, next: Next) {
   c.set("ownerId", identity.host?.userId || identity.user?.id);
   c.set("identityType", "agent");
-  c.set("agentId", identity.agent.id);
+  c.set("sessionId", identity.agent.id);
+  c.set("agentId", persistentAgentId || identity.agent.id);
   c.set("machineId", identity.agent.hostId);
   const caps = (identity.agent.capabilityGrants || []).map((g: any) => g.capability as string);
   c.set("agentCapabilities", caps);
   return enforceRouteRule(c, next);
+}
+
+function decodeJwtClaim(token: string, claim: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload[claim] || null;
+  } catch { return null; }
 }
 
 function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {

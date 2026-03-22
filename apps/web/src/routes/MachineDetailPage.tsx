@@ -158,12 +158,12 @@ export function MachineDetailPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Agents</div>
-            <span className="font-mono text-lg text-content-primary">{machine.agent_count}</span>
+            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Sessions</div>
+            <span className="font-mono text-lg text-content-primary">{machine.session_count}</span>
           </div>
           <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
             <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Active</div>
-            <span className="font-mono text-lg text-accent">{machine.active_agent_count}</span>
+            <span className="font-mono text-lg text-accent">{machine.active_session_count}</span>
           </div>
         </div>
 

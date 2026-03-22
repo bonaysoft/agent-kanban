@@ -3,20 +3,11 @@ import { useParams, Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { api } from "../lib/api";
-import { authClient } from "../lib/auth-client";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { formatRelative } from "../components/TaskDetailFields";
 
-const CAPABILITY_LABELS: Record<string, string> = {
-  "task:claim": "Claim",
-  "task:review": "Review",
-  "task:log": "Log",
-  "task:message": "Chat",
-  "agent:usage": "Usage",
-};
-
-const statusLabels: Record<string, string> = { idle: "Idle", working: "Working", offline: "Offline" };
-const statusDotClass: Record<string, string> = { idle: "bg-content-tertiary", working: "animate-pulse-glow", offline: "bg-warning" };
+const statusLabels: Record<string, string> = { online: "Online", offline: "Offline" };
+const statusDotClass: Record<string, string> = { online: "animate-pulse-glow", offline: "bg-content-tertiary" };
 
 const actionStyles: Record<string, string> = {
   claimed: "text-accent", assigned: "text-accent", completed: "text-success",
@@ -44,25 +35,20 @@ function formatCost(microUsd: number): string {
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<any>(null);
-  const [machine, setMachine] = useState<any>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [task, setTask] = useState<any>(null);
-  const [capabilities, setCapabilities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     api.agents.get(id).then((a) => {
       setAgent(a);
-      if (a.machine_id) api.machines.get(a.machine_id).then(setMachine).catch(() => {});
+      api.agents.sessions(id).then(setSessions).catch(() => {});
       api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
-      authClient.agent.get({ query: { agent_id: id } }).then(({ data }) => {
-        if (data?.agent_capability_grants) {
-          setCapabilities(data.agent_capability_grants.filter((g: any) => g.status === "active").map((g: any) => g.capability));
-        }
-      }).catch(() => {});
     }).finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.agents.get(id).then(setAgent);
+      api.agents.sessions(id).then(setSessions).catch(() => {});
       api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
@@ -93,12 +79,8 @@ export function AgentDetailPage() {
 
   const rgb = agent.public_key ? agentColorRgb(agent.public_key) : "34, 211, 238";
   const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
-  const isWorking = agent.status === "working";
-  const totalTokens = agent.input_tokens + agent.output_tokens + agent.cache_read_tokens;
-  // capabilities loaded from BA via authClient.agent.get
-  const created = new Date(agent.created_at).getTime();
-  const maxLife = 24 * 60 * 60 * 1000;
-  const lifePct = Math.min(((Date.now() - created) / maxLife) * 100, 100);
+  const isOnline = agent.status === "online";
+  const totalTokens = (agent.input_tokens || 0) + (agent.output_tokens || 0) + (agent.cache_read_tokens || 0);
 
   return (
     <div className="min-h-screen bg-surface-primary">
@@ -110,9 +92,9 @@ export function AgentDetailPage() {
 
         {/* ─── Identity Hero ─── */}
         <div
-          className={`bg-surface-secondary rounded-lg border relative overflow-hidden transition-all ${isWorking ? "animate-breathe" : ""}`}
+          className={`bg-surface-secondary rounded-lg border relative overflow-hidden transition-all ${isOnline ? "animate-breathe" : ""}`}
           style={{
-            borderColor: isWorking ? `rgba(${rgb}, 0.3)` : undefined,
+            borderColor: isOnline ? `rgba(${rgb}, 0.3)` : undefined,
             "--breathe-shadow-max": `0 0 40px rgba(${rgb}, 0.15), 0 0 80px rgba(${rgb}, 0.06)`,
             "--breathe-shadow-min": `0 0 16px rgba(${rgb}, 0.05), 0 0 32px rgba(${rgb}, 0.02)`,
           } as React.CSSProperties}
@@ -120,12 +102,12 @@ export function AgentDetailPage() {
           {/* Agent-colored radial gradient backdrop */}
           <div
             className="absolute inset-0 pointer-events-none"
-            style={{ background: `radial-gradient(ellipse at 8% 40%, rgba(${rgb}, ${isWorking ? 0.18 : 0.1}) 0%, transparent 55%)` }}
+            style={{ background: `radial-gradient(ellipse at 8% 40%, rgba(${rgb}, ${isOnline ? 0.18 : 0.1}) 0%, transparent 55%)` }}
           />
 
           <div className="relative p-6">
             <div className="flex items-start gap-6">
-              <AgentIdenticon publicKey={agent.public_key} size={96} glow={isWorking} />
+              <AgentIdenticon publicKey={agent.public_key} size={96} glow={isOnline} />
               <div className="flex-1 min-w-0">
                 <h1 className="font-mono text-2xl font-bold tracking-tight" style={{ color }}>
                   {agent.name}
@@ -134,7 +116,7 @@ export function AgentDetailPage() {
                   <span className="inline-flex items-center gap-2">
                     <span
                       className={`w-2.5 h-2.5 rounded-full ${statusDotClass[agent.status]}`}
-                      style={isWorking ? { backgroundColor: color } : undefined}
+                      style={isOnline ? { backgroundColor: color } : undefined}
                     />
                     <span className="text-sm text-content-secondary">{statusLabels[agent.status]}</span>
                   </span>
@@ -175,59 +157,32 @@ export function AgentDetailPage() {
                   {agent.model && (
                     <span className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{agent.model}</span>
                   )}
-                  {machine && (
-                    <>
-                      <Link to={`/machines/${machine.id}`} className="inline-flex items-center gap-1.5 text-xs hover:text-content-secondary transition-colors bg-surface-tertiary/50 rounded px-2 py-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${machine.status === "online" ? "bg-success" : "bg-warning"}`} />
-                        <span className="font-mono text-content-secondary">{machine.name}</span>
-                      </Link>
-                      {machine.os && <span className="text-[10px] text-content-tertiary bg-surface-tertiary/50 rounded px-2 py-1">{machine.os}</span>}
-                    </>
-                  )}
                 </div>
+
+                {/* Bio */}
+                {agent.bio && (
+                  <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>
+                )}
               </div>
             </div>
-
-            {/* Capabilities — part of identity */}
-            {capabilities.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {capabilities.map((cap) => (
-                  <span
-                    key={cap}
-                    className="text-[10px] font-mono rounded px-2 py-1"
-                    style={{ color, background: `rgba(${rgb}, 0.1)` }}
-                  >
-                    {CAPABILITY_LABELS[cap] || cap}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Lifecycle bar — bottom of hero */}
+          {/* Created / Last active — bottom of hero */}
           <div className="relative px-6 pb-4">
-            <div className="flex justify-between text-[10px] text-content-tertiary font-mono mb-1">
+            <div className="flex gap-4 text-[10px] text-content-tertiary font-mono">
               <span>Created {formatRelative(agent.created_at)}</span>
-              <span>Expires in {formatRelative(new Date(created + maxLife).toISOString())}</span>
+              {agent.last_active_at && <span>Last active {formatRelative(agent.last_active_at)}</span>}
             </div>
-            <div className="h-1 rounded-full bg-surface-tertiary overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{ width: `${lifePct}%`, background: `rgba(${rgb}, 0.3)` }} />
-            </div>
-            {agent.last_active_at && (
-              <div className="text-[10px] text-content-tertiary font-mono mt-1">
-                Last active {formatRelative(agent.last_active_at)}
-              </div>
-            )}
           </div>
         </div>
 
         {/* ─── Telemetry Strip ─── */}
         <div className="grid grid-cols-4 gap-px rounded-lg overflow-hidden" style={{ background: `rgba(${rgb}, 0.12)` }}>
           {[
-            { label: "INPUT", value: formatTokens(agent.input_tokens) },
-            { label: "OUTPUT", value: formatTokens(agent.output_tokens) },
-            { label: "CACHE", value: formatTokens(agent.cache_read_tokens) },
-            { label: "COST", value: formatCost(agent.cost_micro_usd) },
+            { label: "INPUT", value: formatTokens(agent.input_tokens || 0) },
+            { label: "OUTPUT", value: formatTokens(agent.output_tokens || 0) },
+            { label: "CACHE", value: formatTokens(agent.cache_read_tokens || 0) },
+            { label: "COST", value: formatCost(agent.cost_micro_usd || 0) },
           ].map((stat) => (
             <div key={stat.label} className="bg-surface-secondary p-3">
               <div className="text-[10px] text-content-tertiary uppercase tracking-wider font-medium">{stat.label}</div>
@@ -271,6 +226,37 @@ export function AgentDetailPage() {
             </Link>
           ) : (
             <p className="text-sm text-content-tertiary">No task assigned.</p>
+          )}
+        </div>
+
+        {/* ─── Session Chain (Subkey History) ─── */}
+        <div>
+          <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">Sessions</div>
+          {sessions.length === 0 ? (
+            <p className="text-sm text-content-tertiary">No sessions yet.</p>
+          ) : (
+            <div className="space-y-0">
+              {sessions.map((s: any) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-3 py-2 border-l-2 pl-4 ml-1"
+                  style={{ borderColor: s.status === "active" ? `rgba(${rgb}, 0.5)` : undefined }}
+                >
+                  <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
+                    {formatRelative(s.created_at)}
+                  </span>
+                  <code className="font-mono text-[11px] text-accent">{s.id.slice(0, 8)}</code>
+                  <span className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
+                    s.status === "active" ? "bg-accent/15 text-accent" : "bg-zinc-500/15 text-content-tertiary"
+                  }`}>
+                    {s.status}
+                  </span>
+                  {s.machine_name && (
+                    <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

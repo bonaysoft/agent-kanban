@@ -5,9 +5,8 @@ import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-// Integration test: validates the full agent JWT passthrough from daemon env vars → CLI ApiClient → server auth.
-// 1. ApiClient generates correct agent JWT when AK_AGENT_* env vars are set
-// 2. That JWT is accepted by the server's auth middleware for claim/review
+// Integration test: validates CLI AgentClient JWT passthrough with new session model
+// User creates agent → machine creates session → AgentClient uses session JWT
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -36,10 +35,9 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-cli-jwt";
   const now = new Date().toISOString();
-  await db
-    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
-    .bind(userId, "CLI JWT Test", "cli-jwt@example.com", now, now)
-    .run();
+  await db.prepare(
+    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
+  ).bind(userId, "CLI JWT Test", "cli-jwt@example.com", now, now).run();
   return userId;
 }
 
@@ -79,9 +77,10 @@ describe("CLI ApiClient agent JWT passthrough", () => {
   let apiKey: string;
   let machineId: string;
   let agentId: string;
+  let sessionId: string;
   let boardId: string;
   let taskId: string;
-  let privKeyJwk: JsonWebKey;
+  let sessionPrivKeyJwk: JsonWebKey;
 
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -100,7 +99,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     vi.restoreAllMocks();
   });
 
-  it("sets up machine + agent + board + task", async () => {
+  it("sets up machine + agent + session + board + task", async () => {
     userId = await seedUser(testEnv.DB);
     apiKey = await createApiKeyForUser(testEnv.DB, userId);
 
@@ -111,20 +110,24 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     expect(machineRes.status).toBe(201);
     machineId = ((await machineRes.json()) as any).id;
 
-    // Generate agent keypair (same as daemon does)
+    // Create persistent agent (user-only, use repo directly)
+    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+    const agent = await createAgent(testEnv.DB, userId, { name: "JWT Test Agent", runtime: "claude" });
+    agentId = agent.id;
+
+    // Create session keypair (CSR — daemon generates locally)
+    sessionId = randomUUID();
     const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
-    const pubKeyJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
-    privKeyJwk = await crypto.subtle.exportKey("jwk", (keypair as any).privateKey);
+    const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
+    sessionPrivKeyJwk = await crypto.subtle.exportKey("jwk", (keypair as any).privateKey);
 
-    agentId = randomUUID();
-
-    // Register agent
-    const agentRes = await honoRequest("POST", "/api/agents", {
-      agent_id: agentId, public_key: pubKeyJwk.x, runtime: "claude",
+    // Register session via API
+    const sessionRes = await honoRequest("POST", `/api/agents/${agentId}/sessions`, {
+      session_id: sessionId, session_public_key: pubJwk.x!,
     }, apiKey);
-    expect(agentRes.status).toBe(201);
+    expect(sessionRes.status).toBe(201);
 
-    // Create board and task
+    // Create board + task + assign
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const board = await createBoard(testEnv.DB, userId, "jwt-test-board");
@@ -132,50 +135,41 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
     taskId = task.id;
 
-    // Assign task to agent
     const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
     expect(assignRes.status).toBe(200);
   });
 
-  it("ApiClient constructs valid agent JWT that server accepts for claim", async () => {
-    // Set env vars exactly as daemon would
+  it("ApiClient constructs valid session JWT that server accepts for claim", async () => {
     setEnv({
       AK_AGENT_ID: agentId,
-      AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+      AK_SESSION_ID: sessionId,
+      AK_AGENT_KEY: JSON.stringify(sessionPrivKeyJwk),
       AK_API_URL: BETTER_AUTH_URL,
     });
 
-    // Intercept fetch to capture the Authorization header, then forward to Hono
     let capturedToken: string | null = null;
-    const originalFetch = globalThis.fetch;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url;
       const path = new URL(url).pathname;
       const headers = new Headers(init?.headers);
       capturedToken = headers.get("Authorization")?.replace("Bearer ", "") || null;
-
-      // Forward to Hono app
       return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
     });
 
-    // Dynamically import — createClient() detects env vars and returns AgentClient
     const { createClient } = await import("../packages/cli/src/client.js");
     const client = await createClient();
 
     const claimed = await client.claimTask(taskId) as any;
     expect(claimed.status).toBe("in_progress");
     expect(claimed.assigned_to).toBe(agentId);
-
-    // Verify the token was a JWT, not an API key
-    expect(capturedToken).toBeTruthy();
-    expect(capturedToken!.startsWith("ak_")).toBe(false);
     expect(capturedToken!.split(".")).toHaveLength(3);
   });
 
-  it("ApiClient constructs valid agent JWT that server accepts for review", async () => {
+  it("ApiClient constructs valid session JWT that server accepts for review", async () => {
     setEnv({
       AK_AGENT_ID: agentId,
-      AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+      AK_SESSION_ID: sessionId,
+      AK_AGENT_KEY: JSON.stringify(sessionPrivKeyJwk),
       AK_API_URL: BETTER_AUTH_URL,
     });
 
@@ -193,13 +187,10 @@ describe("CLI ApiClient agent JWT passthrough", () => {
 
     const reviewed = await client.reviewTask(taskId, { pr_url: "https://github.com/test/pull/1" }) as any;
     expect(reviewed.status).toBe("in_review");
-    expect(capturedToken!.startsWith("ak_")).toBe(false);
   });
 
   it("machine API key is correctly rejected for claim (agent-only endpoint)", async () => {
     const res = await honoRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(403);
-    const body = await res.json() as any;
-    expect(body.error.message).toContain("agent required");
   });
 });

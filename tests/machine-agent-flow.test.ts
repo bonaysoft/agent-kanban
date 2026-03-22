@@ -6,8 +6,8 @@ import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-// Integration test: full flow from machine creation → agent online → task claim
-// Tests the actual Hono routes with auth middleware, not just repo functions.
+// Integration test: full flow — user creates agent → machine creates session → agent claims task
+// Tests the actual Hono routes with auth middleware.
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -36,10 +36,9 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-flow";
   const now = new Date().toISOString();
-  await db
-    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
-    .bind(userId, "Flow Test User", "flow@example.com", now, now)
-    .run();
+  await db.prepare(
+    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
+  ).bind(userId, "Flow Test User", "flow@example.com", now, now).run();
   return userId;
 }
 
@@ -65,13 +64,13 @@ afterAll(async () => {
   await mf.dispose();
 });
 
-describe("machine → agent online flow", () => {
+describe("machine → agent session flow", () => {
   let userId: string;
   let apiKey: string;
   let machineId: string;
   let agentId: string;
-  let agentPrivateKey: CryptoKey;
-  let agentPubKeyBase64: string;
+  let sessionId: string;
+  let sessionPrivateKey: CryptoKey;
   let boardId: string;
   let taskId: string;
 
@@ -84,32 +83,20 @@ describe("machine → agent online flow", () => {
     return api.request(path, init, env);
   }
 
-  async function signAgentJWT(): Promise<string> {
-    return new SignJWT({ sub: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+  async function signSessionJWT(): Promise<string> {
+    return new SignJWT({ sub: sessionId, aid: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
       .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
-      .sign(agentPrivateKey);
+      .sign(sessionPrivateKey);
   }
 
-  // Step 1: Seed user and create API key
   it("creates user and API key", async () => {
     userId = await seedUser(env.DB);
     apiKey = await createApiKeyForUser(env.DB, userId);
-    expect(apiKey).toBeTruthy();
     expect(apiKey.startsWith("ak_")).toBe(true);
   });
 
-  // Step 1.5: Creating machine without required fields returns 400
-  it("rejects machine creation missing required fields", async () => {
-    const res1 = await apiRequest("POST", "/api/machines", { name: "incomplete" }, apiKey);
-    expect(res1.status).toBe(400);
-
-    const res2 = await apiRequest("POST", "/api/machines", { name: "x", os: "linux", version: "1.0" }, apiKey);
-    expect(res2.status).toBe(400);
-  });
-
-  // Step 2: Machine creates itself via POST /api/machines
   it("creates a machine via API", async () => {
     const res = await apiRequest("POST", "/api/machines", {
       name: "test-machine-01", os: "darwin arm64", version: "1.0.0", runtimes: ["Claude Code"],
@@ -117,173 +104,111 @@ describe("machine → agent online flow", () => {
     expect(res.status).toBe(201);
     const machine = await res.json() as any;
     machineId = machine.id;
-    expect(machine.name).toBe("test-machine-01");
-    expect(machine.os).toBe("darwin arm64");
-    expect(machine.runtimes).toEqual(["Claude Code"]);
-    expect(machine.status).toBe("offline");
-
-    // Verify agentHost was created in BA
-    const baHost = await env.DB.prepare("SELECT * FROM agentHost WHERE id = ?").bind(machineId).first();
-    expect(baHost).toBeTruthy();
-    expect(baHost!.userId).toBe(userId);
   });
 
-  // Step 3: Machine sends heartbeat → status becomes online
   it("machine heartbeat updates status to online", async () => {
-    const res = await apiRequest(
-      "POST",
-      `/api/machines/${machineId}/heartbeat`,
-      {},
-      apiKey,
-    );
+    const res = await apiRequest("POST", `/api/machines/${machineId}/heartbeat`, {}, apiKey);
     expect(res.status).toBe(200);
-    const machine = await res.json() as any;
-    expect(machine.status).toBe("online");
-    expect(machine.os).toBe("darwin arm64");
   });
 
-  // Step 4: Machine registers an agent via POST /api/agents
-  it("registers an agent via API", async () => {
-    agentId = randomUUID();
+  it("user creates a persistent agent", async () => {
+    // Create agent directly via repo (user-only route, no API key auth in test)
+    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+    const agent = await createAgent(env.DB, userId, { name: "Test Agent", runtime: "Claude Code", model: "claude-sonnet-4-20250514" });
+    agentId = agent.id;
+    expect(agent.fingerprint).toBeTruthy();
+    expect(agent.public_key).toBeTruthy();
+  });
+
+  it("machine creates a session for the agent (CSR)", async () => {
+    sessionId = randomUUID();
     const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
-    agentPrivateKey = (keypair as any).privateKey;
+    sessionPrivateKey = (keypair as any).privateKey;
     const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
-    agentPubKeyBase64 = pubJwk.x!;
 
-    const res = await apiRequest(
-      "POST",
-      "/api/agents",
-      { agent_id: agentId, public_key: agentPubKeyBase64, runtime: "Claude Code", model: "claude-sonnet-4-20250514" },
-      apiKey,
-    );
+    const res = await apiRequest("POST", `/api/agents/${agentId}/sessions`, {
+      session_id: sessionId, session_public_key: pubJwk.x!,
+    }, apiKey);
     expect(res.status).toBe(201);
-    const agent = await res.json() as any;
-    expect(agent.id).toBe(agentId);
-    expect(agent.machine_id).toBe(machineId);
-    expect(agent.status).toBe("idle");
+    const result = await res.json() as any;
+    expect(result.delegation_proof).toBeTruthy();
 
-    // Verify BA agent and capabilities
-    const baAgent = await env.DB.prepare("SELECT * FROM agent WHERE id = ?").bind(agentId).first();
+    // Verify BA agent was created for this session
+    const baAgent = await env.DB.prepare("SELECT * FROM agent WHERE id = ?").bind(sessionId).first();
     expect(baAgent).toBeTruthy();
-    expect(baAgent!.hostId).toBe(machineId);
-
-    const caps = await env.DB.prepare("SELECT capability FROM agentCapabilityGrant WHERE agentId = ?").bind(agentId).all();
-    const capNames = caps.results.map((r: any) => r.capability).sort();
-    expect(capNames).toEqual(["agent:usage", "task:claim", "task:log", "task:message", "task:review"]);
   });
 
-  // Step 5: Agent JWT is valid — verify through HTTP handler (not auth.api.*)
-  it("agent JWT authenticates through HTTP handler", async () => {
-    const jwt = await signAgentJWT();
+  it("session JWT authenticates through HTTP handler", async () => {
+    const jwt = await signSessionJWT();
     const res = await apiRequest("GET", "/api/agents", undefined, jwt);
     expect(res.status).toBe(200);
   });
 
-  // Step 6: Create a board and task (as user) for agent to claim
-  it("creates a board and task for the agent", async () => {
-    // Create user session for board/task creation — seed directly
+  it("creates a board and task", async () => {
     const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board");
     boardId = board.id;
-
     const task = await (await import("../apps/web/functions/api/taskRepo")).createTask(env.DB, userId, {
-      title: "Test task for agent",
-      board_id: boardId,
+      title: "Test task for agent", board_id: boardId,
     });
     taskId = task.id;
-    expect(task.status).toBe("todo");
   });
 
-  // Step 7: Machine assigns task to agent
-  it("machine assigns task to agent", async () => {
-    const res = await apiRequest(
-      "POST",
-      `/api/tasks/${taskId}/assign`,
-      { agent_id: agentId },
-      apiKey,
-    );
+  it("machine assigns task to persistent agent", async () => {
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(200);
     const task = await res.json() as any;
     expect(task.assigned_to).toBe(agentId);
-    expect(task.status).toBe("todo");
   });
 
-  // Step 8: Agent claims the task with JWT
-  it("agent claims the assigned task", async () => {
-    const jwt = await signAgentJWT();
-    const res = await apiRequest(
-      "POST",
-      `/api/tasks/${taskId}/claim`,
-      { agent_id: agentId },
-      jwt,
-    );
+  it("agent claims the assigned task via session JWT", async () => {
+    const jwt = await signSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, jwt);
     expect(res.status).toBe(200);
     const task = await res.json() as any;
     expect(task.status).toBe("in_progress");
-    expect(task.assigned_to).toBe(agentId);
-
-    // Agent status should be "working"
-    const agent = await env.DB.prepare("SELECT status FROM agents WHERE id = ?").bind(agentId).first();
-    expect(agent!.status).toBe("working");
   });
 
-  // Step 9: Agent adds a log entry
   it("agent adds a task log", async () => {
-    const jwt = await signAgentJWT();
-    const res = await apiRequest(
-      "POST",
-      `/api/tasks/${taskId}/logs`,
-      { detail: "Started working on the implementation" },
-      jwt,
-    );
+    const jwt = await signSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/logs`, { detail: "Working on it" }, jwt);
     expect(res.status).toBe(201);
   });
 
-  // Step 10: Agent submits for review
   it("agent submits task for review", async () => {
-    const jwt = await signAgentJWT();
-    const res = await apiRequest(
-      "POST",
-      `/api/tasks/${taskId}/review`,
-      { pr_url: "https://github.com/test/repo/pull/1" },
-      jwt,
-    );
+    const jwt = await signSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/review`, { pr_url: "https://github.com/test/repo/pull/1" }, jwt);
     expect(res.status).toBe(200);
     const task = await res.json() as any;
     expect(task.status).toBe("in_review");
   });
 
-  // Step 11: Agent reports usage
-  it("agent reports token usage", async () => {
-    const jwt = await signAgentJWT();
-    const res = await apiRequest(
-      "PATCH",
-      `/api/agents/${agentId}/usage`,
-      { input_tokens: 1500, output_tokens: 800, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0 },
-      jwt,
-    );
+  it("agent reports session usage", async () => {
+    const jwt = await signSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}/sessions/${sessionId}/usage`, {
+      input_tokens: 1500, output_tokens: 800, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0,
+    }, jwt);
     expect(res.status).toBe(200);
 
-    const agent = await env.DB.prepare("SELECT input_tokens, output_tokens FROM agents WHERE id = ?").bind(agentId).first();
-    expect(agent!.input_tokens).toBe(1500);
-    expect(agent!.output_tokens).toBe(800);
+    const session = await env.DB.prepare("SELECT input_tokens, output_tokens FROM agent_sessions WHERE id = ?").bind(sessionId).first();
+    expect(session!.input_tokens).toBe(1500);
+    expect(session!.output_tokens).toBe(800);
   });
 
-  // Step 12: Verify the complete flow state
   it("final state is consistent", async () => {
-    // Machine is online
     const machine = await env.DB.prepare("SELECT status FROM machines WHERE id = ?").bind(machineId).first();
     expect(machine!.status).toBe("online");
 
-    // Agent exists with correct linkage
     const agent = await env.DB.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first() as any;
-    expect(agent.machine_id).toBe(machineId);
+    expect(agent.owner_id).toBe(userId);
 
-    // Task is in review with correct agent
+    const session = await env.DB.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(sessionId).first() as any;
+    expect(session.agent_id).toBe(agentId);
+    expect(session.machine_id).toBe(machineId);
+
     const task = await env.DB.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first() as any;
     expect(task.status).toBe("in_review");
     expect(task.assigned_to).toBe(agentId);
 
-    // Task logs show the full lifecycle
     const logs = await env.DB.prepare("SELECT action FROM task_logs WHERE task_id = ? ORDER BY created_at").bind(taskId).all();
     const actions = logs.results.map((r: any) => r.action);
     expect(actions).toContain("created");

@@ -1,7 +1,6 @@
 import { STALE_TIMEOUT_MS } from "@agent-kanban/shared";
 import type { D1 } from "./db";
 import { releaseTask } from "./taskRepo";
-import { updateAgentStatus } from "./agentRepo";
 
 export async function detectAndReleaseStale(db: D1, boardId: string): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_TIMEOUT_MS).toISOString();
@@ -16,6 +15,5 @@ export async function detectAndReleaseStale(db: D1, boardId: string): Promise<vo
 
   for (const stale of staleTasks.results) {
     await releaseTask(db, stale.id, stale.assigned_to, "timed_out");
-    await updateAgentStatus(db, stale.assigned_to, "offline");
   }
 }

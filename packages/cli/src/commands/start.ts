@@ -2,6 +2,7 @@ import { createInterface } from "readline";
 import type { Command } from "commander";
 import { startDaemon } from "../daemon.js";
 import { setConfigValue, getConfigValue, deleteConfigValue } from "../config.js";
+import { clearLinks } from "../links.js";
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -37,6 +38,7 @@ export function registerStartCommand(program: Command) {
             process.exit(0);
           }
           deleteConfigValue("machine-id");
+          clearLinks();
         }
         setConfigValue("api-key", opts.apiKey);
       }

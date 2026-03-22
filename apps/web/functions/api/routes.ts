@@ -5,7 +5,8 @@ import { authMiddleware } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
-import { createAgent, listAgents, getAgent, getAgentLogs, updateAgentUsage } from "./agentRepo";
+import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
+import { createSession, closeSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -123,65 +124,56 @@ api.get("/api/agents/:id", async (c) => {
 });
 
 api.post("/api/agents", async (c) => {
-
-  const body = await c.req.json<{ agent_id: string; public_key: string; runtime?: string; model?: string }>();
-  if (!body.agent_id || !body.public_key) throw new HTTPException(400, { message: "agent_id and public_key are required" });
-  const machineId = c.get("machineId");
-  if (!machineId) throw new HTTPException(400, { message: "Machine not registered. Run ak start first." });
-
-  // Write to custom agents table (business data)
-  const agent = await createAgent(c.env.DB, machineId, body.agent_id, body.public_key, body.runtime, body.model);
-
-  // Write to Better Auth agent table (auth data) so getAgentSession() works
-  // machineId == agentHost.id (same ID shared between custom machines and BA hosts)
-  const auth = createAuth(c.env);
-  const authCtx = await auth.$context;
-  const jwk = JSON.stringify({ kty: "OKP", crv: "Ed25519", x: body.public_key });
-  const now = new Date();
-  await authCtx.adapter.create({
-    model: "agent",
-    data: {
-      id: body.agent_id,
-      name: agent.name,
-      userId: c.get("ownerId") ?? null,
-      hostId: machineId,
-      status: "active",
-      mode: "autonomous",
-      publicKey: jwk,
-      activatedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    forceAllowId: true,
-  });
-
-  // Grant all capabilities to the agent
-  const capabilities = ["task:claim", "task:review", "task:log", "task:message", "agent:usage"];
-  for (const cap of capabilities) {
-    await authCtx.adapter.create({
-      model: "agentCapabilityGrant",
-      data: {
-        agentId: body.agent_id,
-        capability: cap,
-        grantedBy: c.get("ownerId") ?? null,
-        deniedBy: null,
-        expiresAt: null,
-        status: "active",
-        reason: null,
-        constraints: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-  }
-
+  const body = await c.req.json<{ name: string; bio?: string; soul?: string; runtime?: string; model?: string; skills?: string[] }>();
+  if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  const agent = await createAgent(c.env.DB, c.get("ownerId"), body);
   return c.json(agent, 201);
 });
 
-api.patch("/api/agents/:id/usage", async (c) => {
-
+api.patch("/api/agents/:id", async (c) => {
   const body = await c.req.json();
-  await updateAgentUsage(c.env.DB, c.req.param("id"), body);
+  if (body.skills && Array.isArray(body.skills)) body.skills = JSON.stringify(body.skills);
+  const agent = await updateAgent(c.env.DB, c.req.param("id"), body);
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  return c.json(agent);
+});
+
+api.delete("/api/agents/:id", async (c) => {
+  const deleted = await deleteAgent(c.env.DB, c.req.param("id"));
+  if (!deleted) throw new HTTPException(404, { message: "Agent not found" });
+  return c.json({ ok: true });
+});
+
+// ─── Agent Sessions ───
+
+api.post("/api/agents/:agentId/sessions", async (c) => {
+  const body = await c.req.json<{ session_id: string; session_public_key: string }>();
+  if (!body.session_id || !body.session_public_key) {
+    throw new HTTPException(400, { message: "session_id and session_public_key are required" });
+  }
+  const machineId = c.get("machineId");
+  if (!machineId) throw new HTTPException(400, { message: "Machine not registered" });
+
+  const result = await createSession(
+    c.env.DB, c.env, c.req.param("agentId"), machineId,
+    body.session_id, body.session_public_key, c.get("ownerId"),
+  );
+  return c.json(result, 201);
+});
+
+api.delete("/api/agents/:agentId/sessions/:sessionId", async (c) => {
+  await closeSession(c.env.DB, c.req.param("sessionId"));
+  return c.json({ ok: true });
+});
+
+api.get("/api/agents/:agentId/sessions", async (c) => {
+  const sessions = await listSessions(c.env.DB, c.req.param("agentId"));
+  return c.json(sessions);
+});
+
+api.patch("/api/agents/:agentId/sessions/:sessionId/usage", async (c) => {
+  const body = await c.req.json();
+  await updateSessionUsage(c.env.DB, c.req.param("sessionId"), body);
   return c.json({ ok: true });
 });
 
@@ -334,20 +326,22 @@ api.get("/api/tasks/:id/logs", async (c) => {
 // ─── Messages ───
 
 api.post("/api/tasks/:id/messages", async (c) => {
-  const body = await c.req.json<{ agent_id?: string; role: string; content: string }>();
-  const agentId = c.get("agentId") || body.agent_id;
-  if (!agentId || !body.role || !body.content) {
-    throw new HTTPException(400, { message: "agent_id, role, and content are required" });
+  const body = await c.req.json<{ sender_type: string; sender_id?: string; content: string }>();
+  if (!body.sender_type || !body.content) {
+    throw new HTTPException(400, { message: "sender_type and content are required" });
   }
-  if (body.role !== "human" && body.role !== "agent") {
-    throw new HTTPException(400, { message: "role must be 'human' or 'agent'" });
+  if (body.sender_type !== "user" && body.sender_type !== "agent") {
+    throw new HTTPException(400, { message: "sender_type must be 'user' or 'agent'" });
   }
+
+  const senderId = body.sender_id || (body.sender_type === "agent" ? c.get("agentId") : c.get("ownerId"));
+  if (!senderId) throw new HTTPException(400, { message: "sender_id is required" });
 
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const message = await createMessage(c.env.DB, c.req.param("id"), agentId, body.role, body.content);
+  const message = await createMessage(c.env.DB, c.req.param("id"), body.sender_type, senderId, body.content);
   return c.json(message, 201);
 });
 

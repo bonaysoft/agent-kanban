@@ -55,6 +55,7 @@ export interface TaskLog {
   id: string;
   task_id: string;
   agent_id: string | null;
+  session_id: string | null;
   action: TaskAction;
   detail: string | null;
   created_at: string;
@@ -105,34 +106,62 @@ export interface Machine {
 }
 
 export interface MachineWithAgents extends Machine {
-  agent_count: number;
-  active_agent_count: number;
+  session_count: number;
+  active_session_count: number;
 }
 
 // ─── Agent ───
 
-export type AgentStatus = "idle" | "working" | "offline";
+export type AgentStatus = "online" | "offline";
 
 export interface Agent {
   id: string;
-  machine_id: string;
+  owner_id: string;
   name: string;
-  role_id: string | null;
-  status: AgentStatus;
-  public_key: string;
+  bio: string | null;
+  soul: string | null;
   runtime: string | null;
   model: string | null;
+  skills: string | null;
+  public_key: string;
+  fingerprint: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentWithActivity extends Agent {
+  status: AgentStatus;
+  last_active_at: string | null;
+  task_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_micro_usd: number;
+}
+
+// ─── Agent Session ───
+
+export type AgentSessionStatus = "active" | "closed";
+
+export interface AgentSession {
+  id: string;
+  agent_id: string;
+  machine_id: string;
+  status: AgentSessionStatus;
+  public_key: string;
+  delegation_proof: string;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
   cache_creation_tokens: number;
   cost_micro_usd: number;
   created_at: string;
+  closed_at: string | null;
 }
 
-export interface AgentWithActivity extends Agent {
-  last_active_at: string | null;
-  task_count: number;
+export interface AgentSessionWithMachine extends AgentSession {
+  machine_name: string;
 }
 
 // ─── Repository ───
@@ -148,13 +177,13 @@ export interface Repository {
 
 // ─── Message ───
 
-export type MessageRole = "human" | "agent";
+export type SenderType = "user" | "agent";
 
 export interface Message {
   id: string;
   task_id: string;
-  agent_id: string;
-  role: MessageRole;
+  sender_type: SenderType;
+  sender_id: string;
   content: string;
   created_at: string;
 }
@@ -190,6 +219,28 @@ export interface CompleteTaskInput {
   result?: string;
   pr_url?: string;
   agent_id?: string;
+}
+
+export interface CreateAgentInput {
+  name: string;
+  bio?: string;
+  soul?: string;
+  runtime?: string;
+  model?: string;
+  skills?: string[];
+}
+
+export interface CreateSessionInput {
+  session_id: string;
+  session_public_key: string;
+}
+
+export interface SessionUsageInput {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_micro_usd: number;
 }
 
 export interface CreateBoardInput {

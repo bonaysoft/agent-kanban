@@ -167,7 +167,7 @@ export class ProcessManager {
     if (event.type === "assistant" && Array.isArray(event.message?.content)) {
       for (const block of event.message.content) {
         if (block.type === "text" && block.text) {
-          agentClient.sendMessage(taskId, { agent_id: sessionId, role: "agent", content: block.text })
+          agentClient.sendMessage(taskId, { sender_type: "agent", sender_id: agentClient.getAgentId(), content: block.text })
             .catch((err: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${err.message}`));
         }
       }
@@ -176,7 +176,7 @@ export class ProcessManager {
       const cost = event.total_cost_usd || 0;
       const usage = event.usage || {};
       console.log(`[INFO] Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
-      agentClient.updateAgentUsage(sessionId, {
+      agentClient.updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
         input_tokens: usage.input_tokens || 0,
         output_tokens: usage.output_tokens || 0,
         cache_read_tokens: usage.cache_read_input_tokens || 0,
