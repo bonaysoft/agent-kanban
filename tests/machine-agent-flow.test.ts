@@ -25,14 +25,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = [
-    "0001_initial.sql",
-    "0002_auth_redesign.sql",
-    "0003_agent_identity.sql",
-    "0004_better_auth_plugins.sql",
-    "0005_agent_runtime_model.sql",
-    "0006_machine_usage.sql",
-  ];
+  const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {

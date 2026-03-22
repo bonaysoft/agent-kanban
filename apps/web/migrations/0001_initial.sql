@@ -48,6 +48,122 @@ CREATE TABLE "verification" (
   updatedAt  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Better Auth plugins: API key, Agent Auth
+CREATE TABLE "apikey" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "configId" TEXT NOT NULL,
+  "name" TEXT,
+  "start" TEXT,
+  "referenceId" TEXT NOT NULL,
+  "prefix" TEXT,
+  "key" TEXT NOT NULL,
+  "refillInterval" INTEGER,
+  "refillAmount" INTEGER,
+  "lastRefillAt" DATE,
+  "enabled" INTEGER,
+  "rateLimitEnabled" INTEGER,
+  "rateLimitTimeWindow" INTEGER,
+  "rateLimitMax" INTEGER,
+  "requestCount" INTEGER,
+  "remaining" INTEGER,
+  "lastRequest" DATE,
+  "expiresAt" DATE,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL,
+  "permissions" TEXT,
+  "metadata" TEXT
+);
+CREATE INDEX "apikey_configId_idx" ON "apikey" ("configId");
+CREATE INDEX "apikey_referenceId_idx" ON "apikey" ("referenceId");
+CREATE INDEX "apikey_key_idx" ON "apikey" ("key");
+
+CREATE TABLE "agentHost" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "name" TEXT,
+  "userId" TEXT REFERENCES "user" ("id") ON DELETE CASCADE,
+  "defaultCapabilities" TEXT,
+  "publicKey" TEXT,
+  "kid" TEXT,
+  "jwksUrl" TEXT,
+  "enrollmentTokenHash" TEXT,
+  "enrollmentTokenExpiresAt" DATE,
+  "status" TEXT NOT NULL,
+  "activatedAt" DATE,
+  "expiresAt" DATE,
+  "lastUsedAt" DATE,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL
+);
+CREATE INDEX "agentHost_userId_idx" ON "agentHost" ("userId");
+CREATE INDEX "agentHost_kid_idx" ON "agentHost" ("kid");
+CREATE INDEX "agentHost_enrollmentTokenHash_idx" ON "agentHost" ("enrollmentTokenHash");
+CREATE INDEX "agentHost_status_idx" ON "agentHost" ("status");
+
+CREATE TABLE "agent" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "userId" TEXT REFERENCES "user" ("id") ON DELETE CASCADE,
+  "hostId" TEXT NOT NULL REFERENCES "agentHost" ("id") ON DELETE CASCADE,
+  "status" TEXT NOT NULL,
+  "mode" TEXT NOT NULL,
+  "publicKey" TEXT NOT NULL,
+  "kid" TEXT,
+  "jwksUrl" TEXT,
+  "lastUsedAt" DATE,
+  "activatedAt" DATE,
+  "expiresAt" DATE,
+  "metadata" TEXT,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL
+);
+CREATE INDEX "agent_userId_idx" ON "agent" ("userId");
+CREATE INDEX "agent_hostId_idx" ON "agent" ("hostId");
+CREATE INDEX "agent_status_idx" ON "agent" ("status");
+CREATE INDEX "agent_kid_idx" ON "agent" ("kid");
+
+CREATE TABLE "agentCapabilityGrant" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "agentId" TEXT NOT NULL REFERENCES "agent" ("id") ON DELETE CASCADE,
+  "capability" TEXT NOT NULL,
+  "deniedBy" TEXT REFERENCES "user" ("id") ON DELETE CASCADE,
+  "grantedBy" TEXT REFERENCES "user" ("id") ON DELETE CASCADE,
+  "expiresAt" DATE,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL,
+  "status" TEXT NOT NULL,
+  "reason" TEXT,
+  "constraints" TEXT
+);
+CREATE INDEX "agentCapabilityGrant_agentId_idx" ON "agentCapabilityGrant" ("agentId");
+CREATE INDEX "agentCapabilityGrant_capability_idx" ON "agentCapabilityGrant" ("capability");
+CREATE INDEX "agentCapabilityGrant_grantedBy_idx" ON "agentCapabilityGrant" ("grantedBy");
+CREATE INDEX "agentCapabilityGrant_status_idx" ON "agentCapabilityGrant" ("status");
+
+CREATE TABLE "approvalRequest" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "method" TEXT NOT NULL,
+  "agentId" TEXT REFERENCES "agent" ("id") ON DELETE CASCADE,
+  "hostId" TEXT REFERENCES "agentHost" ("id") ON DELETE CASCADE,
+  "userId" TEXT REFERENCES "user" ("id") ON DELETE CASCADE,
+  "capabilities" TEXT,
+  "status" TEXT NOT NULL,
+  "userCodeHash" TEXT,
+  "loginHint" TEXT,
+  "bindingMessage" TEXT,
+  "clientNotificationToken" TEXT,
+  "clientNotificationEndpoint" TEXT,
+  "deliveryMode" TEXT,
+  "interval" INTEGER NOT NULL,
+  "lastPolledAt" DATE,
+  "expiresAt" DATE NOT NULL,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL
+);
+CREATE INDEX "approvalRequest_agentId_idx" ON "approvalRequest" ("agentId");
+CREATE INDEX "approvalRequest_hostId_idx" ON "approvalRequest" ("hostId");
+CREATE INDEX "approvalRequest_userId_idx" ON "approvalRequest" ("userId");
+CREATE INDEX "approvalRequest_status_idx" ON "approvalRequest" ("status");
+
 -- Boards
 CREATE TABLE boards (
   id          TEXT PRIMARY KEY,
@@ -71,16 +187,16 @@ CREATE TABLE repositories (
 CREATE INDEX idx_repositories_owner ON repositories(owner_id);
 CREATE UNIQUE INDEX idx_repositories_owner_url ON repositories(owner_id, url);
 
--- Machines
+-- Machines (no key_hash — auth handled by Better Auth API key plugin)
 CREATE TABLE machines (
   id                TEXT PRIMARY KEY,
   owner_id          TEXT NOT NULL,
-  key_hash          TEXT NOT NULL,
   name              TEXT NOT NULL,
-  status            TEXT NOT NULL DEFAULT 'online',
+  status            TEXT NOT NULL DEFAULT 'offline',
   os                TEXT,
   version           TEXT,
   runtimes          TEXT,
+  usage_info        TEXT,
   last_heartbeat_at TEXT,
   created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -93,6 +209,9 @@ CREATE TABLE agents (
   name                  TEXT NOT NULL,
   role_id               TEXT,
   status                TEXT NOT NULL DEFAULT 'idle',
+  public_key            TEXT,
+  runtime               TEXT,
+  model                 TEXT,
   input_tokens          INTEGER NOT NULL DEFAULT 0,
   output_tokens         INTEGER NOT NULL DEFAULT 0,
   cache_read_tokens     INTEGER NOT NULL DEFAULT 0,
