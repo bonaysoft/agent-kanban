@@ -1,6 +1,7 @@
+import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, platform } from "os";
 import type { UsageInfo } from "@agent-kanban/shared";
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
@@ -9,12 +10,23 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cachedUsage: UsageInfo | null = null;
 let cachedAt = 0;
+let cachedToken: string | null = null;
+
+function parseToken(raw: string): string | null {
+  const creds = JSON.parse(raw);
+  return creds.claudeAiOauth?.accessToken || null;
+}
 
 function readOAuthToken(): string | null {
+  if (cachedToken) return cachedToken;
   try {
-    const raw = readFileSync(CREDENTIALS_PATH, "utf-8");
-    const creds = JSON.parse(raw);
-    return creds.claudeAiOauth?.accessToken || null;
+    if (platform() === "darwin") {
+      const raw = execSync('security find-generic-password -s "Claude Code-credentials" -w', { stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+      cachedToken = parseToken(raw);
+    } else {
+      cachedToken = parseToken(readFileSync(CREDENTIALS_PATH, "utf-8"));
+    }
+    return cachedToken;
   } catch {
     return null;
   }

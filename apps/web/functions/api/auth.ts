@@ -87,7 +87,7 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
     return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
   }
 
-  c.set("ownerId", result.key.userId);
+  c.set("ownerId", result.key.referenceId);
   c.set("identityType", "machine");
   c.set("apiKeyId", result.key.id);
   const metadata = result.key.metadata as Record<string, any> | null;

@@ -31,11 +31,16 @@ export async function upsertMachineHeartbeat(
 ): Promise<Machine> {
   const now = new Date().toISOString();
   const runtimesStr = info.runtimes?.join(",") || null;
-  const usageStr = info.usage_info ? JSON.stringify(info.usage_info) : null;
 
-  await db.prepare(
-    "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, usage_info = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
-  ).bind(info.name, info.os || null, info.version || null, runtimesStr, usageStr, now, machineId).run();
+  if (info.usage_info) {
+    await db.prepare(
+      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, usage_info = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
+    ).bind(info.name, info.os || null, info.version || null, runtimesStr, JSON.stringify(info.usage_info), now, machineId).run();
+  } else {
+    await db.prepare(
+      "UPDATE machines SET name = ?, os = ?, version = ?, runtimes = ?, status = 'online', last_heartbeat_at = ? WHERE id = ?"
+    ).bind(info.name, info.os || null, info.version || null, runtimesStr, now, machineId).run();
+  }
 
   const row = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine & { usage_info: string | null }>();
   return parseMachineUsage(row!);

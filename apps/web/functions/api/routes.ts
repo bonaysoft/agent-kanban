@@ -66,14 +66,14 @@ api.post("/api/machines", async (c) => {
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
   const machine = await createMachine(c.env.DB, c.get("ownerId"), body.name || "unnamed");
 
-  // Bind this API key to the machine via metadata
+  // Bind this API key to the machine via metadata, and create BA agentHost
   const auth = createAuth(c.env);
-  await auth.api.updateApiKey({
-    body: { keyId: c.get("apiKeyId")!, metadata: { machineId: machine.id } },
-  });
-
-  // Create a Better Auth agentHost using the same ID as the machine
   const authCtx = await auth.$context;
+  await authCtx.adapter.update({
+    model: "apikey",
+    where: [{ field: "id", value: c.get("apiKeyId")! }],
+    update: { metadata: JSON.stringify({ machineId: machine.id }) },
+  });
   const now = new Date();
   await authCtx.adapter.create({
     model: "agentHost",

@@ -30,6 +30,7 @@ export function createAuth(env: Env) {
       apiKey({
         defaultPrefix: "ak_",
         enableMetadata: true,
+        rateLimitEnabled: false,
       }),
       agentAuth({
         allowedKeyAlgorithms: ["Ed25519"],
