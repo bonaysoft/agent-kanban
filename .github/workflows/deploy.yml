@@ -62,6 +62,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
 
       - name: Sync version from tag

@@ -2,6 +2,11 @@
   "name": "agent-kanban",
   "version": "1.0.2",
   "description": "CLI for Agent Kanban — agent-first cross-project task board",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bonaysoft/agent-kanban.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "bin": {
     "agent-kanban": "./dist/index.js",
