@@ -44,7 +44,8 @@ api.use("/api/*", async (c, next) => {
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
   const body = await c.req.json<{ version?: string; runtimes?: string[]; usage_info?: any }>();
-  const updated = await machineHeartbeat(c.env.DB, c.req.param("id"), body);
+  const updated = await machineHeartbeat(c.env.DB, c.req.param("id"), c.get("ownerId"), body);
+  if (!updated) throw new HTTPException(404, { message: "Machine not found" });
   return c.json(updated);
 });
 
@@ -54,7 +55,7 @@ api.get("/api/machines", async (c) => {
 });
 
 api.get("/api/machines/:id", async (c) => {
-  const machine = await getMachine(c.env.DB, c.req.param("id"));
+  const machine = await getMachine(c.env.DB, c.req.param("id"), c.get("ownerId"));
   if (!machine) throw new HTTPException(404, { message: "Machine not found" });
   return c.json(machine);
 });
@@ -96,7 +97,7 @@ api.post("/api/machines", async (c) => {
 api.delete("/api/machines/:id", async (c) => {
 
   const machineId = c.req.param("id");
-  const deleted = await deleteMachine(c.env.DB, machineId);
+  const deleted = await deleteMachine(c.env.DB, machineId, c.get("ownerId"));
   if (!deleted) throw new HTTPException(404, { message: "Machine not found" });
 
   // Clean up BA data: delete agentHost (cascades to agent + agentCapabilityGrant via FK)
@@ -110,12 +111,12 @@ api.delete("/api/machines/:id", async (c) => {
 // ─── Agents ───
 
 api.get("/api/agents", async (c) => {
-  const agents = await listAgents(c.env.DB);
+  const agents = await listAgents(c.env.DB, c.get("ownerId"));
   return c.json(agents);
 });
 
 api.get("/api/agents/:id", async (c) => {
-  const agent = await getAgent(c.env.DB, c.req.param("id"));
+  const agent = await getAgent(c.env.DB, c.req.param("id"), c.get("ownerId"));
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   const logs = await getAgentLogs(c.env.DB, c.req.param("id"));
   return c.json({ ...agent, logs });

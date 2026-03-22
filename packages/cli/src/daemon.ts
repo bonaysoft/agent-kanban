@@ -1,12 +1,12 @@
 import { existsSync, writeFileSync, unlinkSync, readFileSync } from "fs";
 import { join } from "path";
-import { homedir, hostname, platform, arch, release } from "os";
+import { hostname, platform, arch, release } from "os";
 import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { ApiClient, AgentClient } from "./client.js";
 import { ProcessManager } from "./processManager.js";
 import { getLinks, findPathForRepository } from "./links.js";
-import { getConfigValue, setConfigValue } from "./config.js";
+import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
 import { getUsage } from "./usage.js";
 
 // Daemon Lifecycle:
@@ -15,8 +15,6 @@ import { getUsage } from "./usage.js";
 //       → SPAWNING → processManager.spawn()
 //     → POLLING (loop)
 //   SIGINT → SHUTTING_DOWN → kill agents → release tasks → remove PID → exit
-
-const PID_FILE = join(homedir(), ".agent-kanban", "daemon.pid");
 
 export interface DaemonOptions {
   maxConcurrent: number;
@@ -30,11 +28,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   if (existsSync(PID_FILE)) {
     const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
     try {
-      process.kill(pid, 0); // Check if process exists
+      process.kill(pid, 0);
       console.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
       process.exit(1);
     } catch {
-      // Stale PID file — process is dead, clean up
       unlinkSync(PID_FILE);
     }
   }
@@ -51,7 +48,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
 
   const pm = new ProcessManager(client, opts.agentCli, () => {
-    // Slot freed — trigger immediate poll
     schedulePoll(0);
   }, opts.taskTimeout);
 
@@ -60,7 +56,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   let backoffMs = opts.pollInterval || 10000;
   const baseInterval = opts.pollInterval || 10000;
 
-  // Graceful shutdown
   const shutdown = async () => {
     if (!running) return;
     running = false;
@@ -80,6 +75,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
   let machineId = getConfigValue("machine-id");
+
   if (!machineId) {
     const machine = await client.registerMachine(machineInfo);
     machineId = machine.id;
@@ -87,9 +83,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     console.log(`[INFO] Machine registered: ${machineId}`);
   }
 
-  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes }).catch((err: any) =>
-    console.error(`[WARN] Initial heartbeat failed: ${err.message}`)
-  );
+  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
   console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
@@ -116,7 +110,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const tasks = await client.listTasks({ status: "todo" }) as any[];
 
-      // Filter out blocked, already-assigned, already-spawned, and tasks without a linked repo
       const available = tasks.filter((t: any) => {
         if (t.blocked || t.assigned_to) return false;
         if (pm.hasTask(t.id)) return false;
@@ -134,19 +127,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
-      // Pick the first available task
       const task = available[0];
       const repoDir = findPathForRepository(task.repository_id)!;
       const sessionId = randomUUID();
 
-      // Generate ephemeral Ed25519 keypair for this agent
       const { publicKey, privateKey } = await crypto.subtle.generateKey(
         { name: "Ed25519" } as any, true, ["sign", "verify"]
       );
       const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
       const pubKeyBase64 = pubKeyJwk.x;
 
-      // Register agent with public key, runtime, then assign the task
       try {
         await client.registerAgent(sessionId, pubKeyBase64, opts.agentCli);
         await client.assignTask(task.id, sessionId);
@@ -160,7 +150,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Assigned task ${task.id}: ${task.title} → agent ${sessionId}`);
 
-      // Ensure the agent-kanban skill is installed in the target repo
       if (!ensureSkill(repoDir)) {
         console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
         await client.releaseTask(task.id).catch((err: any) =>
@@ -170,20 +159,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
-      // Create agent-specific client with JWT auth
       const agentClient = new AgentClient(
         getConfigValue("api-url")!,
         sessionId,
         privateKey,
       );
 
-      // Notify the agent — it will claim, work, create PR, and submit for review
       const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nFollow the agent-kanban skill workflow: claim the task, do the work, create a PR with gh, then submit for review with ak task review --pr-url <url>. Do NOT call task complete — only humans can complete tasks.`;
       await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient);
 
-      // Reset backoff on success
       backoffMs = baseInterval;
-      schedulePoll(1000); // Quick re-poll for more tasks
+      schedulePoll(1000);
 
     } catch (err: any) {
       console.error(`[WARN] Poll error: ${err.message}`);
@@ -192,7 +178,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     }
   }
 
-  // Start first poll
   schedulePoll(0);
 }
 
@@ -211,13 +196,11 @@ function ensureSkill(repoDir: string): boolean {
         stdio: "pipe",
       });
     } else {
-      // Check for updates
       const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
       if (result.includes("up to date")) return true;
       console.log(`[INFO] Skill "${SKILL_NAME}" updated in ${repoDir}`);
     }
 
-    // Commit any changes
     execSync(`git add .claude/skills/ && git diff --cached --quiet || git commit -m "chore: update ${SKILL_NAME} skill"`, {
       cwd: repoDir,
       stdio: "pipe",

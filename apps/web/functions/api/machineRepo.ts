@@ -24,16 +24,17 @@ export async function createMachine(db: D1, ownerId: string, info: CreateMachine
   return { id, owner_id: ownerId, name: info.name, status: "offline", os: info.os, version: info.version, runtimes: info.runtimes, usage_info: null, last_heartbeat_at: null, created_at: now };
 }
 
-export async function deleteMachine(db: D1, machineId: string): Promise<boolean> {
-  const result = await db.prepare("DELETE FROM machines WHERE id = ?").bind(machineId).run();
+export async function deleteMachine(db: D1, machineId: string, ownerId: string): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM machines WHERE id = ? AND owner_id = ?").bind(machineId, ownerId).run();
   return result.meta.changes > 0;
 }
 
 export async function heartbeat(
   db: D1,
   machineId: string,
+  ownerId: string,
   info: HeartbeatInfo,
-): Promise<Machine> {
+): Promise<Machine | null> {
   const now = new Date().toISOString();
   const sets: string[] = ["status = 'online'", "last_heartbeat_at = ?"];
   const binds: any[] = [now];
@@ -42,8 +43,9 @@ export async function heartbeat(
   if (info.runtimes) { sets.push("runtimes = ?"); binds.push(JSON.stringify(info.runtimes)); }
   if (info.usage_info) { sets.push("usage_info = ?"); binds.push(JSON.stringify(info.usage_info)); }
 
-  binds.push(machineId);
-  await db.prepare(`UPDATE machines SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+  binds.push(machineId, ownerId);
+  const result = await db.prepare(`UPDATE machines SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`).bind(...binds).run();
+  if (result.meta.changes === 0) return null;
 
   const row = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine & { usage_info: string | null }>();
   return parseMachineJson(row!);
@@ -63,15 +65,15 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
   return result.results.map(parseMachineJson);
 }
 
-export async function getMachine(db: D1, machineId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
+export async function getMachine(db: D1, machineId: string, ownerId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
   await detectStaleMachines(db);
 
   const machine = await db.prepare(`
     SELECT m.*,
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id) as agent_count,
       (SELECT COUNT(*) FROM agents a WHERE a.machine_id = m.id AND a.status = 'working') as active_agent_count
-    FROM machines m WHERE m.id = ?
-  `).bind(machineId).first<MachineWithAgents>();
+    FROM machines m WHERE m.id = ? AND m.owner_id = ?
+  `).bind(machineId, ownerId).first<MachineWithAgents>();
 
   if (!machine) return null;
 

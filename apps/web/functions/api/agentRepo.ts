@@ -19,24 +19,28 @@ export async function createAgent(
   return { id: agentId, machine_id: machineId, name, role_id: null, status: "idle", public_key: publicKey, runtime: runtime ?? null, model: model ?? null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0, created_at: now };
 }
 
-export async function listAgents(db: D1): Promise<AgentWithActivity[]> {
+export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
   const result = await db.prepare(`
     SELECT a.*,
       (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count
     FROM agents a
+    JOIN machines m ON a.machine_id = m.id
+    WHERE m.owner_id = ?
     ORDER BY a.created_at DESC
-  `).all<AgentWithActivity>();
+  `).bind(ownerId).all<AgentWithActivity>();
   return result.results;
 }
 
-export async function getAgent(db: D1, agentId: string): Promise<AgentWithActivity | null> {
+export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
   return db.prepare(`
     SELECT a.*,
       (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count
-    FROM agents a WHERE a.id = ?
-  `).bind(agentId).first<AgentWithActivity>();
+    FROM agents a
+    JOIN machines m ON a.machine_id = m.id
+    WHERE a.id = ? AND m.owner_id = ?
+  `).bind(agentId, ownerId).first<AgentWithActivity>();
 }
 
 export async function getAgentLogs(db: D1, agentId: string): Promise<any[]> {

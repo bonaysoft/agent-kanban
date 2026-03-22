@@ -2,8 +2,7 @@ name = "agent-kanban"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Auth config: production uses `wrangler secret put`
-# Dev values are passed via --binding in the dev script (package.json)
+# Auth config: production uses `wrangler secret put`, dev uses .dev.vars
 
 [[d1_databases]]
 binding = "DB"

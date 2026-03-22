@@ -33,3 +33,11 @@ export function setConfigValue(key: string, value: string): void {
   (config as Record<string, string>)[key] = value;
   writeConfig(config);
 }
+
+export function deleteConfigValue(key: string): void {
+  const config = readConfig();
+  delete (config as Record<string, string>)[key];
+  writeConfig(config);
+}
+
+export const PID_FILE = join(CONFIG_DIR, "daemon.pid");

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev --compatibility-flags nodejs_compat -b AUTH_SECRET=dev-secret-change-in-production-32ch -b BETTER_AUTH_URL=http://localhost:8788 -b TRUSTED_ORIGINS=http://localhost:5173 -b GITHUB_CLIENT_ID= -b GITHUB_CLIENT_SECRET= -- vite",
+    "dev": "B=$(awk 'NF{printf \"-b %s \", $0}' .dev.vars) && wrangler pages dev --compatibility-flags nodejs_compat $B -- vite",
     "build": "vite build",
     "preview": "wrangler pages dev dist",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local"

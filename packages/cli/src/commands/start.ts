@@ -1,6 +1,17 @@
+import { createInterface } from "readline";
 import type { Command } from "commander";
 import { startDaemon } from "../daemon.js";
-import { setConfigValue, getConfigValue } from "../config.js";
+import { setConfigValue, getConfigValue, deleteConfigValue } from "../config.js";
+
+function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y");
+    });
+  });
+}
 
 export function registerStartCommand(program: Command) {
   program
@@ -14,7 +25,21 @@ export function registerStartCommand(program: Command) {
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
       if (opts.apiUrl) setConfigValue("api-url", opts.apiUrl);
-      if (opts.apiKey) setConfigValue("api-key", opts.apiKey);
+      if (opts.apiKey) {
+        const oldKey = getConfigValue("api-key");
+        if (oldKey && oldKey !== opts.apiKey && getConfigValue("machine-id")) {
+          const machineId = getConfigValue("machine-id");
+          const yes = await confirm(
+            `This machine is already registered (${machineId}) with a different API key.\nSwitch to the new key and re-register? [y/N] `
+          );
+          if (!yes) {
+            console.log("Aborted.");
+            process.exit(0);
+          }
+          deleteConfigValue("machine-id");
+        }
+        setConfigValue("api-key", opts.apiKey);
+      }
 
       if (!getConfigValue("api-url") || !getConfigValue("api-key")) {
         console.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
