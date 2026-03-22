@@ -24,7 +24,7 @@ api.onError((err, c) => {
 });
 
 // Better Auth handler — must be before auth middleware
-api.on(["GET", "POST"], "/api/auth/*", async (c) => {
+api.on(["GET", "POST"], "/api/auth/**", async (c) => {
   try {
     const auth = createAuth(c.env);
     return await auth.handler(c.req.raw);

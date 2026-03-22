@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { api } from "../lib/api";
-import { authClient } from "../lib/auth-client";
+import { authClient, getAuthToken } from "../lib/auth-client";
 import { formatRelative } from "../components/TaskDetailFields";
 
 const statusDotColors: Record<string, string> = {
@@ -56,7 +56,11 @@ export function MachinesPage() {
     // Poll API key metadata — daemon registers machineId on first heartbeat
     const keyId = data.id;
     pollRef.current = setInterval(async () => {
-      const { data: keyData } = await authClient.apiKey.get({ id: keyId });
+      const res = await fetch(`/api/auth/api-key/get?id=${keyId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (!res.ok) return;
+      const keyData = await res.json();
       const machineId = keyData?.metadata?.machineId;
       if (!machineId) return;
       const m = await api.machines.get(machineId);

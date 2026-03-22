@@ -28,7 +28,8 @@ export function createAuth(env: Env) {
     plugins: [
       bearer(),
       apiKey({
-        apiKeyPrefix: "ak",
+        defaultPrefix: "ak_",
+        enableMetadata: true,
       }),
       agentAuth({
         allowedKeyAlgorithms: ["Ed25519"],
