@@ -102,9 +102,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@agent-kanban/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@auth/agent':
         specifier: ^0.3.0
         version: 0.3.0
