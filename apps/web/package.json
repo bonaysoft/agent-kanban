@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "wrangler pages dev dist",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",
+    "db:reset": "rm -rf .wrangler/state && pnpm db:migrate",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
