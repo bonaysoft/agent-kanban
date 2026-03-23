@@ -64,7 +64,7 @@ taskCmd
   .option("--priority <priority>", "Priority (low, medium, high, urgent)")
   .option("--labels <labels>", "Comma-separated labels")
   .option("--input <json>", "JSON input payload")
-  .option("--agent-name <name>", "Agent identity")
+  .option("--assign-to <id>", "Agent ID to assign the task to")
   .option("--parent <id>", "Parent task ID (creates subtask)")
   .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
   .option("--format <format>", "Output format (json, text)")
@@ -78,7 +78,7 @@ taskCmd
     }
     if (opts.priority) body.priority = opts.priority;
     if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
-    if (opts.agentName) body.agent_id = opts.agentName;
+    if (opts.assignTo) body.assigned_to = opts.assignTo;
     if (opts.parent) body.created_from = opts.parent;
     if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
     if (opts.input) {
@@ -115,11 +115,10 @@ taskCmd
 taskCmd
   .command("claim <id>")
   .description("Claim an assigned task — start working on it")
-  .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
     const client = await createClient();
-    const task = await client.claimTask(id, opts.agentName);
+    const task = await client.claimTask(id);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t: any) => `Claimed task ${t.id}: ${t.title} (now in progress)`);
   });
@@ -127,23 +126,19 @@ taskCmd
 taskCmd
   .command("log <id> <message>")
   .description("Add a log entry to a task")
-  .option("--agent-name <name>", "Agent identity")
-  .action(async (id, message, opts) => {
+  .action(async (id, message) => {
     const client = await createClient();
-    await client.addLog(id, message, opts.agentName);
+    await client.addLog(id, message);
     console.log("Log entry added.");
   });
 
 taskCmd
   .command("cancel <id>")
   .description("Cancel a task")
-  .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
     const client = await createClient();
-    const body: Record<string, unknown> = {};
-    if (opts.agentName) body.agent_name = opts.agentName;
-    const task = await client.cancelTask(id, body);
+    const task = await client.cancelTask(id);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Cancelled task ${t.id}: ${t.title}`);
   });
@@ -152,13 +147,11 @@ taskCmd
   .command("review <id>")
   .description("Move a task to In Review")
   .option("--pr-url <url>", "Pull request URL")
-  .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.prUrl) body.pr_url = opts.prUrl;
-    if (opts.agentName) body.agent_name = opts.agentName;
     const task = await client.reviewTask(id, body);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Moved task ${t.id} to review: ${t.title}`);
@@ -169,14 +162,12 @@ taskCmd
   .description("Complete a task")
   .option("--result <result>", "Completion result summary")
   .option("--pr-url <url>", "PR URL")
-  .option("--agent-name <name>", "Agent identity")
   .option("--format <format>", "Output format (json, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.result) body.result = opts.result;
     if (opts.prUrl) body.pr_url = opts.prUrl;
-    if (opts.agentName) body.agent_id = opts.agentName;
     const task = await client.completeTask(id, body);
     const fmt = getFormat(opts.format);
     output(task, fmt, (t) => `Completed task ${t.id}: ${t.title}`);

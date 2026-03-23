@@ -285,14 +285,14 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
 
   await db.batch([
     db.prepare(
-      "UPDATE tasks SET assigned_to = NULL, status = 'todo', updated_at = ? WHERE id = ?"
+      "UPDATE tasks SET status = 'todo', updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
     ).bind(logId, taskId, agentId, null, action, now),
   ]);
 
-  return { ...task, assigned_to: null, status: "todo", updated_at: now };
+  return { ...task, status: "todo", updated_at: now };
 }
 
 export async function addTaskLog(

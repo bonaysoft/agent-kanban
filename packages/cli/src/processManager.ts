@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "child_process";
 import type { ApiClient, AgentClient } from "./client.js";
+import { cleanupPromptFile } from "./systemPrompt.js";
 
 // Agent Process Lifecycle:
 //   SPAWN → stdin task notification → RUNNING
@@ -46,6 +47,7 @@ export class ProcessManager {
     taskContext: string,
     agentClient: AgentClient,
     agentEnv: Record<string, string>,
+    systemPromptFile?: string,
   ): Promise<void> {
     const args = [
       "--print",
@@ -56,6 +58,9 @@ export class ProcessManager {
       "--session-id", sessionId,
       "-w",
     ];
+    if (systemPromptFile) {
+      args.push("--system-prompt-file", systemPromptFile);
+    }
 
     let proc: ChildProcess;
     try {
@@ -117,6 +122,7 @@ export class ProcessManager {
 
     proc.on("close", async (code) => {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+      cleanupPromptFile(sessionId);
 
       if (stdoutBuffer.trim()) {
         try {

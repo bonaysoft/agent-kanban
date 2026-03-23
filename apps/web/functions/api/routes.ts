@@ -249,12 +249,8 @@ api.post("/api/tasks/:id/complete", async (c) => {
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
-
-  const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
-  if (!existing?.assigned_to) throw new HTTPException(400, { message: "Task is not claimed" });
-
-  const task = await releaseTask(c.env.DB, c.req.param("id"), existing.assigned_to);
+  const agentId = c.get("agentId") || null;
+  const task = await releaseTask(c.env.DB, c.req.param("id"), agentId);
   return c.json(task);
 });
 

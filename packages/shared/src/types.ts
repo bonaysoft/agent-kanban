@@ -120,6 +120,8 @@ export interface Agent {
   name: string;
   bio: string | null;
   soul: string | null;
+  role: string | null;
+  handoff_to: string | null;
   runtime: string | null;
   model: string | null;
   skills: string | null;
@@ -225,6 +227,8 @@ export interface CreateAgentInput {
   name: string;
   bio?: string;
   soul?: string;
+  role?: string;
+  handoff_to?: string[];
   runtime?: string;
   model?: string;
   skills?: string[];

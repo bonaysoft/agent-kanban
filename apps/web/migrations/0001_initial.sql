@@ -209,6 +209,8 @@ CREATE TABLE agents (
   name            TEXT NOT NULL,
   bio             TEXT,
   soul            TEXT,
+  role            TEXT,
+  handoff_to      TEXT,
   runtime         TEXT,
   model           TEXT,
   skills          TEXT,

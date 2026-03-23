@@ -1,9 +1,9 @@
 ---
 name: agent-kanban
-description: Task management skill for the Agent Kanban CLI — claim, log, complete tasks
+description: CLI reference for the Agent Kanban task management tool
 ---
 
-# Agent Kanban — Task Management Skill
+# Agent Kanban — CLI Reference
 
 Use the `agent-kanban` CLI (alias `ak`) to manage tasks on your kanban board.
 
@@ -15,89 +15,18 @@ ak config set api-url https://your-instance.pages.dev
 ak config set api-key <your-api-key>
 ```
 
-## Workflow
-
-When the daemon assigns you a task, you receive the task ID. Follow this flow:
-
-### 1. View the task
-
-```bash
-ak task list --format json
-```
-
-Find your assigned task and read the details.
-
-### 2. Claim the task
-
-```bash
-ak task claim <task-id> --agent-name <your-name>
-```
-
-This confirms you are starting work and moves the task to "In Progress."
-
-### 3. Do the work
-
-You are running in a git worktree. Implement the changes, run tests, commit your work.
-
-### 4. Log progress
-
-```bash
-ak task log <task-id> "Investigating the auth flow..."
-ak task log <task-id> "Root cause: breaking change in v2.3"
-```
-
-### 5. Create a PR and submit for review
-
-When the work is done, push your branch and create a pull request. Then submit the task for review with the PR URL:
-
-```bash
-gh pr create --title "Fix JWT claim namespace" --body "Resolves task <task-id>"
-ak task review <task-id> --pr-url <pr-url> --agent-name <your-name>
-```
-
-A human will review the PR and either complete or request changes.
-
-## Task Lifecycle
-
-```
-Todo ──assign(daemon)──→ Todo (assigned) ──claim(agent)──→ In Progress
-  ──review(agent)──→ In Review ──complete(human)──→ Done
-  → Cancelled (cancel at any stage)
-  → Todo (release — on crash or timeout)
-```
-
-- **assign**: Daemon locks the task to you. Status stays `todo`, but no other agent can take it.
-- **claim**: You confirm you're starting. Status moves to `in_progress`.
-- **review**: You're done working. Status moves to `in_review`. A human will review.
-- **complete**: Human approves and completes. Status moves to `done`.
-
-## Creating Subtasks
-
-When you discover follow-up work, create a task:
-
-```bash
-ak task create \
-  --title "Fix shared-lib JWT claim namespace" \
-  --priority high \
-  --agent-name <your-name>
-```
-
-Log the relationship:
-
-```bash
-ak task log <original-task-id> "Created subtask for shared-lib fix"
-```
-
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `task create --title <t>` | Create a task (optional: --priority, --labels, --input) |
-| `task list` | List tasks (optional: --status, --label, --format) |
+| `task create --title <t>` | Create a task (optional: --description, --priority, --labels, --input, --assign-to, --parent, --depends-on, --repo) |
+| `task list` | List tasks (optional: --status, --label, --parent, --repo, --format) |
 | `task claim <id>` | Claim an assigned task — start working |
 | `task log <id> <msg>` | Add a progress log entry |
-| `task review <id>` | Submit for review (required: --pr-url) |
+| `task review <id>` | Submit for review (optional: --pr-url) |
 | `task cancel <id>` | Cancel a task |
+| `task complete <id>` | Complete a task (optional: --result, --pr-url) |
+| `agent list` | List all agents (shows id, name, role, status) |
 | `board list` | List all boards |
 | `board view` | Show the kanban board |
 | `config set <key> <val>` | Set api-url or api-key |
@@ -112,11 +41,3 @@ ak task log <original-task-id> "Created subtask for shared-lib fix"
 - **401 Unauthorized**: Check your API key with `ak config get api-key`
 - **409 Conflict**: Task is already claimed or not assigned to you
 - **404 Not Found**: Task ID doesn't exist — check with `task list`
-
-## Rules
-
-1. Always claim before working — don't start without claiming
-2. **Never call `task complete`** — only humans can complete tasks
-3. **Always create a PR** and submit via `task review --pr-url <url>` when done
-4. Log progress frequently — humans monitor the board
-5. Create subtasks when you find dependency gaps

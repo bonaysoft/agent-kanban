@@ -47,8 +47,8 @@ export abstract class ApiClient {
     return this.request("GET", `/api/tasks${qs}`);
   }
   getTask(id: string) { return this.request("GET", `/api/tasks/${id}`); }
-  claimTask(id: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${id}/claim`, agentName ? { agent_id: agentName } : {});
+  claimTask(id: string) {
+    return this.request("POST", `/api/tasks/${id}/claim`);
   }
   completeTask(id: string, body: Record<string, unknown>) {
     return this.request("POST", `/api/tasks/${id}/complete`, body);
@@ -68,9 +68,10 @@ export abstract class ApiClient {
   assignTask(id: string, agentId: string) {
     return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
   }
-  addLog(taskId: string, detail: string, agentName?: string) {
-    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail, agent_id: agentName });
+  addLog(taskId: string, detail: string) {
+    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail });
   }
+  getAgent(agentId: string) { return this.request("GET", `/api/agents/${agentId}`); }
 
   // Machines
   registerMachine(info: { name: string; os: string; version: string; runtimes: string[] }) {

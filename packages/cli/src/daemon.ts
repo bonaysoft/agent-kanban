@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { MachineClient, AgentClient, ApiError } from "./client.js";
 import { ProcessManager } from "./processManager.js";
+import { generateSystemPrompt, writePromptFile, type AgentInfo } from "./systemPrompt.js";
 import { getLinks, findPathForRepository, setLink } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
 import { getUsage } from "./usage.js";
@@ -208,8 +209,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         AK_API_URL: getConfigValue("api-url")!,
       };
 
-      const prompt = `You have a new task assigned to you. Task ID: ${task.id}\nFollow the agent-kanban skill workflow: claim the task, do the work, create a PR with gh, then submit for review with ak task review --pr-url <url>. Do NOT call task complete — only humans can complete tasks.`;
-      await pm.spawnAgent(task.id, sessionId, repoDir, prompt, agentClient, agentEnv);
+      // Fetch agent details and generate system prompt
+      const agentDetails = await client.getAgent(agentId) as AgentInfo | null;
+      if (!agentDetails) {
+        console.error(`[ERROR] Agent ${agentId} not found, releasing task ${task.id}`);
+        await client.releaseTask(task.id).catch(() => {});
+        await client.closeSession(agentId, sessionId).catch(() => {});
+        schedulePoll(baseInterval);
+        return;
+      }
+      const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
+
+      const taskContext = [
+        `Task ID: ${task.id}`,
+        `Title: ${task.title}`,
+        task.description ? `Description: ${task.description}` : null,
+        task.priority ? `Priority: ${task.priority}` : null,
+        `Repository: ${task.repository_id}`,
+        `Board: ${task.board_id}`,
+      ].filter(Boolean).join("\n");
+
+      await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, systemPromptFile);
 
       backoffMs = baseInterval;
       schedulePoll(baseInterval);
