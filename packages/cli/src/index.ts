@@ -185,7 +185,7 @@ agentCmd
   .description("List all agents")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     const agents = await client.listAgents();
     const fmt = getFormat(opts.format);
     output(agents, fmt, formatAgentList);
@@ -202,7 +202,7 @@ agentCmd
   .option("--model <model>", "Model to use")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
 
     let body: Record<string, unknown>;
 
@@ -246,7 +246,7 @@ boardCmd
   .option("--description <desc>", "Board description")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     const board = await client.createBoard({ name: opts.name, description: opts.description });
     const fmt = getFormat(opts.format);
     output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
@@ -257,7 +257,7 @@ boardCmd
   .description("List all boards")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     const boards = await client.listBoards();
     const fmt = getFormat(opts.format);
     output(boards, fmt, formatBoardList);
@@ -269,7 +269,7 @@ boardCmd
   .option("--board <name-or-id>", "Board name or ID (uses first if omitted)")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     let boardId: string;
 
     if (opts.board) {
@@ -309,7 +309,7 @@ repoCmd
   .requiredOption("--url <url>", "Clone URL")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     const repo = await client.createRepository({ name: opts.name, url: opts.url });
     const fmt = getFormat(opts.format);
     output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
@@ -320,7 +320,7 @@ repoCmd
   .description("List repositories")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
-    const client = new MachineClient();
+    const client = await createClient();
     const repos = await client.listRepositories();
     const fmt = getFormat(opts.format);
     output(repos, fmt, formatRepositoryList);
