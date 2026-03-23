@@ -106,6 +106,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
 
   await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
+  await cleanupStaleSessions(client, machineId);
   console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
@@ -448,6 +449,35 @@ function detectRuntimes(): string[] {
     } catch { /* not installed */ }
   }
   return found;
+}
+
+function isProcessAlive(sessionId: string): boolean {
+  try {
+    const output = execSync(`ps ax -o args=`, { stdio: ["pipe", "pipe", "ignore"] }).toString();
+    return output.includes(sessionId);
+  } catch {
+    return false;
+  }
+}
+
+async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
+  try {
+    const agents = await client.listAgents() as any[];
+    let closed = 0;
+    for (const agent of agents) {
+      const sessions = await client.listSessions(agent.id) as any[];
+      for (const session of sessions) {
+        if (session.status !== "active" || session.machine_id !== machineId) continue;
+        if (!isProcessAlive(session.id)) {
+          await client.closeSession(agent.id, session.id).catch(() => {});
+          closed++;
+        }
+      }
+    }
+    if (closed > 0) console.log(`[INFO] Cleaned up ${closed} stale session(s) from previous run`);
+  } catch (err: any) {
+    console.warn(`[WARN] Session cleanup failed: ${err.message}`);
+  }
 }
 
 function getMachineInfo() {
