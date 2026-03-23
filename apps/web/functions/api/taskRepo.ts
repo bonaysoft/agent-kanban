@@ -4,7 +4,7 @@ import { newLongId, type D1 } from "./db";
 import { getDefaultBoard } from "./boardRepo";
 import { detectCycle, computeBlocked, getDependencies, setDependencies } from "./taskDeps";
 
-export async function createTask(db: D1, ownerId: string, input: CreateTaskInput & { agentId?: string }): Promise<Task> {
+export async function createTask(db: D1, ownerId: string, input: CreateTaskInput & { agentId?: string; assigned_to?: string }): Promise<Task> {
   const board = input.board_id
     ? { id: input.board_id }
     : await getDefaultBoard(db, ownerId);
@@ -35,16 +35,22 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
   const stmts = [
     db.prepare(`
       INSERT INTO tasks (id, board_id, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
-      VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?)
+      VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
     `).bind(
       taskId, board.id, input.title, input.description || null,
       input.repository_id || null, labelsJson, input.priority || null,
-      input.agentId || "human", inputJson, input.created_from || null,
+      input.agentId || "human", input.assigned_to || null,
+      inputJson, input.created_from || null,
       position, now, now,
     ),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'created', NULL, ?)"
     ).bind(logId, taskId, input.agentId || null, null, now),
+    ...(input.assigned_to ? [
+      db.prepare(
+        "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, ?)"
+      ).bind(newLongId(), taskId, input.assigned_to, null, now),
+    ] : []),
     ...(input.depends_on || []).map((depId) =>
       db.prepare("INSERT INTO task_dependencies (task_id, depends_on) VALUES (?, ?)").bind(taskId, depId)
     ),
@@ -56,7 +62,7 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
     id: taskId, board_id: board.id, status: "todo", title: input.title,
     description: input.description || null, repository_id: input.repository_id || null,
     labels: labelsJson, priority: input.priority || null,
-    created_by: input.agentId || "human", assigned_to: null,
+    created_by: input.agentId || "human", assigned_to: input.assigned_to || null,
     result: null, pr_url: null, input: inputJson,
     created_from: input.created_from || null,
     position, created_at: now, updated_at: now,
