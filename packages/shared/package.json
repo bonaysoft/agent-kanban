@@ -1,7 +1,9 @@
 {
   "name": "@agent-kanban/shared",
   "version": "1.0.0",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -11,5 +13,8 @@
   },
   "devDependencies": {
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
   }
 }

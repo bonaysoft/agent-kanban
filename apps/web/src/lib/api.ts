@@ -60,7 +60,7 @@ export const api = {
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
-    create: (input: { name: string; bio?: string; soul?: string; runtime?: string; model?: string; skills?: string[] }) =>
+    create: (input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) =>
       request<any>("POST", "/agents", input),
     update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/agents/${id}`),

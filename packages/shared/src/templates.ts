@@ -13,11 +13,22 @@ export interface AgentTemplate {
   skills?: string[];
 }
 
+export interface TemplateIndex {
+  slug: string;
+  name: string;
+}
+
+export async function fetchTemplateIndex(): Promise<TemplateIndex[]> {
+  const res = await fetch(`${TEMPLATES_BASE}/index.json`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function fetchTemplate(slug: string): Promise<AgentTemplate> {
   const url = `${TEMPLATES_BASE}/${slug}.yaml`;
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Template "${slug}" not found (${res.status}). Available: fullstack-developer, frontend-developer, backend-developer, feature-planner, designer, quality-goalkeeper, enduser`);
+    throw new Error(`Template "${slug}" not found (${res.status})`);
   }
   return parse(await res.text()) as AgentTemplate;
 }

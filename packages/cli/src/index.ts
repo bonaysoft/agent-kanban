@@ -7,7 +7,7 @@ import { type ApiClient, MachineClient, createClient } from "./client.js";
 import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
 import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
-import { fetchTemplate } from "./templates.js";
+import { fetchTemplate } from "@agent-kanban/shared";
 
 function isUrl(value: string): boolean {
   return value.includes("://") || value.startsWith("git@");

@@ -28,5 +28,8 @@
     "miniflare": "^4.20260317.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@agent-kanban/shared": "workspace:*"
   }
 }

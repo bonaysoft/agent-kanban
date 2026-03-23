@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
+import { CreateAgentDialog } from "../components/CreateAgentDialog";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
@@ -56,12 +57,12 @@ export function AgentsPage() {
           </button>
         </div>
 
-        {showCreate && (
-          <CreateAgentDialog
-            onClose={() => setShowCreate(false)}
-            onCreated={() => { setShowCreate(false); refresh(); }}
-          />
-        )}
+        <CreateAgentDialog
+          existingRoles={[...new Set(agents.map((a) => a.role).filter(Boolean))]}
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          onCreated={refresh}
+        />
 
         {loading ? (
           <div className="grid grid-cols-3 gap-4">
@@ -155,108 +156,3 @@ function AgentCard({ agent }: { agent: any }) {
   );
 }
 
-function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [bio, setBio] = useState("");
-  const [soul, setSoul] = useState("");
-  const [runtime, setRuntime] = useState("claude");
-  const [model, setModel] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleCreate() {
-    if (!name.trim()) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await api.agents.create({
-        name: name.trim(),
-        bio: bio.trim() || undefined,
-        soul: soul.trim() || undefined,
-        runtime: runtime || undefined,
-        model: model.trim() || undefined,
-      });
-      onCreated();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-surface-secondary rounded-lg w-full max-w-md p-6 space-y-4">
-          <h2 className="text-lg font-bold text-content-primary">New agent</h2>
-
-          <div>
-            <label className="text-xs text-content-tertiary block mb-1">Name</label>
-            <input
-              value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Bolt"
-              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary font-mono placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-content-tertiary block mb-1">Bio</label>
-            <input
-              value={bio} onChange={(e) => setBio(e.target.value)}
-              placeholder="Short description"
-              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-content-tertiary block mb-1">Soul</label>
-            <textarea
-              value={soul} onChange={(e) => setSoul(e.target.value)}
-              placeholder="Personality prompt..."
-              rows={3}
-              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent resize-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-content-tertiary block mb-1">Runtime</label>
-              <select
-                value={runtime} onChange={(e) => setRuntime(e.target.value)}
-                className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary focus:outline-none focus:ring-1 focus:ring-accent"
-              >
-                <option value="claude">Claude</option>
-                <option value="codex">Codex</option>
-                <option value="gemini">Gemini</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-content-tertiary block mb-1">Model</label>
-              <input
-                value={model} onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g. claude-sonnet-4-20250514"
-                className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-xs text-error">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-content-secondary hover:text-content-primary transition-colors">
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={!name.trim() || creating}
-              className="px-4 py-2 bg-accent text-surface-primary rounded-md text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
-            >
-              {creating ? "Creating..." : "Create"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}

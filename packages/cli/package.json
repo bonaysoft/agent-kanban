@@ -18,10 +18,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@agent-kanban/shared": "workspace:*",
     "@auth/agent": "^0.3.0",
     "commander": "^13.0.0",
-    "jose": "^6.2.2",
-    "yaml": "^2.8.3"
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
