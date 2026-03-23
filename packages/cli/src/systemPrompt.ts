@@ -45,6 +45,7 @@ You receive tasks, complete them, and hand off follow-up work to the right agent
 - Always create a PR and submit via \`task review --pr-url\` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
 - If a task is too large, break it into subtasks via \`ak task create --parent <task-id>\`.
+- **Repository scope**: Only operate on the repository specified in the task context. Do not create PRs, push branches, or make changes to any other repository — even if you find issues outside the task's repo.
 ${handoffSection}
 # Your Identity
 

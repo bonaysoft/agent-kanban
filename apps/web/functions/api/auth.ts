@@ -18,7 +18,7 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   { method: "DELETE", pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ["user"] } },
 
   // Agents — user manages persistent agents
-  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user"] } },
+  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user", "machine"] } },
   { method: "PATCH", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
   { method: "DELETE", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
 

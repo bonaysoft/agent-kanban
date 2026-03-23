@@ -68,8 +68,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   let running = true;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
-  let backoffMs = opts.pollInterval || 10000;
-  const baseInterval = opts.pollInterval || 10000;
+  const MIN_POLL_INTERVAL = 5000;
+  const baseInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
+  let backoffMs = baseInterval;
 
   const shutdown = async () => {
     if (!running) return;
@@ -234,12 +235,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       }
       const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
 
+      const repos = await client.listRepositories();
+      const taskRepo = repos.find((r: any) => r.id === task.repository_id);
+
       const taskContext = [
         `Task ID: ${task.id}`,
         `Title: ${task.title}`,
         task.description ? `Description: ${task.description}` : null,
         task.priority ? `Priority: ${task.priority}` : null,
-        `Repository: ${task.repository_id}`,
+        `Repository: ${taskRepo?.full_name ?? task.repository_id}`,
         `Board: ${task.board_id}`,
       ].filter(Boolean).join("\n");
 

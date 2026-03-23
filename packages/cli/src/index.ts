@@ -68,11 +68,13 @@ taskCmd
   .option("--assign-to <id>", "Agent ID to assign the task to")
   .option("--parent <id>", "Parent task ID (creates subtask)")
   .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
+  .option("--board <id>", "Board ID to create the task in")
   .option("--format <format>", "Output format (json, text)")
   .action(async (opts) => {
     const client = await createClient();
 
     const body: Record<string, unknown> = { title: opts.title };
+    if (opts.board) body.board_id = opts.board;
     if (opts.description) body.description = opts.description;
     if (opts.repo) {
       body.repository_id = await resolveRepoId(client, opts.repo);
