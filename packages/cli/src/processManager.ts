@@ -16,6 +16,8 @@ export interface AgentProcess {
   process: ChildProcess;
   agentClient: AgentClient;
   timeoutTimer?: ReturnType<typeof setTimeout>;
+  lastMessageSeen?: string;
+  messagePollTimer?: ReturnType<typeof setTimeout>;
 }
 
 export class ProcessManager {
@@ -24,12 +26,14 @@ export class ProcessManager {
   private agentCli: string;
   private onSlotFreed: () => void;
   private taskTimeoutMs: number;
+  private messagePollIntervalMs: number;
 
-  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void, taskTimeoutMs = 2 * 60 * 60 * 1000) {
+  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void, taskTimeoutMs = 2 * 60 * 60 * 1000, messagePollIntervalMs = 5000) {
     this.client = client;
     this.agentCli = agentCli;
     this.onSlotFreed = onSlotFreed;
     this.taskTimeoutMs = taskTimeoutMs;
+    this.messagePollIntervalMs = messagePollIntervalMs;
   }
 
   get activeCount(): number {
@@ -97,7 +101,7 @@ export class ProcessManager {
         message: { role: "user", content: taskContext },
       });
       proc.stdin?.write(payload + "\n");
-      proc.stdin?.end();
+      this.startMessagePolling(agent);
     });
 
     let stdoutBuffer = "";
@@ -122,6 +126,7 @@ export class ProcessManager {
 
     proc.on("close", async (code) => {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+      if (agent.messagePollTimer) clearTimeout(agent.messagePollTimer);
       cleanupPromptFile(sessionId);
 
       if (stdoutBuffer.trim()) {
@@ -150,6 +155,7 @@ export class ProcessManager {
     proc.on("error", async (err) => {
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+      if (agent.messagePollTimer) clearTimeout(agent.messagePollTimer);
       this.agents.delete(taskId);
       await this.releaseTask(taskId);
       this.onSlotFreed();
@@ -163,9 +169,39 @@ export class ProcessManager {
     for (const [taskId, agent] of entries) {
       console.log(`[INFO] Killing agent for task ${taskId}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+      if (agent.messagePollTimer) clearTimeout(agent.messagePollTimer);
       agent.process.kill("SIGTERM");
       this.agents.delete(taskId);
       await this.releaseTask(taskId);
+    }
+  }
+
+  private startMessagePolling(agent: AgentProcess): void {
+    const poll = async () => {
+      if (!this.agents.has(agent.taskId)) return;
+      await this.pollMessages(agent);
+      if (this.agents.has(agent.taskId)) {
+        agent.messagePollTimer = setTimeout(poll, this.messagePollIntervalMs);
+      }
+    };
+    agent.messagePollTimer = setTimeout(poll, this.messagePollIntervalMs);
+  }
+
+  private async pollMessages(agent: AgentProcess): Promise<void> {
+    try {
+      const messages = await agent.agentClient.getMessages(agent.taskId, agent.lastMessageSeen) as any[];
+      const userMessages = messages.filter((m: any) => m.sender_type === "user");
+
+      for (const msg of userMessages) {
+        const payload = JSON.stringify({
+          type: "user",
+          message: { role: "user", content: msg.content },
+        });
+        agent.process.stdin?.write(payload + "\n");
+        agent.lastMessageSeen = msg.created_at;
+      }
+    } catch (err: any) {
+      console.error(`[WARN] Message poll failed for task ${agent.taskId}: ${err.message}`);
     }
   }
 

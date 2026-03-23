@@ -6,6 +6,7 @@ import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { AgentDetailPage } from "./routes/AgentDetailPage";
 import { RepositoriesPage } from "./routes/RepositoriesPage";
+import { SessionDetailPage } from "./routes/SessionDetailPage";
 import { AuthPage } from "./routes/AuthPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
@@ -31,6 +32,7 @@ export function App() {
         <Route path="/machines/:id" element={<ProtectedRoute><MachineDetailPage /></ProtectedRoute>} />
         <Route path="/agents" element={<ProtectedRoute><AgentsPage /></ProtectedRoute>} />
         <Route path="/agents/:id" element={<ProtectedRoute><AgentDetailPage /></ProtectedRoute>} />
+        <Route path="/sessions/:sessionId" element={<ProtectedRoute><SessionDetailPage /></ProtectedRoute>} />
         <Route path="/repositories" element={<ProtectedRoute><RepositoriesPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
       </Routes>

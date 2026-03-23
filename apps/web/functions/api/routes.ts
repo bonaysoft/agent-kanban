@@ -6,7 +6,7 @@ import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteB
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
-import { createSession, closeSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
+import { createSession, closeSession, updateSessionUsage, listSessions, getSessionDetail } from "./agentSessionRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -173,6 +173,12 @@ api.get("/api/agents/:agentId/sessions", async (c) => {
   return c.json(sessions);
 });
 
+api.get("/api/sessions/:sessionId", async (c) => {
+  const detail = await getSessionDetail(c.env.DB, c.req.param("sessionId"));
+  if (!detail) throw new HTTPException(404, { message: "Session not found" });
+  return c.json(detail);
+});
+
 api.patch("/api/agents/:agentId/sessions/:sessionId/usage", async (c) => {
   const body = await c.req.json();
   await updateSessionUsage(c.env.DB, c.req.param("sessionId"), body);
@@ -194,8 +200,8 @@ api.post("/api/tasks", async (c) => {
 });
 
 api.get("/api/tasks", async (c) => {
-  const { repository_id, status, label, board_id, parent, assigned_to } = c.req.query();
-  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent, assigned_to });
+  const { repository_id, status, label, board_id, parent, assigned_to, has_checks } = c.req.query();
+  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent, assigned_to, has_checks });
   return c.json(tasks);
 });
 

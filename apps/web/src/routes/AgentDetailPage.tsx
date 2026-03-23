@@ -289,7 +289,7 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
       {sessions.map((s: any) => {
         const isActive = s.status === "active";
         return (
-          <div key={s.id} className="relative flex items-center gap-4 py-2.5 pl-7">
+          <Link key={s.id} to={`/sessions/${s.id}`} className="relative flex items-center gap-4 py-2.5 pl-7 hover:bg-surface-tertiary/30 rounded-r transition-colors">
             <div
               className={`absolute left-0 w-[7px] h-[7px] rounded-full ${isActive ? "animate-pulse-glow" : ""}`}
               style={{ backgroundColor: isActive ? color : "#3f3f46" }}
@@ -306,7 +306,7 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
             {s.machine_name && (
               <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
             )}
-          </div>
+          </Link>
         );
       })}
     </div>

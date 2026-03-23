@@ -65,7 +65,7 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
 
 export async function listTasks(
   db: D1,
-  filters: { repository_id?: string; status?: string; label?: string; board_id?: string; parent?: string; assigned_to?: string },
+  filters: { repository_id?: string; status?: string; label?: string; board_id?: string; parent?: string; assigned_to?: string; has_checks?: string },
 ): Promise<Task[]> {
   let query = `
     SELECT t.*, r.name as repository_name FROM tasks t
@@ -97,6 +97,9 @@ export async function listTasks(
   if (filters.assigned_to) {
     query += " AND t.assigned_to = ?";
     binds.push(filters.assigned_to);
+  }
+  if (filters.has_checks === "true") {
+    query += " AND EXISTS (SELECT 1 FROM task_checks tc WHERE tc.task_id = t.id)";
   }
 
   query += " ORDER BY t.position";

@@ -76,6 +76,9 @@ export const api = {
     verify: (taskId: string, checkId: string, passed: boolean, agentId?: string) =>
       request<any>("POST", `/tasks/${taskId}/checks/${checkId}/verify`, { passed, agent_id: agentId }),
   },
+  sessions: {
+    get: (sessionId: string) => request<any>("GET", `/sessions/${sessionId}`),
+  },
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),

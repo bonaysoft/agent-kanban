@@ -127,6 +127,11 @@ export abstract class ApiClient {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
     return this.request<any[]>("GET", `/api/tasks/${taskId}/messages${qs}`);
   }
+
+  // Task Checks
+  getChecks(taskId: string) {
+    return this.request<any[]>("GET", `/api/tasks/${taskId}/checks`);
+  }
 }
 
 export class MachineClient extends ApiClient {

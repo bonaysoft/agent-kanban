@@ -93,6 +93,37 @@ export async function updateSessionUsage(db: D1, sessionId: string, usage: Sessi
   ).run();
 }
 
+export async function getSessionDetail(db: D1, sessionId: string): Promise<any | null> {
+  const session = await db.prepare(`
+    SELECT s.*, m.name as machine_name, a.name as agent_name, a.username as agent_username,
+      a.public_key as agent_public_key, a.fingerprint as agent_fingerprint
+    FROM agent_sessions s
+    JOIN machines m ON s.machine_id = m.id
+    JOIN agents a ON s.agent_id = a.id
+    WHERE s.id = ?
+  `).bind(sessionId).first();
+  if (!session) return null;
+
+  // Find the task this session worked on via task_logs
+  const taskLog = await db.prepare(
+    "SELECT task_id FROM task_logs WHERE session_id = ? AND action = 'claimed' LIMIT 1",
+  ).bind(sessionId).first<{ task_id: string }>();
+
+  const task = taskLog
+    ? await db.prepare("SELECT id, title, status, board_id FROM tasks WHERE id = ?")
+        .bind(taskLog.task_id).first()
+    : null;
+
+  // Get messages for this task sent by or to this agent
+  const messages = taskLog
+    ? (await db.prepare(
+        "SELECT * FROM messages WHERE task_id = ? ORDER BY created_at ASC",
+      ).bind(taskLog.task_id).all()).results
+    : [];
+
+  return { ...session, task, messages };
+}
+
 export async function listSessions(db: D1, agentId: string): Promise<AgentSessionWithMachine[]> {
   const result = await db.prepare(`
     SELECT s.*, m.name as machine_name

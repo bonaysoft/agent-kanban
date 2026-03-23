@@ -231,6 +231,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, systemPromptFile);
 
+      // Check for in_review tasks needing a reviewer agent
+      if (pm.activeCount < opts.maxConcurrent) {
+        await pollReviewTasks(client, pm, opts);
+      }
+
       backoffMs = baseInterval;
       schedulePoll(baseInterval);
 
@@ -355,6 +360,132 @@ function cloneAndLink(repo: any): void {
 function removePidFile() {
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }
 }
+
+// ─── Reviewer Agent ───
+
+const activeReviewTasks = new Set<string>();
+
+async function pollReviewTasks(
+  client: MachineClient,
+  pm: ProcessManager,
+  opts: DaemonOptions,
+): Promise<void> {
+  const tasks = await client.listTasks({ status: "in_review", has_checks: "true" }) as any[];
+
+  for (const task of tasks) {
+    if (pm.hasTask(task.id) || activeReviewTasks.has(task.id)) continue;
+    if (!task.repository_id) continue;
+
+    const repoDir = findPathForRepository(task.repository_id);
+    if (!repoDir) continue;
+
+    // Check review_rounds vs board max
+    const board = await client.getBoard(task.board_id) as any;
+    const maxRounds = board?.max_review_rounds ?? 3;
+    if (task.review_rounds >= maxRounds) continue;
+
+    // Find a reviewer agent (role="reviewer")
+    const agents = await client.listAgents() as any[];
+    const reviewer = agents.find((a: any) => a.role === "reviewer");
+    if (!reviewer) continue;
+
+    activeReviewTasks.add(task.id);
+
+    // Create session for reviewer
+    const sessionId = randomUUID();
+    const { publicKey, privateKey } = await crypto.subtle.generateKey(
+      { name: "Ed25519" } as any, true, ["sign", "verify"],
+    );
+    const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
+    const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
+
+    try {
+      await client.createSession(reviewer.id, sessionId, pubKeyJwk.x!);
+    } catch {
+      activeReviewTasks.delete(task.id);
+      continue;
+    }
+
+    console.log(`[INFO] Spawning reviewer (session=${sessionId.slice(0, 8)}) for task ${task.id}`);
+
+    const agentClient = new AgentClient(
+      getConfigValue("api-url")!,
+      reviewer.id,
+      sessionId,
+      privateKey,
+    );
+
+    const agentEnv = {
+      AK_AGENT_ID: reviewer.id,
+      AK_SESSION_ID: sessionId,
+      AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+      AK_API_URL: getConfigValue("api-url")!,
+    };
+
+    // Build review-specific task context
+    const checks = await client.getChecks(task.id) as any[];
+    const checkDescriptions = Array.isArray(checks) && checks.length > 0
+      ? checks.map((c: any, i: number) => `${i + 1}. [${c.id}] ${c.description}`).join("\n")
+      : "No checks found.";
+
+    const reviewPrompt = generateReviewerSystemPrompt(reviewer);
+    const systemPromptFile = writePromptFile(sessionId, reviewPrompt);
+
+    const taskContext = [
+      `Task ID: ${task.id}`,
+      `Title: ${task.title}`,
+      task.description ? `Description: ${task.description}` : null,
+      task.pr_url ? `PR URL: ${task.pr_url}` : null,
+      `Review Round: ${task.review_rounds + 1}/${maxRounds}`,
+      ``,
+      `Verification Checks:`,
+      checkDescriptions,
+    ].filter((s) => s !== null).join("\n");
+
+    await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, systemPromptFile);
+
+    // Clean up tracking when process exits
+    const checkCleanup = setInterval(() => {
+      if (!pm.hasTask(task.id)) {
+        activeReviewTasks.delete(task.id);
+        clearInterval(checkCleanup);
+      }
+    }, 5000);
+
+    if (pm.activeCount >= opts.maxConcurrent) break;
+  }
+}
+
+function generateReviewerSystemPrompt(agent: { name: string; role: string | null; soul: string | null }): string {
+  return `# Reviewer Agent Protocol
+
+You are a code reviewer on the Agent Kanban platform.
+You verify tasks by checking each verification item against the actual code changes.
+
+## Review Process
+
+1. **Claim** the task: \`ak task claim <task-id>\`
+2. **Inspect** the PR: check out the branch, review the diff
+3. **Verify** each check item using: \`ak task verify <task-id> <check-id> --passed\` or \`ak task verify <task-id> <check-id> --failed\`
+4. If all checks pass, the task auto-completes
+5. If any check fails, the task bounces back to the original agent with feedback
+
+## Rules
+
+- Always claim before reviewing.
+- Verify every check item — do not skip any.
+- Be thorough but fair. Only fail checks that genuinely do not pass.
+- Log your findings: \`ak task log <task-id> "message"\`
+
+# Your Identity
+
+Name: ${agent.name}
+Role: ${agent.role ?? "reviewer"}
+
+${agent.soul ?? ""}
+`.trim() + "\n";
+}
+
 
 function detectRuntimes(): string[] {
   const commands: [string, string][] = [
