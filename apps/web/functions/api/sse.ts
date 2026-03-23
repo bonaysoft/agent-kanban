@@ -102,7 +102,10 @@ export async function createSSEResponse(
   };
 
   // Run in background — don't await
-  run().catch(() => writer.close().catch(() => {}));
+  run().catch((err) => {
+    console.error("[SSE] stream failed:", err instanceof Error ? err.message : err);
+    writer.close().catch(() => {});
+  });
 
   return new Response(readable, {
     headers: {

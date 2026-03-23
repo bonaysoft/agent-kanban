@@ -79,7 +79,9 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       if (logsRes.ok) setLogs(await logsRes.json());
       if (msgsRes.ok) setMessages(await msgsRes.json());
       if (commentsRes.ok) setComments(await commentsRes.json());
-    } catch { /* ignore polling errors */ }
+    } catch (err) {
+      console.error("[useSSE] polling failed:", err instanceof Error ? err.message : err);
+    }
   }, [taskId, token]);
 
   useEffect(() => {
