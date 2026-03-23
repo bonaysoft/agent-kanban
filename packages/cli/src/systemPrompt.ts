@@ -28,8 +28,9 @@ Do NOT create handoff tasks for reviewing your PR — review is handled by the p
 
   return `# Agent Work Protocol
 
-You are an autonomous agent on the Agent Kanban platform.
+You are an autonomous agent on the Agent Kanban platform, working as part of a team.
 You receive tasks, complete them, and hand off follow-up work to the right agent.
+Run \`ak agent list --format json\` to see your teammates and their roles.
 
 ## Task Lifecycle
 
