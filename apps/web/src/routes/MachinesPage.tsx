@@ -234,9 +234,22 @@ export function MachinesPage() {
                 {dialogStep === "waiting" && createdKey && (
                   <>
                     <p className="text-xs text-content-secondary">Run this command in your terminal:</p>
-                    <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
-{`npx agent-kanban start --api-url ${apiUrl} --api-key ${createdKey}`}
-                    </pre>
+                    <div className="bg-[#0C0C0C] rounded-lg overflow-hidden border border-border">
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] border-b border-border">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
+                        <span className="text-[10px] text-content-tertiary ml-2 font-mono">terminal</span>
+                      </div>
+                      <div className="p-3 text-xs font-mono leading-relaxed overflow-x-auto whitespace-nowrap">
+                        <span className="text-content-tertiary select-none">$ </span>
+                        <span className="text-content-secondary">npx agent-kanban start \</span>
+                        <br />
+                        <span className="text-content-secondary pl-4">--api-url {apiUrl} \</span>
+                        <br />
+                        <span className="text-content-secondary pl-4">--api-key {createdKey}</span>
+                      </div>
+                    </div>
                     <button
                       onClick={() => navigator.clipboard.writeText(
                         `npx agent-kanban start --api-url ${apiUrl} --api-key ${createdKey}`
