@@ -1,6 +1,7 @@
 {
   "name": "@agent-kanban/shared",
   "version": "1.0.0",
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
