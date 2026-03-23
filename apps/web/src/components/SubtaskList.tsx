@@ -8,10 +8,20 @@ interface SubtaskListProps {
 
 export function SubtaskList({ parentId, onTaskClick }: SubtaskListProps) {
   const [subtasks, setSubtasks] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.tasks.list({ parent: parentId }).then(setSubtasks).catch(() => {});
+    setError(null);
+    api.tasks.list({ parent: parentId }).then(setSubtasks).catch((err) => {
+      const message = err instanceof Error ? err.message : "Failed to load subtasks";
+      setError(message);
+      console.error("[SubtaskList] fetch failed:", message);
+    });
   }, [parentId]);
+
+  if (error) {
+    return <div className="text-sm text-danger pl-6 md:pl-4">{error}</div>;
+  }
 
   if (subtasks.length === 0) return null;
 
