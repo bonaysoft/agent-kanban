@@ -1,19 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getAuthToken } from "../lib/auth-client";
+import type { TaskLog, Message } from "@agent-kanban/shared";
+
+const MAX_LOGS = 500;
 
 interface UseSSEOptions {
   taskId: string;
   enabled?: boolean;
 }
 
+function appendCapped<T>(prev: T[], item: T): T[] {
+  const next = [...prev, item];
+  return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
+}
+
 export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [logs, setLogs] = useState<TaskLog[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const failCount = useRef(0);
   const lastEventId = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const connectRef = useRef<(() => EventSource | undefined) | undefined>(undefined);
 
   const token = getAuthToken();
 
@@ -33,13 +42,13 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
     es.addEventListener("log", (e: MessageEvent) => {
       const log = JSON.parse(e.data);
       lastEventId.current = e.lastEventId;
-      setLogs((prev) => [...prev, log]);
+      setLogs((prev) => appendCapped(prev, log));
     });
 
     es.addEventListener("message", (e: MessageEvent) => {
       const msg = JSON.parse(e.data);
       lastEventId.current = e.lastEventId;
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => appendCapped(prev, msg));
     });
 
     es.onerror = () => {
@@ -53,11 +62,14 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       }
 
       setReconnecting(true);
-      setTimeout(connectSSE, 2000);
+      setTimeout(() => connectRef.current?.(), 2000);
     };
 
     return es;
   }, [taskId, token, enabled]);
+
+  // Keep ref in sync so setTimeout always calls the latest version
+  connectRef.current = connectSSE;
 
   // Polling fallback
   const poll = useCallback(async () => {

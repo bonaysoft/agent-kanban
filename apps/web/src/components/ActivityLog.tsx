@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSSE } from "../hooks/useSSE";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
+import type { TaskLog } from "@agent-kanban/shared";
 
 interface ActivityLogProps {
   taskId: string;
-  initialLogs: any[];
+  initialLogs: TaskLog[];
   assigned: boolean;
 }
 
@@ -40,9 +41,9 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
   const [newCount, setNewCount] = useState(0);
 
   // Merge initial logs with SSE logs (dedup by ID)
-  const allLogs = (() => {
+  const allLogs = useMemo(() => {
     const seen = new Set<string>();
-    const merged: any[] = [];
+    const merged: TaskLog[] = [];
     for (const log of [...initialLogs, ...sseLogs]) {
       if (!seen.has(log.id)) {
         seen.add(log.id);
@@ -50,7 +51,7 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
       }
     }
     return merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
-  })();
+  }, [initialLogs, sseLogs]);
 
   const displayed = allLogs.slice().reverse();
 
@@ -106,7 +107,7 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
         className="space-y-0 mt-2 max-h-80 overflow-y-auto"
         aria-live="polite"
       >
-        {displayed.map((log: any) => (
+        {displayed.map((log) => (
           <div
             key={log.id}
             className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
