@@ -7,7 +7,8 @@
     "dev": "pnpm --filter @agent-kanban/web dev",
     "build": "pnpm --filter @agent-kanban/shared build && pnpm --filter @agent-kanban/web build",
     "test": "vitest",
-    "lint": "pnpm -r --parallel run lint"
+    "lint": "pnpm -r --parallel run lint",
+    "install:cli": "bash scripts/install-cli.sh"
   },
   "keywords": [
     "kanban",

@@ -20,17 +20,16 @@ if [ -z "$BOARD_ID" ]; then
 fi
 echo "  Board: $BOARD_ID"
 
-# 2. Check agent exists
-echo "[2/5] Checking agent..."
+# 2. Check for a developer agent (skip builtins like Quality Goalkeeper)
+echo "[2/5] Checking developer agent..."
 AGENTS=$(ak agent list --format json)
-AGENT_ID=$(echo "$AGENTS" | jq -r '.[0].id // empty')
+AGENT_ID=$(echo "$AGENTS" | jq -r '[.[] | select(.role | test("developer"))] | .[0].id // empty')
 if [ -z "$AGENT_ID" ]; then
-  echo "  ERROR: No agent registered. Create one first:"
-  echo "    ak agent create --template fullstack-developer"
-  exit 1
+  echo "  No developer agent found, creating from fullstack-developer template..."
+  AGENT_ID=$(ak agent create --template fullstack-developer --format json | jq -r '.id')
 fi
-AGENT_NAME=$(echo "$AGENTS" | jq -r '.[0].name')
-AGENT_STATUS=$(echo "$AGENTS" | jq -r '.[0].status')
+AGENT_NAME=$(echo "$AGENTS" | jq -r --arg id "$AGENT_ID" '.[] | select(.id == $id) | .name // "fullstack-developer"')
+AGENT_STATUS=$(echo "$AGENTS" | jq -r --arg id "$AGENT_ID" '.[] | select(.id == $id) | .status // "unknown"')
 echo "  Agent: $AGENT_NAME ($AGENT_ID) — status: $AGENT_STATUS"
 
 # 3. Add repository (idempotent)
