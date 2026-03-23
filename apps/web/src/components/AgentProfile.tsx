@@ -68,9 +68,9 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
               <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status]}`} />
               <span className="text-xs text-content-secondary">{statusLabels[agent.status] || agent.status}</span>
             </div>
-            {agent.public_key && (
+            {agent.fingerprint && (
               <span className="font-mono text-[10px] text-content-tertiary">
-                {agentFingerprint(agent.public_key)}
+                {agentFingerprint(agent.fingerprint)}
               </span>
             )}
           </div>

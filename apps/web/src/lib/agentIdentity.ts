@@ -64,10 +64,9 @@ export function agentColorRgb(publicKey: string): string {
   return hslToRgb(hue, sat, lightDark);
 }
 
-export function agentFingerprint(publicKey: string): string {
-  const bytes = hashBytes(publicKey);
-  return bytes
-    .slice(0, 4)
-    .map((b) => b.toString(16).padStart(2, "0"))
+export function agentFingerprint(fingerprint: string): string {
+  return fingerprint
+    .slice(0, 8)
+    .match(/.{2}/g)!
     .join(":");
 }

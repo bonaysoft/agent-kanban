@@ -2,19 +2,9 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { agentFingerprint } from "../lib/agentIdentity";
+import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
-
-const statusDotColors: Record<string, string> = {
-  online: "bg-accent animate-pulse-glow",
-  offline: "bg-content-tertiary",
-};
-
-const statusLabels: Record<string, string> = {
-  online: "Online",
-  offline: "Offline",
-};
 
 function formatTokens(n: number): string {
   if (!n) return "0";
@@ -46,18 +36,24 @@ export function AgentsPage() {
   return (
     <div className="min-h-screen bg-surface-primary">
       <Header />
-      <div className="max-w-4xl mx-auto p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-content-primary">Agents</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-content-tertiary font-mono">{online} online</span>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="px-3 py-1.5 bg-accent text-surface-primary rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Create Agent
-            </button>
+      <div className="max-w-5xl mx-auto px-8 py-10">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-baseline gap-4">
+            <h1 className="text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
+              Agents
+            </h1>
+            {agents.length > 0 && (
+              <span className="text-xs font-mono text-content-tertiary">
+                {online}/{agents.length} online
+              </span>
+            )}
           </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-3.5 py-1.5 bg-accent text-surface-primary rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            New agent
+          </button>
         </div>
 
         {showCreate && (
@@ -68,14 +64,14 @@ export function AgentsPage() {
         )}
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-4">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-24 bg-surface-secondary border border-border rounded-lg animate-pulse" />
+              <div key={i} className="h-64 bg-surface-secondary rounded-lg animate-pulse" />
             ))}
           </div>
         ) : agents.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-content-secondary text-sm">No agents yet.</p>
+          <div className="text-center py-24">
+            <p className="text-content-tertiary text-sm">No agents yet.</p>
             <button
               onClick={() => setShowCreate(true)}
               className="mt-2 text-sm text-accent hover:underline"
@@ -84,65 +80,78 @@ export function AgentsPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {agents.map((agent) => {
-              const isOnline = agent.status === "online";
-              return (
-                <Link
-                  key={agent.id}
-                  to={`/agents/${agent.id}`}
-                  className={`block bg-surface-secondary rounded-lg px-5 py-4 transition-all border ${
-                    isOnline
-                      ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
-                      : "border-border hover:border-content-tertiary/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <AgentIdenticon publicKey={agent.public_key} size={44} glow={isOnline} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-sm text-accent font-semibold">{agent.name}</span>
-                        {agent.public_key && (
-                          <span className="font-mono text-[10px] text-content-tertiary">
-                            {agentFingerprint(agent.public_key)}
-                          </span>
-                        )}
-                      </div>
-                      <span className="inline-flex items-center gap-1.5 mt-0.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status]}`} />
-                        <span className="text-[11px] text-content-tertiary">{statusLabels[agent.status]}</span>
-                      </span>
-                    </div>
-                    <span className="font-mono text-[11px] text-content-tertiary">
-                      {agent.last_active_at ? formatRelative(agent.last_active_at) : "—"}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 ml-[60px] grid grid-cols-4 gap-6 text-xs">
-                    <div>
-                      <span className="text-[10px] text-content-tertiary uppercase tracking-wider block mb-0.5">Tasks</span>
-                      <span className="font-mono text-content-primary text-sm">{agent.task_count}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-content-tertiary uppercase tracking-wider block mb-0.5">Input</span>
-                      <span className="font-mono text-content-primary text-sm">{formatTokens(agent.input_tokens)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-content-tertiary uppercase tracking-wider block mb-0.5">Output</span>
-                      <span className="font-mono text-content-primary text-sm">{formatTokens(agent.output_tokens)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-content-tertiary uppercase tracking-wider block mb-0.5">Cost</span>
-                      <span className="font-mono text-content-primary text-sm">{formatCost(agent.cost_micro_usd)}</span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="grid grid-cols-3 gap-4">
+            {agents.map((agent) => (
+              <AgentCard key={agent.id} agent={agent} />
+            ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function AgentCard({ agent }: { agent: any }) {
+  const isOnline = agent.status === "online";
+  const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
+  const rgb = agent.public_key ? agentColorRgb(agent.public_key) : "34, 211, 238";
+  const fp = agent.fingerprint ? agentFingerprint(agent.fingerprint) : "";
+
+  return (
+    <Link
+      to={`/agents/${agent.id}`}
+      className="group block rounded-lg overflow-hidden transition-all hover:translate-y-[-2px]"
+      style={{
+        background: "var(--bg-secondary)",
+        boxShadow: isOnline
+          ? `0 4px 24px rgba(${rgb}, 0.15), 0 0 0 1px rgba(${rgb}, 0.1)`
+          : "0 0 0 1px var(--border)",
+      }}
+    >
+      {/* Top edge — agent color */}
+      <div className="h-[3px]" style={{ background: color }} />
+
+      {/* Identity — vertical, centered */}
+      <div className="flex flex-col items-center pt-6 pb-4 px-5">
+        <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} />
+
+        <h2 className="mt-3 font-mono text-base font-bold tracking-tight" style={{ color }}>
+          {agent.name}
+        </h2>
+
+        {/* Fingerprint badge */}
+        <div
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
+          style={{ background: `rgba(${rgb}, 0.08)` }}
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span className="font-mono text-[10px] tracking-[0.12em]" style={{ color: `rgba(${rgb}, 0.7)` }}>
+            {fp}
+          </span>
+        </div>
+
+        {/* Status */}
+        <div className="mt-2 flex items-center gap-1.5">
+          <span
+            className={`w-[6px] h-[6px] rounded-full ${isOnline ? "animate-pulse-glow" : ""}`}
+            style={{ backgroundColor: isOnline ? color : "#3f3f46" }}
+          />
+          <span className="text-[11px] text-content-tertiary">
+            {isOnline ? "Online" : agent.last_active_at ? formatRelative(agent.last_active_at) : "Offline"}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div className="border-t border-border/50 px-5 py-3 flex items-center justify-between text-[10px] font-mono text-content-tertiary">
+        <span>{agent.task_count || 0} tasks</span>
+        <span>{formatTokens((agent.input_tokens || 0) + (agent.output_tokens || 0))} tok</span>
+        <span>{formatCost(agent.cost_micro_usd)}</span>
+      </div>
+    </Link>
   );
 }
 
@@ -179,20 +188,20 @@ function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCrea
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-surface-secondary border border-border rounded-lg w-full max-w-md p-6 space-y-4">
-          <h2 className="text-lg font-bold text-content-primary">Create Agent</h2>
+        <div className="bg-surface-secondary rounded-lg w-full max-w-md p-6 space-y-4">
+          <h2 className="text-lg font-bold text-content-primary">New agent</h2>
 
           <div>
-            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Name *</label>
+            <label className="text-xs text-content-tertiary block mb-1">Name</label>
             <input
               value={name} onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Bolt"
-              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+              className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary font-mono placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
 
           <div>
-            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Bio</label>
+            <label className="text-xs text-content-tertiary block mb-1">Bio</label>
             <input
               value={bio} onChange={(e) => setBio(e.target.value)}
               placeholder="Short description"
@@ -201,7 +210,7 @@ function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           </div>
 
           <div>
-            <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Soul</label>
+            <label className="text-xs text-content-tertiary block mb-1">Soul</label>
             <textarea
               value={soul} onChange={(e) => setSoul(e.target.value)}
               placeholder="Personality prompt..."
@@ -212,7 +221,7 @@ function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCrea
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Runtime</label>
+              <label className="text-xs text-content-tertiary block mb-1">Runtime</label>
               <select
                 value={runtime} onChange={(e) => setRuntime(e.target.value)}
                 className="w-full bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary focus:outline-none focus:ring-1 focus:ring-accent"
@@ -223,7 +232,7 @@ function CreateAgentDialog({ onClose, onCreated }: { onClose: () => void; onCrea
               </select>
             </div>
             <div>
-              <label className="text-xs text-content-tertiary uppercase tracking-wider block mb-1">Model</label>
+              <label className="text-xs text-content-tertiary block mb-1">Model</label>
               <input
                 value={model} onChange={(e) => setModel(e.target.value)}
                 placeholder="e.g. claude-sonnet-4-20250514"

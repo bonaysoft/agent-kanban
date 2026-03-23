@@ -6,9 +6,6 @@ import { api } from "../lib/api";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { formatRelative } from "../components/TaskDetailFields";
 
-const statusLabels: Record<string, string> = { online: "Online", offline: "Offline" };
-const statusDotClass: Record<string, string> = { online: "animate-pulse-glow", offline: "bg-content-tertiary" };
-
 const actionStyles: Record<string, string> = {
   claimed: "text-accent", assigned: "text-accent", completed: "text-success",
   released: "text-warning", timed_out: "text-error", review_requested: "text-accent",
@@ -32,12 +29,16 @@ function formatCost(microUsd: number): string {
   return `$${(microUsd / 1_000_000).toFixed(2)}`;
 }
 
+type Tab = "mission" | "activity" | "sessions";
+
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("mission");
+  const [showIdentity, setShowIdentity] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -58,9 +59,8 @@ export function AgentDetailPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <div className="max-w-4xl mx-auto p-8 space-y-4">
-          <div className="h-6 w-48 bg-surface-tertiary rounded animate-pulse" />
-          <div className="h-64 bg-surface-secondary border border-border rounded-lg animate-pulse" />
+        <div className="max-w-4xl mx-auto px-8 py-10">
+          <div className="h-80 bg-surface-secondary rounded-lg animate-pulse" />
         </div>
       </div>
     );
@@ -70,7 +70,7 @@ export function AgentDetailPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <div className="max-w-4xl mx-auto p-8">
+        <div className="max-w-4xl mx-auto px-8 py-10">
           <p className="text-content-secondary text-sm">Agent not found.</p>
         </div>
       </div>
@@ -79,213 +79,327 @@ export function AgentDetailPage() {
 
   const rgb = agent.public_key ? agentColorRgb(agent.public_key) : "34, 211, 238";
   const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
+  const fp = agent.fingerprint ? agentFingerprint(agent.fingerprint) : "";
   const isOnline = agent.status === "online";
   const totalTokens = (agent.input_tokens || 0) + (agent.output_tokens || 0) + (agent.cache_read_tokens || 0);
+
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "mission", label: "Mission" },
+    { key: "activity", label: "Activity", count: agent.logs?.length },
+    { key: "sessions", label: "Sessions", count: sessions.length },
+  ];
 
   return (
     <div className="min-h-screen bg-surface-primary">
       <Header />
-      <div className="max-w-4xl mx-auto p-8 space-y-4">
-        <Link to="/agents" className="inline-flex items-center gap-1.5 text-xs text-content-tertiary hover:text-content-secondary transition-colors">
+      <div className="max-w-4xl mx-auto px-8 py-10">
+        <Link to="/agents" className="text-xs text-content-tertiary hover:text-content-secondary transition-colors">
           &larr; Agents
         </Link>
 
         {/* ─── Identity Hero ─── */}
         <div
-          className={`bg-surface-secondary rounded-lg border relative overflow-hidden transition-all ${isOnline ? "animate-breathe" : ""}`}
+          className="mt-6 rounded-lg overflow-hidden"
           style={{
-            borderColor: isOnline ? `rgba(${rgb}, 0.3)` : undefined,
-            "--breathe-shadow-max": `0 0 40px rgba(${rgb}, 0.15), 0 0 80px rgba(${rgb}, 0.06)`,
-            "--breathe-shadow-min": `0 0 16px rgba(${rgb}, 0.05), 0 0 32px rgba(${rgb}, 0.02)`,
-          } as React.CSSProperties}
+            background: "var(--bg-secondary)",
+            boxShadow: isOnline
+              ? `0 8px 40px rgba(${rgb}, 0.12), 0 0 0 1px rgba(${rgb}, 0.1)`
+              : "0 0 0 1px var(--border)",
+          }}
         >
-          {/* Agent-colored radial gradient backdrop */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: `radial-gradient(ellipse at 8% 40%, rgba(${rgb}, ${isOnline ? 0.18 : 0.1}) 0%, transparent 55%)` }}
-          />
+          {/* Color bar */}
+          <div className="h-1" style={{ background: color }} />
 
-          <div className="relative p-6">
-            <div className="flex items-start gap-6">
-              <AgentIdenticon publicKey={agent.public_key} size={96} glow={isOnline} />
-              <div className="flex-1 min-w-0">
-                <h1 className="font-mono text-2xl font-bold tracking-tight" style={{ color }}>
-                  {agent.name}
-                </h1>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full ${statusDotClass[agent.status]}`}
-                      style={isOnline ? { backgroundColor: color } : undefined}
-                    />
-                    <span className="text-sm text-content-secondary">{statusLabels[agent.status]}</span>
-                  </span>
-                  {task && (
-                    <>
-                      <span className="text-content-tertiary text-xs">&middot;</span>
-                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
-                        {task.status.replace("_", " ")}
-                      </span>
-                    </>
-                  )}
+          <div className="px-6 py-12 relative overflow-hidden">
+            {/* Fingerprint watermark — right side, clickable */}
+            <button
+              onClick={() => setShowIdentity(true)}
+              className="absolute right-12 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 cursor-pointer group transition-opacity hover:opacity-100 opacity-100"
+            >
+              <svg width="128" height="128" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-15 group-hover:opacity-30 transition-opacity">
+                <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
+                <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
+                <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
+                <path d="M2 12a10 10 0 0 1 18-6" />
+                <path d="M2 16h.01" />
+                <path d="M21.8 16c.2-2 .131-5.354 0-6" />
+                <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
+                <path d="M8.65 22c.21-.66.45-1.32.57-2" />
+                <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
+              </svg>
+              <span className="font-mono text-[11px] tracking-[0.2em] font-medium group-hover:opacity-70 transition-opacity" style={{ color, opacity: 0.4 }}>{fp}</span>
+            </button>
+
+            <div className="flex items-start gap-6 relative">
+              <AgentIdenticon publicKey={agent.public_key} size={96} glow={isOnline} crystallize />
+
+              <div className="flex-1 min-w-0 pt-1">
+                <div className="flex items-center gap-3">
+                  <h1 className="font-mono text-2xl font-bold" style={{ color, letterSpacing: "-0.02em" }}>
+                    {agent.name}
+                  </h1>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOnline ? "animate-pulse-glow" : ""}`}
+                    style={{ backgroundColor: isOnline ? color : "#3f3f46" }}
+                  />
                 </div>
 
-                {/* Fingerprint badge */}
-                {agent.public_key && (
-                  <div
-                    className="mt-3 inline-flex items-center gap-2 rounded-md px-3 py-1.5"
-                    style={{ background: `rgba(${rgb}, 0.08)`, border: `1px solid rgba(${rgb}, 0.15)` }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
-                      <path d="M12 10a2 2 0 0 0-2 2c0 1.02.1 2.51.412 4.12M12 10a2 2 0 0 1 2 2c0 1.22-.13 2.88-.5 4.5M12 10V8" />
-                      <path d="M4.93 4.93A9.97 9.97 0 0 1 12 2c5.52 0 10 4.48 10 10 0 .68-.07 1.35-.2 2" />
-                      <path d="M2 12c0-1.15.19-2.26.56-3.3" />
-                      <path d="M6.2 6.2A6 6 0 0 1 18 12" />
-                      <path d="M6 12a6 6 0 0 0 .87 3.12" />
-                    </svg>
-                    <span className="font-mono text-xs tracking-[0.15em]" style={{ color }}>
-                      {agentFingerprint(agent.public_key)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Runtime / Model / Machine */}
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {agent.runtime && (
-                    <span className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{agent.runtime}</span>
-                  )}
-                  {agent.model && (
-                    <span className="text-[10px] font-mono rounded px-2 py-1" style={{ color, background: `rgba(${rgb}, 0.08)` }}>{agent.model}</span>
-                  )}
-                </div>
-
-                {/* Bio */}
                 {agent.bio && (
                   <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>
                 )}
+
+                {/* Meta */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {agent.runtime && (
+                    <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">
+                      {agent.runtime}
+                    </span>
+                  )}
+                  {agent.model && (
+                    <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">
+                      {agent.model}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-content-tertiary">
+                    Created {formatRelative(agent.created_at)}
+                  </span>
+                  {agent.last_active_at && (
+                    <span className="text-[10px] text-content-tertiary">
+                      Active {formatRelative(agent.last_active_at)}
+                    </span>
+                  )}
+                </div>
+
               </div>
             </div>
           </div>
 
-          {/* Created / Last active — bottom of hero */}
-          <div className="relative px-6 pb-4">
-            <div className="flex gap-4 text-[10px] text-content-tertiary font-mono">
-              <span>Created {formatRelative(agent.created_at)}</span>
-              {agent.last_active_at && <span>Last active {formatRelative(agent.last_active_at)}</span>}
-            </div>
+          {/* Telemetry strip — inside hero card */}
+          <div className="border-t border-border/50 grid grid-cols-5 divide-x divide-border/50">
+            {[
+              { label: "TASKS", value: String(agent.task_count || 0) },
+              { label: "INPUT", value: formatTokens(agent.input_tokens || 0) },
+              { label: "OUTPUT", value: formatTokens(agent.output_tokens || 0) },
+              { label: "CACHE", value: formatTokens(agent.cache_read_tokens || 0) },
+              { label: "COST", value: formatCost(agent.cost_micro_usd || 0) },
+            ].map((stat) => (
+              <div key={stat.label} className="py-3 px-4 text-center">
+                <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider">{stat.label}</div>
+                <div className="font-mono text-base text-content-primary mt-0.5">{stat.value}</div>
+              </div>
+            ))}
           </div>
+
+          {/* Token composition bar */}
+          {totalTokens > 0 && (
+            <div className="h-1 flex">
+              <div style={{ width: `${(agent.input_tokens / totalTokens) * 100}%`, background: color, opacity: 0.8 }} />
+              <div style={{ width: `${(agent.output_tokens / totalTokens) * 100}%`, background: color, opacity: 0.35 }} />
+              <div style={{ flex: 1, background: color, opacity: 0.1 }} />
+            </div>
+          )}
         </div>
 
-        {/* ─── Telemetry Strip ─── */}
-        <div className="grid grid-cols-4 gap-px rounded-lg overflow-hidden" style={{ background: `rgba(${rgb}, 0.12)` }}>
-          {[
-            { label: "INPUT", value: formatTokens(agent.input_tokens || 0) },
-            { label: "OUTPUT", value: formatTokens(agent.output_tokens || 0) },
-            { label: "CACHE", value: formatTokens(agent.cache_read_tokens || 0) },
-            { label: "COST", value: formatCost(agent.cost_micro_usd || 0) },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-surface-secondary p-3">
-              <div className="text-[10px] text-content-tertiary uppercase tracking-wider font-medium">{stat.label}</div>
-              <div className="font-mono text-lg text-content-primary mt-0.5">{stat.value}</div>
-            </div>
+        {/* ─── Identity Modal ─── */}
+        {showIdentity && (
+          <IdentityModal
+            fingerprint={agent.fingerprint}
+            publicKey={agent.public_key}
+            color={color}
+            rgb={rgb}
+            onClose={() => setShowIdentity(false)}
+          />
+        )}
+
+        {/* ─── Soul ─── */}
+        {agent.soul && (
+          <div className="mt-6 bg-surface-secondary rounded-lg px-5 py-4" style={{ boxShadow: "0 0 0 1px var(--border)" }}>
+            <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider mb-2">Soul</div>
+            <p className="font-mono text-xs text-content-secondary leading-relaxed whitespace-pre-wrap">{agent.soul}</p>
+          </div>
+        )}
+
+        {/* ─── Tabs ─── */}
+        <div className="mt-10 flex items-center gap-6 border-b border-border">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`pb-2.5 text-sm font-medium transition-colors relative ${
+                tab === t.key
+                  ? "text-content-primary"
+                  : "text-content-tertiary hover:text-content-secondary"
+              }`}
+            >
+              {t.label}
+              {t.count !== undefined && t.count > 0 && (
+                <span className="ml-1.5 text-[10px] font-mono text-content-tertiary">{t.count}</span>
+              )}
+              {tab === t.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full" style={{ background: color }} />
+              )}
+            </button>
           ))}
         </div>
-        <div>
-          <div className="h-1.5 rounded-full overflow-hidden flex bg-surface-tertiary">
-            {totalTokens > 0 && (
-              <>
-                <div style={{ width: `${(agent.input_tokens / totalTokens) * 100}%`, background: `rgba(${rgb}, 0.8)` }} />
-                <div style={{ width: `${(agent.output_tokens / totalTokens) * 100}%`, background: `rgba(${rgb}, 0.4)` }} />
-                <div style={{ flex: 1, background: `rgba(${rgb}, 0.12)` }} />
-              </>
-            )}
-          </div>
-          <div className="flex justify-between mt-1 text-[10px] text-content-tertiary font-mono">
-            <span>{formatTokens(totalTokens)} total</span>
-            {totalTokens > 0 && <span>{formatCost(Math.round(agent.cost_micro_usd / (totalTokens / 1000)))} / 1K</span>}
-          </div>
-        </div>
 
-        {/* ─── Mission ─── */}
-        <div>
-          <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">Mission</div>
-          {task ? (
-            <Link
-              to={`/boards/${task.board_id}`}
-              className="flex items-center gap-3 bg-surface-secondary rounded-lg px-4 py-3 hover:bg-surface-tertiary/50 transition-colors"
-              style={{ borderLeft: `2px solid rgba(${rgb}, 0.5)` }}
-            >
-              <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
-                {task.status.replace("_", " ")}
-              </span>
-              <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
-              {task.pr_url && (
-                <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} className="text-[11px] font-mono px-2 py-0.5 rounded hover:underline" style={{ color, background: `rgba(${rgb}, 0.1)` }}>PR</a>
-              )}
-              {task.repository_name && <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>}
-            </Link>
-          ) : (
-            <p className="text-sm text-content-tertiary">No task assigned.</p>
-          )}
-        </div>
-
-        {/* ─── Session Chain (Subkey History) ─── */}
-        <div>
-          <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">Sessions</div>
-          {sessions.length === 0 ? (
-            <p className="text-sm text-content-tertiary">No sessions yet.</p>
-          ) : (
-            <div className="space-y-0">
-              {sessions.map((s: any) => (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-3 py-2 border-l-2 pl-4 ml-1"
-                  style={{ borderColor: s.status === "active" ? `rgba(${rgb}, 0.5)` : undefined }}
-                >
-                  <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
-                    {formatRelative(s.created_at)}
-                  </span>
-                  <code className="font-mono text-[11px] text-accent">{s.id.slice(0, 8)}</code>
-                  <span className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
-                    s.status === "active" ? "bg-accent/15 text-accent" : "bg-zinc-500/15 text-content-tertiary"
-                  }`}>
-                    {s.status}
-                  </span>
-                  {s.machine_name && (
-                    <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ─── Activity ─── */}
-        <div>
-          <div className="text-[10px] font-medium text-content-tertiary uppercase tracking-wider mb-2">Activity</div>
-          {(!agent.logs || agent.logs.length === 0) ? (
-            <p className="text-sm text-content-tertiary">No activity yet.</p>
-          ) : (
-            <div className="space-y-0">
-              {agent.logs.map((log: any) => (
-                <div
-                  key={log.id}
-                  className="flex gap-3 py-2 border-l-2 pl-4 ml-1"
-                  style={{ borderColor: actionStyles[log.action] ? `rgba(${rgb}, 0.4)` : undefined }}
-                >
-                  <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
-                    {formatRelative(log.created_at)}
-                  </span>
-                  <span className={`text-[13px] ${actionStyles[log.action] || "text-content-secondary"}`}>
-                    {log.action}
-                  </span>
-                  {log.task_title && <span className="text-[12px] text-content-tertiary truncate ml-auto">{log.task_title}</span>}
-                </div>
-              ))}
-            </div>
-          )}
+        {/* ─── Tab Content ─── */}
+        <div className="mt-6 pb-16">
+          {tab === "mission" && <MissionTab task={task} color={color} rgb={rgb} />}
+          {tab === "activity" && <ActivityTab logs={agent.logs} rgb={rgb} />}
+          {tab === "sessions" && <SessionsTab sessions={sessions} color={color} />}
         </div>
       </div>
     </div>
+  );
+}
+
+function ActivityTab({ logs, rgb }: { logs: any[]; rgb: string }) {
+  if (!logs || logs.length === 0) {
+    return <p className="text-sm text-content-tertiary">No activity yet.</p>;
+  }
+
+  return (
+    <div className="space-y-0">
+      {logs.map((log: any) => (
+        <div key={log.id} className="flex items-center gap-4 py-2.5 group">
+          <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
+            {formatRelative(log.created_at)}
+          </span>
+          <span className={`font-mono text-[12px] w-32 shrink-0 ${actionStyles[log.action] || "text-content-tertiary"}`}>
+            {log.action}
+          </span>
+          {log.task_title && (
+            <span className="text-sm text-content-secondary truncate">{log.task_title}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
+  if (sessions.length === 0) {
+    return <p className="text-sm text-content-tertiary">No sessions yet.</p>;
+  }
+
+  return (
+    <div className="relative ml-2">
+      <div className="absolute left-[3px] top-3 bottom-3 w-px bg-border" />
+
+      {sessions.map((s: any) => {
+        const isActive = s.status === "active";
+        return (
+          <div key={s.id} className="relative flex items-center gap-4 py-2.5 pl-7">
+            <div
+              className={`absolute left-0 w-[7px] h-[7px] rounded-full ${isActive ? "animate-pulse-glow" : ""}`}
+              style={{ backgroundColor: isActive ? color : "#3f3f46" }}
+            />
+            <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
+              {formatRelative(s.created_at)}
+            </span>
+            <code className="font-mono text-[11px] text-content-secondary">{s.id.slice(0, 12)}</code>
+            <span className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
+              isActive ? "text-accent bg-accent/10" : "text-content-tertiary bg-surface-tertiary"
+            }`}>
+              {s.status}
+            </span>
+            {s.machine_name && (
+              <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function IdentityModal({ fingerprint, publicKey, color, rgb, onClose }: {
+  fingerprint: string; publicKey: string; color: string; rgb: string; onClose: () => void;
+}) {
+  const formatFullFingerprint = (fp: string) =>
+    fp.match(/.{2}/g)?.join(":") ?? fp;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-secondary rounded-lg w-full max-w-lg" style={{ boxShadow: `0 0 0 1px rgba(${rgb}, 0.15)` }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
+            <h2 className="text-sm font-medium text-content-primary">Cryptographic Identity</h2>
+            <button onClick={onClose} className="text-content-tertiary hover:text-content-secondary transition-colors text-lg leading-none">&times;</button>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* Fingerprint */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Fingerprint</span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(fingerprint)}
+                  className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+              <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
+                <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all" style={{ wordSpacing: "0.15em" }}>
+                  {formatFullFingerprint(fingerprint)}
+                </code>
+              </div>
+            </div>
+
+            {/* Public key */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Ed25519 Public Key</span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(publicKey)}
+                  className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+              <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
+                <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">
+                  {publicKey}
+                </code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MissionTab({ task, color, rgb }: { task: any; color: string; rgb: string }) {
+  if (!task) {
+    return <p className="text-sm text-content-tertiary">No active mission.</p>;
+  }
+
+  return (
+    <Link
+      to={`/boards/${task.board_id}`}
+      className="flex items-center gap-3 bg-surface-secondary rounded-lg px-5 py-3.5 hover:bg-surface-tertiary/60 transition-colors"
+      style={{
+        borderLeft: `3px solid ${color}`,
+        boxShadow: "0 0 0 1px var(--border)",
+      }}
+    >
+      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
+        {task.status.replace("_", " ")}
+      </span>
+      <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
+      {task.pr_url && (
+        <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}
+          className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary">
+          PR &rarr;
+        </a>
+      )}
+      {task.repository_name && (
+        <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>
+      )}
+    </Link>
   );
 }
