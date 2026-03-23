@@ -124,6 +124,9 @@ export class ProcessManager {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       cleanupPromptFile(sessionId);
 
+      // Already removed by killTask() — process was intentionally terminated
+      if (!this.agents.has(taskId)) return;
+
       if (stdoutBuffer.trim()) {
         try {
           const event = JSON.parse(stdoutBuffer);
@@ -148,6 +151,7 @@ export class ProcessManager {
     });
 
     proc.on("error", async (err) => {
+      if (!this.agents.has(taskId)) return;
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);

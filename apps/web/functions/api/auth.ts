@@ -103,13 +103,11 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   try {
     result = await auth.api.verifyApiKey({ body: { key: token } });
   } catch (err: any) {
-    if (err?.body?.code === "RATE_LIMITED") {
-      return c.json({ error: { code: "RATE_LIMITED", message: "Rate limit exceeded" } }, 429);
-    }
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+    return c.json({ error: { code: "UNAUTHORIZED", message: err?.message || "Invalid API key" } }, 401);
   }
   if (!result?.valid) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+    const code = result?.error?.code === "RATE_LIMITED" ? 429 : 401;
+    return c.json({ error: result?.error || { code: "UNAUTHORIZED", message: "Invalid API key" } }, code);
   }
 
   c.set("ownerId", result.key.referenceId);
