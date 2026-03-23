@@ -7,6 +7,7 @@ import { type ApiClient, MachineClient, createClient } from "./client.js";
 import { getFormat, output, formatTaskList, formatBoard, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
 import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
+import { fetchTemplate } from "./templates.js";
 
 function isUrl(value: string): boolean {
   return value.includes("://") || value.startsWith("git@");
@@ -186,6 +187,50 @@ agentCmd
     const agents = await client.listAgents();
     const fmt = getFormat(opts.format);
     output(agents, fmt, formatAgentList);
+  });
+
+agentCmd
+  .command("create")
+  .description("Create a new agent (from template or manual)")
+  .option("--template <slug>", "Agent template slug (e.g. fullstack-developer, feature-planner)")
+  .option("--name <name>", "Agent name")
+  .option("--bio <bio>", "Agent bio")
+  .option("--role <role>", "Agent role")
+  .option("--runtime <runtime>", "Agent runtime (e.g. claude-code)")
+  .option("--model <model>", "Model to use")
+  .option("--format <format>", "Output format (json, text)")
+  .action(async (opts) => {
+    const client = new MachineClient();
+
+    let body: Record<string, unknown>;
+
+    if (opts.template) {
+      const template = await fetchTemplate(opts.template);
+      body = {
+        name: opts.name || template.name,
+        bio: template.bio,
+        soul: template.soul,
+        role: template.role,
+        handoff_to: template.handoff_to,
+        runtime: opts.runtime || template.runtime,
+        model: opts.model || template.model,
+        skills: template.skills,
+      };
+    } else {
+      if (!opts.name) {
+        console.error("Either --template or --name is required");
+        process.exit(1);
+      }
+      body = { name: opts.name };
+      if (opts.bio) body.bio = opts.bio;
+      if (opts.role) body.role = opts.role;
+      if (opts.runtime) body.runtime = opts.runtime;
+      if (opts.model) body.model = opts.model;
+    }
+
+    const agent = await client.createAgent(body as any);
+    const fmt = getFormat(opts.format);
+    output(agent, fmt, (a) => `Created agent ${a.id}: ${a.name} (${a.role || "no role"})`);
   });
 
 // ─── Board ───

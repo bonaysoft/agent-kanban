@@ -91,6 +91,9 @@ export abstract class ApiClient {
     return this.request("DELETE", `/api/agents/${agentId}/sessions/${sessionId}`);
   }
   listAgents() { return this.request("GET", "/api/agents"); }
+  createAgent(input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) {
+    return this.request("POST", "/api/agents", input);
+  }
 
   // Boards
   createBoard(input: { name: string; description?: string }) {

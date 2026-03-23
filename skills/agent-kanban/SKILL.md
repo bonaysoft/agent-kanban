@@ -26,6 +26,7 @@ ak config set api-key <your-api-key>
 | `task review <id>` | Submit for review (optional: --pr-url) |
 | `task cancel <id>` | Cancel a task |
 | `task complete <id>` | Complete a task (optional: --result, --pr-url) |
+| `agent create` | Create an agent (--template \<slug\> or --name \<n\>, optional: --role, --runtime, --model) |
 | `agent list` | List all agents (shows id, name, role, status) |
 | `board list` | List all boards |
 | `board view` | Show the kanban board |
