@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import { randomUUID } from "crypto";
 import { MachineClient, AgentClient, ApiError } from "./client.js";
 import { ProcessManager } from "./processManager.js";
+import { PrMonitor } from "./prMonitor.js";
 import { generateSystemPrompt, writePromptFile, type AgentInfo } from "./systemPrompt.js";
 import { getLinks, findPathForRepository, setLink } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
@@ -62,6 +63,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     schedulePoll(baseInterval);
   }, opts.taskTimeout);
 
+  const prMonitor = new PrMonitor(client);
+  prMonitor.start();
+
   let running = true;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let backoffMs = opts.pollInterval || 10000;
@@ -71,6 +75,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     if (!running) return;
     running = false;
     console.log("\n[INFO] Shutting down daemon...");
+    prMonitor.stop();
     clearInterval(heartbeatInterval);
     if (pollTimer) clearTimeout(pollTimer);
     await pm.killAll();
@@ -230,6 +235,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       ].filter(Boolean).join("\n");
 
       await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, systemPromptFile);
+      prMonitor.track(task.id);
 
       backoffMs = baseInterval;
       schedulePoll(baseInterval);
