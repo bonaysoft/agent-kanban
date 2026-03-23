@@ -1,0 +1,12 @@
+# Lefthook — pre-commit quality gates
+# Runs type checking and tests on staged files before each commit.
+
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: pnpm lint
+    test:
+      glob: "*.{ts,tsx}"
+      run: npx vitest run --changed --passWithNoTests
