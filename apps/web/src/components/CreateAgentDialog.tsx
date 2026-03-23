@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { api } from "../lib/api";
 import { fetchTemplateIndex, fetchTemplate, type AgentTemplate, type TemplateIndex } from "@agent-kanban/shared";
 
@@ -196,7 +197,11 @@ function RecruitStep({ onSelect, onBack }: {
     <>
       <DialogHeader>
         <div className="flex items-center gap-3">
-          <BackButton onClick={onBack} />
+          <Button variant="ghost" size="icon-xs" onClick={onBack}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </Button>
           <DialogTitle>Recruit an agent</DialogTitle>
         </div>
         <DialogDescription className="sr-only">Select from available templates</DialogDescription>
@@ -265,7 +270,11 @@ function FormStep(props: FormStepProps) {
     <>
       <DialogHeader>
         <div className="flex items-center gap-3">
-          <BackButton onClick={onBack} />
+          <Button variant="ghost" size="icon-xs" onClick={onBack}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </Button>
           {template ? (
             <div className="flex items-center gap-2.5">
               <AgentIdenticon publicKey={template.role || template.name} size={28} />
@@ -303,11 +312,16 @@ function FormStep(props: FormStepProps) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="agent-runtime">Runtime</Label>
-            <select id="agent-runtime" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              <option value="claude-code">Claude Code</option>
-              <option value="codex">Codex</option>
-              <option value="gemini">Gemini</option>
-            </select>
+            <Select value={runtime} onValueChange={(v) => { if (v) setRuntime(v); }}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="claude-code">Claude Code</SelectItem>
+                <SelectItem value="codex">Codex</SelectItem>
+                <SelectItem value="gemini">Gemini</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="agent-model">Model</Label>
@@ -340,16 +354,6 @@ function FormStep(props: FormStepProps) {
 
 /* ── Shared components ── */
 
-function BackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="text-muted-foreground hover:text-foreground transition-colors">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 12H5M12 19l-7-7 7-7" />
-      </svg>
-    </button>
-  );
-}
-
 function RoleMultiSelect({ selected, onChange, options }: {
   selected: string[]; onChange: (v: string[]) => void; options: string[];
 }) {
@@ -381,9 +385,9 @@ function RoleMultiSelect({ selected, onChange, options }: {
         {selected.map((r) => (
           <span key={r} className="inline-flex items-center gap-1 bg-accent/10 text-accent font-mono text-xs px-2 py-0.5 rounded">
             {r}
-            <button onClick={(e) => { e.stopPropagation(); toggle(r); }} className="hover:text-foreground transition-colors">
+            <Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); toggle(r); }} className="h-4 w-4">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-            </button>
+            </Button>
           </span>
         ))}
         {selected.length === 0 && (
@@ -395,9 +399,9 @@ function RoleMultiSelect({ selected, onChange, options }: {
       {open && available.length > 0 && (
         <div className="absolute z-10 mt-1 w-full bg-popover border border-border rounded-md shadow-lg py-1 max-h-40 overflow-y-auto">
           {available.map((r) => (
-            <button key={r} onClick={() => toggle(r)} className="w-full text-left px-3 py-1.5 text-sm font-mono text-popover-foreground hover:bg-muted transition-colors">
+            <Button key={r} variant="ghost" onClick={() => toggle(r)} className="w-full justify-start rounded-none font-mono text-sm">
               {r}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -436,9 +440,9 @@ function TagInput({ tags, onChange, placeholder }: {
       {tags.map((tag) => (
         <span key={tag} className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground font-mono text-xs px-2 py-0.5 rounded">
           {tag}
-          <button onClick={(e) => { e.stopPropagation(); onChange(tags.filter((t) => t !== tag)); }} className="text-muted-foreground hover:text-foreground transition-colors">
+          <Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); onChange(tags.filter((t) => t !== tag)); }} className="h-4 w-4">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
+          </Button>
         </span>
       ))}
       <input

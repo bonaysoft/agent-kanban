@@ -1,5 +1,6 @@
 import { AgentIdenticon } from "./AgentIdenticon";
 import { agentColor } from "../lib/agentIdentity";
+import { Badge } from "./ui/badge";
 
 interface TaskCardProps {
   task: any;
@@ -39,22 +40,22 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
           {task.title}
         </div>
         {task.blocked && (
-          <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-error/15 text-error shrink-0">
+          <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase shrink-0">
             Blocked
-          </span>
+          </Badge>
         )}
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
         {task.repository_name && (
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent">
+          <Badge variant="secondary" className="text-[11px] font-mono bg-accent-soft text-accent border-none">
             {task.repository_name}
-          </span>
+          </Badge>
         )}
         {task.priority && (
-          <span className={`text-[11px] font-mono px-2 py-0.5 rounded ${priorityColors[task.priority]}`}>
+          <Badge variant="secondary" className={`text-[11px] font-mono border-none ${priorityColors[task.priority]}`}>
             {task.priority}
-          </span>
+          </Badge>
         )}
       </div>
 

@@ -1,3 +1,5 @@
+import { Button } from "./ui/button";
+
 interface FilterBarProps {
   repositories: { id: string; name: string }[];
   activeRepository: string | null;
@@ -9,28 +11,22 @@ export function FilterBar({ repositories, activeRepository, onRepositoryChange }
 
   return (
     <div className="flex gap-2 px-5 py-2.5 border-b border-border">
-      <button
+      <Button
+        variant={activeRepository === null ? "secondary" : "outline"}
+        size="xs"
         onClick={() => onRepositoryChange(null)}
-        className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
-          activeRepository === null
-            ? "border-accent text-accent bg-accent-soft"
-            : "border-border text-content-secondary bg-surface-secondary"
-        }`}
       >
         All repos
-      </button>
+      </Button>
       {repositories.map((r) => (
-        <button
+        <Button
           key={r.id}
+          variant={activeRepository === r.id ? "secondary" : "outline"}
+          size="xs"
           onClick={() => onRepositoryChange(r.id)}
-          className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
-            activeRepository === r.id
-              ? "border-accent text-accent bg-accent-soft"
-              : "border-border text-content-secondary bg-surface-secondary"
-          }`}
         >
           {r.name}
-        </button>
+        </Button>
       ))}
     </div>
   );

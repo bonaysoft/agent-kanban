@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -70,18 +72,17 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
               Board name
             </label>
-            <input
+            <Input
               value={boardName}
               onChange={(e) => setBoardName(e.target.value)}
-              className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2.5 text-sm text-content-primary outline-none focus:border-accent"
             />
-            <button
+            <Button
               onClick={handleCreateBoard}
               disabled={loading || !boardName.trim()}
-              className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="w-full"
             >
               {loading ? "Creating..." : "Create Board"}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -90,21 +91,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
               First task
             </label>
-            <input
+            <Input
               value={taskTitle}
               onChange={(e) => setTaskTitle(e.target.value)}
-              className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2.5 text-sm text-content-primary outline-none focus:border-accent"
             />
             {error && (
               <p className="text-xs text-red-400">{error}</p>
             )}
-            <button
+            <Button
               onClick={handleCreateTask}
               disabled={loading || !taskTitle.trim()}
-              className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="w-full"
             >
               {loading ? "Creating..." : "Create Task"}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -116,20 +116,21 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
 {`npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`}
             </pre>
-            <button
+            <Button
+              variant="outline"
               onClick={() => navigator.clipboard.writeText(
                 `npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`
               )}
-              className="w-full border border-border text-content-secondary font-medium text-sm py-2.5 rounded-lg hover:border-content-tertiary"
+              className="w-full"
             >
               Copy to clipboard
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleDone}
-              className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90"
+              className="w-full"
             >
               Go to Board
-            </button>
+            </Button>
           </div>
         )}
       </div>

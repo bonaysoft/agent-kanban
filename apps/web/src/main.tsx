@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./globals.css";
 
 const root = document.getElementById("root")!;
@@ -13,6 +14,8 @@ if (stored === "dark" || (!stored && matchMedia("(prefers-color-scheme: dark)").
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <TooltipProvider>
+      <App />
+    </TooltipProvider>
   </StrictMode>,
 );

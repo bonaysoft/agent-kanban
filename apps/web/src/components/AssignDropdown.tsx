@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useAgents } from "../hooks/useAgents";
 import { api } from "../lib/api";
 import { AgentIdenticon } from "./AgentIdenticon";
+import { Button } from "./ui/button";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
 
 interface AssignDropdownProps {
   taskId: string;
@@ -16,7 +18,6 @@ const statusDotColors: Record<string, string> = {
 
 export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropdownProps) {
   const { agents } = useAgents();
-  const [open, setOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
   async function handleAssign(agentId: string) {
@@ -28,7 +29,6 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
       alert(e.message);
     } finally {
       setAssigning(false);
-      setOpen(false);
     }
   }
 
@@ -39,51 +39,43 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
       onAssigned();
     } finally {
       setAssigning(false);
-      setOpen(false);
     }
   }
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        disabled={assigning}
-        className="text-sm text-accent hover:underline font-mono text-[13px]"
-      >
+    <DropdownMenu>
+      <DropdownMenuTrigger render={
+        <Button variant="link" size="sm" disabled={assigning} className="font-mono text-[13px] px-0" />
+      }>
         {currentAgent || "Assign..."}
-      </button>
+      </DropdownMenuTrigger>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-40 bg-surface-secondary border border-border rounded-lg shadow-lg min-w-[200px] py-1">
-            {currentAgent && (
-              <button
-                onClick={handleRelease}
-                className="w-full text-left px-3 py-2 text-sm text-error hover:bg-surface-tertiary"
-              >
-                Release task
-              </button>
-            )}
-            {agents.length === 0 && (
-              <div className="px-3 py-2 text-sm text-content-tertiary">No agents</div>
-            )}
-            {agents.map((agent) => (
-              <button
-                key={agent.id}
-                onClick={() => handleAssign(agent.id)}
-                disabled={assigning}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-surface-tertiary flex items-center gap-2"
-              >
-                <AgentIdenticon publicKey={agent.public_key} size={20} />
-                <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status] || "bg-content-tertiary"}`} />
-                <span className="font-mono text-[13px] text-content-primary">{agent.name}</span>
-                <span className="text-[10px] text-content-tertiary ml-auto">{agent.status}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+      <DropdownMenuContent align="start" className="min-w-[200px]">
+        {currentAgent && (
+          <>
+            <DropdownMenuItem variant="destructive" onClick={handleRelease}>
+              Release task
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        {agents.length === 0 && (
+          <div className="px-2 py-1.5 text-sm text-content-tertiary">No agents</div>
+        )}
+        {agents.map((agent) => (
+          <DropdownMenuItem
+            key={agent.id}
+            onClick={() => handleAssign(agent.id)}
+            disabled={assigning}
+            className="gap-2"
+          >
+            <AgentIdenticon publicKey={agent.public_key} size={20} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status] || "bg-content-tertiary"}`} />
+            <span className="font-mono text-[13px] text-content-primary">{agent.name}</span>
+            <span className="text-[10px] text-content-tertiary ml-auto">{agent.status}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

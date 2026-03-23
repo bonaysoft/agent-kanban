@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { TaskCard } from "./TaskCard";
 import { api } from "../lib/api";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
 interface KanbanColumnProps {
   column: any;
@@ -58,23 +60,24 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick, onRefresh }: K
             onSubmit={(e) => { e.preventDefault(); handleCreate(); }}
             className="mt-2"
           >
-            <input
+            <Input
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => { if (!title.trim()) setAdding(false); }}
               onKeyDown={(e) => { if (e.key === "Escape") setAdding(false); }}
               placeholder="Task title..."
-              className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
             />
           </form>
         ) : (
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setAdding(true)}
-            className="w-full mt-2 py-2 text-xs text-content-tertiary border border-dashed border-border rounded-md hover:text-content-secondary hover:border-content-tertiary transition-colors"
+            className="w-full mt-2 border-dashed"
           >
             + Task
-          </button>
+          </Button>
         )
       )}
     </div>

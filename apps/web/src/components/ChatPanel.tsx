@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../lib/api";
 import { formatRelative } from "./TaskDetailFields";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { Badge } from "./ui/badge";
 
 interface ChatPanelProps {
   taskId: string;
@@ -78,16 +82,21 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       {/* Session ID for resume */}
       <div className="flex items-center gap-2 text-[11px] font-mono text-content-tertiary shrink-0">
         <span>Session:</span>
-        <code className="bg-surface-primary px-1.5 py-0.5 rounded text-accent select-all">
+        <Badge variant="secondary" className="font-mono text-accent select-all">
           {agentId}
-        </code>
-        <button
-          onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)}
-          className="text-content-tertiary hover:text-content-secondary transition-colors"
-          title="Copy resume command"
-        >
-          ⎘
-        </button>
+        </Badge>
+        <Tooltip>
+          <TooltipTrigger render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)}
+            />
+          }>
+            ⎘
+          </TooltipTrigger>
+          <TooltipContent>Copy resume command</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Messages — fills available space */}
@@ -138,22 +147,20 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       {/* Input — pinned at bottom, hidden when task is done */}
       {!taskDone && (
         <div className="flex gap-2 shrink-0">
-          <input
+          <Input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Message the agent..."
             disabled={sending}
-            className="flex-1 bg-surface-primary border border-border rounded-md px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
           />
-          <button
+          <Button
             onClick={handleSend}
             disabled={!input.trim() || sending}
-            className="px-4 py-2 bg-accent text-surface-primary rounded-md text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
           >
             {sending ? "..." : "Send"}
-          </button>
+          </Button>
         </div>
       )}
     </div>

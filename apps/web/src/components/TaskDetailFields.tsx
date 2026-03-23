@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Button } from "./ui/button";
 
 export function EditableText({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
   const [editing, setEditing] = useState(false);
@@ -16,13 +19,13 @@ export function EditableText({ value, onSave, className }: { value: string; onSa
 
   if (editing) {
     return (
-      <input
+      <Input
         ref={inputRef}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
-        className={`${className} bg-transparent border-b border-accent outline-none w-full`}
+        className={`${className} border-accent`}
       />
     );
   }
@@ -52,14 +55,14 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
 
   if (editing) {
     return (
-      <textarea
+      <Textarea
         ref={ref}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
         rows={3}
-        className="w-full text-sm bg-surface-primary border border-accent rounded-md p-2 text-content-primary outline-none resize-y"
+        className="resize-y"
       />
     );
   }
@@ -91,23 +94,23 @@ export function EditableBadge({ value, placeholder, onSave, className }: { value
 
   if (editing) {
     return (
-      <input
+      <Input
         ref={ref}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value || ""); setEditing(false); } }}
         placeholder="project name"
-        className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-primary border border-accent outline-none w-24"
+        className="text-[11px] font-mono h-6 w-24"
       />
     );
   }
 
   if (!value) {
     return (
-      <button onClick={() => setEditing(true)} className="text-[11px] font-mono px-2 py-0.5 rounded border border-dashed border-border text-content-tertiary hover:border-content-tertiary">
+      <Button variant="outline" size="xs" onClick={() => setEditing(true)} className="text-[11px] font-mono border-dashed">
         {placeholder}
-      </button>
+      </Button>
     );
   }
 

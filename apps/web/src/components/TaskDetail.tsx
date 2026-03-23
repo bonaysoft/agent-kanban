@@ -7,6 +7,13 @@ import { ActivityLog } from "./ActivityLog";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
 import { AssignDropdown } from "./AssignDropdown";
+import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "./ui/sheet";
+import { Badge } from "./ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import { Separator } from "./ui/separator";
+import { Skeleton } from "./ui/skeleton";
 
 const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -27,15 +34,12 @@ interface TaskDetailProps {
 
 const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
-type Tab = "details" | "chat";
-
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
   const [depTitles, setDepTitles] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<Tab>("details");
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
   const { messages: sseMessages } = useSSE({ taskId, enabled: true });
 
@@ -75,240 +79,216 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     onRefresh();
   }
 
-  if (loading) {
-    return (
-      <Panel>
-        <div className="p-6 animate-pulse space-y-4">
-          <div className="h-6 bg-surface-tertiary rounded w-3/4" />
-          <div className="h-4 bg-surface-tertiary rounded w-1/2" />
-          <div className="h-20 bg-surface-tertiary rounded" />
-        </div>
-      </Panel>
-    );
-  }
+  const content = loading ? (
+    <div className="p-6 space-y-4">
+      <Skeleton className="h-6 w-3/4" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-20 w-full" />
+    </div>
+  ) : !task ? (
+    <div className="p-6">
+      <p className="text-content-secondary">Task not found.</p>
+      <Button variant="link" onClick={onClose} className="mt-4">Back to board</Button>
+    </div>
+  ) : null;
 
-  if (!task) {
+  if (content) {
     return (
-      <Panel>
-        <div className="p-6">
-          <p className="text-content-secondary">Task not found.</p>
-          <button onClick={onClose} className="mt-4 text-accent text-sm">Back to board</button>
-        </div>
-      </Panel>
+      <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <SheetContent showCloseButton={false}>
+          <SheetTitle className="sr-only">Task</SheetTitle>
+          <SheetDescription className="sr-only">Task details</SheetDescription>
+          {content}
+        </SheetContent>
+      </Sheet>
     );
   }
 
   const dependsOn: string[] = task.depends_on || [];
   const hasAgent = !!task.assigned_to;
 
-  return (
-    <Panel>
-      {/* Header */}
-      <div className="flex items-start justify-between p-5 border-b border-border">
-        <div className="flex-1 min-w-0 mr-4">
-          <div className="flex items-center gap-2">
-            <EditableText
-              value={task.title}
-              onSave={(v) => handleUpdate("title", v)}
-              className="text-lg font-semibold text-content-primary"
-            />
-            {task.blocked && (
-              <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-error/15 text-error">
-                Blocked
-              </span>
-            )}
-          </div>
-          <div className="flex gap-1.5 mt-2 flex-wrap">
-            <select
-              value={task.repository_id || ""}
-              onChange={(e) => handleUpdate("repository_id", e.target.value || null)}
-              className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent border-none outline-none cursor-pointer"
-            >
-              <option value="">no repo</option>
-              {repositories.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
+  const detailsContent = (
+    <div className="p-5 space-y-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <FieldLabel>Status</FieldLabel>
+          <Select value={task.status} onValueChange={handleStatusChange}>
+            <SelectTrigger size="sm" className="text-sm text-accent border-none shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TASK_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{TASK_STATUS_LABELS[s]}</SelectItem>
               ))}
-            </select>
-            <select
-              value={task.priority || ""}
-              onChange={(e) => handleUpdate("priority", e.target.value || null)}
-              className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-tertiary text-content-secondary border-none outline-none cursor-pointer"
-            >
-              <option value="">no priority</option>
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
+            </SelectContent>
+          </Select>
         </div>
-        <button onClick={onClose} className="text-content-tertiary hover:text-content-primary text-lg">✕</button>
-      </div>
-
-      {/* Tabs */}
-      {hasAgent && (
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setActiveTab("details")}
-            className={`px-5 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === "details"
-                ? "text-content-primary border-b-2 border-accent"
-                : "text-content-tertiary hover:text-content-secondary"
-            }`}
-          >
-            Details
-          </button>
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`px-5 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === "chat"
-                ? "text-accent border-b-2 border-accent"
-                : "text-content-tertiary hover:text-content-secondary"
-            }`}
-          >
-            Chat
-          </button>
-        </div>
-      )}
-
-      {/* Tab content */}
-      {(activeTab === "details" || !hasAgent) && (
-        <div className="p-5 space-y-4">
-          {/* Status row */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <FieldLabel>Status</FieldLabel>
-              <select
-                value={task.status}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="text-sm bg-transparent text-accent border-none outline-none cursor-pointer"
-              >
-                {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel>Assigned to</FieldLabel>
-              <AssignDropdown
-                taskId={taskId}
-                currentAgent={task.agent_name || null}
-                onAssigned={() => { reload(); onRefresh(); }}
-              />
-            </div>
-            <Field label="Duration" value={
-              task.duration_minutes != null
-                ? <span className="font-mono text-[13px]">{task.duration_minutes} min</span>
-                : <span className="text-content-tertiary">—</span>
-            } />
-          </div>
-
-          {/* Dependencies */}
-          {dependsOn.length > 0 && (
-            <div>
-              <FieldLabel>Depends on</FieldLabel>
-              <div className="flex gap-1.5 flex-wrap">
-                {dependsOn.map((depId) => (
-                  <span key={depId} className="text-[11px] px-2 py-0.5 rounded bg-surface-tertiary text-content-secondary">
-                    {depTitles[depId] || depId}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Description */}
-          <div>
-            <FieldLabel>Description</FieldLabel>
-            <EditableTextarea
-              value={task.description || ""}
-              placeholder="Add a description..."
-              onSave={(v) => handleUpdate("description", v || null)}
-            />
-          </div>
-
-          {/* Input (read-only) */}
-          {task.input && (
-            <div>
-              <FieldLabel>Input</FieldLabel>
-              <pre className="text-xs font-mono bg-surface-primary border border-border rounded-md p-3 text-content-secondary overflow-x-auto">
-                {JSON.stringify(JSON.parse(task.input), null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {/* Result */}
-          {task.result && (
-            <div>
-              <FieldLabel>Result</FieldLabel>
-              <p className="text-sm text-content-secondary">{task.result}</p>
-            </div>
-          )}
-
-          {/* PR */}
-          {task.pr_url && (
-            <div>
-              <FieldLabel>PR</FieldLabel>
-              <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
-                {task.pr_url}
-              </a>
-            </div>
-          )}
-
-          {/* Subtasks */}
-          {task.subtask_count > 0 && (
-            <>
-              <hr className="border-border" />
-              <div>
-                <FieldLabel>Subtasks ({task.subtask_count})</FieldLabel>
-                <SubtaskList parentId={taskId} onTaskClick={(id) => { /* navigate to subtask */ }} />
-              </div>
-            </>
-          )}
-
-          <hr className="border-border" />
-
-          {/* Activity Log */}
-          <div>
-            <FieldLabel>Activity</FieldLabel>
-            <ActivityLog
-              taskId={taskId}
-              initialLogs={task.logs || []}
-              assigned={!!task.assigned_to}
-            />
-          </div>
-
-          <hr className="border-border" />
-
-          {/* Delete */}
-          <button
-            onClick={handleDelete}
-            className="text-xs text-error hover:underline"
-          >
-            Delete task
-          </button>
-        </div>
-      )}
-
-      {activeTab === "chat" && hasAgent && (
-        <div className="flex flex-col h-[calc(100%-8rem)] p-5">
-          <ChatPanel
+        <div>
+          <FieldLabel>Assigned to</FieldLabel>
+          <AssignDropdown
             taskId={taskId}
-            agentId={task.assigned_to}
-            userId={session?.user?.id || null}
-            taskDone={task.status === "done"}
-            initialMessages={initialMessages}
-            sseMessages={sseMessages}
+            currentAgent={task.agent_name || null}
+            onAssigned={() => { reload(); onRefresh(); }}
           />
         </div>
-      )}
-    </Panel>
-  );
-}
+        <Field label="Duration" value={
+          task.duration_minutes != null
+            ? <span className="font-mono text-[13px]">{task.duration_minutes} min</span>
+            : <span className="text-content-tertiary">—</span>
+        } />
+      </div>
 
-function Panel({ children }: { children: React.ReactNode }) {
+      {dependsOn.length > 0 && (
+        <div>
+          <FieldLabel>Depends on</FieldLabel>
+          <div className="flex gap-1.5 flex-wrap">
+            {dependsOn.map((depId) => (
+              <Badge key={depId} variant="secondary" className="text-[11px] font-mono">
+                {depTitles[depId] || depId}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <FieldLabel>Description</FieldLabel>
+        <EditableTextarea
+          value={task.description || ""}
+          placeholder="Add a description..."
+          onSave={(v) => handleUpdate("description", v || null)}
+        />
+      </div>
+
+      {task.input && (
+        <div>
+          <FieldLabel>Input</FieldLabel>
+          <pre className="text-xs font-mono bg-surface-primary border border-border rounded-md p-3 text-content-secondary overflow-x-auto">
+            {JSON.stringify(JSON.parse(task.input), null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {task.result && (
+        <div>
+          <FieldLabel>Result</FieldLabel>
+          <p className="text-sm text-content-secondary">{task.result}</p>
+        </div>
+      )}
+
+      {task.pr_url && (
+        <div>
+          <FieldLabel>PR</FieldLabel>
+          <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
+            {task.pr_url}
+          </a>
+        </div>
+      )}
+
+      {task.subtask_count > 0 && (
+        <>
+          <Separator />
+          <div>
+            <FieldLabel>Subtasks ({task.subtask_count})</FieldLabel>
+            <SubtaskList parentId={taskId} onTaskClick={(id) => { /* navigate to subtask */ }} />
+          </div>
+        </>
+      )}
+
+      <Separator />
+
+      <div>
+        <FieldLabel>Activity</FieldLabel>
+        <ActivityLog
+          taskId={taskId}
+          initialLogs={task.logs || []}
+          assigned={!!task.assigned_to}
+        />
+      </div>
+
+      <Separator />
+
+      <Button variant="destructive" size="xs" onClick={handleDelete}>
+        Delete task
+      </Button>
+    </div>
+  );
+
+  const chatContent = (
+    <div className="flex flex-col h-[calc(100%-8rem)] p-5">
+      <ChatPanel
+        taskId={taskId}
+        agentId={task.assigned_to}
+        userId={session?.user?.id || null}
+        taskDone={task.status === "done"}
+        initialMessages={initialMessages}
+        sseMessages={sseMessages}
+      />
+    </div>
+  );
+
   return (
-    <aside className="fixed right-0 top-0 h-full w-full md:w-1/2 bg-surface-secondary border-l border-border z-50 overflow-y-auto">
-      {children}
-    </aside>
+    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent showCloseButton={false} className="overflow-y-auto p-0 gap-0">
+        <SheetTitle className="sr-only">{task.title}</SheetTitle>
+        <SheetDescription className="sr-only">Task detail panel</SheetDescription>
+
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-border">
+          <div className="flex-1 min-w-0 mr-4">
+            <div className="flex items-center gap-2">
+              <EditableText
+                value={task.title}
+                onSave={(v) => handleUpdate("title", v)}
+                className="text-lg font-semibold text-content-primary"
+              />
+              {task.blocked && (
+                <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
+                  Blocked
+                </Badge>
+              )}
+            </div>
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              <Select value={task.repository_id || "__none__"} onValueChange={(v) => handleUpdate("repository_id", v === "__none__" ? null : v)}>
+                <SelectTrigger size="sm" className="text-[11px] font-mono h-6">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">no repo</SelectItem>
+                  {repositories.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={task.priority || "__none__"} onValueChange={(v) => handleUpdate("priority", v === "__none__" ? null : v)}>
+                <SelectTrigger size="sm" className="text-[11px] font-mono h-6">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">no priority</SelectItem>
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon-sm" onClick={onClose}>✕</Button>
+        </div>
+
+        {hasAgent ? (
+          <Tabs defaultValue="details">
+            <TabsList variant="line" className="w-full justify-start border-b border-border px-5">
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+            </TabsList>
+            <TabsContent value="details">{detailsContent}</TabsContent>
+            <TabsContent value="chat">{chatContent}</TabsContent>
+          </Tabs>
+        ) : (
+          detailsContent
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

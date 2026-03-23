@@ -143,32 +143,20 @@ export function BoardPage() {
       </div>
 
       {selectedTask && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={() => setSelectedTask(null)}
-          />
-          <TaskDetail
-            taskId={selectedTask}
-            onClose={() => setSelectedTask(null)}
-            onRefresh={refresh}
-            onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}
-          />
-        </>
+        <TaskDetail
+          taskId={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onRefresh={refresh}
+          onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}
+        />
       )}
 
       {selectedAgent && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={() => setSelectedAgent(null)}
-          />
-          <AgentProfile
-            agentId={selectedAgent}
-            onClose={() => setSelectedAgent(null)}
-            onTaskClick={(taskId) => { setSelectedAgent(null); setSelectedTask(taskId); }}
-          />
-        </>
+        <AgentProfile
+          agentId={selectedAgent}
+          onClose={() => setSelectedAgent(null)}
+          onTaskClick={(taskId) => { setSelectedAgent(null); setSelectedTask(taskId); }}
+        />
       )}
     </div>
   );

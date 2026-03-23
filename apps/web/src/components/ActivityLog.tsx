@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSSE } from "../hooks/useSSE";
 import { formatRelative } from "./TaskDetailFields";
+import { Button } from "./ui/button";
 
 interface ActivityLogProps {
   taskId: string;
@@ -88,12 +89,13 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
       )}
 
       {newCount > 0 && !autoScroll && (
-        <button
+        <Button
           onClick={scrollToTop}
-          className="absolute top-0 left-1/2 -translate-x-1/2 z-10 text-[11px] bg-accent text-surface-primary px-2 py-0.5 rounded-b font-mono"
+          size="xs"
+          className="absolute top-0 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono"
         >
           ↑ {newCount} new
-        </button>
+        </Button>
       )}
 
       <div
