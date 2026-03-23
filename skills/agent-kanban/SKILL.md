@@ -19,7 +19,7 @@ ak config set api-key <your-api-key>
 
 | Command | Description |
 |---------|-------------|
-| `task create --title <t>` | Create a task (optional: --description, --priority, --labels, --input, --assign-to, --parent, --depends-on, --repo) |
+| `task create --title <t>` | Create a task (optional: --description, --priority, --labels, --input, --assign-to, --parent, --depends-on, --repo \<URL or ID\>, --board) |
 | `task list` | List tasks (optional: --status, --label, --parent, --repo, --format) |
 | `task claim <id>` | Claim an assigned task — start working |
 | `task log <id> <msg>` | Add a progress log entry |

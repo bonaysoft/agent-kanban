@@ -308,7 +308,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         `Title: ${task.title}`,
         task.description ? `Description: ${task.description}` : null,
         task.priority ? `Priority: ${task.priority}` : null,
-        `Repository: ${taskRepo?.full_name ?? task.repository_id}`,
+        `Repository: ${taskRepo?.url ?? task.repository_id}`,
         `Board: ${task.board_id}`,
       ].filter(Boolean).join("\n");
 
