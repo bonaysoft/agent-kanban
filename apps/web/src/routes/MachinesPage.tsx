@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
 import { api } from "../lib/api";
 import { authClient, getAuthToken } from "../lib/auth-client";
 import { formatRelative } from "../components/TaskDetailFields";
@@ -186,133 +188,122 @@ export function MachinesPage() {
       </div>
 
       {/* Add Machine Dialog */}
-      {showDialog && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={closeDialog} />
-          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <div className="bg-surface-secondary border border-border rounded-lg w-full max-w-md shadow-lg" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-semibold text-content-primary">Add Machine</h2>
-                <button onClick={closeDialog} className="text-content-tertiary hover:text-content-primary text-lg">✕</button>
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Add Machine</DialogTitle>
+            <DialogDescription className="sr-only">Add a new machine to run agents</DialogDescription>
+          </DialogHeader>
+
+          {dialogStep === "choose" && (
+            <div className="space-y-2">
+              <p className="text-xs text-content-secondary">Where will this machine run?</p>
+              <button
+                onClick={handleChooseLocal}
+                className="w-full flex items-center gap-3 bg-surface-primary border border-border rounded-lg px-4 py-3 hover:border-accent/50 transition-colors text-left"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-content-secondary shrink-0">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+                <div>
+                  <div className="text-sm font-medium text-content-primary">Your Computer</div>
+                  <div className="text-[11px] text-content-tertiary">Run the daemon on this machine</div>
+                </div>
+              </button>
+              <button
+                disabled
+                className="w-full flex items-center gap-3 bg-surface-primary border border-border rounded-lg px-4 py-3 opacity-50 cursor-not-allowed text-left"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-content-tertiary shrink-0">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                </svg>
+                <div>
+                  <div className="text-sm font-medium text-content-tertiary">Cloud Sandbox</div>
+                  <div className="text-[11px] text-content-tertiary">Coming soon</div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {dialogStep === "waiting" && createdKey && (
+            <div className="space-y-4 overflow-hidden">
+              <p className="text-xs text-content-secondary">Run this command in your terminal:</p>
+              <div className="bg-[#0C0C0C] rounded-lg overflow-hidden border border-border">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] border-b border-border">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
+                  <span className="text-[10px] text-content-tertiary ml-2 font-mono">terminal</span>
+                </div>
+                <div className="p-3 text-xs font-mono leading-relaxed overflow-x-auto whitespace-nowrap">
+                  <span className="text-content-tertiary select-none">$ </span>
+                  <span className="text-content-secondary">npx agent-kanban start \</span>
+                  <br />
+                  <span className="text-content-secondary pl-4">--api-url {apiUrl} \</span>
+                  <br />
+                  <span className="text-content-secondary pl-4">--api-key {createdKey}</span>
+                </div>
               </div>
-
-              <div className="p-5 space-y-4">
-                {dialogStep === "choose" && (
-                  <>
-                    <p className="text-xs text-content-secondary">Where will this machine run?</p>
-                    <div className="space-y-2">
-                      <button
-                        onClick={handleChooseLocal}
-                        className="w-full flex items-center gap-3 bg-surface-primary border border-border rounded-lg px-4 py-3 hover:border-accent/50 transition-colors text-left"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-content-secondary shrink-0">
-                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                          <line x1="8" y1="21" x2="16" y2="21" />
-                          <line x1="12" y1="17" x2="12" y2="21" />
-                        </svg>
-                        <div>
-                          <div className="text-sm font-medium text-content-primary">Your Computer</div>
-                          <div className="text-[11px] text-content-tertiary">Run the daemon on this machine</div>
-                        </div>
-                      </button>
-                      <button
-                        disabled
-                        className="w-full flex items-center gap-3 bg-surface-primary border border-border rounded-lg px-4 py-3 opacity-50 cursor-not-allowed text-left"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-content-tertiary shrink-0">
-                          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-                        </svg>
-                        <div>
-                          <div className="text-sm font-medium text-content-tertiary">Cloud Sandbox</div>
-                          <div className="text-[11px] text-content-tertiary">Coming soon</div>
-                        </div>
-                      </button>
-                    </div>
-                  </>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigator.clipboard.writeText(
+                  `npx agent-kanban start --api-url ${apiUrl} --api-key ${createdKey}`
                 )}
-
-                {dialogStep === "waiting" && createdKey && (
-                  <>
-                    <p className="text-xs text-content-secondary">Run this command in your terminal:</p>
-                    <div className="bg-[#0C0C0C] rounded-lg overflow-hidden border border-border">
-                      <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] border-b border-border">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
-                        <span className="text-[10px] text-content-tertiary ml-2 font-mono">terminal</span>
-                      </div>
-                      <div className="p-3 text-xs font-mono leading-relaxed overflow-x-auto whitespace-nowrap">
-                        <span className="text-content-tertiary select-none">$ </span>
-                        <span className="text-content-secondary">npx agent-kanban start \</span>
-                        <br />
-                        <span className="text-content-secondary pl-4">--api-url {apiUrl} \</span>
-                        <br />
-                        <span className="text-content-secondary pl-4">--api-key {createdKey}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(
-                        `npx agent-kanban start --api-url ${apiUrl} --api-key ${createdKey}`
-                      )}
-                      className="w-full border border-border text-content-secondary font-medium text-xs py-2 rounded-lg hover:border-content-tertiary transition-colors"
-                    >
-                      Copy to clipboard
-                    </button>
-                    <div className="flex items-center gap-2 py-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
-                      <span className="text-xs text-content-tertiary">Waiting for connection...</span>
-                    </div>
-                  </>
-                )}
-
-                {dialogStep === "connected" && connectedMachine && (
-                  <>
-                    <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg p-3">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <p className="text-success text-xs font-medium">Machine connected!</p>
-                    </div>
-                    <div className="bg-surface-primary border border-border rounded-lg px-4 py-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Name</span>
-                        <span className="font-mono text-sm text-content-primary">{connectedMachine.name}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Status</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                          <span className="text-xs text-success">Online</span>
-                        </div>
-                      </div>
-                      {connectedMachine.os && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-content-tertiary uppercase tracking-wide">OS</span>
-                          <span className="font-mono text-[11px] text-content-primary">{connectedMachine.os}</span>
-                        </div>
-                      )}
-                      {connectedMachine.runtimes && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Runtimes</span>
-                          <div className="flex gap-1">
-                            {connectedMachine.runtimes.map((r: string) => (
-                              <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">{r}</span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleDone}
-                      className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90"
-                    >
-                      Done
-                    </button>
-                  </>
-                )}
+              >
+                Copy to clipboard
+              </Button>
+              <div className="flex items-center gap-2 py-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                <span className="text-xs text-content-tertiary">Waiting for connection...</span>
               </div>
             </div>
-          </div>
-        </>
-      )}
+          )}
+
+          {dialogStep === "connected" && connectedMachine && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg p-3">
+                <div className="w-2 h-2 rounded-full bg-success" />
+                <p className="text-success text-xs font-medium">Machine connected!</p>
+              </div>
+              <div className="bg-surface-primary border border-border rounded-lg px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Name</span>
+                  <span className="font-mono text-sm text-content-primary">{connectedMachine.name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Status</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                    <span className="text-xs text-success">Online</span>
+                  </div>
+                </div>
+                {connectedMachine.os && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-content-tertiary uppercase tracking-wide">OS</span>
+                    <span className="font-mono text-[11px] text-content-primary">{connectedMachine.os}</span>
+                  </div>
+                )}
+                {connectedMachine.runtimes && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Runtimes</span>
+                    <div className="flex gap-1">
+                      {connectedMachine.runtimes.map((r: string) => (
+                        <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">{r}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Button className="w-full" onClick={handleDone}>
+                Done
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

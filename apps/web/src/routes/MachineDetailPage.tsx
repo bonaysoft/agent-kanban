@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import type { UsageWindow } from "@agent-kanban/shared";
 import { Header } from "../components/Header";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
 
@@ -259,36 +261,22 @@ export function MachineDetailPage() {
       </div>
 
       {/* Delete confirmation dialog */}
-      {showDeleteDialog && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowDeleteDialog(false)} />
-          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <div className="bg-surface-secondary border border-border rounded-lg w-full max-w-sm shadow-lg" onClick={(e) => e.stopPropagation()}>
-              <div className="p-5 space-y-4">
-                <h2 className="text-sm font-semibold text-content-primary">Delete Machine</h2>
-                <p className="text-xs text-content-secondary">
-                  This will revoke the API key for <span className="font-mono text-content-primary">{machine.name}</span>. The daemon will stop authenticating and any running agents will lose access.
-                </p>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => setShowDeleteDialog(false)}
-                    className="text-xs text-content-secondary px-3 py-1.5 rounded-md border border-border hover:border-content-tertiary transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="text-xs text-white bg-error px-3 py-1.5 rounded-md hover:opacity-90 disabled:opacity-50"
-                  >
-                    {deleting ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Machine</DialogTitle>
+            <DialogDescription>
+              This will revoke the API key for <span className="font-mono text-content-primary">{machine.name}</span>. The daemon will stop authenticating and any running agents will lose access.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

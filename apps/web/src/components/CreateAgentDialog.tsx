@@ -90,11 +90,9 @@ export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated
     if (!v) reset();
   }
 
-  const maxW = step === "recruit" ? "sm:max-w-3xl" : step === "choose" ? "sm:max-w-md" : "sm:max-w-lg";
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={`${maxW} max-h-[calc(100vh-2rem)] overflow-y-auto`} showCloseButton={false}>
+      <DialogContent className="sm:max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto" showCloseButton={false}>
         {step === "choose" && (
           <ChooseStep onRecruit={() => setStep("recruit")} onCustom={startCustom} />
         )}
