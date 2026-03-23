@@ -158,6 +158,23 @@ export class ProcessManager {
     console.log(`[INFO] Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`);
   }
 
+  async killTask(taskId: string): Promise<void> {
+    const agent = this.agents.get(taskId);
+    if (!agent) return;
+    console.log(`[INFO] Killing agent for cancelled task ${taskId}`);
+    if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+    agent.process.kill("SIGTERM");
+    this.agents.delete(taskId);
+    await this.client.closeSession(agent.agentClient.getAgentId(), agent.sessionId).catch((err: any) =>
+      console.error(`[WARN] Failed to close session for cancelled task ${taskId}: ${err.message}`)
+    );
+    this.onSlotFreed();
+  }
+
+  getActiveTaskIds(): string[] {
+    return [...this.agents.keys()];
+  }
+
   async killAll(): Promise<void> {
     const entries = [...this.agents.entries()];
     for (const [taskId, agent] of entries) {

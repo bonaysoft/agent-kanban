@@ -119,6 +119,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     if (!running) return;
 
     try {
+      // Check for cancelled tasks and kill their agents
+      const activeTaskIds = pm.getActiveTaskIds();
+      for (const taskId of activeTaskIds) {
+        const task = await client.getTask(taskId) as any;
+        if (task?.status === "cancelled") {
+          await pm.killTask(taskId);
+        }
+      }
+
       if (pm.activeCount >= opts.maxConcurrent) {
         schedulePoll(baseInterval);
         return;
