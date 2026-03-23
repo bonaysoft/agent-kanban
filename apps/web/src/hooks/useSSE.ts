@@ -9,6 +9,7 @@ interface UseSSEOptions {
 export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const [logs, setLogs] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const failCount = useRef(0);
@@ -42,6 +43,12 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       setMessages((prev) => [...prev, msg]);
     });
 
+    es.addEventListener("comment", (e: MessageEvent) => {
+      const comment = JSON.parse(e.data);
+      lastEventId.current = e.lastEventId;
+      setComments((prev) => [...prev, comment]);
+    });
+
     es.onerror = () => {
       es.close();
       setConnected(false);
@@ -63,12 +70,15 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   const poll = useCallback(async () => {
     if (!token) return;
     try {
-      const [logsRes, msgsRes] = await Promise.all([
-        fetch(`/api/tasks/${taskId}/logs`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`/api/tasks/${taskId}/messages`, { headers: { Authorization: `Bearer ${token}` } }),
+      const headers = { Authorization: `Bearer ${token}` };
+      const [logsRes, msgsRes, commentsRes] = await Promise.all([
+        fetch(`/api/tasks/${taskId}/logs`, { headers }),
+        fetch(`/api/tasks/${taskId}/messages`, { headers }),
+        fetch(`/api/tasks/${taskId}/comments`, { headers }),
       ]);
       if (logsRes.ok) setLogs(await logsRes.json());
       if (msgsRes.ok) setMessages(await msgsRes.json());
+      if (commentsRes.ok) setComments(await commentsRes.json());
     } catch { /* ignore polling errors */ }
   }, [taskId, token]);
 
@@ -94,5 +104,5 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
     }
   }, [reconnecting, poll]);
 
-  return { logs, messages, connected, reconnecting };
+  return { logs, messages, comments, connected, reconnecting };
 }

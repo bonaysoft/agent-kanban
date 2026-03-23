@@ -2,10 +2,11 @@ import type { D1 } from "./db";
 import type { Env } from "./types";
 import { getTaskLogs } from "./taskRepo";
 import { listMessages } from "./messageRepo";
+import { listComments } from "./commentRepo";
 
 interface SSEEvent {
   id: string;
-  type: "log" | "message";
+  type: "log" | "message" | "comment";
   data: string;
   created_at: string;
 }
@@ -45,22 +46,25 @@ export async function createSSEResponse(
     let since: string | undefined;
     if (lastEventId) {
       const ref = await db.prepare(
-        "SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?",
-      ).bind(lastEventId, lastEventId).first<{ created_at: string }>();
+        "SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ? UNION SELECT created_at FROM task_comments WHERE id = ?",
+      ).bind(lastEventId, lastEventId, lastEventId).first<{ created_at: string }>();
       since = ref?.created_at;
     }
 
-    const [initialLogs, initialMessages] = await Promise.all([
+    const [initialLogs, initialMessages, initialComments] = await Promise.all([
       getTaskLogs(db, taskId, since),
       listMessages(db, taskId, since),
+      listComments(db, taskId, since),
     ]);
 
     const logEvents: SSEEvent[] = (since ? initialLogs : initialLogs.slice(-50))
       .map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
     const msgEvents: SSEEvent[] = (since ? initialMessages : initialMessages.slice(-50))
       .map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
+    const commentEvents: SSEEvent[] = (since ? initialComments : initialComments.slice(-50))
+      .map((c) => ({ id: c.id, type: "comment" as const, data: JSON.stringify(c), created_at: c.created_at }));
 
-    const batch = mergeByTime(logEvents, msgEvents);
+    const batch = mergeByTime(mergeByTime(logEvents, msgEvents), commentEvents);
     for (const event of batch) {
       await write(event);
     }
@@ -74,14 +78,16 @@ export async function createSSEResponse(
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const [newLogs, newMessages] = await Promise.all([
+      const [newLogs, newMessages, newComments] = await Promise.all([
         getTaskLogs(db, taskId, lastSeen),
         listMessages(db, taskId, lastSeen),
+        listComments(db, taskId, lastSeen),
       ]);
 
       const newLogEvents = newLogs.map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
       const newMsgEvents = newMessages.map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
-      const merged = mergeByTime(newLogEvents, newMsgEvents);
+      const newCommentEvents = newComments.map((c) => ({ id: c.id, type: "comment" as const, data: JSON.stringify(c), created_at: c.created_at }));
+      const merged = mergeByTime(mergeByTime(newLogEvents, newMsgEvents), newCommentEvents);
 
       for (const event of merged) {
         await write(event);

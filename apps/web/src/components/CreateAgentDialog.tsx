@@ -20,6 +20,7 @@ interface Props {
 export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated }: Props) {
   const [step, setStep] = useState<Step>("choose");
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
+  const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [soul, setSoul] = useState("");
@@ -34,13 +35,14 @@ export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated
   function reset() {
     setStep("choose");
     setSelectedTemplate(null);
-    setName(""); setBio(""); setSoul(""); setRole("");
+    setUsername(""); setName(""); setBio(""); setSoul(""); setRole("");
     setHandoffTo([]); setRuntime("claude-code"); setModel(""); setSkills([]);
     setError(null);
   }
 
   function applyTemplate(t: AgentTemplate) {
     setSelectedTemplate(t);
+    setUsername(t.role || t.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-"));
     setName(t.name);
     setBio(t.bio || "");
     setSoul(t.soul || "");
@@ -54,7 +56,7 @@ export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated
 
   function startCustom() {
     setSelectedTemplate(null);
-    setName(""); setBio(""); setSoul(""); setRole("");
+    setUsername(""); setName(""); setBio(""); setSoul(""); setRole("");
     setHandoffTo([]); setRuntime("claude-code"); setModel(""); setSkills([]);
     setStep("form");
   }
@@ -65,6 +67,7 @@ export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated
     setError(null);
     try {
       await api.agents.create({
+        username: username.trim(),
         name: name.trim(),
         bio: bio.trim() || undefined,
         soul: soul.trim() || undefined,
@@ -104,6 +107,7 @@ export function CreateAgentDialog({ existingRoles, open, onOpenChange, onCreated
           <FormStep
             template={selectedTemplate}
             existingRoles={existingRoles}
+            username={username} setUsername={setUsername}
             name={name} setName={setName}
             bio={bio} setBio={setBio}
             soul={soul} setSoul={setSoul}
@@ -241,6 +245,7 @@ function RecruitStep({ onSelect, onBack }: {
 interface FormStepProps {
   template: AgentTemplate | null;
   existingRoles: string[];
+  username: string; setUsername: (v: string) => void;
   name: string; setName: (v: string) => void;
   bio: string; setBio: (v: string) => void;
   soul: string; setSoul: (v: string) => void;
@@ -256,7 +261,7 @@ interface FormStepProps {
 
 function FormStep(props: FormStepProps) {
   const {
-    template, existingRoles, name, setName, bio, setBio, soul, setSoul, role, setRole,
+    template, existingRoles, username, setUsername, name, setName, bio, setBio, soul, setSoul, role, setRole,
     handoffTo, setHandoffTo, runtime, setRuntime, model, setModel,
     skills, setSkills, creating, error, onBack, onCreate,
   } = props;
@@ -279,6 +284,12 @@ function FormStep(props: FormStepProps) {
       </DialogHeader>
 
       <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="agent-username">Username</Label>
+          <Input id="agent-username" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder="e.g. bolt" className="font-mono" />
+          <p className="text-[10px] text-muted-foreground">Lowercase, used for @mentions. Cannot be changed.</p>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="agent-name">Name</Label>
@@ -330,7 +341,7 @@ function FormStep(props: FormStepProps) {
 
       <DialogFooter>
         <Button variant="ghost" onClick={onBack}>Back</Button>
-        <Button onClick={onCreate} disabled={!name.trim() || creating}>
+        <Button onClick={onCreate} disabled={!username.trim() || !name.trim() || creating}>
           {creating ? "Recruiting..." : template ? "Recruit" : "Create"}
         </Button>
       </DialogFooter>

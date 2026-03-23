@@ -193,6 +193,7 @@ agentCmd
   .command("create")
   .description("Create a new agent (from template or manual)")
   .option("--template <slug>", "Agent template slug (e.g. fullstack-developer, feature-planner)")
+  .option("--username <username>", "Agent username (lowercase, for @mentions)")
   .option("--name <name>", "Agent name")
   .option("--bio <bio>", "Agent bio")
   .option("--role <role>", "Agent role")
@@ -206,7 +207,9 @@ agentCmd
 
     if (opts.template) {
       const template = await fetchTemplate(opts.template);
+      const username = opts.username || template.role || template.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
       body = {
+        username,
         name: opts.name || template.name,
         bio: template.bio,
         soul: template.soul,
@@ -221,7 +224,11 @@ agentCmd
         console.error("Either --template or --name is required");
         process.exit(1);
       }
-      body = { name: opts.name };
+      if (!opts.username) {
+        console.error("--username is required");
+        process.exit(1);
+      }
+      body = { username: opts.username, name: opts.name };
       if (opts.bio) body.bio = opts.bio;
       if (opts.role) body.role = opts.role;
       if (opts.runtime) body.runtime = opts.runtime;

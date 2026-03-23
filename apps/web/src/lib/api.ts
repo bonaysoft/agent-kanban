@@ -57,10 +57,29 @@ export const api = {
     create: (taskId: string, body: { sender_type: string; sender_id: string; content: string }) =>
       request<any>("POST", `/tasks/${taskId}/messages`, body),
   },
+  comments: {
+    list: (taskId: string, since?: string) => {
+      const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+      return request<any[]>("GET", `/tasks/${taskId}/comments${qs}`);
+    },
+    create: (taskId: string, body: { content: string; author_type?: string; author_id?: string }) =>
+      request<any>("POST", `/tasks/${taskId}/comments`, body),
+  },
+  checks: {
+    list: (taskId: string) => request<any[]>("GET", `/tasks/${taskId}/checks`),
+    create: (taskId: string, description: string) =>
+      request<any>("POST", `/tasks/${taskId}/checks`, { description }),
+    update: (taskId: string, checkId: string, body: { description?: string }) =>
+      request<any>("PATCH", `/tasks/${taskId}/checks/${checkId}`, body),
+    delete: (taskId: string, checkId: string) =>
+      request<void>("DELETE", `/tasks/${taskId}/checks/${checkId}`),
+    verify: (taskId: string, checkId: string, passed: boolean, agentId?: string) =>
+      request<any>("POST", `/tasks/${taskId}/checks/${checkId}/verify`, { passed, agent_id: agentId }),
+  },
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
-    create: (input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) =>
+    create: (input: { username: string; name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) =>
       request<any>("POST", "/agents", input),
     update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/agents/${id}`),

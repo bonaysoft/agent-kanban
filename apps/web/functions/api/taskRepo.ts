@@ -175,7 +175,7 @@ export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
   return result.meta.changes > 0;
 }
 
-export async function claimTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
+export async function claimTask(db: D1, taskId: string, agentId: string, sessionId: string | null = null): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   if (task.assigned_to !== agentId) throw new HTTPException(409, { message: "Task is not assigned to this agent" });
@@ -190,7 +190,7 @@ export async function claimTask(db: D1, taskId: string, agentId: string): Promis
     ).bind(now, taskId),
     db.prepare(
       "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'claimed', NULL, ?)"
-    ).bind(logId, taskId, agentId, null, now),
+    ).bind(logId, taskId, agentId, sessionId, now),
   ]);
 
   return { ...task, status: "in_progress", updated_at: now };

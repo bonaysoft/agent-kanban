@@ -10,6 +10,8 @@ import { createSession, closeSession, updateSessionUsage, listSessions } from ".
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
+import { createComment, listComments } from "./commentRepo";
+import { createCheck, listChecks, updateCheck, deleteCheck, verifyCheck, checkAllPassed } from "./taskCheckRepo";
 import { updateMachine, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
 import { createAuth } from "./betterAuth";
 
@@ -124,8 +126,8 @@ api.get("/api/agents/:id", async (c) => {
 });
 
 api.post("/api/agents", async (c) => {
-  const body = await c.req.json<{ name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }>();
-  if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  const body = await c.req.json<{ username: string; name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }>();
+  if (!body.username || !body.name) throw new HTTPException(400, { message: "username and name are required" });
   const agent = await createAgent(c.env.DB, c.get("ownerId"), body);
   return c.json(agent, 201);
 });
@@ -235,8 +237,9 @@ api.post("/api/tasks/:id/claim", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
+  const sessionId = c.get("sessionId") || null;
 
-  const task = await claimTask(c.env.DB, c.req.param("id"), agentId);
+  const task = await claimTask(c.env.DB, c.req.param("id"), agentId, sessionId);
   return c.json(task);
 });
 
@@ -349,6 +352,168 @@ api.get("/api/tasks/:id/messages", async (c) => {
   const since = c.req.query("since");
   const messages = await listMessages(c.env.DB, c.req.param("id"), since || undefined);
   return c.json(messages);
+});
+
+// ─── Comments ───
+
+const MENTION_RE = /@([a-z][a-z0-9_-]{1,30})/g;
+
+api.post("/api/tasks/:id/comments", async (c) => {
+  const body = await c.req.json<{ content: string; author_type?: string; author_id?: string }>();
+  if (!body.content) throw new HTTPException(400, { message: "content is required" });
+
+  const taskId = c.req.param("id");
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
+    .bind(taskId).first();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const authorType = body.author_type || (c.get("agentId") ? "agent" : "user");
+  const authorId = body.author_id || (authorType === "agent" ? c.get("agentId") : c.get("ownerId"));
+  if (!authorId) throw new HTTPException(400, { message: "author_id is required" });
+
+  // Extract @mentions
+  const mentions: string[] = [];
+  let match;
+  while ((match = MENTION_RE.exec(body.content)) !== null) {
+    mentions.push(match[1]);
+  }
+
+  const comment = await createComment(
+    c.env.DB, taskId,
+    authorType as "user" | "agent", authorId,
+    body.content, mentions.length > 0 ? mentions : null,
+  );
+
+  // Route @mentions to agent sessions via messages table
+  if (mentions.length > 0) {
+    const placeholders = mentions.map(() => "?").join(",");
+    const agents = await c.env.DB.prepare(
+      `SELECT id, username FROM agents WHERE username IN (${placeholders})`,
+    ).bind(...mentions).all<{ id: string; username: string }>();
+
+    for (const agent of agents.results) {
+      // Find session for this agent on this task via task_logs
+      const log = await c.env.DB.prepare(
+        "SELECT session_id FROM task_logs WHERE task_id = ? AND agent_id = ? AND action = 'claimed' AND session_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+      ).bind(taskId, agent.id).first<{ session_id: string }>();
+
+      if (log?.session_id) {
+        await createMessage(c.env.DB, taskId, authorType as "user" | "agent", authorId, body.content);
+      }
+    }
+  }
+
+  return c.json(comment, 201);
+});
+
+api.get("/api/tasks/:id/comments", async (c) => {
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
+    .bind(c.req.param("id")).first();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const since = c.req.query("since");
+  const comments = await listComments(c.env.DB, c.req.param("id"), since || undefined);
+  return c.json(comments);
+});
+
+// ─── Task Checks ───
+
+api.post("/api/tasks/:id/checks", async (c) => {
+  const body = await c.req.json<{ description: string }>();
+  if (!body.description) throw new HTTPException(400, { message: "description is required" });
+
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
+    .bind(c.req.param("id")).first();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const check = await createCheck(c.env.DB, c.req.param("id"), body.description);
+  return c.json(check, 201);
+});
+
+api.get("/api/tasks/:id/checks", async (c) => {
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
+    .bind(c.req.param("id")).first();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const checks = await listChecks(c.env.DB, c.req.param("id"));
+  return c.json(checks);
+});
+
+api.patch("/api/tasks/:id/checks/:checkId", async (c) => {
+  const body = await c.req.json<{ description?: string }>();
+  const check = await updateCheck(c.env.DB, c.req.param("checkId"), body);
+  if (!check) throw new HTTPException(404, { message: "Check not found" });
+  return c.json(check);
+});
+
+api.delete("/api/tasks/:id/checks/:checkId", async (c) => {
+  const deleted = await deleteCheck(c.env.DB, c.req.param("checkId"));
+  if (!deleted) throw new HTTPException(404, { message: "Check not found" });
+  return c.json({ ok: true });
+});
+
+api.post("/api/tasks/:id/checks/:checkId/verify", async (c) => {
+  const body = await c.req.json<{ passed: boolean; agent_id?: string }>();
+  const agentId = c.get("agentId") || body.agent_id;
+  if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
+
+  const check = await verifyCheck(c.env.DB, c.req.param("checkId"), agentId, body.passed);
+  if (!check) throw new HTTPException(404, { message: "Check not found" });
+
+  const taskId = c.req.param("id");
+  const task = await c.env.DB.prepare("SELECT status, board_id, review_rounds FROM tasks WHERE id = ?")
+    .bind(taskId).first<{ status: string; board_id: string; review_rounds: number }>();
+
+  if (task?.status === "in_review") {
+    const { total, passed: passedCount } = await checkAllPassed(c.env.DB, taskId);
+
+    if (total > 0 && total === passedCount) {
+      // All checks passed → auto-complete
+      await completeTask(c.env.DB, taskId, agentId, "All checks verified", null);
+    } else if (!body.passed) {
+      // A check failed → check ping-pong limit
+      const board = await c.env.DB.prepare("SELECT max_review_rounds FROM boards WHERE id = ?")
+        .bind(task.board_id).first<{ max_review_rounds: number }>();
+      const maxRounds = board?.max_review_rounds ?? 3;
+      const newRounds = task.review_rounds + 1;
+
+      if (newRounds < maxRounds) {
+        // Bounce back to in_progress
+        const now = new Date().toISOString();
+        const logId = (await import("./db")).newLongId();
+
+        // Collect failed check descriptions
+        const failedChecks = await c.env.DB.prepare(
+          "SELECT description FROM task_checks WHERE task_id = ? AND passed = 0",
+        ).bind(taskId).all<{ description: string }>();
+        const failedList = failedChecks.results.map((c) => `- ${c.description}`).join("\n");
+
+        await c.env.DB.batch([
+          c.env.DB.prepare("UPDATE tasks SET status = 'in_progress', review_rounds = ?, updated_at = ? WHERE id = ?")
+            .bind(newRounds, now, taskId),
+          c.env.DB.prepare(
+            "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'moved', ?, ?)",
+          ).bind(logId, taskId, agentId, null, `Review round ${newRounds} failed. Checks not passed:\n${failedList}`, now),
+        ]);
+
+        // Reset failed checks for next round
+        await c.env.DB.prepare("UPDATE task_checks SET passed = 0, verified_by = NULL, verified_at = NULL WHERE task_id = ? AND passed = 0")
+          .bind(taskId).run();
+
+        // Route failure message to original agent session
+        const claimLog = await c.env.DB.prepare(
+          "SELECT session_id FROM task_logs WHERE task_id = ? AND action = 'claimed' AND session_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+        ).bind(taskId).first<{ session_id: string }>();
+        if (claimLog?.session_id) {
+          await createMessage(c.env.DB, taskId, "agent", agentId,
+            `Review failed (round ${newRounds}/${maxRounds}). Please fix:\n${failedList}`);
+        }
+      }
+      // else: stays in in_review for human intervention
+    }
+  }
+
+  return c.json(check);
 });
 
 // ─── SSE Stream ───

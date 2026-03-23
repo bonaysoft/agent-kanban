@@ -1,8 +1,15 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
 import { generateKeypair, computeFingerprint, computeKeyId } from "@agent-kanban/shared";
+import { HTTPException } from "hono/http-exception";
 import type { D1 } from "./db";
 
+const USERNAME_RE = /^[a-z][a-z0-9_-]{1,30}$/;
+
 export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput): Promise<Agent> {
+  if (!USERNAME_RE.test(input.username)) {
+    throw new HTTPException(400, { message: "username must match ^[a-z][a-z0-9_-]{1,30}$" });
+  }
+
   const { publicKeyBase64, privateKeyJwk } = await generateKeypair();
   const fingerprint = await computeFingerprint(publicKeyBase64);
   const id = computeKeyId(fingerprint);
@@ -11,17 +18,17 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
   const handoffJson = input.handoff_to ? JSON.stringify(input.handoff_to) : null;
 
   await db.prepare(`
-    INSERT INTO agents (id, owner_id, name, bio, soul, role, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, owner_id, username, name, bio, soul, role, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    id, ownerId, input.name, input.bio ?? null, input.soul ?? null,
+    id, ownerId, input.username, input.name, input.bio ?? null, input.soul ?? null,
     input.role ?? null, handoffJson,
     input.runtime ?? null, input.model ?? null, skillsJson,
     publicKeyBase64, JSON.stringify(privateKeyJwk), fingerprint, now, now,
   ).run();
 
   return {
-    id, owner_id: ownerId, name: input.name, bio: input.bio ?? null,
+    id, owner_id: ownerId, username: input.username, name: input.name, bio: input.bio ?? null,
     soul: input.soul ?? null, role: input.role ?? null, handoff_to: handoffJson,
     runtime: input.runtime ?? null, model: input.model ?? null,
     skills: skillsJson, public_key: publicKeyBase64, fingerprint, created_at: now, updated_at: now,
@@ -30,7 +37,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
 
 export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
   const result = await db.prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.username, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at,
@@ -49,7 +56,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
 
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
   return db.prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.username, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_logs tl WHERE tl.agent_id = a.id) as last_active_at,

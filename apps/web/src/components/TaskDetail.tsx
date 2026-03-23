@@ -3,8 +3,8 @@ import { api } from "../lib/api";
 import { useSSE } from "../hooks/useSSE";
 import { useSession } from "../lib/auth-client";
 import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
-import { ActivityLog } from "./ActivityLog";
-import { ChatPanel } from "./ChatPanel";
+import { TaskTimeline } from "./TaskTimeline";
+import { TaskChecks } from "./TaskChecks";
 import { SubtaskList } from "./SubtaskList";
 import { AssignDropdown } from "./AssignDropdown";
 
@@ -27,7 +27,7 @@ interface TaskDetailProps {
 
 const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
-type Tab = "details" | "chat";
+type Tab = "details" | "checks";
 
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
@@ -36,14 +36,14 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
   const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
   const [depTitles, setDepTitles] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("details");
-  const [initialMessages, setInitialMessages] = useState<any[]>([]);
-  const { messages: sseMessages } = useSSE({ taskId, enabled: true });
+  const [initialComments, setInitialComments] = useState<any[]>([]);
+  const { logs: sseLogs, comments: sseComments } = useSSE({ taskId, enabled: true });
 
   const reload = () => api.tasks.get(taskId).then(setTask);
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
-    api.messages.list(taskId).then(setInitialMessages).catch(() => {});
+    api.comments.list(taskId).then(setInitialComments).catch(() => {});
   }, [taskId]);
 
   useEffect(() => {
@@ -99,7 +99,6 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
   }
 
   const dependsOn: string[] = task.depends_on || [];
-  const hasAgent = !!task.assigned_to;
 
   return (
     <Panel>
@@ -145,33 +144,31 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
       </div>
 
       {/* Tabs */}
-      {hasAgent && (
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setActiveTab("details")}
-            className={`px-5 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === "details"
-                ? "text-content-primary border-b-2 border-accent"
-                : "text-content-tertiary hover:text-content-secondary"
-            }`}
-          >
-            Details
-          </button>
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`px-5 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === "chat"
-                ? "text-accent border-b-2 border-accent"
-                : "text-content-tertiary hover:text-content-secondary"
-            }`}
-          >
-            Chat
-          </button>
-        </div>
-      )}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setActiveTab("details")}
+          className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === "details"
+              ? "text-content-primary border-b-2 border-accent"
+              : "text-content-tertiary hover:text-content-secondary"
+          }`}
+        >
+          Details
+        </button>
+        <button
+          onClick={() => setActiveTab("checks")}
+          className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === "checks"
+              ? "text-accent border-b-2 border-accent"
+              : "text-content-tertiary hover:text-content-secondary"
+          }`}
+        >
+          Checks
+        </button>
+      </div>
 
       {/* Tab content */}
-      {(activeTab === "details" || !hasAgent) && (
+      {activeTab === "details" && (
         <div className="p-5 space-y-4">
           {/* Status row */}
           <div className="grid grid-cols-3 gap-4">
@@ -267,13 +264,17 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
           <hr className="border-border" />
 
-          {/* Activity Log */}
+          {/* Timeline */}
           <div>
-            <FieldLabel>Activity</FieldLabel>
-            <ActivityLog
+            <FieldLabel>Timeline</FieldLabel>
+            <TaskTimeline
               taskId={taskId}
               initialLogs={task.logs || []}
-              assigned={!!task.assigned_to}
+              initialComments={initialComments}
+              sseLogs={sseLogs}
+              sseComments={sseComments}
+              userId={session?.user?.id || null}
+              taskDone={task.status === "done" || task.status === "cancelled"}
             />
           </div>
 
@@ -289,16 +290,9 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
         </div>
       )}
 
-      {activeTab === "chat" && hasAgent && (
-        <div className="flex flex-col h-[calc(100%-8rem)] p-5">
-          <ChatPanel
-            taskId={taskId}
-            agentId={task.assigned_to}
-            userId={session?.user?.id || null}
-            taskDone={task.status === "done"}
-            initialMessages={initialMessages}
-            sseMessages={sseMessages}
-          />
+      {activeTab === "checks" && (
+        <div className="p-5">
+          <TaskChecks taskId={taskId} />
         </div>
       )}
     </Panel>

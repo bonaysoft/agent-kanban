@@ -5,6 +5,7 @@ export interface Board {
   owner_id: string;
   name: string;
   description: string | null;
+  max_review_rounds: number;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +33,7 @@ export interface Task {
   pr_url: string | null;
   input: string | null;
   created_from: string | null;
+  review_rounds: number;
   position: number;
   created_at: string;
   updated_at: string;
@@ -117,6 +119,7 @@ export type AgentStatus = "online" | "offline";
 export interface Agent {
   id: string;
   owner_id: string;
+  username: string;
   name: string;
   bio: string | null;
   soul: string | null;
@@ -190,6 +193,33 @@ export interface Message {
   created_at: string;
 }
 
+// ─── Comment ───
+
+export type AuthorType = "user" | "agent";
+
+export interface Comment {
+  id: string;
+  task_id: string;
+  author_type: AuthorType;
+  author_id: string;
+  content: string;
+  mentions: string | null;
+  created_at: string;
+}
+
+// ─── Task Check ───
+
+export interface TaskCheck {
+  id: string;
+  task_id: string;
+  description: string;
+  passed: number;
+  verified_by: string | null;
+  verified_at: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 // ─── API ───
 
 export interface ErrorEnvelope {
@@ -224,6 +254,7 @@ export interface CompleteTaskInput {
 }
 
 export interface CreateAgentInput {
+  username: string;
   name: string;
   bio?: string;
   soul?: string;

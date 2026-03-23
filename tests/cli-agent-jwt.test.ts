@@ -112,7 +112,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
 
     // Create persistent agent (user-only, use repo directly)
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(testEnv.DB, userId, { name: "JWT Test Agent", runtime: "claude" });
+    const agent = await createAgent(testEnv.DB, userId, { username: "jwt-test-agent", name: "JWT Test Agent", runtime: "claude" });
     agentId = agent.id;
 
     // Create session keypair (CSR — daemon generates locally)

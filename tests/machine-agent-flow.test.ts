@@ -114,7 +114,7 @@ describe("machine → agent session flow", () => {
   it("user creates a persistent agent", async () => {
     // Create agent directly via repo (user-only route, no API key auth in test)
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "Test Agent", runtime: "Claude Code", model: "claude-sonnet-4-20250514" });
+    const agent = await createAgent(env.DB, userId, { username: "test-agent", name: "Test Agent", runtime: "Claude Code", model: "claude-sonnet-4-20250514" });
     agentId = agent.id;
     expect(agent.fingerprint).toBeTruthy();
     expect(agent.public_key).toBeTruthy();

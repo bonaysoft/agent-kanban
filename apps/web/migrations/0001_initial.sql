@@ -166,12 +166,13 @@ CREATE INDEX "approvalRequest_status_idx" ON "approvalRequest" ("status");
 
 -- Boards
 CREATE TABLE boards (
-  id          TEXT PRIMARY KEY,
-  owner_id    TEXT NOT NULL,
-  name        TEXT NOT NULL,
-  description TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id                TEXT PRIMARY KEY,
+  owner_id          TEXT NOT NULL,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  max_review_rounds INTEGER NOT NULL DEFAULT 3,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_boards_owner ON boards(owner_id);
 CREATE UNIQUE INDEX idx_boards_owner_name ON boards(owner_id, name);
@@ -206,6 +207,7 @@ CREATE INDEX idx_machines_owner ON machines(owner_id);
 CREATE TABLE agents (
   id              TEXT PRIMARY KEY,
   owner_id        TEXT NOT NULL,
+  username        TEXT NOT NULL UNIQUE,
   name            TEXT NOT NULL,
   bio             TEXT,
   soul            TEXT,
@@ -252,15 +254,16 @@ CREATE TABLE tasks (
   repository_id TEXT REFERENCES repositories(id) ON DELETE SET NULL,
   labels       TEXT,
   priority     TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
-  created_by   TEXT,
-  assigned_to  TEXT REFERENCES agents(id) ON DELETE SET NULL,
-  result       TEXT,
-  pr_url       TEXT,
-  input        TEXT,
-  created_from TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-  position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  created_by    TEXT,
+  assigned_to   TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  result        TEXT,
+  pr_url        TEXT,
+  input         TEXT,
+  created_from  TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  review_rounds INTEGER NOT NULL DEFAULT 0,
+  position      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_tasks_board ON tasks(board_id);
 CREATE INDEX idx_tasks_status ON tasks(status);
@@ -301,3 +304,28 @@ CREATE TABLE messages (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_messages_task ON messages(task_id, created_at);
+
+-- Task comments (human ↔ agent discussion on a task)
+CREATE TABLE task_comments (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  author_type TEXT NOT NULL CHECK(author_type IN ('user', 'agent')),
+  author_id   TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  mentions    TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_task_comments_task ON task_comments(task_id, created_at);
+
+-- Task checks (acceptance criteria for review verification)
+CREATE TABLE task_checks (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  passed      INTEGER NOT NULL DEFAULT 0,
+  verified_by TEXT,
+  verified_at TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_task_checks_task ON task_checks(task_id);
