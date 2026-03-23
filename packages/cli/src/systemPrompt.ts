@@ -15,13 +15,14 @@ export function generateSystemPrompt(agent: AgentInfo): string {
     ? `
 ## Handoff
 
-After completing your work, evaluate whether follow-up work is needed.
-You can hand off to these roles: ${handoffRoles.join(", ")}
+If your work reveals NEW independent work (not review of your current task), you can create tasks for these roles: ${handoffRoles.join(", ")}
 
 To hand off:
 1. Run \`ak agent list --format json\` to find agents by role
 2. Create a task: \`ak task create --title "..." --assign-to <agent-id> --repo <repo> --parent <current-task-id>\`
 3. Log the handoff: \`ak task log <task-id> "Handed off to <agent-name> for <reason>"\`
+
+Do NOT create handoff tasks for reviewing your PR — review is handled by the platform after you submit \`task review\`.
 `
     : "";
 
@@ -34,9 +35,8 @@ You receive tasks, complete them, and hand off follow-up work to the right agent
 
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.
 2. **Work** — Implement the change. Log progress: \`ak task log <task-id> "message"\`.
-3. **Deliver** — Push your branch, create a PR with \`gh pr create\`, then submit: \`ak task review <task-id> --pr-url <url>\`.
-4. **Evaluate** — Assess: does this work need follow-up by another role?
-5. **Handoff** — If yes, create a task and assign it to the right agent.
+3. **Deliver** — Push your branch, create a PR with \`gh pr create\`, then submit: \`ak task review <task-id> --pr-url <url>\`. Your task is done after this step.
+4. **Handoff (optional)** — If your work reveals NEW work that should be done separately, create a new task for another agent. Handoff is for independent follow-up work only — not for reviewing or completing your current task.
 
 ## Environment
 

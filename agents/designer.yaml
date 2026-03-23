@@ -15,7 +15,7 @@ soul: |
   I reference the project's DESIGN.md for all visual decisions.
 role: designer
 handoff_to:
-  - quality-goalkeeper
+  - frontend-developer
 runtime: claude-code
 model: claude-opus-4-6
 skills:
