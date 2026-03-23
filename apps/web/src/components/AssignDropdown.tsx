@@ -37,6 +37,8 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
     try {
       await api.tasks.release(taskId);
       onAssigned();
+    } catch (e: any) {
+      alert(e.message);
     } finally {
       setAssigning(false);
       setOpen(false);
