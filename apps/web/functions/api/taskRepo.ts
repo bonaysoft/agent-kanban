@@ -1,9 +1,11 @@
 import type { Task, TaskLog, TaskWithLogs, CreateTaskInput, TaskStatus, IdentityType, TaskTransition } from "@agent-kanban/shared";
 import { validateTransition } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
-import { newLongId, type D1 } from "./db";
+import { newLongId, parseJsonFields, type D1 } from "./db";
 import { getDefaultBoard } from "./boardRepo";
 import { detectCycle, computeBlocked, getDependencies, setDependencies } from "./taskDeps";
+
+const parseTask = <T extends Task>(row: T) => parseJsonFields(row, ["labels", "input"]);
 
 function enforceTransition(action: TaskTransition, currentStatus: TaskStatus, identity: IdentityType): void {
   const error = validateTransition(action, currentStatus, identity);
@@ -68,11 +70,11 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
   await db.batch(stmts);
 
   return {
-    id: taskId, board_id: board.id, status: "todo", title: input.title,
+    id: taskId, board_id: board.id, status: "todo" as const, title: input.title,
     description: input.description || null, repository_id: input.repository_id || null,
-    labels: labelsJson, priority: input.priority || null,
+    labels: input.labels || null, priority: input.priority || null,
     created_by: input.agentId || "human", assigned_to: input.assigned_to || null,
-    result: null, pr_url: null, input: inputJson,
+    result: null, pr_url: null, input: input.input || null,
     created_from: input.created_from || null,
     position, created_at: now, updated_at: now,
   };
@@ -118,7 +120,7 @@ export async function listTasks(
 
   const stmt = db.prepare(query);
   const result = await (binds.length ? stmt.bind(...binds) : stmt).all<Task>();
-  const tasks = result.results;
+  const tasks = result.results.map(parseTask);
 
   const taskIds = tasks.map((t) => t.id);
   if (taskIds.length > 0) {
@@ -153,6 +155,7 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | nu
     WHERE t.id = ?
   `).bind(taskId).first<Task & { subtask_count: number }>();
   if (!task) return null;
+  parseTask(task);
 
   const [logs, deps, blockedSet] = await Promise.all([
     db.prepare("SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC").bind(taskId).all<TaskLog>(),
@@ -182,18 +185,20 @@ export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<T
   const sets: string[] = ["updated_at = ?"];
   const binds: unknown[] = [now];
 
+  const jsonFields = new Set(["labels", "input"]);
   const allowedFields = ["title", "description", "repository_id", "labels", "priority", "result", "pr_url", "input"] as const;
   for (const field of allowedFields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);
-      binds.push((updates as any)[field]);
+      const val = (updates as any)[field];
+      binds.push(jsonFields.has(field) && val != null ? JSON.stringify(val) : val);
     }
   }
 
   binds.push(taskId);
   await db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
 
-  return { ...task, ...updates, updated_at: now } as Task;
+  return parseTask({ ...task, ...updates, updated_at: now } as Task);
 }
 
 export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
@@ -227,7 +232,7 @@ export async function claimTask(db: D1, taskId: string, agentId: string, identit
     ).bind(logId, taskId, agentId, null, now),
   ]);
 
-  return { ...task, status: "in_progress", updated_at: now };
+  return parseTask({ ...task, status: "in_progress" as const, updated_at: now });
 }
 
 export async function assignTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
@@ -251,7 +256,7 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
     ).bind(logId, taskId, agentId, null, now),
   ]);
 
-  return { ...task, assigned_to: agentId, updated_at: now };
+  return parseTask({ ...task, assigned_to: agentId, updated_at: now } as Task);
 }
 
 export async function completeTask(db: D1, taskId: string, agentId: string | null, result: string | null, prUrl: string | null, identity: IdentityType): Promise<Task | null> {
@@ -271,7 +276,7 @@ export async function completeTask(db: D1, taskId: string, agentId: string | nul
     ).bind(logId, taskId, agentId, null, result, now),
   ]);
 
-  return { ...task, status: "done", result, pr_url: prUrl, updated_at: now };
+  return parseTask({ ...task, status: "done" as const, result, pr_url: prUrl, updated_at: now });
 }
 
 export async function cancelTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType): Promise<Task | null> {
@@ -291,7 +296,7 @@ export async function cancelTask(db: D1, taskId: string, agentId: string | null,
     ).bind(logId, taskId, agentId, null, now),
   ]);
 
-  return { ...task, status: "cancelled", assigned_to: null, updated_at: now };
+  return parseTask({ ...task, status: "cancelled" as const, assigned_to: null, updated_at: now });
 }
 
 export async function reviewTask(db: D1, taskId: string, agentId: string | null, prUrl: string | null, identity: IdentityType): Promise<Task | null> {
@@ -311,7 +316,7 @@ export async function reviewTask(db: D1, taskId: string, agentId: string | null,
     ).bind(logId, taskId, agentId, null, now),
   ]);
 
-  return { ...task, status: "in_review", pr_url: prUrl || task.pr_url, updated_at: now };
+  return parseTask({ ...task, status: "in_review" as const, pr_url: prUrl || task.pr_url, updated_at: now });
 }
 
 export async function releaseTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType, action: "released" | "timed_out" = "released"): Promise<Task | null> {
@@ -331,7 +336,7 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
     ).bind(logId, taskId, agentId, null, action, now),
   ]);
 
-  return { ...task, status: "todo", updated_at: now };
+  return parseTask({ ...task, status: "todo" as const, updated_at: now });
 }
 
 export async function rejectTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType): Promise<Task | null> {
@@ -351,7 +356,7 @@ export async function rejectTask(db: D1, taskId: string, agentId: string | null,
     ).bind(logId, taskId, agentId, null, now),
   ]);
 
-  return { ...task, status: "in_progress" as const, updated_at: now };
+  return parseTask({ ...task, status: "in_progress" as const, updated_at: now });
 }
 
 export async function addTaskLog(

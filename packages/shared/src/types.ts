@@ -24,13 +24,13 @@ export interface Task {
   title: string;
   description: string | null;
   repository_id: string | null;
-  labels: string | null;
+  labels: string[] | null;
   priority: Priority | null;
   created_by: string | null;
   assigned_to: string | null;
   result: string | null;
   pr_url: string | null;
-  input: string | null;
+  input: Record<string, unknown> | null;
   created_from: string | null;
   position: number;
   created_at: string;
@@ -122,10 +122,10 @@ export interface Agent {
   bio: string | null;
   soul: string | null;
   role: string | null;
-  handoff_to: string | null;
+  handoff_to: string[] | null;
   runtime: string | null;
   model: string | null;
-  skills: string | null;
+  skills: string[] | null;
   public_key: string;
   fingerprint: string;
   builtin: number;

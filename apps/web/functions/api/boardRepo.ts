@@ -1,5 +1,5 @@
 import type { Board, BoardWithTasks, Task } from "@agent-kanban/shared";
-import { newId, type D1 } from "./db";
+import { newId, parseJsonFields, type D1 } from "./db";
 import { computeBlocked } from "./taskDeps";
 import { seedBuiltinAgents } from "./agentRepo";
 
@@ -48,7 +48,7 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
     }
   }
 
-  return { ...board, tasks: tasks.results };
+  return { ...board, tasks: tasks.results.map(t => parseJsonFields(t, ["labels", "input"])) };
 }
 
 export async function getDefaultBoard(db: D1, ownerId: string): Promise<Board | null> {

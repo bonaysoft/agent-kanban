@@ -139,7 +139,6 @@ api.patch("/api/agents/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
   const body = await c.req.json();
-  if (body.skills && Array.isArray(body.skills)) body.skills = JSON.stringify(body.skills);
   const agent = await updateAgent(c.env.DB, c.req.param("id"), body);
   return c.json(agent);
 });
@@ -221,13 +220,6 @@ api.patch("/api/tasks/:id", async (c) => {
 
   if (body.input !== undefined && body.input !== null && typeof body.input !== "object") {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
-  }
-
-  if (body.labels && Array.isArray(body.labels)) {
-    body.labels = JSON.stringify(body.labels);
-  }
-  if (body.input && typeof body.input === "object") {
-    body.input = JSON.stringify(body.input);
   }
 
   const task = await updateTask(c.env.DB, c.req.param("id"), body);

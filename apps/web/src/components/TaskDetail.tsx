@@ -200,7 +200,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
         <div>
           <FieldLabel>Input</FieldLabel>
           <pre className="text-xs font-mono bg-surface-primary border border-border rounded-md p-3 text-content-secondary overflow-x-auto">
-            {JSON.stringify(JSON.parse(task.input), null, 2)}
+            {JSON.stringify(task.input, null, 2)}
           </pre>
         </div>
       )}

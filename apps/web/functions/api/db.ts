@@ -13,3 +13,10 @@ export function newLongId(): string {
 }
 
 export type D1 = D1Database;
+
+export function parseJsonFields<T>(row: T, fields: (keyof T)[]): T {
+  for (const f of fields) {
+    if (typeof row[f] === "string") row[f] = JSON.parse(row[f] as string);
+  }
+  return row;
+}

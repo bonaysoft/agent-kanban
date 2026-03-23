@@ -6,11 +6,12 @@ export interface AgentInfo {
   name: string;
   role: string | null;
   soul: string | null;
-  handoff_to: string | null; // JSON array string
+  handoff_to: string[] | null;
+  skills: string[] | null;
 }
 
 export function generateSystemPrompt(agent: AgentInfo): string {
-  const handoffRoles = agent.handoff_to ? JSON.parse(agent.handoff_to) as string[] : [];
+  const handoffRoles = agent.handoff_to ?? [];
   const handoffSection = handoffRoles.length > 0
     ? `
 ## Handoff

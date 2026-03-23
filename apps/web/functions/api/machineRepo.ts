@@ -1,6 +1,6 @@
 import type { Machine, MachineWithAgents, UsageInfo } from "@agent-kanban/shared";
 import { MACHINE_STALE_TIMEOUT_MS } from "@agent-kanban/shared";
-import { newId, type D1 } from "./db";
+import { newId, parseJsonFields, type D1 } from "./db";
 
 export interface CreateMachineInfo {
   name: string;
@@ -47,8 +47,8 @@ export async function updateMachine(
   const result = await db.prepare(`UPDATE machines SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`).bind(...binds).run();
   if (result.meta.changes === 0) return null;
 
-  const row = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine & { usage_info: string | null }>();
-  return parseMachineJson(row!);
+  const row = await db.prepare("SELECT * FROM machines WHERE id = ?").bind(machineId).first<Machine>();
+  return parseMachine(row!);
 }
 
 export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
@@ -62,7 +62,7 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
     WHERE m.owner_id = ?
     ORDER BY m.last_heartbeat_at DESC
   `).bind(ownerId).all<MachineWithAgents>();
-  return result.results.map(parseMachineJson);
+  return result.results.map(parseMachine);
 }
 
 export async function getMachine(db: D1, machineId: string, ownerId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
@@ -85,18 +85,10 @@ export async function getMachine(db: D1, machineId: string, ownerId: string): Pr
     ORDER BY s.created_at DESC
   `).bind(machineId).all();
 
-  return { ...parseMachineJson(machine), agents: sessions.results };
+  return { ...parseMachine(machine), agents: sessions.results };
 }
 
-function parseMachineJson<T extends { runtimes: any; usage_info: any }>(row: T): T {
-  if (typeof row.runtimes === "string") {
-    try { row.runtimes = JSON.parse(row.runtimes); } catch { row.runtimes = null; }
-  }
-  if (typeof row.usage_info === "string") {
-    try { row.usage_info = JSON.parse(row.usage_info); } catch { row.usage_info = null; }
-  }
-  return row;
-}
+const parseMachine = <T extends Machine>(row: T) => parseJsonFields(row, ["runtimes", "usage_info"]);
 
 async function detectStaleMachines(db: D1): Promise<void> {
   const cutoff = new Date(Date.now() - MACHINE_STALE_TIMEOUT_MS).toISOString();

@@ -266,7 +266,18 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`);
 
-      if (!ensureSkill(repoDir)) {
+      // Fetch agent details early — needed for both skill install and system prompt
+      const agentDetails = await client.getAgent(agentId) as AgentInfo | null;
+      if (!agentDetails) {
+        console.error(`[ERROR] Agent ${agentId} not found, releasing task ${task.id}`);
+        await client.releaseTask(task.id).catch(() => {});
+        await client.closeSession(agentId, sessionId).catch(() => {});
+        schedulePoll(baseInterval);
+        return;
+      }
+
+      const agentSkills = agentDetails.skills ?? [];
+      if (!ensureSkills(repoDir, agentSkills)) {
         console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
         await client.releaseTask(task.id).catch((err: any) =>
           console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`)
@@ -289,16 +300,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         AK_AGENT_KEY: JSON.stringify(privKeyJwk),
         AK_API_URL: getConfigValue("api-url")!,
       };
-
-      // Fetch agent details and generate system prompt
-      const agentDetails = await client.getAgent(agentId) as AgentInfo | null;
-      if (!agentDetails) {
-        console.error(`[ERROR] Agent ${agentId} not found, releasing task ${task.id}`);
-        await client.releaseTask(task.id).catch(() => {});
-        await client.closeSession(agentId, sessionId).catch(() => {});
-        schedulePoll(baseInterval);
-        return;
-      }
       const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
 
       const repos = await client.listRepositories();
@@ -338,29 +339,48 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 const SKILL_SOURCE = "bonaysoft/agent-kanban";
 const SKILL_NAME = "agent-kanban";
 
-function ensureSkill(repoDir: string): boolean {
-  const skillFile = join(repoDir, `.claude/skills/${SKILL_NAME}/SKILL.md`);
+function installSkill(repoDir: string, source: string, skill: string): boolean {
+  const skillFile = join(repoDir, `.claude/skills/${skill}/SKILL.md`);
+  if (!existsSync(skillFile)) {
+    console.log(`[INFO] Installing skill "${skill}" from ${source} in ${repoDir}`);
+    execSync(`npx skills add ${source} --skill ${skill} --agent claude-code --agent universal -y`, {
+      cwd: repoDir,
+      stdio: "pipe",
+    });
+    return true;
+  }
+  return false;
+}
 
+function ensureSkills(repoDir: string, agentSkills: string[]): boolean {
   try {
-    if (!existsSync(skillFile)) {
-      console.log(`[INFO] Installing skill "${SKILL_NAME}" in ${repoDir}`);
-      execSync(`npx skills add ${SKILL_SOURCE} --skill ${SKILL_NAME} --agent claude-code --agent universal -y`, {
-        cwd: repoDir,
-        stdio: "pipe",
-      });
-    } else {
-      const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
-      if (result.includes("up to date")) return true;
-      console.log(`[INFO] Skill "${SKILL_NAME}" updated in ${repoDir}`);
+    let changed = installSkill(repoDir, SKILL_SOURCE, SKILL_NAME);
+
+    for (const entry of agentSkills) {
+      // format: "source@skill-name"
+      const atIdx = entry.indexOf("@");
+      if (atIdx === -1) {
+        console.warn(`[WARN] Skipping invalid skill entry (missing @): ${entry}`);
+        continue;
+      }
+      const source = entry.slice(0, atIdx);
+      const skill = entry.slice(atIdx + 1);
+      if (installSkill(repoDir, source, skill)) changed = true;
     }
 
-    execSync(`git add .claude/skills/ && git diff --cached --quiet || git commit -m "chore: update ${SKILL_NAME} skill"`, {
+    if (!changed) {
+      const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
+      if (result.includes("up to date")) return true;
+      console.log(`[INFO] Skills updated in ${repoDir}`);
+    }
+
+    execSync(`git add .claude/skills/ && git diff --cached --quiet || git commit -m "chore: update skills"`, {
       cwd: repoDir,
       stdio: "pipe",
     });
     return true;
   } catch (err: any) {
-    console.error(`[ERROR] Failed to ensure skill: ${err.message}`);
+    console.error(`[ERROR] Failed to ensure skills: ${err.message}`);
     return false;
   }
 }

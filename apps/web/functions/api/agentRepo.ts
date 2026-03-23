@@ -1,6 +1,8 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
 import { generateKeypair, computeFingerprint, computeKeyId, BUILTIN_TEMPLATES } from "@agent-kanban/shared";
-import type { D1 } from "./db";
+import { parseJsonFields, type D1 } from "./db";
+
+const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
 
 export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<Agent> {
   const { publicKeyBase64, privateKeyJwk } = await generateKeypair();
@@ -22,9 +24,9 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
 
   return {
     id, owner_id: ownerId, name: input.name, bio: input.bio ?? null,
-    soul: input.soul ?? null, role: input.role ?? null, handoff_to: handoffJson,
+    soul: input.soul ?? null, role: input.role ?? null, handoff_to: input.handoff_to ?? null,
     runtime: input.runtime ?? null, model: input.model ?? null,
-    skills: skillsJson, public_key: publicKeyBase64, fingerprint, builtin: builtin ? 1 : 0,
+    skills: input.skills ?? null, public_key: publicKeyBase64, fingerprint, builtin: builtin ? 1 : 0,
     created_at: now, updated_at: now,
   };
 }
@@ -57,7 +59,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
     WHERE a.owner_id = ?
     ORDER BY a.created_at DESC
   `).bind(ownerId).all<AgentWithActivity>();
-  return result.results;
+  return result.results.map(parseAgent);
 }
 
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
@@ -74,7 +76,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
       COALESCE((SELECT SUM(s.cost_micro_usd) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as cost_micro_usd
     FROM agents a
     WHERE a.id = ? AND a.owner_id = ?
-  `).bind(agentId, ownerId).first<AgentWithActivity>();
+  `).bind(agentId, ownerId).first<AgentWithActivity>().then(r => r ? parseAgent(r) : null);
 }
 
 export async function updateAgent(
@@ -89,17 +91,19 @@ export async function updateAgent(
   const sets: string[] = ["updated_at = ?"];
   const binds: unknown[] = [now];
 
+  const jsonFields = new Set(["skills", "handoff_to"]);
   const fields = ["name", "bio", "soul", "role", "handoff_to", "runtime", "model", "skills"] as const;
   for (const field of fields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);
-      binds.push((updates as any)[field]);
+      const val = (updates as any)[field];
+      binds.push(jsonFields.has(field) && val != null ? JSON.stringify(val) : val);
     }
   }
 
   binds.push(agentId);
   await db.prepare(`UPDATE agents SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
-  return { ...agent, ...updates, updated_at: now };
+  return parseAgent({ ...agent, ...updates, updated_at: now });
 }
 
 export async function deleteAgent(db: D1, agentId: string): Promise<boolean> {
