@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
+import type { Task } from "@agent-kanban/shared";
 
 interface SubtaskListProps {
   parentId: string;
@@ -7,7 +8,7 @@ interface SubtaskListProps {
 }
 
 export function SubtaskList({ parentId, onTaskClick }: SubtaskListProps) {
-  const [subtasks, setSubtasks] = useState<any[]>([]);
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

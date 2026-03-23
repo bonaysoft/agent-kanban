@@ -7,6 +7,11 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "./ui/sheet";
 import { Separator } from "./ui/separator";
 import { Skeleton } from "./ui/skeleton";
+import type { AgentWithActivity, TaskLog } from "@agent-kanban/shared";
+
+interface AgentActivityLog extends TaskLog {
+  task_title?: string;
+}
 
 interface AgentProfileProps {
   agentId: string;
@@ -33,7 +38,7 @@ const actionStyles: Record<string, string> = {
 };
 
 export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProps) {
-  const [agent, setAgent] = useState<any>(null);
+  const [agent, setAgent] = useState<(AgentWithActivity & { logs?: AgentActivityLog[] }) | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
               <div>
                 <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-2">Activity</div>
                 <div className="space-y-0 max-h-96 overflow-y-auto">
-                  {(agent.logs || []).map((log: any) => (
+                  {(agent.logs || []).map((log) => (
                     <div
                       key={log.id}
                       className="flex gap-3 py-2 border-l-2 pl-4 ml-1 border-border"
