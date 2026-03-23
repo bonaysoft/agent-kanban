@@ -127,7 +127,7 @@ export function AgentDetailPage() {
                 <path d="M8.65 22c.21-.66.45-1.32.57-2" />
                 <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
               </svg>
-              <span className="font-mono text-[11px] tracking-[0.2em] font-medium group-hover:opacity-70 transition-opacity" style={{ color, opacity: 0.4 }}>{fp}</span>
+              <span className="font-mono text-[11px] tracking-[0.2em] font-medium text-content-tertiary transition-opacity">{fp}</span>
             </button>
 
             <div className="flex items-start gap-6 relative">
@@ -135,7 +135,7 @@ export function AgentDetailPage() {
 
               <div className="flex-1 min-w-0 pt-1">
                 <div className="flex items-center gap-3">
-                  <h1 className="font-mono text-2xl font-bold" style={{ color, letterSpacing: "-0.02em" }}>
+                  <h1 className="font-mono text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
                     {agent.name}
                   </h1>
                   {agent.builtin ? (

@@ -117,7 +117,7 @@ function AgentCard({ agent }: { agent: any }) {
         <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} />
 
         <div className="mt-3 flex items-center gap-1.5">
-          <h2 className="font-mono text-base font-bold tracking-tight" style={{ color }}>
+          <h2 className="font-mono text-base font-bold tracking-tight text-content-primary">
             {agent.name}
           </h2>
           {agent.builtin ? (
@@ -131,13 +131,13 @@ function AgentCard({ agent }: { agent: any }) {
         {/* Fingerprint badge */}
         <div
           className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
-          style={{ background: `rgba(${rgb}, 0.08)` }}
+          style={{ background: "var(--bg-secondary)" }}
         >
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <span className="font-mono text-[10px] tracking-[0.12em]" style={{ color: `rgba(${rgb}, 0.7)` }}>
+          <span className="font-mono text-[10px] tracking-[0.12em] text-content-secondary">
             {fp}
           </span>
         </div>
