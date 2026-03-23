@@ -10,25 +10,39 @@ import { cleanupPromptFile } from "./systemPrompt.js";
 //   EXIT(N) → POST /release (crash recovery) → cleanup
 //   KILL (shutdown) → POST /release → cleanup
 
+export interface SuspendedTask {
+  taskId: string;
+  sessionId: string;
+  cwd: string;
+  agentId: string;
+}
+
 export interface AgentProcess {
   taskId: string;
   sessionId: string;
+  cwd: string;
   process: ChildProcess;
   agentClient: AgentClient;
   timeoutTimer?: ReturnType<typeof setTimeout>;
+  rateLimited?: boolean;
 }
+
+const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
 
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
+  private suspended: SuspendedTask[] = [];
   private client: ApiClient;
   private agentCli: string;
   private onSlotFreed: () => void;
+  private onRateLimited: (resetAt: string) => void;
   private taskTimeoutMs: number;
 
-  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void, taskTimeoutMs = 2 * 60 * 60 * 1000) {
+  constructor(client: ApiClient, agentCli: string, onSlotFreed: () => void, onRateLimited: (resetAt: string) => void, taskTimeoutMs = 2 * 60 * 60 * 1000) {
     this.client = client;
     this.agentCli = agentCli;
     this.onSlotFreed = onSlotFreed;
+    this.onRateLimited = onRateLimited;
     this.taskTimeoutMs = taskTimeoutMs;
   }
 
@@ -48,17 +62,12 @@ export class ProcessManager {
     agentClient: AgentClient,
     agentEnv: Record<string, string>,
     systemPromptFile?: string,
+    resume?: boolean,
   ): Promise<void> {
-    const args = [
-      "--print",
-      "--verbose",
-      "--input-format", "stream-json",
-      "--output-format", "stream-json",
-      "--dangerously-skip-permissions",
-      "--session-id", sessionId,
-      "-w",
-    ];
-    if (systemPromptFile) {
+    const args = resume
+      ? ["--resume", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId, "-w"]
+      : ["--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId, "-w"];
+    if (!resume && systemPromptFile) {
       args.push("--system-prompt-file", systemPromptFile);
     }
 
@@ -81,7 +90,7 @@ export class ProcessManager {
       return;
     }
 
-    const agent: AgentProcess = { taskId, sessionId, process: proc, agentClient };
+    const agent: AgentProcess = { taskId, sessionId, cwd, process: proc, agentClient };
     this.agents.set(taskId, agent);
 
     if (this.taskTimeoutMs > 0) {
@@ -91,14 +100,18 @@ export class ProcessManager {
       }, this.taskTimeoutMs);
     }
 
-    proc.on("spawn", () => {
-      const payload = JSON.stringify({
-        type: "user",
-        message: { role: "user", content: taskContext },
+    if (resume) {
+      proc.on("spawn", () => proc.stdin?.end());
+    } else {
+      proc.on("spawn", () => {
+        const payload = JSON.stringify({
+          type: "user",
+          message: { role: "user", content: taskContext },
+        });
+        proc.stdin?.write(payload + "\n");
+        proc.stdin?.end();
       });
-      proc.stdin?.write(payload + "\n");
-      proc.stdin?.end();
-    });
+    }
 
     let stdoutBuffer = "";
     proc.stdout?.on("data", (chunk: Buffer) => {
@@ -138,6 +151,9 @@ export class ProcessManager {
 
       if (code === 0) {
         console.log(`[INFO] Agent finished task ${taskId}`);
+      } else if (agent.rateLimited) {
+        console.warn(`[WARN] Agent for task ${taskId} exited due to rate limit, suspending`);
+        this.suspended.push({ taskId, sessionId, cwd: agent.cwd, agentId: agentClient.getAgentId() });
       } else {
         console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {
@@ -179,6 +195,14 @@ export class ProcessManager {
     return [...this.agents.keys()];
   }
 
+  getSuspended(): SuspendedTask[] {
+    return this.suspended;
+  }
+
+  clearSuspended(): void {
+    this.suspended = [];
+  }
+
   async killAll(): Promise<void> {
     const entries = [...this.agents.entries()];
     for (const [taskId, agent] of entries) {
@@ -190,12 +214,68 @@ export class ProcessManager {
     }
   }
 
+  /** Detect error events — CLI has multiple shapes:
+   *  1. { type: "error", error: { type: "rate_limit_error", message: "..." } }
+   *  2. { type: "assistant", error: "unknown", message: { content: [{ type: "text", text: "..." }] } }
+   *  3. { error: "some string" }  (top-level error without type)
+   */
+  private detectError(event: any): { code?: string; detail: string } | null {
+    if (event.type !== "error" && !event.error) return null;
+
+    let code: string | undefined;
+    if (event.error && typeof event.error === "object") {
+      code = event.error.type;
+    }
+
+    let detail: string | undefined;
+    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+      const textBlock = event.message.content.find((e: any) => e.type === "text" && e.text);
+      if (textBlock?.text) detail = textBlock.text;
+    }
+    if (!detail) {
+      detail = event.error?.message
+        || (event.error !== "unknown" ? event.error : undefined)
+        || event.message
+        || JSON.stringify(event);
+    }
+
+    return { code, detail: String(detail) };
+  }
+
   private handleEvent(taskId: string, sessionId: string, event: any, agentClient: AgentClient): void {
+    // rate_limit_event — structured rate limit info from Claude CLI
+    if (event.type === "rate_limit_event") {
+      const info = event.rate_limit_info;
+      if (info && info.status !== "allowed") {
+        const resetAt = new Date(info.resetsAt * 1000).toISOString();
+        console.warn(`[WARN] Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`);
+        const agent = this.agents.get(taskId);
+        if (agent) agent.rateLimited = true;
+        this.onRateLimited(resetAt);
+      }
+      return;
+    }
+
+    // Error detection (covers all CLI error shapes)
+    const err = this.detectError(event);
+    if (err) {
+      if (err.code && RATE_LIMIT_CODES.has(err.code)) {
+        console.warn(`[WARN] Claude error rate limited (${err.code}) on task ${taskId}`);
+        const agent = this.agents.get(taskId);
+        if (agent) agent.rateLimited = true;
+        // resetAt already captured from preceding rate_limit_event; fire again as fallback
+        this.onRateLimited(new Date(Date.now() + 60 * 60 * 1000).toISOString());
+      } else {
+        console.warn(`[WARN] Claude error on task ${taskId}: ${err.detail}`);
+      }
+      return;
+    }
+
     if (event.type === "assistant" && Array.isArray(event.message?.content)) {
       for (const block of event.message.content) {
         if (block.type === "text" && block.text) {
           agentClient.sendMessage(taskId, { sender_type: "agent", sender_id: agentClient.getAgentId(), content: block.text })
-            .catch((err: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${err.message}`));
+            .catch((e: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${e.message}`));
         }
       }
     }
@@ -209,7 +289,7 @@ export class ProcessManager {
         cache_read_tokens: usage.cache_read_input_tokens || 0,
         cache_creation_tokens: usage.cache_creation_input_tokens || 0,
         cost_micro_usd: Math.round(cost * 1_000_000),
-      }).catch((err: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${err.message}`));
+      }).catch((e: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${e.message}`));
     }
   }
 

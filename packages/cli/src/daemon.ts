@@ -59,9 +59,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     console.log(`[INFO] Linked repositories: ${linkedRepoCount}`);
   }
 
+  let paused = false;
+  let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+
   const pm = new ProcessManager(client, opts.agentCli, () => {
     schedulePoll(baseInterval);
-  }, opts.taskTimeout);
+  }, pauseForRateLimit, opts.taskTimeout);
 
   const prMonitor = new PrMonitor(client);
   prMonitor.start();
@@ -79,6 +82,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     prMonitor.stop();
     clearInterval(heartbeatInterval);
     if (pollTimer) clearTimeout(pollTimer);
+    if (resumeTimer) clearTimeout(resumeTimer);
     await pm.killAll();
     removePidFile();
     console.log("[INFO] Daemon stopped.");
@@ -110,6 +114,62 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     );
   }, 30000);
 
+  function pauseForRateLimit(resetAt: string) {
+    if (paused) return;
+    paused = true;
+    const waitMs = Math.max(new Date(resetAt).getTime() - Date.now(), 60_000);
+    console.warn(`[WARN] Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
+    if (resumeTimer) clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(resume, waitMs);
+  }
+
+  async function resume() {
+    if (!running || !paused) return;
+    console.log("[INFO] Rate limit window reset, resuming");
+    paused = false;
+    await resumeSuspended();
+    schedulePoll(0);
+  }
+
+  async function resumeSuspended() {
+    const tasks = pm.getSuspended();
+    pm.clearSuspended();
+    for (const t of tasks) {
+      const task = await client.getTask(t.taskId) as any;
+      if (!task || task.status === "cancelled" || task.status === "done") continue;
+
+      const { publicKey, privateKey } = await crypto.subtle.generateKey(
+        { name: "Ed25519" } as any, true, ["sign", "verify"]
+      );
+      const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
+      const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
+
+      try {
+        await client.createSession(t.agentId, t.sessionId, pubKeyJwk.x!);
+      } catch {
+        console.warn(`[WARN] Failed to create session for resumed task ${t.taskId}, will retry via poll`);
+        continue;
+      }
+
+      const agentClient = new AgentClient(
+        getConfigValue("api-url")!,
+        t.agentId,
+        t.sessionId,
+        privateKey,
+      );
+
+      const agentEnv = {
+        AK_AGENT_ID: t.agentId,
+        AK_SESSION_ID: t.sessionId,
+        AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+        AK_API_URL: getConfigValue("api-url")!,
+      };
+
+      console.log(`[INFO] Resuming task ${t.taskId} (session=${t.sessionId.slice(0, 8)})`);
+      await pm.spawnAgent(t.taskId, t.sessionId, t.cwd, "", agentClient, agentEnv, undefined, true);
+    }
+  }
+
   function schedulePoll(delayMs: number) {
     if (!running) return;
     if (pollTimer) clearTimeout(pollTimer);
@@ -117,7 +177,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
 
   async function poll() {
-    if (!running) return;
+    if (!running || paused) return;
 
     try {
       // Check for cancelled tasks and kill their agents
