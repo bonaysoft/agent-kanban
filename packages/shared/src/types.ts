@@ -127,6 +127,7 @@ export interface Agent {
   skills: string | null;
   public_key: string;
   fingerprint: string;
+  builtin: number;
   created_at: string;
   updated_at: string;
 }

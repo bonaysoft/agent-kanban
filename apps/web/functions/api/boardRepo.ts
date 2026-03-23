@@ -1,6 +1,7 @@
 import type { Board, BoardWithTasks, Task } from "@agent-kanban/shared";
 import { newId, type D1 } from "./db";
 import { computeBlocked } from "./taskDeps";
+import { seedBuiltinAgents } from "./agentRepo";
 
 export async function createBoard(db: D1, ownerId: string, name: string, description?: string): Promise<Board> {
   const id = newId();
@@ -8,6 +9,9 @@ export async function createBoard(db: D1, ownerId: string, name: string, descrip
   await db.prepare(
     "INSERT INTO boards (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
   ).bind(id, ownerId, name, description || null, now, now).run();
+
+  await seedBuiltinAgents(db, ownerId);
+
   return { id, owner_id: ownerId, name, description: description || null, created_at: now, updated_at: now };
 }
 

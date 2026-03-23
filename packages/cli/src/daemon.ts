@@ -297,26 +297,20 @@ async function ensureLefthookTask(client: MachineClient, task: any, repoDir: str
 
   console.log(`[INFO] No lefthook config in ${repoDir}, creating setup task`);
 
+  const agents = await client.listAgents() as any[];
+  const qualityAgent = agents.find((a: any) => a.builtin && a.role === "quality-goalkeeper");
+  if (!qualityAgent) {
+    console.log("[WARN] No builtin quality-goalkeeper agent found, skipping lefthook setup");
+    return false;
+  }
+
   const setupTask = await client.createTask({
-    title: "Setup lefthook quality gates",
-    description: [
-      "Analyze this project's tech stack and set up quality gates via lefthook.",
-      "",
-      "Phase 1 — Setup tools and full scan:",
-      "1. Detect the project type (language, framework, package manager, build tools)",
-      "2. Determine what quality checks this project SHOULD have (linting, formatting, type checking, etc.)",
-      "3. If any required tools are missing (e.g. no linter configured), install and configure them",
-      "4. Run a full check against the entire codebase and collect all issues",
-      "5. Group the issues by module/area and create follow-up tasks via `ak task create` for each group",
-      "",
-      "Phase 2 — Enforce on future commits:",
-      "6. Generate `lefthook.yml` with pre-commit hooks that only check staged files (not the full codebase)",
-      "7. Run `lefthook install`",
-      "8. Commit all changes (lefthook.yml, tool configs, dependency updates)",
-    ].join("\n"),
+    title: "Setup lefthook quality gates for this repository",
+    description: "This repository has no lefthook configuration. Analyze the project's tech stack, set up appropriate quality checks, and enforce them via lefthook pre-commit hooks.",
     board_id: task.board_id,
     repository_id: task.repository_id,
     labels: [LEFTHOOK_LABEL],
+    assigned_to: qualityAgent.id,
   }) as any;
 
   console.log(`[INFO] Created lefthook setup task ${setupTask.id}`);
