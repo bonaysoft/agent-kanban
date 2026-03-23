@@ -10,11 +10,13 @@ import { cleanupPromptFile } from "./systemPrompt.js";
 //   EXIT(N) → POST /release (crash recovery) → cleanup
 //   KILL (shutdown) → POST /release → cleanup
 
-export interface SuspendedTask {
+export interface SuspendedSession {
   taskId: string;
   sessionId: string;
   cwd: string;
   agentId: string;
+  privateKey: CryptoKey;
+  privateKeyJwk: JsonWebKey;
 }
 
 export interface AgentProcess {
@@ -23,6 +25,8 @@ export interface AgentProcess {
   cwd: string;
   process: ChildProcess;
   agentClient: AgentClient;
+  privateKey: CryptoKey;
+  privateKeyJwk: JsonWebKey;
   timeoutTimer?: ReturnType<typeof setTimeout>;
   rateLimited?: boolean;
 }
@@ -31,7 +35,7 @@ const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
 
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
-  private suspended: SuspendedTask[] = [];
+  private suspended: SuspendedSession[] = [];
   private client: ApiClient;
   private agentCli: string;
   private onSlotFreed: () => void;
@@ -61,6 +65,8 @@ export class ProcessManager {
     taskContext: string,
     agentClient: AgentClient,
     agentEnv: Record<string, string>,
+    privateKey: CryptoKey,
+    privateKeyJwk: JsonWebKey,
     systemPromptFile?: string,
     resume?: boolean,
   ): Promise<void> {
@@ -90,7 +96,7 @@ export class ProcessManager {
       return;
     }
 
-    const agent: AgentProcess = { taskId, sessionId, cwd, process: proc, agentClient };
+    const agent: AgentProcess = { taskId, sessionId, cwd, process: proc, agentClient, privateKey, privateKeyJwk };
     this.agents.set(taskId, agent);
 
     if (this.taskTimeoutMs > 0) {
@@ -149,11 +155,13 @@ export class ProcessManager {
 
       this.agents.delete(taskId);
 
+      await this.closeSession(agentClient);
+
       if (code === 0) {
         console.log(`[INFO] Agent finished task ${taskId}`);
       } else if (agent.rateLimited) {
         console.warn(`[WARN] Agent for task ${taskId} exited due to rate limit, suspending`);
-        this.suspended.push({ taskId, sessionId, cwd: agent.cwd, agentId: agentClient.getAgentId() });
+        this.suspended.push({ taskId, sessionId, cwd: agent.cwd, agentId: agentClient.getAgentId(), privateKey: agent.privateKey, privateKeyJwk: agent.privateKeyJwk });
       } else {
         console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {
@@ -171,6 +179,7 @@ export class ProcessManager {
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
+      await this.closeSession(agentClient);
       await this.releaseTask(taskId);
       this.onSlotFreed();
     });
@@ -195,7 +204,7 @@ export class ProcessManager {
     return [...this.agents.keys()];
   }
 
-  getSuspended(): SuspendedTask[] {
+  getSuspended(): SuspendedSession[] {
     return this.suspended;
   }
 
@@ -210,6 +219,7 @@ export class ProcessManager {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       agent.process.kill("SIGTERM");
       this.agents.delete(taskId);
+      await this.closeSession(agent.agentClient);
       await this.releaseTask(taskId);
     }
   }
@@ -291,6 +301,12 @@ export class ProcessManager {
         cost_micro_usd: Math.round(cost * 1_000_000),
       }).catch((e: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${e.message}`));
     }
+  }
+
+  private async closeSession(agentClient: AgentClient): Promise<void> {
+    await this.client.closeSession(agentClient.getAgentId(), agentClient.getSessionId()).catch((err: any) =>
+      console.error(`[WARN] Failed to close session ${agentClient.getSessionId()}: ${err.message}`)
+    );
   }
 
   private async releaseTask(taskId: string, retries = 3): Promise<void> {

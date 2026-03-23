@@ -90,6 +90,9 @@ export abstract class ApiClient {
   closeSession(agentId: string, sessionId: string) {
     return this.request("DELETE", `/api/agents/${agentId}/sessions/${sessionId}`);
   }
+  reopenSession(agentId: string, sessionId: string) {
+    return this.request("POST", `/api/agents/${agentId}/sessions/${sessionId}/reopen`);
+  }
   listAgents() { return this.request("GET", "/api/agents"); }
   createAgent(input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) {
     return this.request("POST", "/api/agents", input);

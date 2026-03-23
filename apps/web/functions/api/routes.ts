@@ -7,7 +7,7 @@ import { createRepository, listRepositories, deleteRepository } from "./reposito
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, rejectTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
 import { RESERVED_ROLES } from "@agent-kanban/shared";
-import { createSession, closeSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
+import { createSession, closeSession, reopenSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
 import { createMessage, listMessages } from "./messageRepo";
@@ -171,6 +171,11 @@ api.post("/api/agents/:agentId/sessions", async (c) => {
 
 api.delete("/api/agents/:agentId/sessions/:sessionId", async (c) => {
   await closeSession(c.env.DB, c.req.param("sessionId"));
+  return c.json({ ok: true });
+});
+
+api.post("/api/agents/:agentId/sessions/:sessionId/reopen", async (c) => {
+  await reopenSession(c.env.DB, c.req.param("sessionId"));
   return c.json({ ok: true });
 });
 

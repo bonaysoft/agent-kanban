@@ -77,6 +77,13 @@ export async function closeSession(db: D1, sessionId: string): Promise<void> {
   await db.prepare("UPDATE agent_sessions SET status = 'closed', closed_at = ? WHERE id = ?").bind(now, sessionId).run();
 }
 
+export async function reopenSession(db: D1, sessionId: string): Promise<void> {
+  const result = await db.prepare(
+    "UPDATE agent_sessions SET status = 'active', closed_at = NULL WHERE id = ? AND status = 'closed'",
+  ).bind(sessionId).run();
+  if (!result.meta.changes) throw new Error(`Session ${sessionId} not found or not closed`);
+}
+
 export async function updateSessionUsage(db: D1, sessionId: string, usage: SessionUsageInput): Promise<void> {
   await db.prepare(`
     UPDATE agent_sessions SET

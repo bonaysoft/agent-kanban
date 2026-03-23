@@ -61,6 +61,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   let paused = false;
   let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  let resumeTargetMs = 0;
 
   const pm = new ProcessManager(client, opts.agentCli, () => {
     schedulePoll(baseInterval);
@@ -115,9 +116,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }, 30000);
 
   function pauseForRateLimit(resetAt: string) {
-    if (paused) return;
+    const resetTime = new Date(resetAt).getTime();
+    const currentResetTime = resumeTimer ? (resumeTargetMs ?? 0) : 0;
+    if (paused && resetTime <= currentResetTime) return;
     paused = true;
-    const waitMs = Math.max(new Date(resetAt).getTime() - Date.now(), 60_000);
+    resumeTargetMs = resetTime;
+    const waitMs = Math.max(resetTime - Date.now(), 60_000);
     console.warn(`[WARN] Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
     if (resumeTimer) clearTimeout(resumeTimer);
     resumeTimer = setTimeout(resume, waitMs);
@@ -127,46 +131,47 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     if (!running || !paused) return;
     console.log("[INFO] Rate limit window reset, resuming");
     paused = false;
+    resumeTargetMs = 0;
     await resumeSuspended();
     schedulePoll(0);
   }
 
   async function resumeSuspended() {
-    const tasks = pm.getSuspended();
+    const sessions = pm.getSuspended();
     pm.clearSuspended();
-    for (const t of tasks) {
-      const task = await client.getTask(t.taskId) as any;
+    for (const s of sessions) {
+      const task = await client.getTask(s.taskId) as any;
       if (!task || task.status === "cancelled" || task.status === "done") continue;
 
-      const { publicKey, privateKey } = await crypto.subtle.generateKey(
-        { name: "Ed25519" } as any, true, ["sign", "verify"]
-      );
-      const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
-      const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
-
       try {
-        await client.createSession(t.agentId, t.sessionId, pubKeyJwk.x!);
+        await client.reopenSession(s.agentId, s.sessionId);
       } catch {
-        console.warn(`[WARN] Failed to create session for resumed task ${t.taskId}, will retry via poll`);
+        console.warn(`[WARN] Failed to reopen session ${s.sessionId}, releasing task ${s.taskId}`);
+        await client.releaseTask(s.taskId).catch(() => {});
         continue;
       }
 
       const agentClient = new AgentClient(
         getConfigValue("api-url")!,
-        t.agentId,
-        t.sessionId,
-        privateKey,
+        s.agentId,
+        s.sessionId,
+        s.privateKey,
       );
 
       const agentEnv = {
-        AK_AGENT_ID: t.agentId,
-        AK_SESSION_ID: t.sessionId,
-        AK_AGENT_KEY: JSON.stringify(privKeyJwk),
+        AK_AGENT_ID: s.agentId,
+        AK_SESSION_ID: s.sessionId,
+        AK_AGENT_KEY: JSON.stringify(s.privateKeyJwk),
         AK_API_URL: getConfigValue("api-url")!,
       };
 
-      console.log(`[INFO] Resuming task ${t.taskId} (session=${t.sessionId.slice(0, 8)})`);
-      await pm.spawnAgent(t.taskId, t.sessionId, t.cwd, "", agentClient, agentEnv, undefined, true);
+      console.log(`[INFO] Resuming task ${s.taskId} (session=${s.sessionId.slice(0, 8)})`);
+      try {
+        await pm.spawnAgent(s.taskId, s.sessionId, s.cwd, "", agentClient, agentEnv, s.privateKey, s.privateKeyJwk, undefined, true);
+      } catch {
+        console.warn(`[WARN] Failed to resume task ${s.taskId}, releasing`);
+        await client.releaseTask(s.taskId).catch(() => {});
+      }
     }
   }
 
@@ -307,7 +312,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         `Board: ${task.board_id}`,
       ].filter(Boolean).join("\n");
 
-      await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, systemPromptFile);
+      await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, privateKey, privKeyJwk, systemPromptFile);
       prMonitor.track(task.id);
 
       backoffMs = baseInterval;
