@@ -42,6 +42,7 @@ export const api = {
     release: (id: string) => request<any>("POST", `/tasks/${id}/release`),
     cancel: (id: string) => request<any>("POST", `/tasks/${id}/cancel`),
     review: (id: string) => request<any>("POST", `/tasks/${id}/review`),
+    reject: (id: string) => request<any>("POST", `/tasks/${id}/reject`),
     assign: (id: string, agentId: string) => request<any>("POST", `/tasks/${id}/assign`, { agent_id: agentId }),
     addLog: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/logs`, { detail }),
     getLogs: (id: string, since?: string) => {

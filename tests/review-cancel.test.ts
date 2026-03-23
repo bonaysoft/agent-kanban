@@ -45,14 +45,14 @@ describe("review and cancel task actions", () => {
     expect(TASK_ACTIONS).toContain("review_requested");
   });
 
-  it("'cancelled' and 'review_requested' are the last two actions", () => {
+  it("'rejected' and 'review_requested' are the last two actions", () => {
     const len = TASK_ACTIONS.length;
-    expect(TASK_ACTIONS[len - 2]).toBe("cancelled");
+    expect(TASK_ACTIONS[len - 2]).toBe("rejected");
     expect(TASK_ACTIONS[len - 1]).toBe("review_requested");
   });
 
-  it("TASK_ACTIONS has exactly 10 entries with new actions", () => {
-    expect(TASK_ACTIONS).toHaveLength(10);
+  it("TASK_ACTIONS has exactly 11 entries with new actions", () => {
+    expect(TASK_ACTIONS).toHaveLength(11);
   });
 
   it("new actions coexist with all original actions", () => {

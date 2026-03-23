@@ -3,10 +3,11 @@ import { useAgents } from "../hooks/useAgents";
 import { api } from "../lib/api";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { Button } from "./ui/button";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 
 interface AssignDropdownProps {
   taskId: string;
+  taskStatus: string;
   currentAgent: string | null;
   onAssigned: () => void;
 }
@@ -16,7 +17,7 @@ const statusDotColors: Record<string, string> = {
   offline: "bg-content-tertiary",
 };
 
-export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropdownProps) {
+export function AssignDropdown({ taskId, taskStatus, currentAgent, onAssigned }: AssignDropdownProps) {
   const { agents } = useAgents();
   const [assigning, setAssigning] = useState(false);
 
@@ -32,33 +33,17 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
     }
   }
 
-  async function handleRelease() {
-    setAssigning(true);
-    try {
-      await api.tasks.release(taskId);
-      onAssigned();
-    } finally {
-      setAssigning(false);
-    }
-  }
+  const canAssign = taskStatus === "todo" && !currentAgent;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={
-        <Button variant="link" size="sm" disabled={assigning} className="font-mono text-[13px] px-0" />
+        <Button variant="link" size="sm" disabled={assigning || !canAssign} className="font-mono text-[13px] px-0" />
       }>
         {currentAgent || "Assign..."}
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="min-w-[200px]">
-        {currentAgent && (
-          <>
-            <DropdownMenuItem variant="destructive" onClick={handleRelease}>
-              Release task
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
         {agents.length === 0 && (
           <div className="px-2 py-1.5 text-sm text-content-tertiary">No agents</div>
         )}

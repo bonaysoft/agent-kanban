@@ -16,6 +16,7 @@ const actionStyles: Record<string, string> = {
   released: "text-warning",
   timed_out: "text-error",
   cancelled: "text-error",
+  rejected: "text-warning",
   review_requested: "text-accent",
 };
 
@@ -28,6 +29,7 @@ const actionLabels: Record<string, string> = {
   timed_out: "Timed out",
   moved: "Moved",
   cancelled: "Cancelled",
+  rejected: "Rejected",
   review_requested: "Moved to review",
 };
 

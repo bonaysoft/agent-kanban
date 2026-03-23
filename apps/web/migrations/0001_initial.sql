@@ -285,7 +285,7 @@ CREATE TABLE task_logs (
   session_id  TEXT,
   action      TEXT NOT NULL CHECK(action IN (
     'created', 'claimed', 'moved', 'commented', 'completed',
-    'assigned', 'released', 'timed_out', 'cancelled', 'review_requested'
+    'assigned', 'released', 'timed_out', 'cancelled', 'rejected', 'review_requested'
   )),
   detail      TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))

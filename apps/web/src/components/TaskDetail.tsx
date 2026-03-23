@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import { useSSE } from "../hooks/useSSE";
 import { useSession } from "../lib/auth-client";
+import { getAllowedActions, type TaskTransition } from "@agent-kanban/shared";
 import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
 import { ActivityLog } from "./ActivityLog";
 import { ChatPanel } from "./ChatPanel";
@@ -15,14 +16,30 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Separator } from "./ui/separator";
 import { Skeleton } from "./ui/skeleton";
 
-const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
-
 const TASK_STATUS_LABELS: Record<string, string> = {
   todo: "Todo",
   in_progress: "In Progress",
   in_review: "In Review",
   done: "Done",
   cancelled: "Cancelled",
+};
+
+const ACTION_LABELS: Record<TaskTransition, string> = {
+  claim: "Claim",
+  review: "Request Review",
+  reject: "Reject",
+  complete: "Complete",
+  cancel: "Cancel",
+  release: "Release",
+};
+
+const ACTION_VARIANTS: Record<TaskTransition, "default" | "destructive" | "outline"> = {
+  claim: "default",
+  review: "default",
+  reject: "outline",
+  complete: "default",
+  cancel: "destructive",
+  release: "outline",
 };
 
 interface TaskDetailProps {
@@ -67,8 +84,16 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     onRefresh();
   }
 
-  async function handleStatusChange(status: string) {
-    await api.tasks.update(taskId, { status });
+  async function handleAction(action: TaskTransition) {
+    const handlers: Record<TaskTransition, () => Promise<any>> = {
+      claim: () => api.tasks.claim(taskId),
+      review: () => api.tasks.review(taskId),
+      reject: () => api.tasks.reject(taskId),
+      complete: () => api.tasks.complete(taskId),
+      cancel: () => api.tasks.cancel(taskId),
+      release: () => api.tasks.release(taskId),
+    };
+    await handlers[action]();
     await reload();
     onRefresh();
   }
@@ -112,21 +137,13 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
       <div className="grid grid-cols-3 gap-4">
         <div>
           <FieldLabel>Status</FieldLabel>
-          <Select value={task.status} onValueChange={handleStatusChange}>
-            <SelectTrigger size="sm" className="text-sm text-accent border-none shadow-none">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TASK_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>{TASK_STATUS_LABELS[s]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="text-sm font-medium text-accent">{TASK_STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <div>
           <FieldLabel>Assigned to</FieldLabel>
           <AssignDropdown
             taskId={taskId}
+            taskStatus={task.status}
             currentAgent={task.agent_name || null}
             onAssigned={() => { reload(); onRefresh(); }}
           />
@@ -137,6 +154,25 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
             : <span className="text-content-tertiary">—</span>
         } />
       </div>
+
+      {(() => {
+        const actions = getAllowedActions(task.status, "user");
+        if (actions.length === 0) return null;
+        return (
+          <div className="flex gap-2">
+            {actions.map((action) => (
+              <Button
+                key={action}
+                variant={ACTION_VARIANTS[action]}
+                size="sm"
+                onClick={() => handleAction(action)}
+              >
+                {ACTION_LABELS[action]}
+              </Button>
+            ))}
+          </div>
+        );
+      })()}
 
       {dependsOn.length > 0 && (
         <div>
@@ -208,9 +244,11 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
       <Separator />
 
-      <Button variant="destructive" size="xs" onClick={handleDelete}>
-        Delete task
-      </Button>
+      {((task.status === "todo" && !task.assigned_to) || task.status === "cancelled") && (
+        <Button variant="destructive" size="xs" onClick={handleDelete}>
+          Delete task
+        </Button>
+      )}
     </div>
   );
 
@@ -220,7 +258,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
         taskId={taskId}
         agentId={task.assigned_to}
         userId={session?.user?.id || null}
-        taskDone={task.status === "done"}
+        taskDone={task.status === "done" || task.status === "cancelled"}
         initialMessages={initialMessages}
         sseMessages={sseMessages}
       />

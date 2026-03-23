@@ -385,10 +385,10 @@ describe("user assigns task to agent", () => {
     expect((logs.results[0] as any).agent_id).toBe(agentId);
   });
 
-  it("release resets status but keeps assignment", async () => {
-    const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await releaseTask(env.DB, taskId, agentId);
-    expect(task!.assigned_to).toBe(agentId);
+  it("release resets status from in_progress to todo", async () => {
+    const { claimTask, releaseTask } = await import("../apps/web/functions/api/taskRepo");
+    await claimTask(env.DB, taskId, agentId, "agent");
+    const task = await releaseTask(env.DB, taskId, agentId, "machine");
     expect(task!.status).toBe("todo");
   });
 });

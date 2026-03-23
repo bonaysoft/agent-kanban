@@ -73,6 +73,7 @@ export type TaskAction =
   | "released"
   | "timed_out"
   | "cancelled"
+  | "rejected"
   | "review_requested";
 
 // ─── Machine ───

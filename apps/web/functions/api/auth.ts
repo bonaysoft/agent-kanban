@@ -31,7 +31,10 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent"], capability: "task:claim" } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent"], capability: "task:review" } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["user", "machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/complete$/, rule: { allow: ["user", "machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/cancel$/, rule: { allow: ["user", "machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/reject$/, rule: { allow: ["user", "machine"] } },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {

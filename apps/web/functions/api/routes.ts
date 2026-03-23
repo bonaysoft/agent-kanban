@@ -4,7 +4,7 @@ import type { Env } from "./types";
 import { authMiddleware } from "./auth";
 import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
-import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
+import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, rejectTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
 import { RESERVED_ROLES } from "@agent-kanban/shared";
 import { createSession, closeSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
@@ -244,7 +244,7 @@ api.post("/api/tasks/:id/claim", async (c) => {
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const task = await claimTask(c.env.DB, c.req.param("id"), agentId);
+  const task = await claimTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
   return c.json(task);
 });
 
@@ -252,13 +252,13 @@ api.post("/api/tasks/:id/complete", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
-  const task = await completeTask(c.env.DB, c.req.param("id"), agentId || null, body.result || null, body.pr_url || null);
+  const task = await completeTask(c.env.DB, c.req.param("id"), agentId || null, body.result || null, body.pr_url || null, c.get("identityType"));
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
   const agentId = c.get("agentId") || null;
-  const task = await releaseTask(c.env.DB, c.req.param("id"), agentId);
+  const task = await releaseTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
   return c.json(task);
 });
 
@@ -282,23 +282,24 @@ api.post("/api/tasks/:id/cancel", async (c) => {
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
-  const existing = await c.env.DB.prepare("SELECT status, assigned_to FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first<{ status: string; assigned_to: string | null }>();
-  if (existing?.status === "done") throw new HTTPException(400, { message: "Cannot cancel a completed task" });
-
-  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null);
+  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || null, c.get("identityType"));
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
-
   const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
     .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
 
-  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null);
+  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null, c.get("identityType"));
+  return c.json(task);
+});
+
+api.post("/api/tasks/:id/reject", async (c) => {
+  const agentId = c.get("agentId") || null;
+  const task = await rejectTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
   return c.json(task);
 });
 

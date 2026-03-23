@@ -20,6 +20,7 @@ export const TASK_ACTIONS = [
   "released",
   "timed_out",
   "cancelled",
+  "rejected",
   "review_requested",
 ] as const;
 

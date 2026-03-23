@@ -14,6 +14,6 @@ export async function detectAndReleaseStale(db: D1, boardId: string): Promise<vo
   `).bind(boardId, cutoff).all<{ id: string; assigned_to: string }>();
 
   for (const stale of staleTasks.results) {
-    await releaseTask(db, stale.id, stale.assigned_to, "timed_out");
+    await releaseTask(db, stale.id, stale.assigned_to, "machine", "timed_out");
   }
 }

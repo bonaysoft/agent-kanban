@@ -1,8 +1,17 @@
-import type { Task, TaskLog, TaskWithLogs, CreateTaskInput } from "@agent-kanban/shared";
+import type { Task, TaskLog, TaskWithLogs, CreateTaskInput, TaskStatus, IdentityType, TaskTransition } from "@agent-kanban/shared";
+import { validateTransition } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
 import { newLongId, type D1 } from "./db";
 import { getDefaultBoard } from "./boardRepo";
 import { detectCycle, computeBlocked, getDependencies, setDependencies } from "./taskDeps";
+
+function enforceTransition(action: TaskTransition, currentStatus: TaskStatus, identity: IdentityType): void {
+  const error = validateTransition(action, currentStatus, identity);
+  if (error) {
+    const status = error.code === "FORBIDDEN" ? 403 : 409;
+    throw new HTTPException(status, { message: error.message });
+  }
+}
 
 export async function createTask(db: D1, ownerId: string, input: CreateTaskInput & { agentId?: string; assigned_to?: string }): Promise<Task> {
   const board = input.board_id
@@ -177,15 +186,23 @@ export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<T
 }
 
 export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
+  const task = await db.prepare("SELECT status, assigned_to FROM tasks WHERE id = ?").bind(taskId).first<{ status: string; assigned_to: string | null }>();
+  if (!task) return false;
+
+  const canDelete = (task.status === "todo" && !task.assigned_to) || task.status === "cancelled";
+  if (!canDelete) {
+    throw new HTTPException(409, { message: `Cannot delete task in ${task.status}${task.assigned_to ? " (assigned)" : ""} status` });
+  }
+
   const result = await db.prepare("DELETE FROM tasks WHERE id = ?").bind(taskId).run();
   return result.meta.changes > 0;
 }
 
-export async function claimTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
+export async function claimTask(db: D1, taskId: string, agentId: string, identity: IdentityType): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   if (task.assigned_to !== agentId) throw new HTTPException(409, { message: "Task is not assigned to this agent" });
-  if (task.status !== "todo") throw new HTTPException(409, { message: "Task is not in todo status" });
+  enforceTransition("claim", task.status as TaskStatus, identity);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -205,6 +222,7 @@ export async function claimTask(db: D1, taskId: string, agentId: string): Promis
 export async function assignTask(db: D1, taskId: string, agentId: string): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
+  if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
   if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
 
   const blockedSet = await computeBlocked(db, [taskId]);
@@ -225,9 +243,10 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   return { ...task, assigned_to: agentId, updated_at: now };
 }
 
-export async function completeTask(db: D1, taskId: string, agentId: string | null, result: string | null, prUrl: string | null): Promise<Task | null> {
+export async function completeTask(db: D1, taskId: string, agentId: string | null, result: string | null, prUrl: string | null, identity: IdentityType): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
+  enforceTransition("complete", task.status as TaskStatus, identity);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -244,9 +263,10 @@ export async function completeTask(db: D1, taskId: string, agentId: string | nul
   return { ...task, status: "done", result, pr_url: prUrl, updated_at: now };
 }
 
-export async function cancelTask(db: D1, taskId: string, agentId: string | null): Promise<Task | null> {
+export async function cancelTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
+  enforceTransition("cancel", task.status as TaskStatus, identity);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -263,9 +283,10 @@ export async function cancelTask(db: D1, taskId: string, agentId: string | null)
   return { ...task, status: "cancelled", assigned_to: null, updated_at: now };
 }
 
-export async function reviewTask(db: D1, taskId: string, agentId: string | null, prUrl: string | null = null): Promise<Task | null> {
+export async function reviewTask(db: D1, taskId: string, agentId: string | null, prUrl: string | null, identity: IdentityType): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
+  enforceTransition("review", task.status as TaskStatus, identity);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -282,9 +303,10 @@ export async function reviewTask(db: D1, taskId: string, agentId: string | null,
   return { ...task, status: "in_review", pr_url: prUrl || task.pr_url, updated_at: now };
 }
 
-export async function releaseTask(db: D1, taskId: string, agentId: string | null, action: "released" | "timed_out" = "released"): Promise<Task | null> {
+export async function releaseTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType, action: "released" | "timed_out" = "released"): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
+  enforceTransition("release", task.status as TaskStatus, identity);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -299,6 +321,26 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
   ]);
 
   return { ...task, status: "todo", updated_at: now };
+}
+
+export async function rejectTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType): Promise<Task | null> {
+  const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
+  if (!task) return null;
+  enforceTransition("reject", task.status as TaskStatus, identity);
+
+  const now = new Date().toISOString();
+  const logId = newLongId();
+
+  await db.batch([
+    db.prepare(
+      "UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"
+    ).bind(now, taskId),
+    db.prepare(
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'rejected', NULL, ?)"
+    ).bind(logId, taskId, agentId, null, now),
+  ]);
+
+  return { ...task, status: "in_progress" as const, updated_at: now };
 }
 
 export async function addTaskLog(
