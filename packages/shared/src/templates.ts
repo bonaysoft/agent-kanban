@@ -53,6 +53,8 @@ export const BUILTIN_TEMPLATES: AgentTemplate[] = [
   },
 ];
 
+export const RESERVED_ROLES = new Set(BUILTIN_TEMPLATES.map((t) => t.role!));
+
 export async function fetchTemplate(slug: string): Promise<AgentTemplate> {
   const url = `${TEMPLATES_BASE}/${slug}.yaml`;
   const res = await fetch(url);

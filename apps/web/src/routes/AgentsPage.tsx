@@ -116,9 +116,17 @@ function AgentCard({ agent }: { agent: any }) {
       <div className="flex flex-col items-center pt-6 pb-4 px-5">
         <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} />
 
-        <h2 className="mt-3 font-mono text-base font-bold tracking-tight" style={{ color }}>
-          {agent.name}
-        </h2>
+        <div className="mt-3 flex items-center gap-1.5">
+          <h2 className="font-mono text-base font-bold tracking-tight" style={{ color }}>
+            {agent.name}
+          </h2>
+          {agent.builtin ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          ) : null}
+        </div>
 
         {/* Fingerprint badge */}
         <div

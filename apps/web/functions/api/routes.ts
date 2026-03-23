@@ -6,6 +6,7 @@ import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteB
 import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
 import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, addTaskLog, getTaskLogs } from "./taskRepo";
 import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
+import { RESERVED_ROLES } from "@agent-kanban/shared";
 import { createSession, closeSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
 import { detectAndReleaseStale } from "./taskStale";
 import { createSSEResponse } from "./sse";
@@ -126,21 +127,28 @@ api.get("/api/agents/:id", async (c) => {
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{ name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  if (body.role && RESERVED_ROLES.has(body.role)) {
+    throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
+  }
   const agent = await createAgent(c.env.DB, c.get("ownerId"), body);
   return c.json(agent, 201);
 });
 
 api.patch("/api/agents/:id", async (c) => {
+  const existing = await c.env.DB.prepare("SELECT builtin FROM agents WHERE id = ?").bind(c.req.param("id")).first<{ builtin: number }>();
+  if (!existing) throw new HTTPException(404, { message: "Agent not found" });
+  if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
   const body = await c.req.json();
   if (body.skills && Array.isArray(body.skills)) body.skills = JSON.stringify(body.skills);
   const agent = await updateAgent(c.env.DB, c.req.param("id"), body);
-  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   return c.json(agent);
 });
 
 api.delete("/api/agents/:id", async (c) => {
+  const existing = await c.env.DB.prepare("SELECT builtin FROM agents WHERE id = ?").bind(c.req.param("id")).first<{ builtin: number }>();
+  if (!existing) throw new HTTPException(404, { message: "Agent not found" });
+  if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
   const deleted = await deleteAgent(c.env.DB, c.req.param("id"));
-  if (!deleted) throw new HTTPException(404, { message: "Agent not found" });
   return c.json({ ok: true });
 });
 

@@ -138,6 +138,12 @@ export function AgentDetailPage() {
                   <h1 className="font-mono text-2xl font-bold" style={{ color, letterSpacing: "-0.02em" }}>
                     {agent.name}
                   </h1>
+                  {agent.builtin ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0" title="Built-in — cannot be modified">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  ) : null}
                   <span
                     className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOnline ? "animate-pulse-glow" : ""}`}
                     style={{ backgroundColor: isOnline ? color : "#3f3f46" }}

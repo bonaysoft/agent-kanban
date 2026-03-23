@@ -72,6 +72,12 @@ export function AssignDropdown({ taskId, currentAgent, onAssigned }: AssignDropd
             <AgentIdenticon publicKey={agent.public_key} size={20} />
             <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status] || "bg-content-tertiary"}`} />
             <span className="font-mono text-[13px] text-content-primary">{agent.name}</span>
+            {agent.builtin ? (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            ) : null}
             <span className="text-[10px] text-content-tertiary ml-auto">{agent.status}</span>
           </DropdownMenuItem>
         ))}

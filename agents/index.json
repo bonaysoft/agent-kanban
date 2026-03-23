@@ -4,6 +4,5 @@
   {"slug":"enduser","name":"Enduser"},
   {"slug":"feature-planner","name":"Feature Planner"},
   {"slug":"frontend-developer","name":"Frontend Developer"},
-  {"slug":"fullstack-developer","name":"Fullstack Developer"},
-  {"slug":"quality-goalkeeper","name":"Quality Goalkeeper"}
+  {"slug":"fullstack-developer","name":"Fullstack Developer"}
 ]
