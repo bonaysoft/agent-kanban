@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { CreateAgentDialog } from "../components/CreateAgentDialog";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
@@ -22,7 +21,6 @@ function formatCost(microUsd: number): string {
 export function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
 
   const refresh = () => api.agents.list().then(setAgents);
 
@@ -49,20 +47,13 @@ export function AgentsPage() {
               </span>
             )}
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
+          <Link
+            to="/agents/new"
             className="px-3.5 py-1.5 bg-accent text-surface-primary rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
           >
             New agent
-          </button>
+          </Link>
         </div>
-
-        <CreateAgentDialog
-          existingRoles={[...new Set(agents.map((a) => a.role).filter(Boolean))]}
-          open={showCreate}
-          onOpenChange={setShowCreate}
-          onCreated={refresh}
-        />
 
         {loading ? (
           <div className="grid grid-cols-3 gap-4">
@@ -73,12 +64,12 @@ export function AgentsPage() {
         ) : agents.length === 0 ? (
           <div className="text-center py-24">
             <p className="text-content-tertiary text-sm">No agents yet.</p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-2 text-sm text-accent hover:underline"
+            <Link
+              to="/agents/new"
+              className="mt-2 text-sm text-accent hover:underline inline-block"
             >
               Create your first agent
-            </button>
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-4">
