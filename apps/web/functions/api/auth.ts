@@ -128,7 +128,6 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
     c.header("X-RateLimit-Limit", String(key.rateLimitMax));
     c.header("X-RateLimit-Remaining", String(Math.max(0, key.rateLimitMax - (key.requestCount || 0))));
   }
-
   return enforceRouteRule(c, next);
 }
 
