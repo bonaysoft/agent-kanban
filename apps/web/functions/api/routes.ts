@@ -296,7 +296,8 @@ api.post("/api/tasks/:id/review", async (c) => {
 
 api.post("/api/tasks/:id/reject", async (c) => {
   const agentId = c.get("agentId") || null;
-  const task = await rejectTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
+  const task = await rejectTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"), body.reason);
   return c.json(task);
 });
 

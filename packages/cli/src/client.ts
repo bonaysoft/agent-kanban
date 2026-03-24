@@ -33,7 +33,11 @@ export abstract class ApiClient {
     const data = await res.json() as T & { error?: { code: string; message: string } };
 
     if (!res.ok) {
-      const msg = (data as any).error?.message || `HTTP ${res.status}`;
+      let msg = (data as any).error?.message || `HTTP ${res.status}`;
+      if (res.status === 429) {
+        const retryAfter = res.headers.get("Retry-After");
+        if (retryAfter) msg += ` (retry after ${retryAfter}s)`;
+      }
       throw new ApiError(res.status, msg);
     }
 
@@ -71,7 +75,16 @@ export abstract class ApiClient {
   addLog(taskId: string, detail: string) {
     return this.request("POST", `/api/tasks/${taskId}/logs`, { detail });
   }
+  deleteTask(id: string) { return this.request("DELETE", `/api/tasks/${id}`); }
+  rejectTask(id: string, body: Record<string, unknown> = {}) {
+    return this.request("POST", `/api/tasks/${id}/reject`, body);
+  }
+  getTaskLogs(taskId: string, since?: string) {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+    return this.request("GET", `/api/tasks/${taskId}/logs${qs}`);
+  }
   getAgent(agentId: string) { return this.request("GET", `/api/agents/${agentId}`); }
+  deleteAgent(agentId: string) { return this.request("DELETE", `/api/agents/${agentId}`); }
 
   // Machines
   registerMachine(info: { name: string; os: string; version: string; runtimes: string[] }) {
@@ -106,6 +119,10 @@ export abstract class ApiClient {
   listBoards() { return this.request<any[]>("GET", "/api/boards"); }
   getBoardByName(name: string) { return this.request("GET", `/api/boards?name=${encodeURIComponent(name)}`); }
   getBoard(boardId: string) { return this.request("GET", `/api/boards/${boardId}`); }
+  updateBoard(boardId: string, body: Record<string, unknown>) {
+    return this.request("PATCH", `/api/boards/${boardId}`, body);
+  }
+  deleteBoard(boardId: string) { return this.request("DELETE", `/api/boards/${boardId}`); }
 
   // Repositories
   createRepository(input: { name: string; url: string }) {
@@ -117,6 +134,7 @@ export abstract class ApiClient {
     const qs = params.toString();
     return this.request<any[]>("GET", `/api/repositories${qs ? `?${qs}` : ""}`);
   }
+  deleteRepository(repoId: string) { return this.request("DELETE", `/api/repositories/${repoId}`); }
 
   // Session usage
   updateSessionUsage(agentId: string, sessionId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {

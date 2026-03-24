@@ -63,6 +63,47 @@ export function formatRepositoryList(repos: any[]): string {
   return lines.join("\n");
 }
 
+export function formatTask(task: any): string {
+  const lines: string[] = [];
+  lines.push(`${task.title}`);
+  lines.push(`  ID:          ${task.id}`);
+  lines.push(`  Status:      ${task.status}${task.blocked ? " (BLOCKED)" : ""}`);
+  lines.push(`  Priority:    ${task.priority || "none"}`);
+  if (task.labels?.length) lines.push(`  Labels:      ${task.labels.join(", ")}`);
+  if (task.assigned_to) lines.push(`  Assigned to: ${task.assigned_to}`);
+  if (task.repository_name) lines.push(`  Repository:  ${task.repository_name}`);
+  if (task.depends_on?.length) lines.push(`  Depends on:  ${task.depends_on.join(", ")}`);
+  if (task.pr_url) lines.push(`  PR:          ${task.pr_url}`);
+  if (task.description) lines.push(`\n  ${task.description}`);
+  if (task.input) lines.push(`\n  Input: ${JSON.stringify(task.input)}`);
+  if (task.result) lines.push(`  Result: ${task.result}`);
+  return lines.join("\n");
+}
+
+export function formatTaskLogs(logs: any[]): string {
+  if (logs.length === 0) return "No logs.";
+  return logs.map((l) => {
+    const time = new Date(l.created_at).toLocaleString();
+    const actor = l.actor_id ? ` [${l.actor_id}]` : "";
+    return `  ${time}  ${l.action.padEnd(18)}${actor}  ${l.detail || ""}`;
+  }).join("\n");
+}
+
+export function formatAgent(agent: any): string {
+  const lines: string[] = [];
+  lines.push(`${agent.name}`);
+  lines.push(`  ID:       ${agent.id}`);
+  lines.push(`  Status:   ${agent.status}`);
+  if (agent.role) lines.push(`  Role:     ${agent.role}`);
+  if (agent.bio) lines.push(`  Bio:      ${agent.bio}`);
+  if (agent.runtime) lines.push(`  Runtime:  ${agent.runtime}`);
+  if (agent.model) lines.push(`  Model:    ${agent.model}`);
+  if (agent.skills?.length) lines.push(`  Skills:   ${agent.skills.join(", ")}`);
+  if (agent.handoff_to?.length) lines.push(`  Handoff:  ${agent.handoff_to.join(", ")}`);
+  if (agent.task_count != null) lines.push(`  Tasks:    ${agent.task_count}`);
+  return lines.join("\n");
+}
+
 export function formatBoard(board: any): string {
   const cols = board.columns || [];
   const maxWidth = 30;

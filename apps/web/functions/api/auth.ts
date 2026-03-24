@@ -106,8 +106,15 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
     return c.json({ error: { code: "UNAUTHORIZED", message: err?.message || "Invalid API key" } }, 401);
   }
   if (!result?.valid) {
-    const code = result?.error?.code === "RATE_LIMITED" ? 429 : 401;
-    return c.json({ error: result?.error || { code: "UNAUTHORIZED", message: "Invalid API key" } }, code);
+    if (result?.error?.code === "RATE_LIMITED") {
+      const retryAfter = result.error.details?.tryAgainIn ? Math.ceil(result.error.details.tryAgainIn / 1000) : 60;
+      console.log(`[rate-limit] retry_after=${retryAfter}s path=${c.req.path}`);
+      return c.json(
+        { error: { code: "RATE_LIMITED", message: `Rate limit exceeded. Retry after ${retryAfter}s` } },
+        { status: 429, headers: { "Retry-After": String(retryAfter) } },
+      );
+    }
+    return c.json({ error: result?.error || { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
   }
 
   c.set("ownerId", result.key.referenceId);

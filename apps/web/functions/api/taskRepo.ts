@@ -169,7 +169,7 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithLogs | nu
   return { ...task, logs: logs.results, duration_minutes: duration, depends_on: deps, subtask_count: task.subtask_count };
 }
 
-export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input">> & { depends_on?: string[] }): Promise<Task | null> {
+export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input" | "position">> & { depends_on?: string[] }): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
 
@@ -186,7 +186,7 @@ export async function updateTask(db: D1, taskId: string, updates: Partial<Pick<T
   const binds: unknown[] = [now];
 
   const jsonFields = new Set(["labels", "input"]);
-  const allowedFields = ["title", "description", "repository_id", "labels", "priority", "result", "pr_url", "input"] as const;
+  const allowedFields = ["title", "description", "repository_id", "labels", "priority", "result", "pr_url", "input", "position"] as const;
   for (const field of allowedFields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);
@@ -339,7 +339,7 @@ export async function releaseTask(db: D1, taskId: string, agentId: string | null
   return parseTask({ ...task, status: "todo" as const, updated_at: now });
 }
 
-export async function rejectTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType): Promise<Task | null> {
+export async function rejectTask(db: D1, taskId: string, agentId: string | null, identity: IdentityType, reason?: string): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   enforceTransition("reject", task.status as TaskStatus, identity);
@@ -352,8 +352,8 @@ export async function rejectTask(db: D1, taskId: string, agentId: string | null,
       "UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"
     ).bind(now, taskId),
     db.prepare(
-      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'rejected', NULL, ?)"
-    ).bind(logId, taskId, agentId, null, now),
+      "INSERT INTO task_logs (id, task_id, agent_id, session_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'rejected', ?, ?)"
+    ).bind(logId, taskId, agentId, null, reason || null, now),
   ]);
 
   return parseTask({ ...task, status: "in_progress" as const, updated_at: now });
