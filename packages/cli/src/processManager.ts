@@ -38,6 +38,13 @@ export interface AgentProcess {
 
 const RATE_LIMIT_CODES = new Set(['rate_limit_error', 'overloaded_error']);
 
+export interface ProcessManagerCallbacks {
+  onSlotFreed: () => void;
+  onRateLimited: (resetAt: string) => void;
+  onProcessStarted?: (sessionId: string, pid: number) => void;
+  onProcessExited?: (sessionId: string) => void;
+}
+
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
   private suspended: SuspendedSession[] = [];
@@ -45,19 +52,22 @@ export class ProcessManager {
   private agentCli: string;
   private onSlotFreed: () => void;
   private onRateLimited: (resetAt: string) => void;
+  private onProcessStarted?: (sessionId: string, pid: number) => void;
+  private onProcessExited?: (sessionId: string) => void;
   private taskTimeoutMs: number;
 
   constructor(
     client: ApiClient,
     agentCli: string,
-    onSlotFreed: () => void,
-    onRateLimited: (resetAt: string) => void,
+    callbacks: ProcessManagerCallbacks,
     taskTimeoutMs = 2 * 60 * 60 * 1000,
   ) {
     this.client = client;
     this.agentCli = agentCli;
-    this.onSlotFreed = onSlotFreed;
-    this.onRateLimited = onRateLimited;
+    this.onSlotFreed = callbacks.onSlotFreed;
+    this.onRateLimited = callbacks.onRateLimited;
+    this.onProcessStarted = callbacks.onProcessStarted;
+    this.onProcessExited = callbacks.onProcessExited;
     this.taskTimeoutMs = taskTimeoutMs;
   }
 
@@ -141,6 +151,7 @@ export class ProcessManager {
       onCleanup,
     };
     this.agents.set(taskId, agent);
+    this.onProcessStarted?.(sessionId, proc.pid);
 
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
@@ -189,6 +200,7 @@ export class ProcessManager {
     proc.on('close', async (code) => {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       cleanupPromptFile(sessionId);
+      this.onProcessExited?.(sessionId);
 
       // Already removed by killTask() — process was intentionally terminated
       if (!this.agents.has(taskId)) return;
