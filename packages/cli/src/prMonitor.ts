@@ -1,8 +1,8 @@
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import type { ApiClient } from "./client.js";
-import { TRACKED_TASKS_FILE } from "./paths.js";
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+import type { ApiClient } from './client.js';
+import { TRACKED_TASKS_FILE } from './paths.js';
 
 // PR Monitor: watches in_review tasks spawned by this machine.
 //   PR merged  → task done
@@ -21,6 +21,8 @@ export class PrMonitor {
   private trackedTasks: Set<string>;
   private timer: ReturnType<typeof setInterval> | null = null;
   private checking = false;
+  private failureCount = 0;
+  private taskFailures = new Map<string, number>();
 
   constructor(client: ApiClient) {
     this.client = client;
@@ -46,6 +48,7 @@ export class PrMonitor {
 
   untrack(taskId: string): void {
     this.trackedTasks.delete(taskId);
+    this.taskFailures.delete(taskId);
     saveTrackedTasks(this.trackedTasks);
   }
 
@@ -54,38 +57,69 @@ export class PrMonitor {
     this.checking = true;
 
     try {
-      const tasks = (await this.client.listTasks({ status: "in_review" })) as ReviewTask[];
+      const tasks = (await this.client.listTasks({ status: 'in_review' })) as ReviewTask[];
+      const inReviewIds = new Set(tasks.map((t) => t.id));
       const monitored = tasks.filter((t) => t.pr_url && this.trackedTasks.has(t.id));
 
       for (const task of monitored) {
         const state = getPrState(task.pr_url);
-        if (!state) continue;
+        if (!state) {
+          const count = (this.taskFailures.get(task.id) ?? 0) + 1;
+          this.taskFailures.set(task.id, count);
+          if (count === 20) {
+            console.log(
+              `[WARN] Cannot check PR status for task ${task.id} (${task.pr_url}), gh may need re-auth`,
+            );
+          }
+          continue;
+        }
 
-        if (state === "MERGED") {
+        this.taskFailures.delete(task.id);
+
+        if (state === 'MERGED') {
           console.log(`[INFO] PR merged for task ${task.id}, marking done`);
-          await this.client.completeTask(task.id, { result: "PR merged" });
+          await this.client.completeTask(task.id, { result: 'PR merged' });
           this.untrack(task.id);
-        } else if (state === "CLOSED") {
+        } else if (state === 'CLOSED') {
           console.log(`[INFO] PR closed for task ${task.id}, marking cancelled`);
           await this.client.cancelTask(task.id);
           this.untrack(task.id);
         }
       }
+
+      // Untrack tasks no longer in_review (completed/cancelled externally)
+      for (const taskId of [...this.trackedTasks]) {
+        if (!inReviewIds.has(taskId)) {
+          console.log(`[INFO] Task ${taskId} no longer in_review, untracking`);
+          this.untrack(taskId);
+        }
+      }
+
+      this.failureCount = 0;
     } catch (err: any) {
-      console.error(`[WARN] PR monitor error: ${err.message}`);
+      this.failureCount++;
+      if (this.failureCount === 10 || (this.failureCount > 10 && this.failureCount % 10 === 0)) {
+        console.error(
+          `[ERROR] PR monitor has failed ${this.failureCount} consecutive checks: ${err.message}. Check gh auth status.`,
+        );
+      } else if (this.failureCount < 10) {
+        console.error(`[WARN] PR monitor error: ${err.message}`);
+      }
     } finally {
       this.checking = false;
     }
   }
 }
 
-function getPrState(prUrl: string): "OPEN" | "MERGED" | "CLOSED" | null {
+function getPrState(prUrl: string): 'OPEN' | 'MERGED' | 'CLOSED' | null {
   try {
     const raw = execSync(`gh pr view "${prUrl}" --json state -q .state`, {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 10_000,
-    }).toString().trim();
-    if (raw === "OPEN" || raw === "MERGED" || raw === "CLOSED") return raw;
+    })
+      .toString()
+      .trim();
+    if (raw === 'OPEN' || raw === 'MERGED' || raw === 'CLOSED') return raw;
     return null;
   } catch {
     return null;
@@ -94,7 +128,7 @@ function getPrState(prUrl: string): "OPEN" | "MERGED" | "CLOSED" | null {
 
 function loadTrackedTasks(): Set<string> {
   try {
-    const data = JSON.parse(readFileSync(TRACKED_TASKS_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync(TRACKED_TASKS_FILE, 'utf-8'));
     return new Set(Array.isArray(data) ? data : []);
   } catch {
     return new Set();
@@ -103,5 +137,5 @@ function loadTrackedTasks(): Set<string> {
 
 function saveTrackedTasks(tasks: Set<string>): void {
   mkdirSync(dirname(TRACKED_TASKS_FILE), { recursive: true });
-  writeFileSync(TRACKED_TASKS_FILE, JSON.stringify([...tasks]) + "\n");
+  writeFileSync(TRACKED_TASKS_FILE, JSON.stringify([...tasks]) + '\n');
 }
