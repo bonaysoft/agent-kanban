@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { AddMachineSteps } from "./AddMachineSteps";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -13,7 +14,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [boardName, setBoardName] = useState("My Board");
   const [taskTitle, setTaskTitle] = useState("First task");
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
-  const [apiUrl, setApiUrl] = useState(window.location.origin);
+  const [apiKeyId, setApiKeyId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,6 +37,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       return;
     }
     setApiKeyDisplay(data.key);
+    setApiKeyId(data.id);
 
     setLoading(false);
     setStep(2);
@@ -108,30 +110,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        {step === 2 && (
-          <div className="space-y-4">
-            <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
-              CLI configuration
-            </label>
-            <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
-{`npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`}
-            </pre>
-            <Button
-              variant="outline"
-              onClick={() => navigator.clipboard.writeText(
-                `npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKeyDisplay}`
-              )}
-              className="w-full"
-            >
-              Copy to clipboard
-            </Button>
-            <Button
-              onClick={handleDone}
-              className="w-full"
-            >
-              Go to Board
-            </Button>
-          </div>
+        {step === 2 && apiKeyDisplay && apiKeyId && (
+          <AddMachineSteps
+            apiKey={apiKeyDisplay}
+            apiKeyId={apiKeyId}
+            onDone={handleDone}
+          />
         )}
       </div>
     </div>
