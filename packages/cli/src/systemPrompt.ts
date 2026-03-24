@@ -42,8 +42,8 @@ Run \`ak agent list --format json\` to see your teammates and their roles.
 
 ## Environment
 
-- Your current working directory IS the project repository. Do not \`cd\` elsewhere.
-- You are running inside a git worktree with its own branch already created. Do not create or checkout branches — commit directly to the current branch.
+- Your current working directory IS the project repository (a git worktree). Do not \`cd\` elsewhere.
+- A branch has already been created for you. Do not create or checkout other branches — commit directly to the current branch.
 - Push the current branch and create a PR from it when ready.
 
 ## Rules

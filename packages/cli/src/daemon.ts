@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, unlinkSync, readFileSync } from "fs";
+import { existsSync, writeFileSync, unlinkSync, readFileSync, appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { hostname, platform, arch, release } from "os";
 import { execSync } from "child_process";
@@ -10,7 +10,7 @@ import { generateSystemPrompt, writePromptFile, type AgentInfo } from "./systemP
 import { getLinks, findPathForRepository, setLink } from "./links.js";
 import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
 import { getUsage } from "./usage.js";
-import { REPOS_DIR } from "./paths.js";
+import { REPOS_DIR, WORKTREES_DIR } from "./paths.js";
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -168,7 +168,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       console.log(`[INFO] Resuming task ${s.taskId} (session=${s.sessionId.slice(0, 8)})`);
       try {
-        await pm.spawnAgent(s.taskId, s.sessionId, s.cwd, "", agentClient, agentEnv, s.privateKey, s.privateKeyJwk, undefined, true);
+        const resumeCleanup = () => removeWorktree(s.repoDir, s.cwd, s.branchName);
+        await pm.spawnAgent(s.taskId, s.sessionId, s.cwd, s.repoDir, s.branchName, "", agentClient, agentEnv, s.privateKey, s.privateKeyJwk, undefined, true, resumeCleanup);
       } catch {
         console.warn(`[WARN] Failed to resume task ${s.taskId}, releasing`);
         await client.releaseTask(s.taskId).catch(() => {});
@@ -282,9 +283,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
+      let worktreeDir: string;
+      let branchName: string;
+      try {
+        ({ worktreeDir, branchName } = createWorktree(repoDir, sessionId));
+      } catch (err: any) {
+        console.error(`[ERROR] Failed to create worktree in ${repoDir}: ${err.message}`);
+        await client.releaseTask(task.id).catch(() => {});
+        await client.closeSession(agentId, sessionId).catch(() => {});
+        schedulePoll(baseInterval);
+        return;
+      }
+
       const agentSkills = agentDetails.skills ?? [];
-      if (!ensureSkills(repoDir, agentSkills)) {
+      if (!ensureSkills(worktreeDir, agentSkills)) {
         console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
+        removeWorktree(repoDir, worktreeDir, branchName);
         await client.releaseTask(task.id).catch((err: any) =>
           console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`)
         );
@@ -320,7 +334,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         `Board: ${task.board_id}`,
       ].filter(Boolean).join("\n");
 
-      await pm.spawnAgent(task.id, sessionId, repoDir, taskContext, agentClient, agentEnv, privateKey, privKeyJwk, systemPromptFile);
+      const cleanup = () => removeWorktree(repoDir, worktreeDir, branchName);
+      await pm.spawnAgent(task.id, sessionId, worktreeDir, repoDir, branchName, taskContext, agentClient, agentEnv, privateKey, privKeyJwk, systemPromptFile, false, cleanup);
       prMonitor.track(task.id);
 
       backoffMs = baseInterval;
@@ -358,9 +373,11 @@ function installSkill(repoDir: string, source: string, skill: string): boolean {
   return false;
 }
 
-function ensureSkills(repoDir: string, agentSkills: string[]): boolean {
+const SKILL_GITIGNORE_ENTRIES = [".claude/skills/", ".agents/", "skills-lock.json"];
+
+function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
   try {
-    let changed = installSkill(repoDir, SKILL_SOURCE, SKILL_NAME);
+    let changed = installSkill(worktreeDir, SKILL_SOURCE, SKILL_NAME);
 
     for (const entry of agentSkills) {
       // format: "source@skill-name"
@@ -371,19 +388,23 @@ function ensureSkills(repoDir: string, agentSkills: string[]): boolean {
       }
       const source = entry.slice(0, atIdx);
       const skill = entry.slice(atIdx + 1);
-      if (installSkill(repoDir, source, skill)) changed = true;
+      if (installSkill(worktreeDir, source, skill)) changed = true;
     }
 
     if (!changed) {
-      const result = execSync("npx skills update", { cwd: repoDir, stdio: "pipe" }).toString();
+      const result = execSync("npx skills update", { cwd: worktreeDir, stdio: "pipe" }).toString();
       if (result.includes("up to date")) return true;
-      console.log(`[INFO] Skills updated in ${repoDir}`);
+      console.log(`[INFO] Skills updated in ${worktreeDir}`);
     }
 
-    execSync(`git add .claude/skills/ && (git diff --cached --quiet || (git commit -m "chore: update skills" && git push))`, {
-      cwd: repoDir,
-      stdio: "pipe",
-    });
+    // Ensure skill paths are gitignored so agents don't commit them
+    const gitignorePath = join(worktreeDir, ".gitignore");
+    const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+    const missing = SKILL_GITIGNORE_ENTRIES.filter((e) => !existing.includes(e));
+    if (missing.length > 0) {
+      appendFileSync(gitignorePath, "\n# agent skills (managed by daemon)\n" + missing.join("\n") + "\n");
+    }
+
     return true;
   } catch (err: any) {
     console.error(`[ERROR] Failed to ensure skills: ${err.message}`);
@@ -471,6 +492,25 @@ function prepareRepo(repoDir: string): boolean {
   } catch (err: any) {
     console.error(`[ERROR] Failed to prepare repo ${repoDir}: ${err.message}`);
     return false;
+  }
+}
+
+function createWorktree(repoDir: string, sessionId: string): { worktreeDir: string; branchName: string } {
+  const branchName = `ak/${sessionId.slice(0, 8)}`;
+  mkdirSync(WORKTREES_DIR, { recursive: true });
+  const worktreeDir = join(WORKTREES_DIR, sessionId.slice(0, 8));
+  execSync(`git worktree add "${worktreeDir}" -b "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
+  console.log(`[INFO] Created worktree ${worktreeDir} (branch ${branchName})`);
+  return { worktreeDir, branchName };
+}
+
+function removeWorktree(repoDir: string, worktreeDir: string, branchName: string): void {
+  try {
+    execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: repoDir, stdio: "pipe" });
+    execSync(`git branch -D "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
+    console.log(`[INFO] Removed worktree ${worktreeDir}`);
+  } catch (err: any) {
+    console.error(`[WARN] Failed to remove worktree ${worktreeDir}: ${err.message}`);
   }
 }
 

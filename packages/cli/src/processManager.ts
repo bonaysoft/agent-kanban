@@ -14,6 +14,8 @@ export interface SuspendedSession {
   taskId: string;
   sessionId: string;
   cwd: string;
+  repoDir: string;
+  branchName: string;
   agentId: string;
   privateKey: CryptoKey;
   privateKeyJwk: JsonWebKey;
@@ -23,12 +25,15 @@ export interface AgentProcess {
   taskId: string;
   sessionId: string;
   cwd: string;
+  repoDir: string;
+  branchName: string;
   process: ChildProcess;
   agentClient: AgentClient;
   privateKey: CryptoKey;
   privateKeyJwk: JsonWebKey;
   timeoutTimer?: ReturnType<typeof setTimeout>;
   rateLimited?: boolean;
+  onCleanup?: () => void;
 }
 
 const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
@@ -62,6 +67,8 @@ export class ProcessManager {
     taskId: string,
     sessionId: string,
     cwd: string,
+    repoDir: string,
+    branchName: string,
     taskContext: string,
     agentClient: AgentClient,
     agentEnv: Record<string, string>,
@@ -69,10 +76,11 @@ export class ProcessManager {
     privateKeyJwk: JsonWebKey,
     systemPromptFile?: string,
     resume?: boolean,
+    onCleanup?: () => void,
   ): Promise<void> {
     const args = resume
-      ? ["--resume", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId, "-w"]
-      : ["--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId, "-w"];
+      ? ["--resume", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId]
+      : ["--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId];
     if (!resume && systemPromptFile) {
       args.push("--system-prompt-file", systemPromptFile);
     }
@@ -96,7 +104,7 @@ export class ProcessManager {
       return;
     }
 
-    const agent: AgentProcess = { taskId, sessionId, cwd, process: proc, agentClient, privateKey, privateKeyJwk };
+    const agent: AgentProcess = { taskId, sessionId, cwd, repoDir, branchName, process: proc, agentClient, privateKey, privateKeyJwk, onCleanup };
     this.agents.set(taskId, agent);
 
     if (this.taskTimeoutMs > 0) {
@@ -159,9 +167,10 @@ export class ProcessManager {
 
       if (code === 0) {
         console.log(`[INFO] Agent finished task ${taskId}`);
+        agent.onCleanup?.();
       } else if (agent.rateLimited) {
         console.warn(`[WARN] Agent for task ${taskId} exited due to rate limit, suspending`);
-        this.suspended.push({ taskId, sessionId, cwd: agent.cwd, agentId: agentClient.getAgentId(), privateKey: agent.privateKey, privateKeyJwk: agent.privateKeyJwk });
+        this.suspended.push({ taskId, sessionId, cwd: agent.cwd, repoDir: agent.repoDir, branchName: agent.branchName, agentId: agentClient.getAgentId(), privateKey: agent.privateKey, privateKeyJwk: agent.privateKeyJwk });
       } else {
         console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {
@@ -169,6 +178,7 @@ export class ProcessManager {
           console.warn(`  stderr: ${lastLines}`);
         }
         await this.releaseTask(taskId);
+        agent.onCleanup?.();
       }
 
       this.onSlotFreed();
@@ -179,6 +189,7 @@ export class ProcessManager {
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
+      agent.onCleanup?.();
       await this.closeSession(agentClient);
       await this.releaseTask(taskId);
       this.onSlotFreed();
@@ -194,6 +205,7 @@ export class ProcessManager {
     if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
     agent.process.kill("SIGTERM");
     this.agents.delete(taskId);
+    agent.onCleanup?.();
     await this.client.closeSession(agent.agentClient.getAgentId(), agent.sessionId).catch((err: any) =>
       console.error(`[WARN] Failed to close session for cancelled task ${taskId}: ${err.message}`)
     );
@@ -219,6 +231,7 @@ export class ProcessManager {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       agent.process.kill("SIGTERM");
       this.agents.delete(taskId);
+      agent.onCleanup?.();
       await this.closeSession(agent.agentClient);
       await this.releaseTask(taskId);
     }
