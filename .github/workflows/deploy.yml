@@ -68,7 +68,7 @@ jobs:
       - name: Sync version from tag
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          cd packages/cli && npm version "$VERSION" --no-git-tag-version
+          cd packages/cli && npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - run: pnpm --filter @agent-kanban/shared build
       - run: pnpm --filter agent-kanban build
