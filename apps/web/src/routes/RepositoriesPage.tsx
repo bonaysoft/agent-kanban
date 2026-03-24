@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Header } from "../components/Header";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
 
@@ -116,46 +117,41 @@ export function RepositoriesPage() {
         )}
       </div>
 
-      {showDialog && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowDialog(false)} />
-          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <div className="bg-surface-secondary border border-border rounded-lg w-full max-w-md shadow-lg" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-semibold text-content-primary">Add Repository</h2>
-                <button onClick={() => setShowDialog(false)} className="text-content-tertiary hover:text-content-primary text-lg">✕</button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Name</label>
-                  <input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="my-repo"
-                    className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Clone URL</label>
-                  <input
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    placeholder="https://github.com/user/repo.git"
-                    className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent font-mono"
-                  />
-                </div>
-                <button
-                  onClick={handleAdd}
-                  disabled={!newName.trim() || !newUrl.trim() || submitting}
-                  className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
-                >
-                  {submitting ? "Adding..." : "Add Repository"}
-                </button>
-              </div>
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) setShowDialog(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Repository</DialogTitle>
+            <DialogDescription className="sr-only">Add a new repository to track tasks</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Name</label>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="my-repo"
+                className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent font-mono"
+              />
             </div>
+            <div className="space-y-2">
+              <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Clone URL</label>
+              <input
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="https://github.com/user/repo.git"
+                className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent font-mono"
+              />
+            </div>
+            <button
+              onClick={handleAdd}
+              disabled={!newName.trim() || !newUrl.trim() || submitting}
+              className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {submitting ? "Adding..." : "Add Repository"}
+            </button>
           </div>
-        </>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

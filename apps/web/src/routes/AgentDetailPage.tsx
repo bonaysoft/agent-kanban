@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { api } from "../lib/api";
 import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
 import { formatRelative } from "../components/TaskDetailFields";
@@ -208,15 +209,14 @@ export function AgentDetailPage() {
         </div>
 
         {/* ─── Identity Modal ─── */}
-        {showIdentity && (
-          <IdentityModal
-            fingerprint={agent.fingerprint}
-            publicKey={agent.public_key}
-            color={color}
-            rgb={rgb}
-            onClose={() => setShowIdentity(false)}
-          />
-        )}
+        <IdentityModal
+          open={showIdentity}
+          onOpenChange={setShowIdentity}
+          fingerprint={agent.fingerprint}
+          publicKey={agent.public_key}
+          color={color}
+          rgb={rgb}
+        />
 
         {/* ─── Soul ─── */}
         {agent.soul && (
@@ -320,63 +320,58 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
   );
 }
 
-function IdentityModal({ fingerprint, publicKey, color, rgb, onClose }: {
-  fingerprint: string; publicKey: string; color: string; rgb: string; onClose: () => void;
+function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
+  open: boolean; onOpenChange: (open: boolean) => void;
+  fingerprint: string; publicKey: string; color: string; rgb: string;
 }) {
   const formatFullFingerprint = (fp: string) =>
     fp.match(/.{2}/g)?.join(":") ?? fp;
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-surface-secondary rounded-lg w-full max-w-lg" style={{ boxShadow: `0 0 0 1px rgba(${rgb}, 0.15)` }}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-            <h2 className="text-sm font-medium text-content-primary">Cryptographic Identity</h2>
-            <button onClick={onClose} className="text-content-tertiary hover:text-content-secondary transition-colors text-lg leading-none">&times;</button>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg" style={{ boxShadow: `0 0 0 1px rgba(${rgb}, 0.15)` }}>
+        <DialogHeader>
+          <DialogTitle>Cryptographic Identity</DialogTitle>
+          <DialogDescription className="sr-only">Agent cryptographic identity details</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Fingerprint</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(fingerprint)}
+                className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
+              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all" style={{ wordSpacing: "0.15em" }}>
+                {formatFullFingerprint(fingerprint)}
+              </code>
+            </div>
           </div>
 
-          <div className="p-6 space-y-5">
-            {/* Fingerprint */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Fingerprint</span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(fingerprint)}
-                  className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
-                >
-                  Copy
-                </button>
-              </div>
-              <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
-                <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all" style={{ wordSpacing: "0.15em" }}>
-                  {formatFullFingerprint(fingerprint)}
-                </code>
-              </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Ed25519 Public Key</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(publicKey)}
+                className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
+              >
+                Copy
+              </button>
             </div>
-
-            {/* Public key */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Ed25519 Public Key</span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(publicKey)}
-                  className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
-                >
-                  Copy
-                </button>
-              </div>
-              <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
-                <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">
-                  {publicKey}
-                </code>
-              </div>
+            <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
+              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">
+                {publicKey}
+              </code>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
 
