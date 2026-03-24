@@ -1,5 +1,8 @@
 # Agent Kanban
 
+[![CI](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml)
+![coverage](https://img.shields.io/endpoint?url=https://saltbo.github.io/agent-kanban/coverage.json)
+
 Mission control for your AI workforce.
 
 ![Kanban Board](screenshots/kanban.jpg)
