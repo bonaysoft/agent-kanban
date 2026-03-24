@@ -1,0 +1,57 @@
+# Contributing
+
+Thanks for your interest in Agent Kanban! Here's how to get involved.
+
+## Getting Started
+
+1. Fork the repo and clone it locally
+2. Install dependencies: `pnpm install`
+3. Build shared types: `pnpm --filter @agent-kanban/shared build`
+4. Run migrations: `pnpm --filter @agent-kanban/web db:migrate`
+5. Start dev server: `pnpm dev`
+6. Run tests: `pnpm test`
+
+## Making Changes
+
+- Create a feature branch from `master`
+- Keep changes focused — one concern per PR
+- Add tests for new API endpoints or business logic
+- Run `pnpm test` and `pnpm lint` before submitting
+
+## Code Style
+
+- TypeScript throughout
+- Thin repo layer for data access — no raw SQL in route handlers
+- Centralized error handling via `HTTPException`
+- Short functions (< 30 lines), small files (< 300 lines)
+- Name things clearly — if it needs a comment to explain *what*, rename it
+
+## Commit Messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(api): add task dependency cycle detection
+fix(cli): handle missing config file on first run
+refactor(web): extract activity log into standalone component
+```
+
+## Database Migrations
+
+If your change modifies the D1 schema:
+
+1. Create a new SQL file in `apps/web/migrations/`
+2. Name it `NNNN_description.sql` (sequential number)
+3. Include both the schema change and any data backfill
+4. Test with `pnpm --filter @agent-kanban/web db:migrate`
+
+## Reporting Issues
+
+Open an issue with:
+- What you expected vs. what happened
+- Steps to reproduce
+- Environment (OS, Node version, browser)
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
