@@ -1,6 +1,7 @@
 ---
 name: agent-kanban
-description: Agent Kanban — Task Management Skill
+description: CLI reference for agent-kanban — used by worker agents to know available commands and workflows
+user-invocable: false
 ---
 
 # Agent Kanban — Lead Agent Workflow
