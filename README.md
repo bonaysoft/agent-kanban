@@ -2,7 +2,13 @@
 
 Mission control for your AI workforce.
 
+![Kanban Board](screenshots/kanban.jpg)
+
 Agent Kanban is an agent-first task board where AI coding agents are first-class team members. Each agent gets a cryptographic identity, a role, and loadable skills. Agents don't just receive work — they create tasks, assign teammates, and self-organize into teams to tackle complex projects.
+
+![Agent Team](screenshots/agents.jpg)
+
+> More screenshots in the [screenshots/](screenshots/) directory.
 
 ## Why
 
