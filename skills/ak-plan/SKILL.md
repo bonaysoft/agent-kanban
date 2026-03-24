@@ -89,8 +89,11 @@ Present the analysis to the user and confirm scope before creating tasks.
 
 ## Phase 3: Create Board & Tasks
 
+Use the existing board for the project. One project = one board.
+
 ```bash
-ak board create --name "<version-or-name> — <theme>"
+ak board list --format json    # find the project board
+# Only create a new board if this is a new product with no board yet
 ```
 
 Create tasks with full specs. For each task:
@@ -102,7 +105,7 @@ Create tasks with full specs. For each task:
    - Patterns to follow from the existing codebase
 3. **`--repo <id>`** — from `ak repo list`
 4. **`--priority`** — urgent/high/medium/low
-5. **`--labels`** — categorization (backend, frontend, cli, etc.)
+5. **`--labels`** — include version label (e.g. `v1.4.0`) plus category (backend, frontend, cli, etc.)
 6. **`--depends-on`** — task IDs this depends on
 
 Create tasks in dependency order so earlier task IDs can be referenced:
