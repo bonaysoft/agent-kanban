@@ -7,11 +7,7 @@ export interface Keypair {
 }
 
 export async function generateKeypair(): Promise<Keypair> {
-  const { publicKey, privateKey } = await crypto.subtle.generateKey(
-    { name: "Ed25519" } as any,
-    true,
-    ["sign", "verify"],
-  );
+  const { publicKey, privateKey } = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
   const pubJwk = await crypto.subtle.exportKey("jwk", publicKey);
   const privJwk = await crypto.subtle.exportKey("jwk", privateKey);
   return { publicKeyBase64: pubJwk.x!, privateKeyJwk: privJwk };
@@ -27,34 +23,17 @@ export function computeKeyId(fingerprint: string): string {
   return fingerprint.slice(-16);
 }
 
-export async function signDelegation(
-  agentPrivateKeyJwk: JsonWebKey,
-  sessionPublicKeyBase64: string,
-): Promise<string> {
-  const privateKey = await crypto.subtle.importKey(
-    "jwk",
-    agentPrivateKeyJwk,
-    { name: "Ed25519" } as any,
-    false,
-    ["sign"],
-  );
+export async function signDelegation(agentPrivateKeyJwk: JsonWebKey, sessionPublicKeyBase64: string): Promise<string> {
+  const privateKey = await crypto.subtle.importKey("jwk", agentPrivateKeyJwk, { name: "Ed25519" } as any, false, ["sign"]);
   const data = new TextEncoder().encode(sessionPublicKeyBase64);
   const signature = await crypto.subtle.sign("Ed25519" as any, privateKey, data);
   return bytesToBase64Url(new Uint8Array(signature));
 }
 
-export async function verifyDelegation(
-  agentPublicKeyBase64: string,
-  sessionPublicKeyBase64: string,
-  proof: string,
-): Promise<boolean> {
-  const publicKey = await crypto.subtle.importKey(
-    "jwk",
-    { kty: "OKP", crv: "Ed25519", x: agentPublicKeyBase64 },
-    { name: "Ed25519" } as any,
-    false,
-    ["verify"],
-  );
+export async function verifyDelegation(agentPublicKeyBase64: string, sessionPublicKeyBase64: string, proof: string): Promise<boolean> {
+  const publicKey = await crypto.subtle.importKey("jwk", { kty: "OKP", crv: "Ed25519", x: agentPublicKeyBase64 }, { name: "Ed25519" } as any, false, [
+    "verify",
+  ]);
   const data = new TextEncoder().encode(sessionPublicKeyBase64);
   const signature = base64UrlToBytes(proof) as ArrayBufferView<ArrayBuffer>;
   return crypto.subtle.verify("Ed25519" as any, publicKey, signature, data);
@@ -76,5 +55,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
 }
 
 function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }

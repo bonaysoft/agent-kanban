@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Miniflare } from "miniflare";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -13,7 +14,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map(s => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -74,7 +78,7 @@ describe("task JSON field parsing (labels, input)", () => {
   it("listTasks returns parsed labels and input", async () => {
     const { listTasks } = await import("../apps/web/functions/api/taskRepo");
     const tasks = await listTasks(db, { board_id: boardId });
-    const task = tasks.find(t => t.id === taskId)!;
+    const task = tasks.find((t) => t.id === taskId)!;
 
     expect(Array.isArray(task.labels)).toBe(true);
     expect(task.labels).toEqual(["bug", "urgent"]);
@@ -118,7 +122,7 @@ describe("task JSON field parsing (labels, input)", () => {
     const board = await getBoard(db, boardId);
 
     expect(board).toBeTruthy();
-    const task = board!.tasks.find(t => t.id === taskId)!;
+    const task = board!.tasks.find((t) => t.id === taskId)!;
     expect(Array.isArray(task.labels)).toBe(true);
     expect(task.labels).toEqual(["feature"]);
     expect(typeof task.input).toBe("object");

@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SignJWT } from "jose";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -24,7 +25,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -33,9 +37,10 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-sm";
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(userId, "SM Test User", "sm@example.com", now, now).run();
+  await db
+    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
+    .bind(userId, "SM Test User", "sm@example.com", now, now)
+    .run();
   return userId;
 }
 
@@ -534,7 +539,7 @@ describe("task lifecycle repo functions", () => {
 describe("task lifecycle HTTP permissions", () => {
   let userId: string;
   let apiKey: string;
-  let machineId: string;
+  let _machineId: string;
   let agentId: string;
   let sessionId: string;
   let sessionPrivateKey: CryptoKey;
@@ -543,7 +548,7 @@ describe("task lifecycle HTTP permissions", () => {
   async function apiRequest(method: string, path: string, body?: any, token?: string) {
     const { api } = await import("../apps/web/functions/api/routes");
     const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
     const init: RequestInit = { method, headers };
     if (body) init.body = JSON.stringify(body);
     return api.request(path, init, env);
@@ -572,10 +577,18 @@ describe("task lifecycle HTTP permissions", () => {
     apiKey = await createApiKeyForUser(env.DB, userId);
 
     // Create machine
-    const res = await apiRequest("POST", "/api/machines", {
-      name: "sm-machine", os: "darwin", version: "1.0.0", runtimes: ["Claude Code"],
-    }, apiKey);
-    machineId = ((await res.json()) as any).id;
+    const res = await apiRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "sm-machine",
+        os: "darwin",
+        version: "1.0.0",
+        runtimes: ["Claude Code"],
+      },
+      apiKey,
+    );
+    _machineId = ((await res.json()) as any).id;
 
     // Create agent
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
@@ -587,9 +600,15 @@ describe("task lifecycle HTTP permissions", () => {
     const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
     sessionPrivateKey = (keypair as any).privateKey;
     const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
-    await apiRequest("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: pubJwk.x!,
-    }, apiKey);
+    await apiRequest(
+      "POST",
+      `/api/agents/${agentId}/sessions`,
+      {
+        session_id: sessionId,
+        session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
 
     // Create board
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
@@ -636,7 +655,7 @@ describe("task lifecycle HTTP permissions", () => {
     await forceStatus(task.id, "in_progress");
     const res = await apiRequest("POST", `/api/tasks/${task.id}/release`, {}, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("todo");
   });
 

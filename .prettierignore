@@ -1,7 +1,0 @@
-dist
-node_modules
-.wrangler
-pnpm-lock.yaml
-*.min.js
-*.min.css
-apps/web/src/components/ui

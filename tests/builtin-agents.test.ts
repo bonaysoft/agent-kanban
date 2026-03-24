@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { readFileSync } from "fs";
-import { join } from "path";
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { BUILTIN_TEMPLATES } from "@agent-kanban/shared";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -22,7 +23,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -30,9 +34,10 @@ async function applyMigrations(db: D1Database) {
 
 async function seedUser(db: D1Database, id: string, email: string): Promise<string> {
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(id, "Test User", email, now, now).run();
+  await db
+    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
+    .bind(id, "Test User", email, now, now)
+    .run();
   return id;
 }
 

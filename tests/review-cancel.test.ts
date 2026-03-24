@@ -1,8 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  TASK_STATUSES,
-  TASK_ACTIONS,
-} from "@agent-kanban/shared";
+import { TASK_ACTIONS, TASK_STATUSES } from "@agent-kanban/shared";
+import { describe, expect, it } from "vitest";
 
 describe("task statuses", () => {
   it("TASK_STATUSES includes 'in_review' at position 2", () => {
@@ -14,13 +11,7 @@ describe("task statuses", () => {
   });
 
   it("TASK_STATUSES has the full ordered list", () => {
-    expect([...TASK_STATUSES]).toEqual([
-      "todo",
-      "in_progress",
-      "in_review",
-      "done",
-      "cancelled",
-    ]);
+    expect([...TASK_STATUSES]).toEqual(["todo", "in_progress", "in_review", "done", "cancelled"]);
   });
 
   it("'in_review' comes after 'in_progress' and before 'done'", () => {
@@ -56,16 +47,7 @@ describe("review and cancel task actions", () => {
   });
 
   it("new actions coexist with all original actions", () => {
-    const originals = [
-      "created",
-      "claimed",
-      "moved",
-      "commented",
-      "completed",
-      "assigned",
-      "released",
-      "timed_out",
-    ] as const;
+    const originals = ["created", "claimed", "moved", "commented", "completed", "assigned", "released", "timed_out"] as const;
     for (const action of originals) {
       expect(TASK_ACTIONS).toContain(action);
     }

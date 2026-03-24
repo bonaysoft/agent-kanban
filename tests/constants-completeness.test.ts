@@ -1,9 +1,21 @@
-import { describe, it, expect } from "vitest";
-import { TASK_ACTIONS, AGENT_STATUSES } from "@agent-kanban/shared";
+import { AGENT_STATUSES, TASK_ACTIONS } from "@agent-kanban/shared";
+import { describe, expect, it } from "vitest";
 
 describe("enum completeness", () => {
   it("TASK_ACTIONS matches the migration CHECK constraint", () => {
-    const migrationActions = ["created", "claimed", "moved", "commented", "completed", "assigned", "released", "timed_out", "cancelled", "rejected", "review_requested"];
+    const migrationActions = [
+      "created",
+      "claimed",
+      "moved",
+      "commented",
+      "completed",
+      "assigned",
+      "released",
+      "timed_out",
+      "cancelled",
+      "rejected",
+      "review_requested",
+    ];
     expect([...TASK_ACTIONS]).toEqual(migrationActions);
   });
 

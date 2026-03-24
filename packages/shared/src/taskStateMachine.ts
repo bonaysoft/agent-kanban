@@ -3,12 +3,12 @@ import type { TaskStatus } from "./types.js";
 export type IdentityType = "user" | "machine" | "agent";
 
 export type TaskTransition =
-  | "claim"      // todo → in_progress
-  | "review"     // in_progress → in_review
-  | "reject"     // in_review → in_progress
-  | "complete"   // in_review → done
-  | "cancel"     // todo|in_review → cancelled
-  | "release";   // in_progress → todo (machine only)
+  | "claim" // todo → in_progress
+  | "review" // in_progress → in_review
+  | "reject" // in_review → in_progress
+  | "complete" // in_review → done
+  | "cancel" // todo|in_review → cancelled
+  | "release"; // in_progress → todo (machine only)
 
 interface TransitionDef {
   from: TaskStatus[];
@@ -17,12 +17,12 @@ interface TransitionDef {
 }
 
 const TRANSITIONS: Record<TaskTransition, TransitionDef> = {
-  claim:    { from: ["todo"],        to: "in_progress", allow: ["agent"] },
-  review:   { from: ["in_progress"], to: "in_review",   allow: ["agent"] },
-  reject:   { from: ["in_review"],   to: "in_progress", allow: ["user", "machine"] },
-  complete: { from: ["in_review"],   to: "done",        allow: ["user", "machine"] },
-  cancel:   { from: ["in_progress", "in_review"], to: "cancelled", allow: ["user", "machine"] },
-  release:  { from: ["in_progress", "in_review"], to: "todo", allow: ["machine"] },
+  claim: { from: ["todo"], to: "in_progress", allow: ["agent"] },
+  review: { from: ["in_progress"], to: "in_review", allow: ["agent"] },
+  reject: { from: ["in_review"], to: "in_progress", allow: ["user", "machine"] },
+  complete: { from: ["in_review"], to: "done", allow: ["user", "machine"] },
+  cancel: { from: ["in_progress", "in_review"], to: "cancelled", allow: ["user", "machine"] },
+  release: { from: ["in_progress", "in_review"], to: "todo", allow: ["machine"] },
 };
 
 export interface TransitionError {
@@ -30,11 +30,7 @@ export interface TransitionError {
   message: string;
 }
 
-export function validateTransition(
-  action: TaskTransition,
-  currentStatus: TaskStatus,
-  identity: IdentityType,
-): TransitionError | null {
+export function validateTransition(action: TaskTransition, currentStatus: TaskStatus, identity: IdentityType): TransitionError | null {
   const def = TRANSITIONS[action];
   if (!def) return { code: "INVALID_TRANSITION", message: `Unknown action: ${action}` };
 

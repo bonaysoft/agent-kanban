@@ -1,5 +1,5 @@
-import { AgentIdenticon } from "./AgentIdenticon";
 import { agentColor } from "../lib/agentIdentity";
+import { AgentIdenticon } from "./AgentIdenticon";
 import { Badge } from "./ui/badge";
 
 interface TaskCardProps {
@@ -25,20 +25,24 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
       className={`
         w-full text-left bg-surface-card border rounded-lg p-3
         transition-all duration-150 cursor-pointer
-        ${isAgentActive
-          ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
-          : "border-border hover:border-content-tertiary"}
+        ${
+          isAgentActive
+            ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
+            : "border-border hover:border-content-tertiary"
+        }
         ${isNew ? "animate-card-highlight" : ""}
       `}
-      style={isAgentActive && task.agent_public_key ? {
-        borderColor: `color-mix(in srgb, ${agentColor(task.agent_public_key)} 30%, transparent)`,
-        boxShadow: `0 0 20px color-mix(in srgb, ${agentColor(task.agent_public_key)} 12%, transparent)`,
-      } : undefined}
+      style={
+        isAgentActive && task.agent_public_key
+          ? {
+              borderColor: `color-mix(in srgb, ${agentColor(task.agent_public_key)} 30%, transparent)`,
+              boxShadow: `0 0 20px color-mix(in srgb, ${agentColor(task.agent_public_key)} 12%, transparent)`,
+            }
+          : undefined
+      }
     >
       <div className="flex items-center gap-1.5 mb-2">
-        <div className="text-[13px] font-medium leading-snug text-content-primary flex-1">
-          {task.title}
-        </div>
+        <div className="text-[13px] font-medium leading-snug text-content-primary flex-1">{task.title}</div>
         {task.blocked && (
           <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase shrink-0">
             Blocked
@@ -78,9 +82,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
       )}
 
       {task.result && (
-        <div className="font-mono text-[11px] text-success mt-1.5">
-          Completed{task.duration_minutes ? ` in ${task.duration_minutes} min` : ""}
-        </div>
+        <div className="font-mono text-[11px] text-success mt-1.5">Completed{task.duration_minutes ? ` in ${task.duration_minutes} min` : ""}</div>
       )}
     </button>
   );

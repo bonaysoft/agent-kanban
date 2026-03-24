@@ -1,7 +1,7 @@
+import { agentAuth } from "@better-auth/agent-auth";
+import { apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
-import { apiKey } from "@better-auth/api-key";
-import { agentAuth } from "@better-auth/agent-auth";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 import type { Env } from "./types";

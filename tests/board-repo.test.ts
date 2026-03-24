@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
 import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;

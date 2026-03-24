@@ -8,8 +8,9 @@
     "build": "pnpm --filter @agent-kanban/shared build && pnpm --filter @agent-kanban/web build",
     "test": "vitest",
     "lint": "pnpm -r --parallel run lint",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --fix .",
     "prepare": "lefthook install",
     "install:cli": "bash scripts/install-cli.sh"
   },
@@ -33,7 +34,6 @@
     "jsdom": "^29.0.1",
     "lefthook": "^2.1.4",
     "miniflare": "^4.20260317.1",
-    "prettier": "^3.8.1",
     "tsup": "^8.5.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

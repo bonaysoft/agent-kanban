@@ -1,15 +1,11 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
-import { getTheme, setTheme, type Theme } from "../lib/theme";
-import { api } from "../lib/api";
 import { useBoards } from "../hooks/useBoard";
+import { api } from "../lib/api";
+import { getTheme, setTheme, type Theme } from "../lib/theme";
 
-function BoardItem({ board, onUpdate, onDelete }: {
-  board: any;
-  onUpdate: () => void;
-  onDelete: (id: string) => void;
-}) {
+function BoardItem({ board, onUpdate, onDelete }: { board: any; onUpdate: () => void; onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(board.name);
   const [editDesc, setEditDesc] = useState(board.description || "");
@@ -20,7 +16,7 @@ function BoardItem({ board, onUpdate, onDelete }: {
   useEffect(() => {
     setEditName(board.name);
     setEditDesc(board.description || "");
-  }, [board.id, board.name, board.description]);
+  }, [board.name, board.description]);
 
   const nameChanged = editName.trim() !== board.name;
   const descChanged = editDesc.trim() !== (board.description || "");
@@ -49,14 +45,24 @@ function BoardItem({ board, onUpdate, onDelete }: {
         onClick={() => setExpanded(!expanded)}
       >
         <svg
-          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
           className={`shrink-0 text-content-tertiary transition-transform ${expanded ? "rotate-90" : ""}`}
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
         <span className="text-sm font-medium text-content-primary flex-1 truncate">{board.name}</span>
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/boards/${board.id}`); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/boards/${board.id}`);
+          }}
           className="text-xs text-content-tertiary hover:text-accent transition-colors"
         >
           Open
@@ -88,11 +94,17 @@ function BoardItem({ board, onUpdate, onDelete }: {
               {confirmDelete ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-error">Delete?</span>
-                  <button onClick={handleDelete} className="text-xs font-medium text-error hover:underline">Yes</button>
-                  <button onClick={() => setConfirmDelete(false)} className="text-xs text-content-tertiary hover:text-content-secondary">No</button>
+                  <button onClick={handleDelete} className="text-xs font-medium text-error hover:underline">
+                    Yes
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)} className="text-xs text-content-tertiary hover:text-content-secondary">
+                    No
+                  </button>
                 </div>
               ) : (
-                <button onClick={() => setConfirmDelete(true)} className="text-xs text-error hover:underline">Delete</button>
+                <button onClick={() => setConfirmDelete(true)} className="text-xs text-error hover:underline">
+                  Delete
+                </button>
               )}
             </div>
             {hasChanges && (
@@ -120,7 +132,7 @@ export function AccountSettingsPage() {
     setCurrentTheme(theme);
   }
 
-  function handleBoardDelete(id: string) {
+  function handleBoardDelete(_id: string) {
     refresh();
   }
 
@@ -158,12 +170,7 @@ export function AccountSettingsPage() {
           ) : (
             <div className="space-y-2">
               {boards.map((board: any) => (
-                <BoardItem
-                  key={board.id}
-                  board={board}
-                  onUpdate={refresh}
-                  onDelete={handleBoardDelete}
-                />
+                <BoardItem key={board.id} board={board} onUpdate={refresh} onDelete={handleBoardDelete} />
               ))}
             </div>
           )}

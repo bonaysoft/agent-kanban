@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { authClient, signIn, signUp, setAuthToken } from "../lib/auth-client";
 import { useNavigate } from "react-router-dom";
+import { authClient, setAuthToken, signIn, signUp } from "../lib/auth-client";
 
 function GitHubIcon() {
   return (
@@ -56,9 +56,7 @@ export function AuthPage() {
           <h1 className="text-xl font-bold tracking-tight text-content-primary">
             Agent <span className="text-accent">Kanban</span>
           </h1>
-          <p className="mt-2 text-sm text-content-secondary">
-            {mode === "signin" ? "Sign in to your account" : "Create a new account"}
-          </p>
+          <p className="mt-2 text-sm text-content-secondary">{mode === "signin" ? "Sign in to your account" : "Create a new account"}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -90,9 +88,7 @@ export function AuthPage() {
             className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
           />
 
-          {error && (
-            <p className="text-sm text-error">{error}</p>
-          )}
+          {error && <p className="text-sm text-error">{error}</p>}
 
           <button
             type="submit"
@@ -123,7 +119,10 @@ export function AuthPage() {
         <p className="text-center text-xs text-content-tertiary">
           {mode === "signin" ? "No account? " : "Already have an account? "}
           <button
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setError(null);
+            }}
             className="text-accent hover:underline"
           >
             {mode === "signin" ? "Sign up" : "Sign in"}

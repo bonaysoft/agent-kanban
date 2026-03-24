@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SignJWT } from "jose";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Integration test: validates the new agent-auth bridge
 // User creates Agent → Machine creates Session (CSR) → Session JWT → auth
@@ -20,7 +21,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    const statements = sql.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
+    const statements = sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     for (const stmt of statements) {
       await db.prepare(stmt).run();
     }
@@ -30,9 +34,10 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-001";
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(userId, "Test User", "test@example.com", now, now).run();
+  await db
+    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
+    .bind(userId, "Test User", "test@example.com", now, now)
+    .run();
   return userId;
 }
 
@@ -134,10 +139,14 @@ describe("agent-auth bridge", () => {
       .setExpirationTime("60s")
       .sign(privateKey);
 
-    const res = await api.request("/api/agents", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${jwt}`, Host: "localhost:8788", "x-forwarded-proto": "http" },
-    }, env);
+    const res = await api.request(
+      "/api/agents",
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${jwt}`, Host: "localhost:8788", "x-forwarded-proto": "http" },
+      },
+      env,
+    );
     expect(res.status).toBe(200);
   });
 

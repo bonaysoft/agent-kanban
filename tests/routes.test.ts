@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { randomUUID } from "crypto";
+
+import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const BETTER_AUTH_URL = "http://localhost:8788";
 const env = createTestEnv();
@@ -12,7 +13,7 @@ let mf: Miniflare;
 async function apiRequest(method: string, path: string, body?: Record<string, unknown>, token?: string) {
   const { api } = await import("../apps/web/functions/api/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
   if (body && method !== "GET") init.body = JSON.stringify(body);
   return api.request(path, init, env);
@@ -54,9 +55,17 @@ describe("routes", () => {
     await seedUser(env.DB, userId, "routes@test.com");
     apiKey = await createApiKeyForUser(userId);
 
-    const machineRes = await apiRequest("POST", "/api/machines", {
-      name: "routes-machine", os: "darwin", version: "1.0.0", runtimes: ["Claude Code"],
-    }, apiKey);
+    const machineRes = await apiRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "routes-machine",
+        os: "darwin",
+        version: "1.0.0",
+        runtimes: ["Claude Code"],
+      },
+      apiKey,
+    );
     expect(machineRes.status).toBe(201);
     machineId = ((await machineRes.json()) as { id: string }).id;
 
@@ -68,9 +77,15 @@ describe("routes", () => {
     const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
     sessionPrivateKey = (keypair as any).privateKey;
     const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
-    await apiRequest("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: pubJwk.x!,
-    }, apiKey);
+    await apiRequest(
+      "POST",
+      `/api/agents/${agentId}/sessions`,
+      {
+        session_id: sessionId,
+        session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
 
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const board = await createBoard(env.DB, userId, "routes-board");
@@ -82,7 +97,7 @@ describe("routes", () => {
   it("returns 401 for missing token", async () => {
     const res = await apiRequest("GET", "/api/boards");
     expect(res.status).toBe(401);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 
@@ -98,7 +113,7 @@ describe("routes", () => {
   it("onError returns structured error for HTTPException", async () => {
     const res = await apiRequest("GET", "/api/boards/nonexistent", undefined, apiKey);
     expect(res.status).toBe(404);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error).toBeDefined();
     expect(body.error.message).toBe("Board not found");
   });
@@ -108,7 +123,7 @@ describe("routes", () => {
   it("POST /api/boards creates a board", async () => {
     const res = await apiRequest("POST", "/api/boards", { name: "Route Board", description: "Test" }, apiKey);
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.name).toBe("Route Board");
     expect(body.description).toBe("Test");
   });
@@ -121,7 +136,7 @@ describe("routes", () => {
   it("GET /api/boards lists boards", async () => {
     const res = await apiRequest("GET", "/api/boards", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
@@ -129,7 +144,7 @@ describe("routes", () => {
   it("GET /api/boards?name= finds board by name", async () => {
     const res = await apiRequest("GET", "/api/boards?name=Route Board", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.name).toBe("Route Board");
   });
 
@@ -141,7 +156,7 @@ describe("routes", () => {
   it("GET /api/boards/:id returns board with tasks", async () => {
     const res = await apiRequest("GET", `/api/boards/${boardId}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.id).toBe(boardId);
     expect(Array.isArray(body.tasks)).toBe(true);
   });
@@ -154,7 +169,7 @@ describe("routes", () => {
   it("PATCH /api/boards/:id updates board", async () => {
     const res = await apiRequest("PATCH", `/api/boards/${boardId}`, { name: "Updated Board" }, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.name).toBe("Updated Board");
   });
 
@@ -168,7 +183,7 @@ describe("routes", () => {
     const board = await createBoard(env.DB, userId, "Delete Route Board");
     const res = await apiRequest("DELETE", `/api/boards/${board.id}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
@@ -182,7 +197,7 @@ describe("routes", () => {
   it("POST /api/repositories creates a repository", async () => {
     const res = await apiRequest("POST", "/api/repositories", { name: "test-repo", url: "https://github.com/org/test-repo" }, apiKey);
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.name).toBe("test-repo");
     expect(body.url).toBe("https://github.com/org/test-repo");
   });
@@ -195,7 +210,7 @@ describe("routes", () => {
   it("GET /api/repositories lists repositories", async () => {
     const res = await apiRequest("GET", "/api/repositories", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
@@ -203,7 +218,7 @@ describe("routes", () => {
   it("GET /api/repositories?url= filters by URL", async () => {
     const res = await apiRequest("GET", "/api/repositories?url=https://github.com/org/test-repo", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -212,7 +227,7 @@ describe("routes", () => {
     const repo = await createRepository(env.DB, userId, { name: "del-repo", url: "https://github.com/org/del-repo" });
     const res = await apiRequest("DELETE", `/api/repositories/${repo.id}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
@@ -226,14 +241,14 @@ describe("routes", () => {
   it("GET /api/agents lists agents", async () => {
     const res = await apiRequest("GET", "/api/agents", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
   });
 
   it("GET /api/agents/:id returns agent with logs", async () => {
     const res = await apiRequest("GET", `/api/agents/${agentId}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.id).toBe(agentId);
     expect(body).toHaveProperty("logs");
   });
@@ -246,7 +261,7 @@ describe("routes", () => {
   it("POST /api/agents creates an agent", async () => {
     const res = await apiRequest("POST", "/api/agents", { name: "New Route Agent" }, apiKey);
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.name).toBe("New Route Agent");
   });
 
@@ -265,7 +280,7 @@ describe("routes", () => {
   it("POST /api/tasks creates a task", async () => {
     const res = await apiRequest("POST", "/api/tasks", { title: "Route Task", board_id: boardId }, apiKey);
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.title).toBe("Route Task");
   });
 
@@ -282,7 +297,7 @@ describe("routes", () => {
   it("GET /api/tasks lists tasks", async () => {
     const res = await apiRequest("GET", "/api/tasks", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
   });
 
@@ -291,7 +306,7 @@ describe("routes", () => {
     const task = await createTask(env.DB, userId, { title: "Get Task", board_id: boardId });
     const res = await apiRequest("GET", `/api/tasks/${task.id}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.id).toBe(task.id);
   });
 
@@ -305,7 +320,7 @@ describe("routes", () => {
     const task = await createTask(env.DB, userId, { title: "Patch Task", board_id: boardId });
     const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { title: "Patched" }, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.title).toBe("Patched");
   });
 
@@ -326,7 +341,7 @@ describe("routes", () => {
     const task = await createTask(env.DB, userId, { title: "Delete Task", board_id: boardId });
     const res = await apiRequest("DELETE", `/api/tasks/${task.id}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
@@ -342,7 +357,7 @@ describe("routes", () => {
     const task = await createTask(env.DB, userId, { title: "Assign Task", board_id: boardId });
     const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.assigned_to).toBe(agentId);
   });
 
@@ -352,7 +367,7 @@ describe("routes", () => {
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/complete`, { result: "done" }, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("done");
   });
 
@@ -371,7 +386,7 @@ describe("routes", () => {
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").bind(task.id).run();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/cancel`, {}, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("cancelled");
   });
 
@@ -381,7 +396,7 @@ describe("routes", () => {
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/reject`, {}, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("in_progress");
   });
 
@@ -392,7 +407,7 @@ describe("routes", () => {
     const task = await createTask(env.DB, userId, { title: "Log Task", board_id: boardId });
     const res = await apiRequest("POST", `/api/tasks/${task.id}/logs`, { detail: "A log entry" }, apiKey);
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.detail).toBe("A log entry");
   });
 
@@ -414,7 +429,7 @@ describe("routes", () => {
     await addTaskLog(env.DB, task.id, null, "commented", "Test log");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/logs`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
@@ -429,11 +444,17 @@ describe("routes", () => {
   it("POST /api/tasks/:id/messages creates a message", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Msg Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, {
-      sender_type: "user", content: "Hello",
-    }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      `/api/tasks/${task.id}/messages`,
+      {
+        sender_type: "user",
+        content: "Hello",
+      },
+      apiKey,
+    );
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.content).toBe("Hello");
     expect(body.sender_type).toBe("user");
   });
@@ -448,16 +469,28 @@ describe("routes", () => {
   it("POST /api/tasks/:id/messages rejects invalid sender_type", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Msg Task 3", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, {
-      sender_type: "bot", content: "Bad type",
-    }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      `/api/tasks/${task.id}/messages`,
+      {
+        sender_type: "bot",
+        content: "Bad type",
+      },
+      apiKey,
+    );
     expect(res.status).toBe(400);
   });
 
   it("POST /api/tasks/:id/messages returns 404 for unknown task", async () => {
-    const res = await apiRequest("POST", "/api/tasks/nonexistent/messages", {
-      sender_type: "user", content: "X",
-    }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      "/api/tasks/nonexistent/messages",
+      {
+        sender_type: "user",
+        content: "X",
+      },
+      apiKey,
+    );
     expect(res.status).toBe(404);
   });
 
@@ -468,7 +501,7 @@ describe("routes", () => {
     await createMessage(env.DB, task.id, "user", userId, "Test msg");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/messages`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
@@ -493,14 +526,14 @@ describe("routes", () => {
   it("GET /api/machines lists machines", async () => {
     const res = await apiRequest("GET", "/api/machines", undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
   });
 
   it("GET /api/machines/:id returns a machine", async () => {
     const res = await apiRequest("GET", `/api/machines/${machineId}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.id).toBe(machineId);
   });
 
@@ -529,7 +562,7 @@ describe("routes", () => {
   it("GET /api/agents/:agentId/sessions lists sessions", async () => {
     const res = await apiRequest("GET", `/api/agents/${agentId}/sessions`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
   });
 
@@ -580,7 +613,7 @@ describe("routes", () => {
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/claim`, {}, jwt);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("in_progress");
   });
 
@@ -591,7 +624,7 @@ describe("routes", () => {
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/review`, {}, jwt);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.status).toBe("in_review");
   });
 

@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "../components/Header";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { api } from "../lib/api";
 
 export function RepositoriesPage() {
   const [repos, setRepos] = useState<any[]>([]);
@@ -13,7 +13,10 @@ export function RepositoriesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.repositories.list().then(setRepos).finally(() => setLoading(false));
+    api.repositories
+      .list()
+      .then(setRepos)
+      .finally(() => setLoading(false));
   }, []);
 
   async function handleAdd() {
@@ -39,9 +42,7 @@ export function RepositoriesPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-content-primary">Repositories</h1>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-content-tertiary font-mono">
-              {repos.length} total
-            </span>
+            <span className="text-xs text-content-tertiary font-mono">{repos.length} total</span>
             <button
               onClick={() => setShowDialog(true)}
               className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90 transition-opacity"
@@ -70,24 +71,18 @@ export function RepositoriesPage() {
               Or{" "}
               <button onClick={() => setShowDialog(true)} className="text-accent hover:underline">
                 add manually
-              </button>.
+              </button>
+              .
             </p>
           </div>
         ) : (
           <div className="space-y-3">
             {repos.map((repo) => (
-              <div
-                key={repo.id}
-                className="bg-surface-secondary border border-border rounded-lg px-5 py-4 hover:border-accent/30 transition-colors"
-              >
+              <div key={repo.id} className="bg-surface-secondary border border-border rounded-lg px-5 py-4 hover:border-accent/30 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-mono text-sm text-content-primary font-medium truncate">
-                      {repo.name}
-                    </span>
-                    <span className="text-[11px] font-mono text-content-tertiary truncate hidden sm:inline">
-                      {repo.url}
-                    </span>
+                    <span className="font-mono text-sm text-content-primary font-medium truncate">{repo.name}</span>
+                    <span className="text-[11px] font-mono text-content-tertiary truncate hidden sm:inline">{repo.url}</span>
                   </div>
                   <button
                     onClick={() => handleDelete(repo.id)}
@@ -103,13 +98,9 @@ export function RepositoriesPage() {
                   </div>
                   <div>
                     <span className="text-content-tertiary">Added: </span>
-                    <span className="font-mono text-content-primary">
-                      {formatRelative(repo.created_at)}
-                    </span>
+                    <span className="font-mono text-content-primary">{formatRelative(repo.created_at)}</span>
                   </div>
-                  <span className="text-[11px] font-mono text-content-tertiary truncate sm:hidden">
-                    {repo.url}
-                  </span>
+                  <span className="text-[11px] font-mono text-content-tertiary truncate sm:hidden">{repo.url}</span>
                 </div>
               </div>
             ))}
@@ -117,7 +108,12 @@ export function RepositoriesPage() {
         )}
       </div>
 
-      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) setShowDialog(false); }}>
+      <Dialog
+        open={showDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowDialog(false);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Repository</DialogTitle>

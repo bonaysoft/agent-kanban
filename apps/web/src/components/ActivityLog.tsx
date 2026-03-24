@@ -61,7 +61,7 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
     } else if (!autoScroll && sseLogs.length > 0) {
       setNewCount((c) => c + 1);
     }
-  }, [allLogs.length, autoScroll, sseLogs.length]);
+  }, [autoScroll, sseLogs.length]);
 
   function handleScroll() {
     if (!containerRef.current) return;
@@ -77,54 +77,38 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
   }
 
   if (displayed.length === 0) {
-    return (
-      <p className="text-sm text-content-tertiary">
-        No activity yet. Assign an agent to see logs.
-      </p>
-    );
+    return <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see logs.</p>;
   }
 
   return (
     <div className="relative">
-      {reconnecting && (
-        <div className="text-[10px] text-warning mb-1">Reconnecting...</div>
-      )}
+      {reconnecting && <div className="text-[10px] text-warning mb-1">Reconnecting...</div>}
 
       {newCount > 0 && !autoScroll && (
-        <Button
-          onClick={scrollToTop}
-          size="xs"
-          className="absolute top-0 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono"
-        >
+        <Button onClick={scrollToTop} size="xs" className="absolute top-0 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono">
           ↑ {newCount} new
         </Button>
       )}
 
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="space-y-0 mt-2 max-h-80 overflow-y-auto"
-        aria-live="polite"
-      >
+      <div ref={containerRef} onScroll={handleScroll} className="space-y-0 mt-2 max-h-80 overflow-y-auto" aria-live="polite">
         {displayed.map((log: any) => (
-          <div
-            key={log.id}
-            className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
-              log.agent_id ? "border-accent" : "border-border"
-            }`}
-          >
-            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
-              {formatRelative(log.created_at)}
-            </span>
-            <span className={`text-[13px] ${
-              log.action === "commented"
-                ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
-                : "text-content-secondary"
-            }`}>
-              {log.action === "commented"
-                ? log.detail
-                : <span className={actionStyles[log.action] || ""}>{actionLabels[log.action] || log.action}{log.detail ? `: ${log.detail}` : ""}</span>
-              }
+          <div key={log.id} className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${log.agent_id ? "border-accent" : "border-border"}`}>
+            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(log.created_at)}</span>
+            <span
+              className={`text-[13px] ${
+                log.action === "commented"
+                  ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
+                  : "text-content-secondary"
+              }`}
+            >
+              {log.action === "commented" ? (
+                log.detail
+              ) : (
+                <span className={actionStyles[log.action] || ""}>
+                  {actionLabels[log.action] || log.action}
+                  {log.detail ? `: ${log.detail}` : ""}
+                </span>
+              )}
             </span>
           </div>
         ))}

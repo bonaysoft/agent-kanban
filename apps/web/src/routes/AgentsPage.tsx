@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
-import { api } from "../lib/api";
+import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
+import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 
 function formatTokens(n: number): string {
   if (!n) return "0";
@@ -28,7 +28,7 @@ export function AgentsPage() {
     refresh().finally(() => setLoading(false));
     const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refresh]);
 
   const online = agents.filter((a) => a.status === "online").length;
 
@@ -64,10 +64,7 @@ export function AgentsPage() {
         ) : agents.length === 0 ? (
           <div className="text-center py-24">
             <p className="text-content-tertiary text-sm">No agents yet.</p>
-            <Link
-              to="/agents/new"
-              className="mt-2 text-sm text-accent hover:underline inline-block"
-            >
+            <Link to="/agents/new" className="mt-2 text-sm text-accent hover:underline inline-block">
               Create your first agent
             </Link>
           </div>
@@ -95,9 +92,7 @@ function AgentCard({ agent }: { agent: any }) {
       className="group block rounded-lg overflow-hidden transition-all hover:translate-y-[-2px]"
       style={{
         background: "var(--bg-secondary)",
-        boxShadow: isOnline
-          ? `0 4px 24px rgba(${rgb}, 0.15), 0 0 0 1px rgba(${rgb}, 0.1)`
-          : "0 0 0 1px var(--border)",
+        boxShadow: isOnline ? `0 4px 24px rgba(${rgb}, 0.15), 0 0 0 1px rgba(${rgb}, 0.1)` : "0 0 0 1px var(--border)",
       }}
     >
       {/* Top edge — agent color */}
@@ -108,11 +103,18 @@ function AgentCard({ agent }: { agent: any }) {
         <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} />
 
         <div className="mt-3 flex items-center gap-1.5">
-          <h2 className="font-mono text-base font-bold tracking-tight text-content-primary">
-            {agent.name}
-          </h2>
+          <h2 className="font-mono text-base font-bold tracking-tight text-content-primary">{agent.name}</h2>
           {agent.builtin ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              className="text-content-tertiary shrink-0"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
@@ -120,17 +122,12 @@ function AgentCard({ agent }: { agent: any }) {
         </div>
 
         {/* Fingerprint badge */}
-        <div
-          className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
-          style={{ background: "var(--bg-secondary)" }}
-        >
+        <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5" style={{ background: "var(--bg-secondary)" }}>
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <span className="font-mono text-[10px] tracking-[0.12em] text-content-secondary">
-            {fp}
-          </span>
+          <span className="font-mono text-[10px] tracking-[0.12em] text-content-secondary">{fp}</span>
         </div>
 
         {/* Status */}
@@ -154,4 +151,3 @@ function AgentCard({ agent }: { agent: any }) {
     </Link>
   );
 }
-

@@ -1,13 +1,13 @@
-import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-import { Header } from "../components/Header";
-import { FilterBar } from "../components/FilterBar";
-import { KanbanColumn } from "../components/KanbanColumn";
-import { TaskDetail } from "../components/TaskDetail";
+import { useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { AgentProfile } from "../components/AgentProfile";
+import { FilterBar } from "../components/FilterBar";
+import { Header } from "../components/Header";
+import { KanbanColumn } from "../components/KanbanColumn";
 import { Onboarding } from "../components/Onboarding";
+import { TaskDetail } from "../components/TaskDetail";
 import { useBoard } from "../hooks/useBoard";
+import { api } from "../lib/api";
 
 const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -43,9 +43,7 @@ export function BoardPage() {
 
   const columns = useMemo(() => {
     if (!board?.tasks) return [];
-    const tasks = activeRepository
-      ? board.tasks.filter((t: any) => t.repository_id === activeRepository)
-      : board.tasks;
+    const tasks = activeRepository ? board.tasks.filter((t: any) => t.repository_id === activeRepository) : board.tasks;
     return TASK_STATUSES.map((status) => ({
       status,
       name: TASK_STATUS_LABELS[status],
@@ -81,10 +79,12 @@ export function BoardPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <Onboarding onComplete={async () => {
-          const boards = await api.boards.list();
-          if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
-        }} />
+        <Onboarding
+          onComplete={async () => {
+            const boards = await api.boards.list();
+            if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
+          }}
+        />
       </div>
     );
   }
@@ -97,7 +97,9 @@ export function BoardPage() {
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">
           {error}
-          <button onClick={refresh} className="ml-2 underline">Retry</button>
+          <button onClick={refresh} className="ml-2 underline">
+            Retry
+          </button>
         </div>
       )}
 
@@ -119,25 +121,17 @@ export function BoardPage() {
       {/* Desktop: 5-column grid */}
       <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
         {columns.map((col) => (
-          <KanbanColumn
-            key={col.status}
-            column={col}
-            onTaskClick={setSelectedTask}
-            onAgentClick={setSelectedAgent}
-          />
+          <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
         ))}
       </div>
 
       {/* Mobile: single column based on tab */}
       <div className="md:hidden min-h-[calc(100vh-160px)]">
-        {columns.filter((_, i) => i === mobileTab).map((col) => (
-          <KanbanColumn
-            key={col.status}
-            column={col}
-            onTaskClick={setSelectedTask}
-            onAgentClick={setSelectedAgent}
-          />
-        ))}
+        {columns
+          .filter((_, i) => i === mobileTab)
+          .map((col) => (
+            <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
+          ))}
       </div>
 
       {selectedTask && (
@@ -145,7 +139,10 @@ export function BoardPage() {
           taskId={selectedTask}
           onClose={() => setSelectedTask(null)}
           onRefresh={refresh}
-          onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}
+          onAgentClick={(agentId) => {
+            setSelectedTask(null);
+            setSelectedAgent(agentId);
+          }}
         />
       )}
 
@@ -153,7 +150,10 @@ export function BoardPage() {
         <AgentProfile
           agentId={selectedAgent}
           onClose={() => setSelectedAgent(null)}
-          onTaskClick={(taskId) => { setSelectedAgent(null); setSelectedTask(taskId); }}
+          onTaskClick={(taskId) => {
+            setSelectedAgent(null);
+            setSelectedTask(taskId);
+          }}
         />
       )}
     </div>

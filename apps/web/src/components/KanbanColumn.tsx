@@ -18,19 +18,12 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
         <span className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}>
           {column.name}
         </span>
-        <span className="font-mono text-[11px] text-content-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">
-          {column.tasks.length}
-        </span>
+        <span className="font-mono text-[11px] text-content-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">{column.tasks.length}</span>
       </div>
 
       <div className="space-y-2">
         {column.tasks.map((task: any) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            onClick={() => onTaskClick(task.id)}
-            onAgentClick={onAgentClick}
-          />
+          <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} onAgentClick={onAgentClick} />
         ))}
       </div>
     </div>

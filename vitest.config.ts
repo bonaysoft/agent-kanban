@@ -1,5 +1,5 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
-import path from "path";
 
 export default defineConfig({
   resolve: {
@@ -13,11 +13,7 @@ export default defineConfig({
     include: ["**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      include: [
-        "apps/web/functions/**/*.ts",
-        "packages/shared/src/**/*.ts",
-        "packages/cli/src/**/*.ts",
-      ],
+      include: ["apps/web/functions/**/*.ts", "packages/shared/src/**/*.ts", "packages/cli/src/**/*.ts"],
       exclude: ["**/*.d.ts", "**/types.ts"],
     },
     server: {

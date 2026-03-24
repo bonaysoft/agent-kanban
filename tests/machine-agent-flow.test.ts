@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SignJWT } from "jose";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Integration test: full flow — user creates agent → machine creates session → agent claims task
 // Tests the actual Hono routes with auth middleware.
@@ -27,7 +28,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -36,9 +40,10 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-flow";
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(userId, "Flow Test User", "flow@example.com", now, now).run();
+  await db
+    .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
+    .bind(userId, "Flow Test User", "flow@example.com", now, now)
+    .run();
   return userId;
 }
 
@@ -77,7 +82,7 @@ describe("machine → agent session flow", () => {
   async function apiRequest(method: string, path: string, body?: any, token?: string) {
     const { api } = await import("../apps/web/functions/api/routes");
     const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
     const init: RequestInit = { method, headers };
     if (body) init.body = JSON.stringify(body);
     return api.request(path, init, env);
@@ -98,11 +103,19 @@ describe("machine → agent session flow", () => {
   });
 
   it("creates a machine via API", async () => {
-    const res = await apiRequest("POST", "/api/machines", {
-      name: "test-machine-01", os: "darwin arm64", version: "1.0.0", runtimes: ["Claude Code"],
-    }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "test-machine-01",
+        os: "darwin arm64",
+        version: "1.0.0",
+        runtimes: ["Claude Code"],
+      },
+      apiKey,
+    );
     expect(res.status).toBe(201);
-    const machine = await res.json() as any;
+    const machine = (await res.json()) as any;
     machineId = machine.id;
   });
 
@@ -126,11 +139,17 @@ describe("machine → agent session flow", () => {
     sessionPrivateKey = (keypair as any).privateKey;
     const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
 
-    const res = await apiRequest("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: pubJwk.x!,
-    }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      `/api/agents/${agentId}/sessions`,
+      {
+        session_id: sessionId,
+        session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
     expect(res.status).toBe(201);
-    const result = await res.json() as any;
+    const result = (await res.json()) as any;
     expect(result.delegation_proof).toBeTruthy();
 
     // Verify BA agent was created for this session
@@ -148,7 +167,8 @@ describe("machine → agent session flow", () => {
     const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board");
     boardId = board.id;
     const task = await (await import("../apps/web/functions/api/taskRepo")).createTask(env.DB, userId, {
-      title: "Test task for agent", board_id: boardId,
+      title: "Test task for agent",
+      board_id: boardId,
     });
     taskId = task.id;
   });
@@ -156,7 +176,7 @@ describe("machine → agent session flow", () => {
   it("machine assigns task to persistent agent", async () => {
     const res = await apiRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(200);
-    const task = await res.json() as any;
+    const task = (await res.json()) as any;
     expect(task.assigned_to).toBe(agentId);
   });
 
@@ -164,7 +184,7 @@ describe("machine → agent session flow", () => {
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, jwt);
     expect(res.status).toBe(200);
-    const task = await res.json() as any;
+    const task = (await res.json()) as any;
     expect(task.status).toBe("in_progress");
   });
 
@@ -178,15 +198,24 @@ describe("machine → agent session flow", () => {
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${taskId}/review`, { pr_url: "https://github.com/test/repo/pull/1" }, jwt);
     expect(res.status).toBe(200);
-    const task = await res.json() as any;
+    const task = (await res.json()) as any;
     expect(task.status).toBe("in_review");
   });
 
   it("agent reports session usage", async () => {
     const jwt = await signSessionJWT();
-    const res = await apiRequest("PATCH", `/api/agents/${agentId}/sessions/${sessionId}/usage`, {
-      input_tokens: 1500, output_tokens: 800, cache_read_tokens: 0, cache_creation_tokens: 0, cost_micro_usd: 0,
-    }, jwt);
+    const res = await apiRequest(
+      "PATCH",
+      `/api/agents/${agentId}/sessions/${sessionId}/usage`,
+      {
+        input_tokens: 1500,
+        output_tokens: 800,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+        cost_micro_usd: 0,
+      },
+      jwt,
+    );
     expect(res.status).toBe(200);
 
     const session = await env.DB.prepare("SELECT input_tokens, output_tokens FROM agent_sessions WHERE id = ?").bind(sessionId).first();
@@ -197,7 +226,7 @@ describe("machine → agent session flow", () => {
   it("GET /api/machines/:id returns agents with correct fields", async () => {
     const res = await apiRequest("GET", `/api/machines/${machineId}`, undefined, apiKey);
     expect(res.status).toBe(200);
-    const machine = await res.json() as any;
+    const machine = (await res.json()) as any;
     expect(machine.agents).toHaveLength(1);
     const agent = machine.agents[0];
     expect(agent.id).toBe(agentId);
@@ -210,14 +239,14 @@ describe("machine → agent session flow", () => {
     const machine = await env.DB.prepare("SELECT status FROM machines WHERE id = ?").bind(machineId).first();
     expect(machine!.status).toBe("online");
 
-    const agent = await env.DB.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first() as any;
+    const agent = (await env.DB.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first()) as any;
     expect(agent.owner_id).toBe(userId);
 
-    const session = await env.DB.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(sessionId).first() as any;
+    const session = (await env.DB.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(sessionId).first()) as any;
     expect(session.agent_id).toBe(agentId);
     expect(session.machine_id).toBe(machineId);
 
-    const task = await env.DB.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first() as any;
+    const task = (await env.DB.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first()) as any;
     expect(task.status).toBe("in_review");
     expect(task.assigned_to).toBe(agentId);
 

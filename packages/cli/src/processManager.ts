@@ -1,6 +1,6 @@
-import { spawn, type ChildProcess } from 'child_process';
-import type { ApiClient, AgentClient } from './client.js';
-import { cleanupPromptFile } from './systemPrompt.js';
+import { type ChildProcess, spawn } from "node:child_process";
+import type { AgentClient, ApiClient } from "./client.js";
+import { cleanupPromptFile } from "./systemPrompt.js";
 
 // Agent Process Lifecycle:
 //   SPAWN → stdin task notification → RUNNING
@@ -36,7 +36,7 @@ export interface AgentProcess {
   onCleanup?: () => void;
 }
 
-const RATE_LIMIT_CODES = new Set(['rate_limit_error', 'overloaded_error']);
+const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
 
 export interface ProcessManagerCallbacks {
   onSlotFreed: () => void;
@@ -56,12 +56,7 @@ export class ProcessManager {
   private onProcessExited?: (sessionId: string) => void;
   private taskTimeoutMs: number;
 
-  constructor(
-    client: ApiClient,
-    agentCli: string,
-    callbacks: ProcessManagerCallbacks,
-    taskTimeoutMs = 2 * 60 * 60 * 1000,
-  ) {
+  constructor(client: ApiClient, agentCli: string, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
     this.client = client;
     this.agentCli = agentCli;
     this.onSlotFreed = callbacks.onSlotFreed;
@@ -95,35 +90,27 @@ export class ProcessManager {
     onCleanup?: () => void,
   ): Promise<void> {
     const args = resume
-      ? [
-          '--resume',
-          '--verbose',
-          '--output-format',
-          'stream-json',
-          '--dangerously-skip-permissions',
-          '--session-id',
-          sessionId,
-        ]
+      ? ["--resume", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId]
       : [
-          '--print',
-          '--verbose',
-          '--input-format',
-          'stream-json',
-          '--output-format',
-          'stream-json',
-          '--dangerously-skip-permissions',
-          '--session-id',
+          "--print",
+          "--verbose",
+          "--input-format",
+          "stream-json",
+          "--output-format",
+          "stream-json",
+          "--dangerously-skip-permissions",
+          "--session-id",
           sessionId,
         ];
     if (!resume && systemPromptFile) {
-      args.push('--system-prompt-file', systemPromptFile);
+      args.push("--system-prompt-file", systemPromptFile);
     }
 
     let proc: ChildProcess;
     try {
       proc = spawn(this.agentCli, args, {
         cwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...agentEnv },
       });
     } catch (err: any) {
@@ -155,31 +142,29 @@ export class ProcessManager {
 
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
-        console.warn(
-          `[WARN] Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`,
-        );
+        console.warn(`[WARN] Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
         this.terminateProcess(proc);
       }, this.taskTimeoutMs);
     }
 
     if (resume) {
-      proc.on('spawn', () => proc.stdin?.end());
+      proc.on("spawn", () => proc.stdin?.end());
     } else {
-      proc.on('spawn', () => {
+      proc.on("spawn", () => {
         const payload = JSON.stringify({
-          type: 'user',
-          message: { role: 'user', content: taskContext },
+          type: "user",
+          message: { role: "user", content: taskContext },
         });
-        proc.stdin?.write(payload + '\n');
+        proc.stdin?.write(`${payload}\n`);
         proc.stdin?.end();
       });
     }
 
-    let stdoutBuffer = '';
-    proc.stdout?.on('data', (chunk: Buffer) => {
+    let stdoutBuffer = "";
+    proc.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
-      const lines = stdoutBuffer.split('\n');
-      stdoutBuffer = lines.pop() || '';
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() || "";
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
@@ -191,13 +176,13 @@ export class ProcessManager {
       }
     });
 
-    let stderrBuffer = '';
-    proc.stderr?.on('data', (chunk: Buffer) => {
+    let stderrBuffer = "";
+    proc.stderr?.on("data", (chunk: Buffer) => {
       stderrBuffer += chunk.toString();
       if (stderrBuffer.length > 50000) stderrBuffer = stderrBuffer.slice(-25000);
     });
 
-    proc.on('close', async (code) => {
+    proc.on("close", async (code) => {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       cleanupPromptFile(sessionId);
       this.onProcessExited?.(sessionId);
@@ -236,7 +221,7 @@ export class ProcessManager {
       } else {
         console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {
-          const lastLines = stderrBuffer.trim().split('\n').slice(-10).join('\n');
+          const lastLines = stderrBuffer.trim().split("\n").slice(-10).join("\n");
           console.warn(`  stderr: ${lastLines}`);
         }
         await this.releaseTask(taskId);
@@ -246,7 +231,7 @@ export class ProcessManager {
       this.onSlotFreed();
     });
 
-    proc.on('error', async (err) => {
+    proc.on("error", async (err) => {
       if (!this.agents.has(taskId)) return;
       console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
@@ -257,9 +242,7 @@ export class ProcessManager {
       this.onSlotFreed();
     });
 
-    console.log(
-      `[INFO] Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`,
-    );
+    console.log(`[INFO] Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`);
   }
 
   async killTask(taskId: string): Promise<void> {
@@ -272,11 +255,7 @@ export class ProcessManager {
     agent.onCleanup?.();
     await this.client
       .closeSession(agent.agentClient.getAgentId(), agent.sessionId)
-      .catch((err: any) =>
-        console.error(
-          `[WARN] Failed to close session for cancelled task ${taskId}: ${err.message}`,
-        ),
-      );
+      .catch((err: any) => console.error(`[WARN] Failed to close session for cancelled task ${taskId}: ${err.message}`));
     this.onSlotFreed();
   }
 
@@ -311,43 +290,32 @@ export class ProcessManager {
    *  3. { error: "some string" }  (top-level error without type)
    */
   private detectError(event: any): { code?: string; detail: string } | null {
-    if (event.type !== 'error' && !event.error) return null;
+    if (event.type !== "error" && !event.error) return null;
 
     let code: string | undefined;
-    if (event.error && typeof event.error === 'object') {
+    if (event.error && typeof event.error === "object") {
       code = event.error.type;
     }
 
     let detail: string | undefined;
-    if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
-      const textBlock = event.message.content.find((e: any) => e.type === 'text' && e.text);
+    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+      const textBlock = event.message.content.find((e: any) => e.type === "text" && e.text);
       if (textBlock?.text) detail = textBlock.text;
     }
     if (!detail) {
-      detail =
-        event.error?.message ||
-        (event.error !== 'unknown' ? event.error : undefined) ||
-        event.message ||
-        JSON.stringify(event);
+      detail = event.error?.message || (event.error !== "unknown" ? event.error : undefined) || event.message || JSON.stringify(event);
     }
 
     return { code, detail: String(detail) };
   }
 
-  private handleEvent(
-    taskId: string,
-    sessionId: string,
-    event: any,
-    agentClient: AgentClient,
-  ): void {
+  private handleEvent(taskId: string, _sessionId: string, event: any, agentClient: AgentClient): void {
     // rate_limit_event — structured rate limit info from Claude CLI
-    if (event.type === 'rate_limit_event') {
+    if (event.type === "rate_limit_event") {
       const info = event.rate_limit_info;
-      if (info && info.status !== 'allowed') {
+      if (info && info.status !== "allowed") {
         const resetAt = new Date(info.resetsAt * 1000).toISOString();
-        console.warn(
-          `[WARN] Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`,
-        );
+        console.warn(`[WARN] Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`);
         const agent = this.agents.get(taskId);
         if (agent) agent.rateLimited = true;
         this.onRateLimited(resetAt);
@@ -370,22 +338,20 @@ export class ProcessManager {
       return;
     }
 
-    if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
+    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
       for (const block of event.message.content) {
-        if (block.type === 'text' && block.text) {
+        if (block.type === "text" && block.text) {
           agentClient
             .sendMessage(taskId, {
-              sender_type: 'agent',
+              sender_type: "agent",
               sender_id: agentClient.getAgentId(),
               content: block.text,
             })
-            .catch((e: any) =>
-              console.error(`[ERROR] Failed to send message for task ${taskId}: ${e.message}`),
-            );
+            .catch((e: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${e.message}`));
         }
       }
     }
-    if (event.type === 'result') {
+    if (event.type === "result") {
       const cost = event.total_cost_usd || 0;
       const usage = event.usage || {};
       console.log(`[INFO] Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
@@ -397,20 +363,14 @@ export class ProcessManager {
           cache_creation_tokens: usage.cache_creation_input_tokens || 0,
           cost_micro_usd: Math.round(cost * 1_000_000),
         })
-        .catch((e: any) =>
-          console.error(`[ERROR] Failed to report usage for task ${taskId}: ${e.message}`),
-        );
+        .catch((e: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${e.message}`));
     }
   }
 
   private async closeSession(agentClient: AgentClient): Promise<void> {
     await this.client
       .closeSession(agentClient.getAgentId(), agentClient.getSessionId())
-      .catch((err: any) =>
-        console.error(
-          `[WARN] Failed to close session ${agentClient.getSessionId()}: ${err.message}`,
-        ),
-      );
+      .catch((err: any) => console.error(`[WARN] Failed to close session ${agentClient.getSessionId()}: ${err.message}`));
   }
 
   private terminateProcess(proc: ChildProcess): Promise<void> {
@@ -424,14 +384,14 @@ export class ProcessManager {
         clearTimeout(killTimer);
         resolve();
       };
-      proc.once('close', onExit);
+      proc.once("close", onExit);
 
-      proc.kill('SIGTERM');
+      proc.kill("SIGTERM");
 
       const killTimer = setTimeout(() => {
-        proc.removeListener('close', onExit);
+        proc.removeListener("close", onExit);
         if (!proc.killed) {
-          proc.kill('SIGKILL');
+          proc.kill("SIGKILL");
         }
         resolve();
       }, 5000);
@@ -444,14 +404,10 @@ export class ProcessManager {
         await this.client.releaseTask(taskId);
         return;
       } catch (err: any) {
-        console.error(
-          `[WARN] Failed to release task ${taskId} (attempt ${i + 1}/${retries}): ${err.message}`,
-        );
+        console.error(`[WARN] Failed to release task ${taskId} (attempt ${i + 1}/${retries}): ${err.message}`);
         if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
       }
     }
-    console.error(
-      `[ERROR] Could not release task ${taskId} after ${retries} attempts. Task will remain locked until stale detection.`,
-    );
+    console.error(`[ERROR] Could not release task ${taskId} after ${retries} attempts. Task will remain locked until stale detection.`);
   }
 }

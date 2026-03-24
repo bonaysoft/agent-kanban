@@ -1,18 +1,33 @@
+import { RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { Env } from "./types";
+import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
+import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
-import { getBoard, listBoards, createBoard, getBoardByName, updateBoard, deleteBoard } from "./boardRepo";
-import { createRepository, listRepositories, deleteRepository } from "./repositoryRepo";
-import { createTask, listTasks, getTask, updateTask, deleteTask, claimTask, completeTask, releaseTask, assignTask, cancelTask, reviewTask, rejectTask, addTaskLog, getTaskLogs } from "./taskRepo";
-import { createAgent, listAgents, getAgent, getAgentLogs, updateAgent, deleteAgent } from "./agentRepo";
-import { RESERVED_ROLES } from "@agent-kanban/shared";
-import { createSession, closeSession, reopenSession, updateSessionUsage, listSessions } from "./agentSessionRepo";
-import { detectAndReleaseStale } from "./taskStale";
-import { createSSEResponse } from "./sse";
-import { createMessage, listMessages } from "./messageRepo";
-import { updateMachine, listMachines, getMachine, createMachine, deleteMachine } from "./machineRepo";
 import { createAuth } from "./betterAuth";
+import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateBoard } from "./boardRepo";
+import { createMachine, deleteMachine, getMachine, listMachines, updateMachine } from "./machineRepo";
+import { createMessage, listMessages } from "./messageRepo";
+import { createRepository, deleteRepository, listRepositories } from "./repositoryRepo";
+import { createSSEResponse } from "./sse";
+import {
+  addTaskLog,
+  assignTask,
+  cancelTask,
+  claimTask,
+  completeTask,
+  createTask,
+  deleteTask,
+  getTask,
+  getTaskLogs,
+  listTasks,
+  rejectTask,
+  releaseTask,
+  reviewTask,
+  updateTask,
+} from "./taskRepo";
+import { detectAndReleaseStale } from "./taskStale";
+import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -73,7 +88,6 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
-
   const body = await c.req.json<{ name: string; os: string; version: string; runtimes: string[] }>();
   if (!body.name || !body.os || !body.version || !body.runtimes) {
     throw new HTTPException(400, { message: "name, os, version, and runtimes are required" });
@@ -107,7 +121,6 @@ api.post("/api/machines", async (c) => {
 });
 
 api.delete("/api/machines/:id", async (c) => {
-
   const machineId = c.req.param("id");
   const deleted = await deleteMachine(c.env.DB, machineId, c.get("ownerId"));
   if (!deleted) throw new HTTPException(404, { message: "Machine not found" });
@@ -135,7 +148,16 @@ api.get("/api/agents/:id", async (c) => {
 });
 
 api.post("/api/agents", async (c) => {
-  const body = await c.req.json<{ name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }>();
+  const body = await c.req.json<{
+    name: string;
+    bio?: string;
+    soul?: string;
+    role?: string;
+    handoff_to?: string[];
+    runtime?: string;
+    model?: string;
+    skills?: string[];
+  }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
@@ -157,7 +179,7 @@ api.delete("/api/agents/:id", async (c) => {
   const existing = await c.env.DB.prepare("SELECT builtin FROM agents WHERE id = ?").bind(c.req.param("id")).first<{ builtin: number }>();
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
-  const deleted = await deleteAgent(c.env.DB, c.req.param("id"));
+  const _deleted = await deleteAgent(c.env.DB, c.req.param("id"));
   return c.json({ ok: true });
 });
 
@@ -171,10 +193,7 @@ api.post("/api/agents/:agentId/sessions", async (c) => {
   const machineId = c.get("machineId");
   if (!machineId) throw new HTTPException(400, { message: "Machine not registered" });
 
-  const result = await createSession(
-    c.env.DB, c.env, c.req.param("agentId"), machineId,
-    body.session_id, body.session_public_key, c.get("ownerId"),
-  );
+  const result = await createSession(c.env.DB, c.env, c.req.param("agentId"), machineId, body.session_id, body.session_public_key, c.get("ownerId"));
   return c.json(result, 201);
 });
 
@@ -246,8 +265,7 @@ api.delete("/api/tasks/:id", async (c) => {
 // ─── Task Lifecycle ───
 
 api.post("/api/tasks/:id/claim", async (c) => {
-
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
@@ -256,7 +274,7 @@ api.post("/api/tasks/:id/claim", async (c) => {
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { result?: string; pr_url?: string; agent_id?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { result?: string; pr_url?: string; agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
   const task = await completeTask(c.env.DB, c.req.param("id"), agentId || null, body.result || null, body.pr_url || null, c.get("identityType"));
@@ -270,13 +288,11 @@ api.post("/api/tasks/:id/release", async (c) => {
 });
 
 api.post("/api/tasks/:id/assign", async (c) => {
-
   const body = await c.req.json<{ agent_id: string }>();
   const agentId = c.get("agentId") || body.agent_id;
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first<{ board_id: string }>();
+  const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?").bind(c.req.param("id")).first<{ board_id: string }>();
   if (existing) {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
@@ -286,7 +302,7 @@ api.post("/api/tasks/:id/assign", async (c) => {
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
   const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || null, c.get("identityType"));
@@ -294,11 +310,12 @@ api.post("/api/tasks/:id/cancel", async (c) => {
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { agent_id?: string; pr_url?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string; pr_url?: string };
   const agentId = c.get("agentId") || body.agent_id;
 
   const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first<{ assigned_to: string | null }>();
+    .bind(c.req.param("id"))
+    .first<{ assigned_to: string | null }>();
 
   const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null, c.get("identityType"));
   return c.json(task);
@@ -306,7 +323,7 @@ api.post("/api/tasks/:id/review", async (c) => {
 
 api.post("/api/tasks/:id/reject", async (c) => {
   const agentId = c.get("agentId") || null;
-  const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
   const task = await rejectTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"), body.reason);
   return c.json(task);
 });
@@ -317,8 +334,7 @@ api.post("/api/tasks/:id/logs", async (c) => {
   const body = await c.req.json<{ detail: string; agent_id?: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
-  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first();
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const agentId = c.get("agentId") || body.agent_id;
@@ -327,8 +343,7 @@ api.post("/api/tasks/:id/logs", async (c) => {
 });
 
 api.get("/api/tasks/:id/logs", async (c) => {
-  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first();
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const since = c.req.query("since");
@@ -350,8 +365,7 @@ api.post("/api/tasks/:id/messages", async (c) => {
   const senderId = body.sender_id || (body.sender_type === "agent" ? c.get("agentId") : c.get("ownerId"));
   if (!senderId) throw new HTTPException(400, { message: "sender_id is required" });
 
-  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first();
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const message = await createMessage(c.env.DB, c.req.param("id"), body.sender_type, senderId, body.content);
@@ -359,8 +373,7 @@ api.post("/api/tasks/:id/messages", async (c) => {
 });
 
 api.get("/api/tasks/:id/messages", async (c) => {
-  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?")
-    .bind(c.req.param("id")).first();
+  const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const since = c.req.query("since");

@@ -1,20 +1,26 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Header } from "../components/Header";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { api } from "../lib/api";
-import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
+import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 
 const actionStyles: Record<string, string> = {
-  claimed: "text-accent", assigned: "text-accent", completed: "text-success",
-  released: "text-warning", timed_out: "text-error", review_requested: "text-accent",
+  claimed: "text-accent",
+  assigned: "text-accent",
+  completed: "text-success",
+  released: "text-warning",
+  timed_out: "text-error",
+  review_requested: "text-accent",
 };
 
 const taskStatusStyles: Record<string, string> = {
-  in_progress: "bg-accent/15 text-accent", in_review: "bg-yellow-500/15 text-yellow-500",
-  done: "bg-green-500/15 text-green-500", todo: "bg-zinc-500/15 text-content-tertiary",
+  in_progress: "bg-accent/15 text-accent",
+  in_review: "bg-yellow-500/15 text-yellow-500",
+  done: "bg-green-500/15 text-green-500",
+  todo: "bg-zinc-500/15 text-content-tertiary",
   cancelled: "bg-red-500/15 text-red-500",
 };
 
@@ -43,15 +49,30 @@ export function AgentDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    api.agents.get(id).then((a) => {
-      setAgent(a);
-      api.agents.sessions(id).then(setSessions).catch(() => {});
-      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
-    }).finally(() => setLoading(false));
+    api.agents
+      .get(id)
+      .then((a) => {
+        setAgent(a);
+        api.agents
+          .sessions(id)
+          .then(setSessions)
+          .catch(() => {});
+        api.tasks
+          .list({ assigned_to: id })
+          .then((ts) => setTask(ts[0] ?? null))
+          .catch(() => {});
+      })
+      .finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.agents.get(id).then(setAgent);
-      api.agents.sessions(id).then(setSessions).catch(() => {});
-      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
+      api.agents
+        .sessions(id)
+        .then(setSessions)
+        .catch(() => {});
+      api.tasks
+        .list({ assigned_to: id })
+        .then((ts) => setTask(ts[0] ?? null))
+        .catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, [id]);
@@ -103,9 +124,7 @@ export function AgentDetailPage() {
           className="mt-6 rounded-lg overflow-hidden"
           style={{
             background: "var(--bg-secondary)",
-            boxShadow: isOnline
-              ? `0 8px 40px rgba(${rgb}, 0.12), 0 0 0 1px rgba(${rgb}, 0.1)`
-              : "0 0 0 1px var(--border)",
+            boxShadow: isOnline ? `0 8px 40px rgba(${rgb}, 0.12), 0 0 0 1px rgba(${rgb}, 0.1)` : "0 0 0 1px var(--border)",
           }}
         >
           {/* Color bar */}
@@ -117,7 +136,17 @@ export function AgentDetailPage() {
               onClick={() => setShowIdentity(true)}
               className="absolute right-12 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 cursor-pointer group transition-opacity hover:opacity-100 opacity-100"
             >
-              <svg width="128" height="128" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-15 group-hover:opacity-30 transition-opacity">
+              <svg
+                width="128"
+                height="128"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="opacity-15 group-hover:opacity-30 transition-opacity"
+              >
                 <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
                 <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
                 <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
@@ -140,7 +169,16 @@ export function AgentDetailPage() {
                     {agent.name}
                   </h1>
                   {agent.builtin ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      className="text-content-tertiary shrink-0"
+                    >
                       <title>Built-in — cannot be modified</title>
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -152,9 +190,7 @@ export function AgentDetailPage() {
                   />
                 </div>
 
-                {agent.bio && (
-                  <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>
-                )}
+                {agent.bio && <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>}
 
                 {/* Meta */}
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -164,20 +200,11 @@ export function AgentDetailPage() {
                     </span>
                   )}
                   {agent.model && (
-                    <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">
-                      {agent.model}
-                    </span>
+                    <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">{agent.model}</span>
                   )}
-                  <span className="text-[10px] text-content-tertiary">
-                    Created {formatRelative(agent.created_at)}
-                  </span>
-                  {agent.last_active_at && (
-                    <span className="text-[10px] text-content-tertiary">
-                      Active {formatRelative(agent.last_active_at)}
-                    </span>
-                  )}
+                  <span className="text-[10px] text-content-tertiary">Created {formatRelative(agent.created_at)}</span>
+                  {agent.last_active_at && <span className="text-[10px] text-content-tertiary">Active {formatRelative(agent.last_active_at)}</span>}
                 </div>
-
               </div>
             </div>
           </div>
@@ -233,18 +260,12 @@ export function AgentDetailPage() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`pb-2.5 text-sm font-medium transition-colors relative ${
-                tab === t.key
-                  ? "text-content-primary"
-                  : "text-content-tertiary hover:text-content-secondary"
+                tab === t.key ? "text-content-primary" : "text-content-tertiary hover:text-content-secondary"
               }`}
             >
               {t.label}
-              {t.count !== undefined && t.count > 0 && (
-                <span className="ml-1.5 text-[10px] font-mono text-content-tertiary">{t.count}</span>
-              )}
-              {tab === t.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full" style={{ background: color }} />
-              )}
+              {t.count !== undefined && t.count > 0 && <span className="ml-1.5 text-[10px] font-mono text-content-tertiary">{t.count}</span>}
+              {tab === t.key && <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full" style={{ background: color }} />}
             </button>
           ))}
         </div>
@@ -269,15 +290,9 @@ function ActivityTab({ logs, rgb }: { logs: any[]; rgb: string }) {
     <div className="space-y-0">
       {logs.map((log: any) => (
         <div key={log.id} className="flex items-center gap-4 py-2.5 group">
-          <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
-            {formatRelative(log.created_at)}
-          </span>
-          <span className={`font-mono text-[12px] w-32 shrink-0 ${actionStyles[log.action] || "text-content-tertiary"}`}>
-            {log.action}
-          </span>
-          {log.task_title && (
-            <span className="text-sm text-content-secondary truncate">{log.task_title}</span>
-          )}
+          <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">{formatRelative(log.created_at)}</span>
+          <span className={`font-mono text-[12px] w-32 shrink-0 ${actionStyles[log.action] || "text-content-tertiary"}`}>{log.action}</span>
+          {log.task_title && <span className="text-sm text-content-secondary truncate">{log.task_title}</span>}
         </div>
       ))}
     </div>
@@ -301,18 +316,16 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
               className={`absolute left-0 w-[7px] h-[7px] rounded-full ${isActive ? "animate-pulse-glow" : ""}`}
               style={{ backgroundColor: isActive ? color : "#3f3f46" }}
             />
-            <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
-              {formatRelative(s.created_at)}
-            </span>
+            <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">{formatRelative(s.created_at)}</span>
             <code className="font-mono text-[11px] text-content-secondary">{s.id.slice(0, 12)}</code>
-            <span className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
-              isActive ? "text-accent bg-accent/10" : "text-content-tertiary bg-surface-tertiary"
-            }`}>
+            <span
+              className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
+                isActive ? "text-accent bg-accent/10" : "text-content-tertiary bg-surface-tertiary"
+              }`}
+            >
               {s.status}
             </span>
-            {s.machine_name && (
-              <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
-            )}
+            {s.machine_name && <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>}
           </div>
         );
       })}
@@ -320,12 +333,21 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
   );
 }
 
-function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
-  open: boolean; onOpenChange: (open: boolean) => void;
-  fingerprint: string; publicKey: string; color: string; rgb: string;
+function IdentityModal({
+  open,
+  onOpenChange,
+  fingerprint,
+  publicKey,
+  rgb,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fingerprint: string;
+  publicKey: string;
+  color: string;
+  rgb: string;
 }) {
-  const formatFullFingerprint = (fp: string) =>
-    fp.match(/.{2}/g)?.join(":") ?? fp;
+  const formatFullFingerprint = (fp: string) => fp.match(/.{2}/g)?.join(":") ?? fp;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -347,7 +369,10 @@ function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
               </button>
             </div>
             <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
-              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all" style={{ wordSpacing: "0.15em" }}>
+              <code
+                className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all"
+                style={{ wordSpacing: "0.15em" }}
+              >
                 {formatFullFingerprint(fingerprint)}
               </code>
             </div>
@@ -364,9 +389,7 @@ function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
               </button>
             </div>
             <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
-              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">
-                {publicKey}
-              </code>
+              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">{publicKey}</code>
             </div>
           </div>
         </div>
@@ -389,19 +412,20 @@ function MissionTab({ task, color, rgb }: { task: any; color: string; rgb: strin
         boxShadow: "0 0 0 1px var(--border)",
       }}
     >
-      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
-        {task.status.replace("_", " ")}
-      </span>
+      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>{task.status.replace("_", " ")}</span>
       <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
       {task.pr_url && (
-        <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}
-          className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary">
+        <a
+          href={task.pr_url}
+          target="_blank"
+          rel="noopener"
+          onClick={(e) => e.stopPropagation()}
+          className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary"
+        >
           PR &rarr;
         </a>
       )}
-      {task.repository_name && (
-        <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>
-      )}
+      {task.repository_name && <span className="text-[10px] font-mono text-content-tertiary">{task.repository_name}</span>}
     </Link>
   );
 }

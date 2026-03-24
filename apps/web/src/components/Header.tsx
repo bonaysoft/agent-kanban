@@ -1,15 +1,14 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { getTheme, setTheme, type Theme } from "../lib/theme";
 import { useState } from "react";
-import { signOut, clearAuthToken, useSession } from "../lib/auth-client";
-import { api } from "../lib/api";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useBoards } from "../hooks/useBoard";
+import { api } from "../lib/api";
+import { clearAuthToken, signOut, useSession } from "../lib/auth-client";
+import { getTheme, setTheme, type Theme } from "../lib/theme";
 import { BoardSwitcher } from "./BoardSwitcher";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
-import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { Separator } from "./ui/separator";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const navLinks = [
   { to: "/agents", label: "Agents" },
@@ -21,10 +20,14 @@ function ThemeIcon({ theme }: { theme: Theme }) {
     return (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="5" />
-        <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-        <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        <line x1="12" y1="1" x2="12" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="23" />
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+        <line x1="1" y1="12" x2="3" y2="12" />
+        <line x1="21" y1="12" x2="23" y2="12" />
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
       </svg>
     );
   }
@@ -38,7 +41,8 @@ function ThemeIcon({ theme }: { theme: Theme }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-      <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
     </svg>
   );
 }
@@ -89,11 +93,7 @@ export function Header() {
           {activeBoard && (
             <>
               <span className="text-content-tertiary text-xs">/</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSwitcherOpen(true)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setSwitcherOpen(true)}>
                 {activeBoard.name}
               </Button>
             </>
@@ -106,10 +106,11 @@ export function Header() {
               <Link
                 key={to}
                 to={to}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${location.pathname.startsWith(to)
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  location.pathname.startsWith(to)
                     ? "text-accent bg-accent-soft"
                     : "text-content-tertiary hover:text-content-secondary hover:bg-surface-tertiary"
-                  }`}
+                }`}
               >
                 {label}
               </Link>
@@ -118,9 +119,7 @@ export function Header() {
 
           {/* Avatar + Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger render={
-              <Button variant="ghost" size="icon-sm" className="rounded-full" />
-            }>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="rounded-full" />}>
               <Avatar size="sm">
                 {user?.image && <AvatarImage src={user.image} />}
                 <AvatarFallback>{(user?.name || "?")[0].toUpperCase()}</AvatarFallback>
@@ -132,16 +131,23 @@ export function Header() {
                 <>
                   <div className="px-2 py-1.5">
                     <p className="text-sm font-medium text-content-primary truncate">{user.name || user.email}</p>
-                    {user.name && user.email && (
-                      <p className="text-xs text-content-tertiary truncate">{user.email}</p>
-                    )}
+                    {user.name && user.email && <p className="text-xs text-content-tertiary truncate">{user.email}</p>}
                   </div>
                   <DropdownMenuSeparator />
                 </>
               )}
 
               <DropdownMenuItem onClick={() => navigate("/settings")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
@@ -149,7 +155,16 @@ export function Header() {
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => navigate("/repositories")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                 </svg>
                 Repositories
@@ -158,7 +173,16 @@ export function Header() {
               <DropdownMenuSeparator />
 
               <DropdownMenuItem onClick={handleSignOut}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   <polyline points="16 17 21 12 16 7" />
                   <line x1="21" y1="12" x2="9" y2="12" />
@@ -170,9 +194,7 @@ export function Header() {
 
           {/* Theme toggle */}
           <Tooltip>
-            <TooltipTrigger render={
-              <Button variant="ghost" size="icon-sm" onClick={cycleTheme} />
-            }>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={cycleTheme} />}>
               <ThemeIcon theme={theme} />
             </TooltipTrigger>
             <TooltipContent>Theme: {theme}</TooltipContent>

@@ -82,11 +82,13 @@ export function formatTask(task: any): string {
 
 export function formatTaskLogs(logs: any[]): string {
   if (logs.length === 0) return "No logs.";
-  return logs.map((l) => {
-    const time = new Date(l.created_at).toLocaleString();
-    const actor = l.actor_id ? ` [${l.actor_id}]` : "";
-    return `  ${time}  ${l.action.padEnd(18)}${actor}  ${l.detail || ""}`;
-  }).join("\n");
+  return logs
+    .map((l) => {
+      const time = new Date(l.created_at).toLocaleString();
+      const actor = l.actor_id ? ` [${l.actor_id}]` : "";
+      return `  ${time}  ${l.action.padEnd(18)}${actor}  ${l.detail || ""}`;
+    })
+    .join("\n");
 }
 
 export function formatAgent(agent: any): string {
@@ -108,35 +110,26 @@ export function formatBoard(board: any): string {
   const cols = board.columns || [];
   const maxWidth = 30;
 
-  const header = cols.map((c: any) =>
-    `│ ${(c.name + ` (${c.tasks.length})`).padEnd(maxWidth)} `
-  ).join("") + "│";
+  const header = `${cols.map((c: any) => `│ ${(`${c.name} (${c.tasks.length})`).padEnd(maxWidth)} `).join("")}│`;
 
-  const sep = cols.map(() => "├" + "─".repeat(maxWidth + 2)).join("") + "┤";
-  const topSep = cols.map(() => "┌" + "─".repeat(maxWidth + 2)).join("") + "┐";
-  const botSep = cols.map(() => "└" + "─".repeat(maxWidth + 2)).join("") + "┘";
+  const sep = `${cols.map(() => `├${"─".repeat(maxWidth + 2)}`).join("")}┤`;
+  const topSep = `${cols.map(() => `┌${"─".repeat(maxWidth + 2)}`).join("")}┐`;
+  const botSep = `${cols.map(() => `└${"─".repeat(maxWidth + 2)}`).join("")}┘`;
 
   const maxRows = Math.max(...cols.map((c: any) => c.tasks.length), 0);
   const rows: string[] = [];
 
   for (let i = 0; i < maxRows; i++) {
-    const row = cols.map((c: any) => {
-      const task = c.tasks[i];
-      if (!task) return `│ ${"".padEnd(maxWidth)} `;
-      const title = task.title.length > maxWidth - 2
-        ? task.title.slice(0, maxWidth - 5) + "..."
-        : task.title;
-      return `│ ${title.padEnd(maxWidth)} `;
-    }).join("") + "│";
+    const row = `${cols
+      .map((c: any) => {
+        const task = c.tasks[i];
+        if (!task) return `│ ${"".padEnd(maxWidth)} `;
+        const title = task.title.length > maxWidth - 2 ? `${task.title.slice(0, maxWidth - 5)}...` : task.title;
+        return `│ ${title.padEnd(maxWidth)} `;
+      })
+      .join("")}│`;
     rows.push(row);
   }
 
-  return [
-    `Board: ${board.name}`,
-    topSep,
-    header,
-    sep,
-    ...rows,
-    botSep,
-  ].join("\n");
+  return [`Board: ${board.name}`, topSep, header, sep, ...rows, botSep].join("\n");
 }

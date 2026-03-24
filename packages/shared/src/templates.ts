@@ -46,10 +46,7 @@ export const BUILTIN_TEMPLATES: AgentTemplate[] = [
     handoff_to: ["enduser"],
     runtime: "claude-code",
     model: "claude-opus-4-6",
-    skills: [
-      "trailofbits/skills@differential-review",
-      "obra/superpowers@verification-before-completion",
-    ],
+    skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
   },
 ];
 

@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
-import type { Env } from "./types";
 import { createAuth } from "./betterAuth";
+import type { Env } from "./types";
 
 type IdentityType = "user" | "machine" | "agent";
 
@@ -51,7 +51,9 @@ function detectTokenType(token: string): "apikey" | "agent" | "user" {
     try {
       const header = JSON.parse(atob(parts[0]));
       if (header.typ === "agent+jwt") return "agent";
-    } catch { /* not a valid JWT header */ }
+    } catch {
+      /* not a valid JWT header */
+    }
   }
   return "user";
 }
@@ -148,7 +150,9 @@ function decodeJwtClaim(token: string, claim: string): string | null {
   try {
     const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
     return payload[claim] || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {
@@ -169,4 +173,3 @@ function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {
 
   return next();
 }
-

@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { Button } from "./ui/button";
 
 export function EditableText({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -24,17 +28,20 @@ export function EditableText({ value, onSave, className }: { value: string; onSa
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
         className={`${className} border-accent`}
       />
     );
   }
 
   return (
-    <span
-      onClick={() => setEditing(true)}
-      className={`${className} cursor-pointer hover:border-b hover:border-content-tertiary`}
-    >
+    <span onClick={() => setEditing(true)} className={`${className} cursor-pointer hover:border-b hover:border-content-tertiary`}>
       {value}
     </span>
   );
@@ -45,8 +52,12 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (editing) ref.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -60,7 +71,12 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
         rows={3}
         className="resize-y"
       />
@@ -79,13 +95,27 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
   );
 }
 
-export function EditableBadge({ value, placeholder, onSave, className }: { value: string | null; placeholder: string; onSave: (v: string) => void; className: string }) {
+export function EditableBadge({
+  value,
+  placeholder,
+  onSave,
+  className,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (v: string) => void;
+  className: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
   const ref = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setDraft(value || ""); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value || "");
+  }, [value]);
+  useEffect(() => {
+    if (editing) ref.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -99,7 +129,13 @@ export function EditableBadge({ value, placeholder, onSave, className }: { value
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value || ""); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value || "");
+            setEditing(false);
+          }
+        }}
         placeholder="project name"
         className="text-[11px] font-mono h-6 w-24"
       />
@@ -131,11 +167,7 @@ export function Field({ label, value }: { label: string; value: React.ReactNode 
 }
 
 export function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
-      {children}
-    </div>
-  );
+  return <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">{children}</div>;
 }
 
 export function formatRelative(dateStr: string): string {

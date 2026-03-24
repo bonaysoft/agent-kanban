@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
 import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -95,7 +96,10 @@ describe("repositoryRepo", () => {
   it("findOrCreateRepository returns existing if found", async () => {
     const { findOrCreateRepository } = await import("../apps/web/functions/api/repositoryRepo");
     const first = await findOrCreateRepository(env.DB, "repo-test-user", { name: "find-create-dup", url: "https://github.com/org/find-create-dup" });
-    const second = await findOrCreateRepository(env.DB, "repo-test-user", { name: "find-create-dup-2", url: "https://github.com/org/find-create-dup" });
+    const second = await findOrCreateRepository(env.DB, "repo-test-user", {
+      name: "find-create-dup-2",
+      url: "https://github.com/org/find-create-dup",
+    });
     expect(second.id).toBe(first.id);
   });
 

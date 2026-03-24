@@ -11,20 +11,11 @@ export function FilterBar({ repositories, activeRepository, onRepositoryChange }
 
   return (
     <div className="flex gap-2 px-5 py-2.5 border-b border-border">
-      <Button
-        variant={activeRepository === null ? "secondary" : "outline"}
-        size="xs"
-        onClick={() => onRepositoryChange(null)}
-      >
+      <Button variant={activeRepository === null ? "secondary" : "outline"} size="xs" onClick={() => onRepositoryChange(null)}>
         All repos
       </Button>
       {repositories.map((r) => (
-        <Button
-          key={r.id}
-          variant={activeRepository === r.id ? "secondary" : "outline"}
-          size="xs"
-          onClick={() => onRepositoryChange(r.id)}
-        >
+        <Button key={r.id} variant={activeRepository === r.id ? "secondary" : "outline"} size="xs" onClick={() => onRepositoryChange(r.id)}>
           {r.name}
         </Button>
       ))}

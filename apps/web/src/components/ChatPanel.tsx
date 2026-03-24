@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { formatRelative } from "./TaskDetailFields";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { Badge } from "./ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface ChatPanelProps {
   taskId: string;
@@ -39,7 +39,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [allMessages.length]);
+  }, []);
 
   async function handleSend() {
     if (!input.trim() || !agentId) return;
@@ -53,7 +53,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
         content: input.trim(),
       });
       setInput("");
-    } catch (err: any) {
+    } catch (_err: any) {
       setSendError("Failed to send. Try again.");
     } finally {
       setSending(false);
@@ -70,9 +70,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
   if (!agentId) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-content-tertiary">
-          No agent assigned. Chat is available when an agent is working on this task.
-        </p>
+        <p className="text-sm text-content-tertiary">No agent assigned. Chat is available when an agent is working on this task.</p>
       </div>
     );
   }
@@ -86,13 +84,9 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
           {agentId}
         </Badge>
         <Tooltip>
-          <TooltipTrigger render={
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)}
-            />
-          }>
+          <TooltipTrigger
+            render={<Button variant="ghost" size="icon-xs" onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)} />}
+          >
             ⎘
           </TooltipTrigger>
           <TooltipContent>Copy resume command</TooltipContent>
@@ -100,10 +94,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       </div>
 
       {/* Messages — fills available space */}
-      <div
-        ref={containerRef}
-        className="flex-1 min-h-0 overflow-y-auto space-y-2"
-      >
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-y-auto space-y-2">
         {allMessages.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-content-tertiary">
@@ -112,26 +103,19 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
           </div>
         )}
         {allMessages.map((msg: any) => (
-          <div
-            key={msg.id}
-            className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
-              msg.sender_type === "agent" ? "border-accent" : "border-border"
-            }`}
-          >
-            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
-              {formatRelative(msg.created_at)}
-            </span>
+          <div key={msg.id} className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${msg.sender_type === "agent" ? "border-accent" : "border-border"}`}>
+            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(msg.created_at)}</span>
             <div className="flex-1 min-w-0">
-              <span className={`text-[11px] font-mono uppercase tracking-wider ${
-                msg.sender_type === "agent" ? "text-accent" : "text-content-tertiary"
-              }`}>
+              <span
+                className={`text-[11px] font-mono uppercase tracking-wider ${msg.sender_type === "agent" ? "text-accent" : "text-content-tertiary"}`}
+              >
                 {msg.sender_type}
               </span>
-              <p className={`text-[13px] mt-0.5 whitespace-pre-wrap break-words ${
-                msg.sender_type === "agent"
-                  ? "font-mono text-xs text-content-secondary"
-                  : "text-content-primary"
-              }`}>
+              <p
+                className={`text-[13px] mt-0.5 whitespace-pre-wrap break-words ${
+                  msg.sender_type === "agent" ? "font-mono text-xs text-content-secondary" : "text-content-primary"
+                }`}
+              >
                 {msg.content}
               </p>
             </div>
@@ -140,9 +124,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       </div>
 
       {/* Send error */}
-      {sendError && (
-        <p className="text-xs text-error shrink-0">{sendError}</p>
-      )}
+      {sendError && <p className="text-xs text-error shrink-0">{sendError}</p>}
 
       {/* Input — pinned at bottom, hidden when task is done */}
       {!taskDone && (
@@ -155,10 +137,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
             placeholder="Message the agent..."
             disabled={sending}
           />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || sending}
-          >
+          <Button onClick={handleSend} disabled={!input.trim() || sending}>
             {sending ? "..." : "Send"}
           </Button>
         </div>

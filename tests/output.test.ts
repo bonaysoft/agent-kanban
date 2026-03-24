@@ -1,14 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  formatTask,
-  formatTaskLogs,
   formatAgent,
-  formatTaskList,
   formatAgentList,
+  formatBoard,
   formatBoardList,
   formatRepositoryList,
-  formatBoard,
+  formatTask,
+  formatTaskList,
+  formatTaskLogs,
   getFormat,
   output,
 } from "../packages/cli/src/output";
@@ -162,9 +162,7 @@ describe("formatTaskLogs", () => {
   });
 
   it("includes the action for each log entry", () => {
-    const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
-    ];
+    const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
     const result = formatTaskLogs(logs);
     expect(result).toContain("created");
   });
@@ -178,17 +176,13 @@ describe("formatTaskLogs", () => {
   });
 
   it("includes actor_id when present", () => {
-    const logs = [
-      { id: "l1", task_id: "t1", actor_id: "agent-5", action: "claimed", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
-    ];
+    const logs = [{ id: "l1", task_id: "t1", actor_id: "agent-5", action: "claimed", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
     const result = formatTaskLogs(logs);
     expect(result).toContain("agent-5");
   });
 
   it("omits actor bracket when actor_id is absent", () => {
-    const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
-    ];
+    const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
     const result = formatTaskLogs(logs);
     expect(result).not.toContain("[null]");
     expect(result).not.toContain("[undefined]");
@@ -205,9 +199,7 @@ describe("formatTaskLogs", () => {
   });
 
   it("formats the created_at timestamp", () => {
-    const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-06-15T10:30:00.000Z" },
-    ];
+    const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-06-15T10:30:00.000Z" }];
     const result = formatTaskLogs(logs);
     // The timestamp should be a recognisable date string (locale-formatted)
     expect(result.trim().length).toBeGreaterThan(0);
@@ -458,9 +450,7 @@ describe("formatBoard", () => {
   it("renders task titles inside column cells", () => {
     const board = {
       name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [{ title: "Build feature" }] },
-      ],
+      columns: [{ name: "Todo", tasks: [{ title: "Build feature" }] }],
     };
     const result = formatBoard(board);
     expect(result).toContain("Build feature");
@@ -470,9 +460,7 @@ describe("formatBoard", () => {
     const longTitle = "A".repeat(40);
     const board = {
       name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [{ title: longTitle }] },
-      ],
+      columns: [{ name: "Todo", tasks: [{ title: longTitle }] }],
     };
     const result = formatBoard(board);
     expect(result).toContain("...");
@@ -528,7 +516,10 @@ describe("getFormat", () => {
 describe("output", () => {
   it("calls textFormatter in text mode when provided", () => {
     let called = false;
-    const formatter = (_data: any) => { called = true; return "formatted"; };
+    const formatter = (_data: any) => {
+      called = true;
+      return "formatted";
+    };
     // Redirect console.log to avoid test noise
     const original = console.log;
     console.log = () => {};
@@ -540,7 +531,9 @@ describe("output", () => {
   it("falls back to JSON.stringify in text mode when no formatter provided", () => {
     let logged = "";
     const original = console.log;
-    console.log = (v: string) => { logged = v; };
+    console.log = (v: string) => {
+      logged = v;
+    };
     output({ foo: "bar" }, "text");
     console.log = original;
     expect(logged).toContain('"foo"');
@@ -549,7 +542,9 @@ describe("output", () => {
   it("outputs pretty-printed JSON in json mode", () => {
     let logged = "";
     const original = console.log;
-    console.log = (v: string) => { logged = v; };
+    console.log = (v: string) => {
+      logged = v;
+    };
     output({ foo: "bar" }, "json");
     console.log = original;
     expect(JSON.parse(logged)).toEqual({ foo: "bar" });

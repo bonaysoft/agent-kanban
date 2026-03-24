@@ -15,7 +15,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
 
   if (!res.ok) {
     const err = new Error(data.error?.message || `HTTP ${res.status}`);
@@ -30,7 +30,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   tasks: {
     list: (params?: Record<string, string>) => {
-      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
       return request<any[]>("GET", `/tasks${qs}`);
     },
     get: (id: string) => request<any>("GET", `/tasks/${id}`),
@@ -61,8 +61,16 @@ export const api = {
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
-    create: (input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) =>
-      request<any>("POST", "/agents", input),
+    create: (input: {
+      name: string;
+      bio?: string;
+      soul?: string;
+      role?: string;
+      handoff_to?: string[];
+      runtime?: string;
+      model?: string;
+      skills?: string[];
+    }) => request<any>("POST", "/agents", input),
     update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/agents/${id}`),
     sessions: (agentId: string) => request<any[]>("GET", `/agents/${agentId}/sessions`),

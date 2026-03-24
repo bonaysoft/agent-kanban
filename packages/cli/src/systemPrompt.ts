@@ -1,6 +1,6 @@
-import { writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export interface AgentInfo {
   name: string;
@@ -12,8 +12,9 @@ export interface AgentInfo {
 
 export function generateSystemPrompt(agent: AgentInfo): string {
   const handoffRoles = agent.handoff_to ?? [];
-  const handoffSection = handoffRoles.length > 0
-    ? `
+  const handoffSection =
+    handoffRoles.length > 0
+      ? `
 ## Handoff
 
 If your work reveals NEW independent work (not review of your current task), you can create tasks for these roles: ${handoffRoles.join(", ")}
@@ -25,9 +26,9 @@ To hand off:
 
 Do NOT create handoff tasks for reviewing your PR — review is handled by the platform after you submit \`task review\`.
 `
-    : "";
+      : "";
 
-  return `# Agent Work Protocol
+  return `${`# Agent Work Protocol
 
 You are an autonomous agent on the Agent Kanban platform, working as part of a team.
 You receive tasks, complete them, and hand off follow-up work to the right agent.
@@ -61,7 +62,7 @@ Name: ${agent.name}
 Role: ${agent.role ?? "general"}
 
 ${agent.soul ?? ""}
-`.trim() + "\n";
+`.trim()}\n`;
 }
 
 export function writePromptFile(sessionId: string, content: string): string {
@@ -73,5 +74,7 @@ export function writePromptFile(sessionId: string, content: string): string {
 export function cleanupPromptFile(sessionId: string): void {
   try {
     unlinkSync(join(tmpdir(), `ak-prompt-${sessionId}.txt`));
-  } catch { /* already deleted */ }
+  } catch {
+    /* already deleted */
+  }
 }
