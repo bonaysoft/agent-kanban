@@ -30,8 +30,12 @@ You are a worker agent. Use the `ak` CLI to work on your assigned task.
 - JSON when piped (not a TTY), text in interactive terminals
 - Force with `--format json`
 
+## Rules
+
+- **If claim fails, stop immediately** — do not write any code or make any changes. Report the error and wait.
+
 ## Error Handling
 
 - **429 Rate limited**: wait and retry (Retry-After header provided)
-- **401 Unauthorized**: check AK_API_URL and AK_AGENT_KEY env vars
+- **401 Unauthorized**: your session token is invalid or expired — report to the daemon, do not attempt to fix
 - **409 Conflict**: task is not assigned to you, or wrong status for this action
