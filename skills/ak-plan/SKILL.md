@@ -48,7 +48,7 @@ gh repo create <owner>/<name> --public --description "<one-liner>" --clone
 cd <repo-dir>
 
 # Initialize project — use framework CLIs, install ALL dependencies upfront
-# Default stack: Hono + Cloudflare Workers + D1 (unless user specifies otherwise)
+# Ask user for tech stack if not specified
 
 # Create config files, entry point, DB schema, .gitignore
 # Commit and push
@@ -71,7 +71,7 @@ ak repo list                   # registered repos
 git remote -v                  # repo URL (use this, never guess)
 ```
 
-Read CLAUDE.md, DESIGN.md, and recent git history to understand:
+Read CLAUDE.md and recent git history to understand:
 - What was shipped recently
 - What patterns/conventions exist
 - What the project architecture looks like
@@ -129,8 +129,7 @@ POST /api/items — create item
   Response: 201 { "id": 1, "name": "..." }
 
 ## Patterns
-- Export Hono sub-app, mount via app.route() in index.ts
-- Use D1 prepared statements
+- Follow existing project conventions (read CLAUDE.md)
 ```
 
 Vague descriptions produce vague code. Be specific.
