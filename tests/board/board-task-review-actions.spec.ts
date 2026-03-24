@@ -13,10 +13,11 @@ test.describe('Board Page', () => {
 
       // Create task
       const createRes = await fetch('/api/tasks', {
-        method: 'POST', headers,
+        method: 'POST',
+        headers,
         body: JSON.stringify({ title }),
       });
-      const task = await createRes.json() as { id: string };
+      const task = (await createRes.json()) as { id: string };
 
       // Move to in_progress then in_review via direct DB manipulation isn't possible,
       // so use PATCH to set status indirectly — actually we need lifecycle endpoints.

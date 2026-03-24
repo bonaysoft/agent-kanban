@@ -30,9 +30,14 @@ export function agentIdenticon(publicKey: string): boolean[][] {
 // Hue 160-220 (cyan-blue), vary saturation 60-85% and lightness for distinction
 // Dark mode: lightness 58-72% for readability on dark backgrounds
 // Light mode: lightness 38-48% for contrast on light backgrounds
-function agentHsl(publicKey: string): { hue: number; sat: number; lightDark: number; lightLight: number } {
+function agentHsl(publicKey: string): {
+  hue: number;
+  sat: number;
+  lightDark: number;
+  lightLight: number;
+} {
   const bytes = hashBytes(publicKey);
-  const hue = 160 + ((bytes[0] << 8 | bytes[1]) % 61);
+  const hue = 160 + (((bytes[0] << 8) | bytes[1]) % 61);
   const sat = 60 + (bytes[2] % 26);
   const lightDark = 58 + (bytes[3] % 15);
   const lightLight = 38 + (bytes[3] % 11);
@@ -50,7 +55,8 @@ export function agentColorLight(publicKey: string): string {
 }
 
 function hslToRgb(h: number, s: number, l: number): string {
-  s /= 100; l /= 100;
+  s /= 100;
+  l /= 100;
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) => {
     const k = (n + h / 30) % 12;
@@ -65,8 +71,5 @@ export function agentColorRgb(publicKey: string): string {
 }
 
 export function agentFingerprint(fingerprint: string): string {
-  return fingerprint
-    .slice(0, 8)
-    .match(/.{2}/g)!
-    .join(":");
+  return fingerprint.slice(0, 8).match(/.{2}/g)!.join(':');
 }

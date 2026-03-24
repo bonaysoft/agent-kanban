@@ -21,10 +21,12 @@ test.describe('Authentication', () => {
 
     // The button should show '...' while the request is in flight
     // and then return to 'Sign In' or show an error once resolved
-    await expect(submitButton).toHaveText('...').catch(async () => {
-      // If we missed the loading state (too fast), the button should be back to 'Sign In'
-      await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
-    });
+    await expect(submitButton)
+      .toHaveText('...')
+      .catch(async () => {
+        // If we missed the loading state (too fast), the button should be back to 'Sign In'
+        await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+      });
 
     // expect: The button re-enables once the response arrives
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeEnabled({ timeout: 10000 });

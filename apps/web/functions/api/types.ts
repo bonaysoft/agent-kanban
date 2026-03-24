@@ -1,4 +1,4 @@
-import type { Session, User } from "better-auth";
+import type { Session, User } from 'better-auth';
 
 export interface Env {
   DB: D1Database;
@@ -8,10 +8,10 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
 }
 
-declare module "hono" {
+declare module 'hono' {
   interface ContextVariableMap {
     ownerId: string;
-    identityType: "user" | "machine" | "agent";
+    identityType: 'user' | 'machine' | 'agent';
     apiKeyId?: string;
     machineId?: string;
     agentId?: string;

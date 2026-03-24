@@ -1,28 +1,28 @@
-import { defineConfig } from "vitest/config";
-import path from "path";
+import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@agent-kanban/shared": path.resolve(__dirname, "packages/shared/src"),
+      '@agent-kanban/shared': path.resolve(__dirname, 'packages/shared/src'),
     },
   },
   test: {
     globals: true,
-    environment: "jsdom",
-    include: ["**/*.test.{ts,tsx}"],
+    environment: 'jsdom',
+    include: ['**/*.test.{ts,tsx}'],
     coverage: {
-      provider: "v8",
+      provider: 'v8',
       include: [
-        "apps/web/functions/**/*.ts",
-        "packages/shared/src/**/*.ts",
-        "packages/cli/src/**/*.ts",
+        'apps/web/functions/**/*.ts',
+        'packages/shared/src/**/*.ts',
+        'packages/cli/src/**/*.ts',
       ],
-      exclude: ["**/*.d.ts", "**/types.ts"],
+      exclude: ['**/*.d.ts', '**/types.ts'],
     },
     server: {
       deps: {
-        inline: ["jose", "miniflare"],
+        inline: ['jose', 'miniflare'],
       },
     },
   },

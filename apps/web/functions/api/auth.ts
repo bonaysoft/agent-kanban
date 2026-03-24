@@ -1,8 +1,8 @@
-import type { Context, Next } from "hono";
-import type { Env } from "./types";
-import { createAuth } from "./betterAuth";
+import type { Context, Next } from 'hono';
+import type { Env } from './types';
+import { createAuth } from './betterAuth';
 
-type IdentityType = "user" | "machine" | "agent";
+type IdentityType = 'user' | 'machine' | 'agent';
 
 interface RouteRule {
   allow: IdentityType[];
@@ -13,28 +13,60 @@ interface RouteRule {
 // Routes not listed here are open to any authenticated identity.
 const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Machines — machine-only
-  { method: "POST", pattern: /^\/api\/machines$/, rule: { allow: ["machine"] } },
-  { method: "POST", pattern: /^\/api\/machines\/[^/]+\/heartbeat$/, rule: { allow: ["machine"] } },
-  { method: "DELETE", pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ["user"] } },
+  { method: 'POST', pattern: /^\/api\/machines$/, rule: { allow: ['machine'] } },
+  { method: 'POST', pattern: /^\/api\/machines\/[^/]+\/heartbeat$/, rule: { allow: ['machine'] } },
+  { method: 'DELETE', pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ['user'] } },
 
   // Agents — user manages persistent agents
-  { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user", "machine"] } },
-  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
-  { method: "DELETE", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
+  { method: 'POST', pattern: /^\/api\/agents$/, rule: { allow: ['user', 'machine'] } },
+  { method: 'PATCH', pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ['user'] } },
+  { method: 'DELETE', pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ['user'] } },
 
   // Agent Sessions — machine creates/closes, agent reports usage
-  { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions$/, rule: { allow: ["machine"] } },
-  { method: "DELETE", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+$/, rule: { allow: ["machine"] } },
-  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/, rule: { allow: ["agent"], capability: "agent:usage" } },
+  { method: 'POST', pattern: /^\/api\/agents\/[^/]+\/sessions$/, rule: { allow: ['machine'] } },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+$/,
+    rule: { allow: ['machine'] },
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/,
+    rule: { allow: ['agent'], capability: 'agent:usage' },
+  },
 
   // Task lifecycle
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent"], capability: "task:claim" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent"], capability: "task:review" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/complete$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/cancel$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/reject$/, rule: { allow: ["user", "machine"] } },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/claim$/,
+    rule: { allow: ['agent'], capability: 'task:claim' },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/review$/,
+    rule: { allow: ['agent'], capability: 'task:review' },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/assign$/,
+    rule: { allow: ['user', 'machine'] },
+  },
+  { method: 'POST', pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ['machine'] } },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/complete$/,
+    rule: { allow: ['user', 'machine'] },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/cancel$/,
+    rule: { allow: ['user', 'machine'] },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tasks\/[^/]+\/reject$/,
+    rule: { allow: ['user', 'machine'] },
+  },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {
@@ -44,58 +76,60 @@ function matchRouteRule(method: string, path: string): RouteRule | null {
   return null;
 }
 
-function detectTokenType(token: string): "apikey" | "agent" | "user" {
-  if (token.startsWith("ak_")) return "apikey";
-  const parts = token.split(".");
+function detectTokenType(token: string): 'apikey' | 'agent' | 'user' {
+  if (token.startsWith('ak_')) return 'apikey';
+  const parts = token.split('.');
   if (parts.length === 3) {
     try {
       const header = JSON.parse(atob(parts[0]));
-      if (header.typ === "agent+jwt") return "agent";
-    } catch { /* not a valid JWT header */ }
+      if (header.typ === 'agent+jwt') return 'agent';
+    } catch {
+      /* not a valid JWT header */
+    }
   }
-  return "user";
+  return 'user';
 }
 
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
-  const header = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : queryToken;
+  const header = c.req.header('Authorization');
+  const queryToken = c.req.query('token');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : queryToken;
   if (!token) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Missing token" } }, 401);
+    return c.json({ error: { code: 'UNAUTHORIZED', message: 'Missing token' } }, 401);
   }
 
   const auth = createAuth(c.env);
   const type = detectTokenType(token);
 
-  if (type === "apikey") {
+  if (type === 'apikey') {
     return handleApiKey(c, auth, token, next);
   }
 
-  if (type === "agent") {
-    const sessionReq = new Request(new URL("/api/auth/agent/session", c.req.url), {
+  if (type === 'agent') {
+    const sessionReq = new Request(new URL('/api/auth/agent/session', c.req.url), {
       headers: c.req.raw.headers,
     });
     const sessionRes = await auth.handler(sessionReq);
     if (!sessionRes.ok) {
-      return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid agent session" } }, 401);
+      return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid agent session' } }, 401);
     }
     const agentIdentity = await sessionRes.json();
     // Extract persistent agent ID from JWT `aid` claim
-    const aid = decodeJwtClaim(token, "aid");
+    const aid = decodeJwtClaim(token, 'aid');
     return handleAgentIdentity(c, agentIdentity, aid, next);
   }
 
   const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
   const session = await auth.api.getSession({ headers: authHeaders });
   if (session) {
-    c.set("ownerId", session.user.id);
-    c.set("identityType", "user");
-    c.set("user", session.user);
-    c.set("session", session.session);
+    c.set('ownerId', session.user.id);
+    c.set('identityType', 'user');
+    c.set('user', session.user);
+    c.set('session', session.session);
     return enforceRouteRule(c, next);
   }
 
-  return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
+  return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } }, 401);
 }
 
 async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: string, next: Next) {
@@ -103,70 +137,98 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   try {
     result = await auth.api.verifyApiKey({ body: { key: token } });
   } catch (err: any) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: err?.message || "Invalid API key" } }, 401);
+    return c.json(
+      { error: { code: 'UNAUTHORIZED', message: err?.message || 'Invalid API key' } },
+      401,
+    );
   }
   if (!result?.valid) {
-    if (result?.error?.code === "RATE_LIMITED") {
-      const retryAfter = result.error.details?.tryAgainIn ? Math.ceil(result.error.details.tryAgainIn / 1000) : 60;
+    if (result?.error?.code === 'RATE_LIMITED') {
+      const retryAfter = result.error.details?.tryAgainIn
+        ? Math.ceil(result.error.details.tryAgainIn / 1000)
+        : 60;
       console.log(`[rate-limit] retry_after=${retryAfter}s path=${c.req.path}`);
       return c.json(
-        { error: { code: "RATE_LIMITED", message: `Rate limit exceeded. Retry after ${retryAfter}s` } },
-        { status: 429, headers: { "Retry-After": String(retryAfter) } },
+        {
+          error: {
+            code: 'RATE_LIMITED',
+            message: `Rate limit exceeded. Retry after ${retryAfter}s`,
+          },
+        },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
       );
     }
-    return c.json({ error: result?.error || { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
+    return c.json(
+      { error: result?.error || { code: 'UNAUTHORIZED', message: 'Invalid API key' } },
+      401,
+    );
   }
 
-  c.set("ownerId", result.key.referenceId);
-  c.set("identityType", "machine");
-  c.set("apiKeyId", result.key.id);
+  c.set('ownerId', result.key.referenceId);
+  c.set('identityType', 'machine');
+  c.set('apiKeyId', result.key.id);
   const metadata = result.key.metadata as Record<string, any> | null;
-  if (metadata?.machineId) c.set("machineId", metadata.machineId);
+  if (metadata?.machineId) c.set('machineId', metadata.machineId);
 
   const key = result.key;
   if (key?.rateLimitMax != null) {
-    c.header("X-RateLimit-Limit", String(key.rateLimitMax));
-    c.header("X-RateLimit-Remaining", String(Math.max(0, key.rateLimitMax - (key.requestCount || 0))));
+    c.header('X-RateLimit-Limit', String(key.rateLimitMax));
+    c.header(
+      'X-RateLimit-Remaining',
+      String(Math.max(0, key.rateLimitMax - (key.requestCount || 0))),
+    );
   }
   return enforceRouteRule(c, next);
 }
 
-function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, persistentAgentId: string | null, next: Next) {
-  c.set("ownerId", identity.host?.userId || identity.user?.id);
-  c.set("identityType", "agent");
-  c.set("sessionId", identity.agent.id);
-  c.set("agentId", persistentAgentId || identity.agent.id);
-  c.set("machineId", identity.agent.hostId);
+function handleAgentIdentity(
+  c: Context<{ Bindings: Env }>,
+  identity: any,
+  persistentAgentId: string | null,
+  next: Next,
+) {
+  c.set('ownerId', identity.host?.userId || identity.user?.id);
+  c.set('identityType', 'agent');
+  c.set('sessionId', identity.agent.id);
+  c.set('agentId', persistentAgentId || identity.agent.id);
+  c.set('machineId', identity.agent.hostId);
   const caps = (identity.agent.capabilityGrants || []).map((g: any) => g.capability as string);
-  c.set("agentCapabilities", caps);
+  c.set('agentCapabilities', caps);
   return enforceRouteRule(c, next);
 }
 
 function decodeJwtClaim(token: string, claim: string): string | null {
-  const parts = token.split(".");
+  const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
     return payload[claim] || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {
   const rule = matchRouteRule(c.req.method, c.req.path);
   if (!rule) return next(); // no rule = open to any authenticated identity
 
-  const identity = c.get("identityType") as IdentityType;
+  const identity = c.get('identityType') as IdentityType;
   if (!rule.allow.includes(identity)) {
-    return c.json({ error: { code: "FORBIDDEN", message: `${rule.allow.join(" or ")} required` } }, 403);
+    return c.json(
+      { error: { code: 'FORBIDDEN', message: `${rule.allow.join(' or ')} required` } },
+      403,
+    );
   }
 
-  if (rule.capability && identity === "agent") {
-    const caps: string[] = c.get("agentCapabilities") || [];
+  if (rule.capability && identity === 'agent') {
+    const caps: string[] = c.get('agentCapabilities') || [];
     if (!caps.includes(rule.capability)) {
-      return c.json({ error: { code: "FORBIDDEN", message: `Missing capability: ${rule.capability}` } }, 403);
+      return c.json(
+        { error: { code: 'FORBIDDEN', message: `Missing capability: ${rule.capability}` } },
+        403,
+      );
     }
   }
 
   return next();
 }
-

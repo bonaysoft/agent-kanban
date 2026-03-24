@@ -3,12 +3,14 @@
 Agent-first kanban board. React SPA + Hono API on Cloudflare Pages + D1.
 
 ## Design System
+
 Always read DESIGN.md before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
 Do not deviate without explicit user approval.
 In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Architecture
+
 - Monorepo: pnpm workspaces
 - Frontend: apps/web/ — React + Vite + Tailwind + shadcn/ui
 - Backend: apps/web/functions/[[path]].ts — Hono catch-all on Cloudflare Pages Functions
@@ -18,6 +20,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Agent skill: skills/agent-kanban/ — installed via `npx skills add` to target repos
 
 ## UI Principles
+
 - **Read-only board** — the web UI is for observation and review, not task management
 - **No task creation UI** — tasks are created exclusively by agents via CLI/API
 - **No status transition buttons** — no claim/cancel/release/assign in the UI
@@ -26,6 +29,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Board switcher and task detail (logs, PR, chat) are the only navigation interactions
 
 ## Patterns
+
 - Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, messageRepo.ts) — no raw SQL in route handlers
 - Error handling: Hono onError + HTTPException — centralized error envelope { error: { code, message } }
 - Claim atomicity: db.batch() for race-condition-free task claims
@@ -43,6 +47,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Data model: Board is the workspace unit. Repositories belong to owner (tenant-level, like machines). Tasks belong to boards, optionally linked to a repository. Machines belong to owner (user/org).
 
 ## Post-Write Workflow
+
 After every significant code change, follow this sequence:
 
 1. **Test** — invoke test-writer agent to write/update unit/integration tests and run them.
@@ -57,12 +62,13 @@ After every significant code change, follow this sequence:
    - REVISE on test code → forward issues to the appropriate test agent to fix.
    - PASS → proceed to step 3.
 
-**Ownership rule**: you (main agent) only modify source code. Test code is owned by test agents — all test modifications go through them.
-3. **Regression** — run build + type check + full test suite to catch breakage.
-   - `pnpm build && pnpm tsc --noEmit && npx vitest run`
-   - Any failure → fix and re-run. If fix touches source code, go back to step 1.
+**Ownership rule**: you (main agent) only modify source code. Test code is owned by test agents — all test modifications go through them. 3. **Regression** — run build + type check + full test suite to catch breakage.
+
+- `pnpm build && pnpm tsc --noEmit && npx vitest run`
+- Any failure → fix and re-run. If fix touches source code, go back to step 1.
 
 ## Testing
+
 - Framework: vitest (root `vitest.config.ts`)
 - Run: `npx vitest run`
 - Run with coverage: `npx vitest run --coverage --coverage.include='<glob>'`

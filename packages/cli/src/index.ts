@@ -1,15 +1,26 @@
-import { readFileSync } from "fs";
-import { join } from "path";
-import { Command } from "commander";
-import { setConfigValue, getConfigValue } from "./config.js";
-import { type ApiClient, MachineClient, createClient } from "./client.js";
-import { getFormat, output, formatTaskList, formatTask, formatTaskLogs, formatBoard, formatAgent, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
-import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
-import { registerStartCommand } from "./commands/start.js";
-import { fetchTemplate } from "@agent-kanban/shared";
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { Command } from 'commander';
+import { setConfigValue, getConfigValue } from './config.js';
+import { type ApiClient, MachineClient, createClient } from './client.js';
+import {
+  getFormat,
+  output,
+  formatTaskList,
+  formatTask,
+  formatTaskLogs,
+  formatBoard,
+  formatAgent,
+  formatAgentList,
+  formatBoardList,
+  formatRepositoryList,
+} from './output.js';
+import { registerLinkCommand, registerUnlinkCommand } from './commands/link.js';
+import { registerStartCommand } from './commands/start.js';
+import { fetchTemplate } from '@agent-kanban/shared';
 
 function isUrl(value: string): boolean {
-  return value.includes("://") || value.startsWith("git@");
+  return value.includes('://') || value.startsWith('git@');
 }
 
 async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string> {
@@ -22,26 +33,26 @@ async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string
   return repos[0].id;
 }
 
-const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
+const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf-8'));
 
 const program = new Command();
-program.name("agent-kanban").description("Agent-first kanban board").version(pkg.version);
+program.name('agent-kanban').description('Agent-first kanban board').version(pkg.version);
 
 // ─── Config ───
 
-const configCmd = program.command("config").description("Manage CLI configuration");
+const configCmd = program.command('config').description('Manage CLI configuration');
 
 configCmd
-  .command("set <key> <value>")
-  .description("Set a config value (api-url, api-key)")
+  .command('set <key> <value>')
+  .description('Set a config value (api-url, api-key)')
   .action((key, value) => {
     setConfigValue(key, value);
     console.log(`Set ${key}`);
   });
 
 configCmd
-  .command("get <key>")
-  .description("Get a config value")
+  .command('get <key>')
+  .description('Get a config value')
   .action((key) => {
     const value = getConfigValue(key);
     if (value) console.log(value);
@@ -53,22 +64,22 @@ configCmd
 
 // ─── Task ───
 
-const taskCmd = program.command("task").description("Manage tasks");
+const taskCmd = program.command('task').description('Manage tasks');
 
 taskCmd
-  .command("create")
-  .description("Create a new task")
-  .requiredOption("--title <title>", "Task title")
-  .option("--description <desc>", "Task description")
-  .option("--repo <repo>", "Repository ID or URL")
-  .option("--priority <priority>", "Priority (low, medium, high, urgent)")
-  .option("--labels <labels>", "Comma-separated labels")
-  .option("--input <json>", "JSON input payload")
-  .option("--assign-to <id>", "Agent ID to assign the task to")
-  .option("--parent <id>", "Parent task ID (creates subtask)")
-  .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
-  .option("--board <id>", "Board ID to create the task in")
-  .option("--format <format>", "Output format (json, text)")
+  .command('create')
+  .description('Create a new task')
+  .requiredOption('--title <title>', 'Task title')
+  .option('--description <desc>', 'Task description')
+  .option('--repo <repo>', 'Repository ID or URL')
+  .option('--priority <priority>', 'Priority (low, medium, high, urgent)')
+  .option('--labels <labels>', 'Comma-separated labels')
+  .option('--input <json>', 'JSON input payload')
+  .option('--assign-to <id>', 'Agent ID to assign the task to')
+  .option('--parent <id>', 'Parent task ID (creates subtask)')
+  .option('--depends-on <ids>', 'Comma-separated task IDs this depends on')
+  .option('--board <id>', 'Board ID to create the task in')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
 
@@ -79,13 +90,17 @@ taskCmd
       body.repository_id = await resolveRepoId(client, opts.repo);
     }
     if (opts.priority) body.priority = opts.priority;
-    if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
+    if (opts.labels) body.labels = opts.labels.split(',').map((l: string) => l.trim());
     if (opts.assignTo) body.assigned_to = opts.assignTo;
     if (opts.parent) body.created_from = opts.parent;
-    if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
+    if (opts.dependsOn) body.depends_on = opts.dependsOn.split(',').map((id: string) => id.trim());
     if (opts.input) {
-      try { body.input = JSON.parse(opts.input); }
-      catch { console.error("Invalid JSON for --input"); process.exit(1); }
+      try {
+        body.input = JSON.parse(opts.input);
+      } catch {
+        console.error('Invalid JSON for --input');
+        process.exit(1);
+      }
     }
 
     const task = await client.createTask(body);
@@ -94,13 +109,13 @@ taskCmd
   });
 
 taskCmd
-  .command("list")
-  .description("List tasks")
-  .option("--repo <repo>", "Filter by repository ID")
-  .option("--status <status>", "Filter by status (column name)")
-  .option("--label <label>", "Filter by label")
-  .option("--parent <id>", "Filter subtasks of a parent task")
-  .option("--format <format>", "Output format (json, text)")
+  .command('list')
+  .description('List tasks')
+  .option('--repo <repo>', 'Filter by repository ID')
+  .option('--status <status>', 'Filter by status (column name)')
+  .option('--label <label>', 'Filter by label')
+  .option('--parent <id>', 'Filter subtasks of a parent task')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const params: Record<string, string> = {};
@@ -115,9 +130,9 @@ taskCmd
   });
 
 taskCmd
-  .command("claim <id>")
-  .description("Claim an assigned task — start working on it")
-  .option("--format <format>", "Output format (json, text)")
+  .command('claim <id>')
+  .description('Claim an assigned task — start working on it')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.claimTask(id);
@@ -126,18 +141,18 @@ taskCmd
   });
 
 taskCmd
-  .command("log <id> <message>")
-  .description("Add a log entry to a task")
+  .command('log <id> <message>')
+  .description('Add a log entry to a task')
   .action(async (id, message) => {
     const client = await createClient();
     await client.addLog(id, message);
-    console.log("Log entry added.");
+    console.log('Log entry added.');
   });
 
 taskCmd
-  .command("cancel <id>")
-  .description("Cancel a task")
-  .option("--format <format>", "Output format (json, text)")
+  .command('cancel <id>')
+  .description('Cancel a task')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.cancelTask(id);
@@ -146,10 +161,10 @@ taskCmd
   });
 
 taskCmd
-  .command("review <id>")
-  .description("Move a task to In Review")
-  .option("--pr-url <url>", "Pull request URL")
-  .option("--format <format>", "Output format (json, text)")
+  .command('review <id>')
+  .description('Move a task to In Review')
+  .option('--pr-url <url>', 'Pull request URL')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
@@ -160,11 +175,11 @@ taskCmd
   });
 
 taskCmd
-  .command("complete <id>")
-  .description("Complete a task")
-  .option("--result <result>", "Completion result summary")
-  .option("--pr-url <url>", "PR URL")
-  .option("--format <format>", "Output format (json, text)")
+  .command('complete <id>')
+  .description('Complete a task')
+  .option('--result <result>', 'Completion result summary')
+  .option('--pr-url <url>', 'PR URL')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
@@ -176,9 +191,9 @@ taskCmd
   });
 
 taskCmd
-  .command("view <id>")
-  .description("View task details")
-  .option("--format <format>", "Output format (json, text)")
+  .command('view <id>')
+  .description('View task details')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.getTask(id);
@@ -187,31 +202,35 @@ taskCmd
   });
 
 taskCmd
-  .command("update <id>")
-  .description("Update a task")
-  .option("--title <title>", "New title")
-  .option("--description <desc>", "New description")
-  .option("--priority <priority>", "New priority (low, medium, high, urgent)")
-  .option("--labels <labels>", "Comma-separated labels")
-  .option("--input <json>", "JSON input payload")
-  .option("--depends-on <ids>", "Comma-separated task IDs this depends on")
-  .option("--repo <repo>", "Repository ID or URL")
-  .option("--format <format>", "Output format (json, text)")
+  .command('update <id>')
+  .description('Update a task')
+  .option('--title <title>', 'New title')
+  .option('--description <desc>', 'New description')
+  .option('--priority <priority>', 'New priority (low, medium, high, urgent)')
+  .option('--labels <labels>', 'Comma-separated labels')
+  .option('--input <json>', 'JSON input payload')
+  .option('--depends-on <ids>', 'Comma-separated task IDs this depends on')
+  .option('--repo <repo>', 'Repository ID or URL')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.title) body.title = opts.title;
     if (opts.description) body.description = opts.description;
     if (opts.priority) body.priority = opts.priority;
-    if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
-    if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
+    if (opts.labels) body.labels = opts.labels.split(',').map((l: string) => l.trim());
+    if (opts.dependsOn) body.depends_on = opts.dependsOn.split(',').map((id: string) => id.trim());
     if (opts.repo) body.repository_id = await resolveRepoId(client, opts.repo);
     if (opts.input) {
-      try { body.input = JSON.parse(opts.input); }
-      catch { console.error("Invalid JSON for --input"); process.exit(1); }
+      try {
+        body.input = JSON.parse(opts.input);
+      } catch {
+        console.error('Invalid JSON for --input');
+        process.exit(1);
+      }
     }
     if (Object.keys(body).length === 0) {
-      console.error("Nothing to update. Provide at least one option.");
+      console.error('Nothing to update. Provide at least one option.');
       process.exit(1);
     }
     const task = await client.updateTask(id, body);
@@ -220,9 +239,9 @@ taskCmd
   });
 
 taskCmd
-  .command("delete <id>")
-  .description("Delete a task (only todo+unassigned or cancelled)")
-  .option("--format <format>", "Output format (json, text)")
+  .command('delete <id>')
+  .description('Delete a task (only todo+unassigned or cancelled)')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     await client.deleteTask(id);
@@ -231,10 +250,10 @@ taskCmd
   });
 
 taskCmd
-  .command("assign <id>")
-  .description("Assign a task to an agent")
-  .requiredOption("--agent <agent-id>", "Agent ID to assign to")
-  .option("--format <format>", "Output format (json, text)")
+  .command('assign <id>')
+  .description('Assign a task to an agent')
+  .requiredOption('--agent <agent-id>', 'Agent ID to assign to')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.assignTask(id, opts.agent);
@@ -243,10 +262,10 @@ taskCmd
   });
 
 taskCmd
-  .command("reject <id>")
-  .description("Reject a task from review back to in-progress")
-  .option("--reason <reason>", "Reason for rejection (logged)")
-  .option("--format <format>", "Output format (json, text)")
+  .command('reject <id>')
+  .description('Reject a task from review back to in-progress')
+  .option('--reason <reason>', 'Reason for rejection (logged)')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
@@ -257,9 +276,9 @@ taskCmd
   });
 
 taskCmd
-  .command("release <id>")
-  .description("Release a task back to todo (unassign)")
-  .option("--format <format>", "Output format (json, text)")
+  .command('release <id>')
+  .description('Release a task back to todo (unassign)')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.releaseTask(id);
@@ -268,10 +287,10 @@ taskCmd
   });
 
 taskCmd
-  .command("logs <id>")
-  .description("View task logs")
-  .option("--since <timestamp>", "Only show logs after this timestamp")
-  .option("--format <format>", "Output format (json, text)")
+  .command('logs <id>')
+  .description('View task logs')
+  .option('--since <timestamp>', 'Only show logs after this timestamp')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const logs = await client.getTaskLogs(id, opts.since);
@@ -281,12 +300,12 @@ taskCmd
 
 // ─── Agent ───
 
-const agentCmd = program.command("agent").description("Manage agents");
+const agentCmd = program.command('agent').description('Manage agents');
 
 agentCmd
-  .command("list")
-  .description("List all agents")
-  .option("--format <format>", "Output format (json, text)")
+  .command('list')
+  .description('List all agents')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const agents = await client.listAgents();
@@ -295,15 +314,15 @@ agentCmd
   });
 
 agentCmd
-  .command("create")
-  .description("Create a new agent (from template or manual)")
-  .option("--template <slug>", "Agent template slug (e.g. fullstack-developer, feature-planner)")
-  .option("--name <name>", "Agent name")
-  .option("--bio <bio>", "Agent bio")
-  .option("--role <role>", "Agent role")
-  .option("--runtime <runtime>", "Agent runtime (e.g. claude-code)")
-  .option("--model <model>", "Model to use")
-  .option("--format <format>", "Output format (json, text)")
+  .command('create')
+  .description('Create a new agent (from template or manual)')
+  .option('--template <slug>', 'Agent template slug (e.g. fullstack-developer, feature-planner)')
+  .option('--name <name>', 'Agent name')
+  .option('--bio <bio>', 'Agent bio')
+  .option('--role <role>', 'Agent role')
+  .option('--runtime <runtime>', 'Agent runtime (e.g. claude-code)')
+  .option('--model <model>', 'Model to use')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
 
@@ -323,7 +342,7 @@ agentCmd
       };
     } else {
       if (!opts.name) {
-        console.error("Either --template or --name is required");
+        console.error('Either --template or --name is required');
         process.exit(1);
       }
       body = { name: opts.name };
@@ -335,13 +354,13 @@ agentCmd
 
     const agent = await client.createAgent(body as any);
     const fmt = getFormat(opts.format);
-    output(agent, fmt, (a) => `Created agent ${a.id}: ${a.name} (${a.role || "no role"})`);
+    output(agent, fmt, (a) => `Created agent ${a.id}: ${a.name} (${a.role || 'no role'})`);
   });
 
 agentCmd
-  .command("view <id>")
-  .description("View agent details")
-  .option("--format <format>", "Output format (json, text)")
+  .command('view <id>')
+  .description('View agent details')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     const agent = await client.getAgent(id);
@@ -350,9 +369,9 @@ agentCmd
   });
 
 agentCmd
-  .command("delete <id>")
-  .description("Delete an agent")
-  .option("--format <format>", "Output format (json, text)")
+  .command('delete <id>')
+  .description('Delete an agent')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     await client.deleteAgent(id);
@@ -362,14 +381,14 @@ agentCmd
 
 // ─── Board ───
 
-const boardCmd = program.command("board").description("Manage boards");
+const boardCmd = program.command('board').description('Manage boards');
 
 boardCmd
-  .command("create")
-  .description("Create a new board")
-  .requiredOption("--name <name>", "Board name")
-  .option("--description <desc>", "Board description")
-  .option("--format <format>", "Output format (json, text)")
+  .command('create')
+  .description('Create a new board')
+  .requiredOption('--name <name>', 'Board name')
+  .option('--description <desc>', 'Board description')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const board = await client.createBoard({ name: opts.name, description: opts.description });
@@ -378,9 +397,9 @@ boardCmd
   });
 
 boardCmd
-  .command("list")
-  .description("List all boards")
-  .option("--format <format>", "Output format (json, text)")
+  .command('list')
+  .description('List all boards')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const boards = await client.listBoards();
@@ -389,10 +408,10 @@ boardCmd
   });
 
 boardCmd
-  .command("view")
-  .description("View a kanban board")
-  .option("--board <name-or-id>", "Board name or ID (uses first if omitted)")
-  .option("--format <format>", "Output format (json, text)")
+  .command('view')
+  .description('View a kanban board')
+  .option('--board <name-or-id>', 'Board name or ID (uses first if omitted)')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     let boardId: string;
@@ -414,12 +433,12 @@ boardCmd
   });
 
 boardCmd
-  .command("update")
-  .description("Update a board")
-  .requiredOption("--board <name-or-id>", "Board name or ID")
-  .option("--name <name>", "New board name")
-  .option("--description <desc>", "New board description")
-  .option("--format <format>", "Output format (json, text)")
+  .command('update')
+  .description('Update a board')
+  .requiredOption('--board <name-or-id>', 'Board name or ID')
+  .option('--name <name>', 'New board name')
+  .option('--description <desc>', 'New board description')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const boardId = await resolveBoardId(client, opts.board);
@@ -427,7 +446,7 @@ boardCmd
     if (opts.name) body.name = opts.name;
     if (opts.description) body.description = opts.description;
     if (Object.keys(body).length === 0) {
-      console.error("Nothing to update. Provide --name or --description.");
+      console.error('Nothing to update. Provide --name or --description.');
       process.exit(1);
     }
     const board = await client.updateBoard(boardId, body);
@@ -436,10 +455,10 @@ boardCmd
   });
 
 boardCmd
-  .command("delete")
-  .description("Delete a board")
-  .requiredOption("--board <name-or-id>", "Board name or ID")
-  .option("--format <format>", "Output format (json, text)")
+  .command('delete')
+  .description('Delete a board')
+  .requiredOption('--board <name-or-id>', 'Board name or ID')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const boardId = await resolveBoardId(client, opts.board);
@@ -450,9 +469,11 @@ boardCmd
 
 async function resolveBoardId(client: ApiClient, nameOrId: string): Promise<string> {
   try {
-    const board = await client.getBoard(nameOrId) as any;
+    const board = (await client.getBoard(nameOrId)) as any;
     if (board?.id) return board.id;
-  } catch { /* not a valid ID, try name lookup */ }
+  } catch {
+    /* not a valid ID, try name lookup */
+  }
   const boards = await client.listBoards();
   const match = boards.find((b: any) => b.name === nameOrId);
   if (!match) {
@@ -464,14 +485,14 @@ async function resolveBoardId(client: ApiClient, nameOrId: string): Promise<stri
 
 // ─── Repo ───
 
-const repoCmd = program.command("repo").description("Manage repositories");
+const repoCmd = program.command('repo').description('Manage repositories');
 
 repoCmd
-  .command("add")
-  .description("Add a repository")
-  .requiredOption("--name <name>", "Repository name")
-  .requiredOption("--url <url>", "Clone URL")
-  .option("--format <format>", "Output format (json, text)")
+  .command('add')
+  .description('Add a repository')
+  .requiredOption('--name <name>', 'Repository name')
+  .requiredOption('--url <url>', 'Clone URL')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const repo = await client.createRepository({ name: opts.name, url: opts.url });
@@ -480,9 +501,9 @@ repoCmd
   });
 
 repoCmd
-  .command("list")
-  .description("List repositories")
-  .option("--format <format>", "Output format (json, text)")
+  .command('list')
+  .description('List repositories')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (opts) => {
     const client = await createClient();
     const repos = await client.listRepositories();
@@ -491,9 +512,9 @@ repoCmd
   });
 
 repoCmd
-  .command("delete <id>")
-  .description("Delete a repository")
-  .option("--format <format>", "Output format (json, text)")
+  .command('delete <id>')
+  .description('Delete a repository')
+  .option('--format <format>', 'Output format (json, text)')
   .action(async (id, opts) => {
     const client = await createClient();
     await client.deleteRepository(id);

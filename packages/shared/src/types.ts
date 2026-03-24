@@ -15,7 +15,7 @@ export interface BoardWithTasks extends Board {
 
 // ─── Task ───
 
-export type TaskStatus = "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
 
 export interface Task {
   id: string;
@@ -61,24 +61,24 @@ export interface TaskLog {
   created_at: string;
 }
 
-export type Priority = "low" | "medium" | "high" | "urgent";
+export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type TaskAction =
-  | "created"
-  | "claimed"
-  | "moved"
-  | "commented"
-  | "completed"
-  | "assigned"
-  | "released"
-  | "timed_out"
-  | "cancelled"
-  | "rejected"
-  | "review_requested";
+  | 'created'
+  | 'claimed'
+  | 'moved'
+  | 'commented'
+  | 'completed'
+  | 'assigned'
+  | 'released'
+  | 'timed_out'
+  | 'cancelled'
+  | 'rejected'
+  | 'review_requested';
 
 // ─── Machine ───
 
-export type MachineStatus = "online" | "offline";
+export type MachineStatus = 'online' | 'offline';
 
 export interface UsageWindow {
   utilization: number;
@@ -113,7 +113,7 @@ export interface MachineWithAgents extends Machine {
 
 // ─── Agent ───
 
-export type AgentStatus = "online" | "offline";
+export type AgentStatus = 'online' | 'offline';
 
 export interface Agent {
   id: string;
@@ -146,7 +146,7 @@ export interface AgentWithActivity extends Agent {
 
 // ─── Agent Session ───
 
-export type AgentSessionStatus = "active" | "closed";
+export type AgentSessionStatus = 'active' | 'closed';
 
 export interface AgentSession {
   id: string;
@@ -181,7 +181,7 @@ export interface Repository {
 
 // ─── Message ───
 
-export type SenderType = "user" | "agent";
+export type SenderType = 'user' | 'agent';
 
 export interface Message {
   id: string;
@@ -200,7 +200,6 @@ export interface ErrorEnvelope {
     message: string;
   };
 }
-
 
 export interface CreateTaskInput {
   title: string;

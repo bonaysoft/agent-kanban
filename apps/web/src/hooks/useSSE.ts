@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { getAuthToken } from "../lib/auth-client";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getAuthToken } from '../lib/auth-client';
 
 interface UseSSEOptions {
   taskId: string;
@@ -30,13 +30,13 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
     };
 
     // Named event handlers for typed SSE events
-    es.addEventListener("log", (e: MessageEvent) => {
+    es.addEventListener('log', (e: MessageEvent) => {
       const log = JSON.parse(e.data);
       lastEventId.current = e.lastEventId;
       setLogs((prev) => [...prev, log]);
     });
 
-    es.addEventListener("message", (e: MessageEvent) => {
+    es.addEventListener('message', (e: MessageEvent) => {
       const msg = JSON.parse(e.data);
       lastEventId.current = e.lastEventId;
       setMessages((prev) => [...prev, msg]);
@@ -69,7 +69,9 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       ]);
       if (logsRes.ok) setLogs(await logsRes.json());
       if (msgsRes.ok) setMessages(await msgsRes.json());
-    } catch { /* ignore polling errors */ }
+    } catch {
+      /* ignore polling errors */
+    }
   }, [taskId, token]);
 
   useEffect(() => {

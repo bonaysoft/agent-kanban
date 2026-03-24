@@ -33,6 +33,7 @@ v3:  Open agent marketplace (vision)
 ### Agent Identity
 
 Each agent that interacts with the system has a persistent identity:
+
 - Name (user-assigned or auto-generated)
 - Avatar/icon (distinguishes agents visually)
 - Activity history (all tasks claimed, logs, completions)
@@ -59,10 +60,10 @@ $ ak start
 
 ```yaml
 # ~/.agent-kanban/config.yaml
-max_concurrent: 3          # max simultaneous agents
-agent_cli: claude-code     # which CLI to spawn
-poll_interval: 10s         # how often to check for new tasks
-projects:                  # only claim tasks from these projects (empty = all)
+max_concurrent: 3 # max simultaneous agents
+agent_cli: claude-code # which CLI to spawn
+poll_interval: 10s # how often to check for new tasks
+projects: # only claim tasks from these projects (empty = all)
   - agent-kanban
   - my-other-project
 ```
@@ -100,12 +101,12 @@ Machine local storage (agent CLI's own):
   → user can review via: claude --resume <agent_id>
 ```
 
-| Direction | Data | Platform stores? |
-|-----------|------|-----------------|
-| Up (agent → web) | chat replies | Yes — messages table (role='agent') |
-| Down (web → agent) | user chat messages | Yes — messages table (role='human') |
-| Agent behavior | thinking, tool use, output | No — stays on Machine, resume via session ID |
-| Structured events | claimed, completed, commented | Yes — task_logs table |
+| Direction          | Data                          | Platform stores?                             |
+| ------------------ | ----------------------------- | -------------------------------------------- |
+| Up (agent → web)   | chat replies                  | Yes — messages table (role='agent')          |
+| Down (web → agent) | user chat messages            | Yes — messages table (role='human')          |
+| Agent behavior     | thinking, tool use, output    | No — stays on Machine, resume via session ID |
+| Structured events  | claimed, completed, commented | Yes — task_logs table                        |
 
 Key constraint: we don't control the agent's output. We consume it. The `agent_id` in the messages table doubles as the agent CLI session ID — it's used both for message routing (daemon knows which process to pipe stdin to) and for session resume (`claude --resume <agent_id>`).
 
@@ -117,6 +118,7 @@ Chat is a bidirectional message channel through the Machine daemon, using D1 as 
 - **Up (agent → web):** Agent responds via stdout → daemon captures → POST to platform → stored in `messages` (role='agent') → Web UI reads via SSE
 
 **Data model:**
+
 ```sql
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
@@ -144,6 +146,7 @@ $ ak link --project agent-kanban
 ```
 
 Multiple repos can link to the same project:
+
 ```
 $ cd ~/projects/agent-kanban-docs
 $ ak link --project agent-kanban
@@ -153,6 +156,7 @@ $ ak link --project agent-kanban
 Repos can also be added to projects from the platform side (Web UI or API).
 
 **When the daemon claims a task:**
+
 - `task.project_id` → look up local links → if found, use the local repo directory
 - If no local link exists, query `project_resources` for `git_repo` entries → auto-clone to `~/.agent-kanban/workspaces/` → spawn agent there
 - If the project has multiple repos (local or remote), the agent works in the primary one and can access others
@@ -166,6 +170,7 @@ Claude Code (or any agent CLI) is a **generic agent**. It can do anything, but i
 ### Agent Roles
 
 A Role = a named configuration of:
+
 - Skills (loaded into the agent's context)
 - System instructions (behavior guidelines)
 - Tool access (what the agent can use)
@@ -173,17 +178,18 @@ A Role = a named configuration of:
 
 ### Built-in Roles (examples)
 
-| Role | Skills | Purpose |
-|------|--------|---------|
-| Code Reviewer | review, investigate | Reviews PRs, finds bugs |
+| Role            | Skills              | Purpose                        |
+| --------------- | ------------------- | ------------------------------ |
+| Code Reviewer   | review, investigate | Reviews PRs, finds bugs        |
 | Feature Builder | plan-eng-review, qa | Implements features end-to-end |
-| Bug Fixer | investigate, qa | Debugs and fixes issues |
-| Docs Writer | document-release | Keeps documentation current |
-| DevOps | ship, careful | Handles deployment and infra |
+| Bug Fixer       | investigate, qa     | Debugs and fixes issues        |
+| Docs Writer     | document-release    | Keeps documentation current    |
+| DevOps          | ship, careful       | Handles deployment and infra   |
 
 ### User-Defined Roles
 
 Users can create custom roles:
+
 1. Name the role
 2. Select skills to load
 3. Optionally write custom system instructions
@@ -266,6 +272,7 @@ tasks
 ```
 
 Resource types (extensible):
+
 - `git_repo`: code repository (uri = clone URL)
 - `credentials`: third-party platform accounts, API keys, tokens
 - `database`: structured data (uri = connection string)
@@ -279,6 +286,7 @@ Each type can have multiple instances per project. A game dev project might have
 ### Industry Examples
 
 **Game Development — "星际殖民"**
+
 ```
 Resources:
   git_repo:    game-client, game-server, shared-proto
@@ -289,6 +297,7 @@ Resources:
 ```
 
 **Self-Media — "科技频道"**
+
 ```
 Resources:
   storage:     media-assets (photos, videos, audio)
@@ -297,6 +306,7 @@ Resources:
 ```
 
 **Finance — "量化策略 Alpha-7"**
+
 ```
 Resources:
   git_repo:    strategy-code, backtest-framework
@@ -307,6 +317,7 @@ Resources:
 ```
 
 **Real Estate Agency — "翡翠湾楼盘"**
+
 ```
 Resources:
   database:    property-listings, client-needs
@@ -320,6 +331,7 @@ Resources:
 **Design principle: Task only associates with Project. Task does NOT link to specific Resources. Resource selection is the Agent's decision, not a data model constraint.**
 
 When an agent is dispatched to work on a task:
+
 1. Look up `task.project_id` → Project
 2. Query `project_resources` for that Project → get all available resources
 3. Agent reads task description + available resources → decides which to use
@@ -356,13 +368,13 @@ Agent output quality is unstable. Some operators invest in tuning their agents (
 
 ### Key Differences from v1/v2
 
-| Aspect | v1/v2 (Personal) | v3 (Marketplace) |
-|--------|------------------|-------------------|
-| Who registers Machines | You, on your own computers | Anyone |
-| Who pays for agent compute | You | Each agent operator |
-| Tasks claimed by | One agent (first wins) | Multiple agents (up to N) |
-| Quality assurance | Trust your own agent | Competition + review |
-| Scoring | Not needed | Core mechanism |
+| Aspect                     | v1/v2 (Personal)           | v3 (Marketplace)          |
+| -------------------------- | -------------------------- | ------------------------- |
+| Who registers Machines     | You, on your own computers | Anyone                    |
+| Who pays for agent compute | You                        | Each agent operator       |
+| Tasks claimed by           | One agent (first wins)     | Multiple agents (up to N) |
+| Quality assurance          | Trust your own agent       | Competition + review      |
+| Scoring                    | Not needed                 | Core mechanism            |
 
 ### Open Questions (deferred)
 

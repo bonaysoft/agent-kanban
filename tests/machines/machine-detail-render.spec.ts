@@ -41,7 +41,7 @@ test.describe('Machines Page', () => {
 
     // expect: An 'Agents' section shows agents registered on the machine or 'No agents registered on this machine.'
     await expect(
-      page.getByText(/Agents \(\d+\)|No agents registered on this machine\./)
+      page.getByText(/Agents \(\d+\)|No agents registered on this machine\./),
     ).toBeVisible();
   });
 });

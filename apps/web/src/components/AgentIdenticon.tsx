@@ -1,4 +1,4 @@
-import { agentIdenticon, agentColor } from "../lib/agentIdentity";
+import { agentIdenticon, agentColor } from '../lib/agentIdentity';
 
 interface AgentIdenticonProps {
   publicKey: string;
@@ -17,12 +17,7 @@ export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: Agen
   let cellIndex = 0;
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0"
-    >
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       {glow && (
         <defs>
           <filter id={`glow-${publicKey.slice(0, 8)}`} x="-50%" y="-50%" width="200%" height="200%">
@@ -58,10 +53,14 @@ export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: Agen
                 rx={cellSize * 0.2}
                 fill={color}
                 opacity={crystallize ? 0 : 0.9}
-                style={crystallize ? {
-                  animation: `cell-in 0.4s ease-out ${idx * 60}ms forwards`,
-                  transformOrigin: `${padding + x * cellSize + cellSize / 2}px ${padding + y * cellSize + cellSize / 2}px`,
-                } : undefined}
+                style={
+                  crystallize
+                    ? {
+                        animation: `cell-in 0.4s ease-out ${idx * 60}ms forwards`,
+                        transformOrigin: `${padding + x * cellSize + cellSize / 2}px ${padding + y * cellSize + cellSize / 2}px`,
+                      }
+                    : undefined
+                }
               />
             );
           }),

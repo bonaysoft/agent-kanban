@@ -15,7 +15,9 @@ test.describe('Repositories Page', () => {
     // Add a repository so we have one to remove
     await page.getByRole('button', { name: 'Add Repository' }).click();
     await page.getByRole('textbox', { name: 'my-repo' }).fill('remove-me');
-    await page.getByRole('textbox', { name: 'https://github.com/user/repo.' }).fill('https://github.com/user/remove-me.git');
+    await page
+      .getByRole('textbox', { name: 'https://github.com/user/repo.' })
+      .fill('https://github.com/user/remove-me.git');
     await page.getByRole('dialog').getByRole('button', { name: 'Add Repository' }).click();
 
     // expect: Repository cards are shown, each with a 'Remove' button

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { useSSE } from "../hooks/useSSE";
-import { formatRelative } from "./TaskDetailFields";
-import { Button } from "./ui/button";
+import { useEffect, useRef, useState } from 'react';
+import { useSSE } from '../hooks/useSSE';
+import { formatRelative } from './TaskDetailFields';
+import { Button } from './ui/button';
 
 interface ActivityLogProps {
   taskId: string;
@@ -10,27 +10,27 @@ interface ActivityLogProps {
 }
 
 const actionStyles: Record<string, string> = {
-  claimed: "text-accent",
-  assigned: "text-accent",
-  completed: "text-success",
-  released: "text-warning",
-  timed_out: "text-error",
-  cancelled: "text-error",
-  rejected: "text-warning",
-  review_requested: "text-accent",
+  claimed: 'text-accent',
+  assigned: 'text-accent',
+  completed: 'text-success',
+  released: 'text-warning',
+  timed_out: 'text-error',
+  cancelled: 'text-error',
+  rejected: 'text-warning',
+  review_requested: 'text-accent',
 };
 
 const actionLabels: Record<string, string> = {
-  claimed: "Claimed",
-  assigned: "Assigned",
-  completed: "Completed",
-  created: "Created",
-  released: "Released",
-  timed_out: "Timed out",
-  moved: "Moved",
-  cancelled: "Cancelled",
-  rejected: "Rejected",
-  review_requested: "Moved to review",
+  claimed: 'Claimed',
+  assigned: 'Assigned',
+  completed: 'Completed',
+  created: 'Created',
+  released: 'Released',
+  timed_out: 'Timed out',
+  moved: 'Moved',
+  cancelled: 'Cancelled',
+  rejected: 'Rejected',
+  review_requested: 'Moved to review',
 };
 
 export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps) {
@@ -71,24 +71,20 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
   }
 
   function scrollToTop() {
-    containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     setNewCount(0);
     setAutoScroll(true);
   }
 
   if (displayed.length === 0) {
     return (
-      <p className="text-sm text-content-tertiary">
-        No activity yet. Assign an agent to see logs.
-      </p>
+      <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see logs.</p>
     );
   }
 
   return (
     <div className="relative">
-      {reconnecting && (
-        <div className="text-[10px] text-warning mb-1">Reconnecting...</div>
-      )}
+      {reconnecting && <div className="text-[10px] text-warning mb-1">Reconnecting...</div>}
 
       {newCount > 0 && !autoScroll && (
         <Button
@@ -110,21 +106,27 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
           <div
             key={log.id}
             className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${
-              log.agent_id ? "border-accent" : "border-border"
+              log.agent_id ? 'border-accent' : 'border-border'
             }`}
           >
             <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
               {formatRelative(log.created_at)}
             </span>
-            <span className={`text-[13px] ${
-              log.action === "commented"
-                ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
-                : "text-content-secondary"
-            }`}>
-              {log.action === "commented"
-                ? log.detail
-                : <span className={actionStyles[log.action] || ""}>{actionLabels[log.action] || log.action}{log.detail ? `: ${log.detail}` : ""}</span>
-              }
+            <span
+              className={`text-[13px] ${
+                log.action === 'commented'
+                  ? 'font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded'
+                  : 'text-content-secondary'
+              }`}
+            >
+              {log.action === 'commented' ? (
+                log.detail
+              ) : (
+                <span className={actionStyles[log.action] || ''}>
+                  {actionLabels[log.action] || log.action}
+                  {log.detail ? `: ${log.detail}` : ''}
+                </span>
+              )}
             </span>
           </div>
         ))}

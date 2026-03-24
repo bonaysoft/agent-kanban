@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { api } from "../lib/api";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { api } from '../lib/api';
 
-const LAST_BOARD_KEY = "ak-last-board";
+const LAST_BOARD_KEY = 'ak-last-board';
 
 /** Remember last visited board for redirect from "/" */
 export function getLastBoardId(): string | null {
@@ -34,8 +34,8 @@ export function useBoard(boardId: string | undefined) {
       setError(null);
     } catch (e: any) {
       failCount.current++;
-      if (e.status === 401 || e.message === "NOT_AUTHENTICATED") {
-        setError("NOT_AUTHENTICATED");
+      if (e.status === 401 || e.message === 'NOT_AUTHENTICATED') {
+        setError('NOT_AUTHENTICATED');
       } else if (failCount.current >= 3) {
         setError("Can't reach server");
       }

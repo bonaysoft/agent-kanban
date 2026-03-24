@@ -5,7 +5,7 @@ description: |
   brand new product from scratch. Analyzes gaps, creates board with tasks and
   dependencies, assigns to agents. Use when asked to "plan a version", "plan v1.4",
   "build a product", "create a project", "规划版本", or "/ak-plan <version> <goals>".
-argument-hint: "<version-or-name> [goals]"
+argument-hint: '<version-or-name> [goals]'
 disable-model-invocation: true
 allowed-tools:
   - Bash
@@ -25,6 +25,7 @@ Plan and create a board with tasks — for a new version release or a new produc
 ## Input
 
 Parse the user's input:
+
 - **Name** — version (e.g. "v1.4.0") or product name (e.g. "my-api")
 - **Goals** — what to achieve (if not provided, ask)
 
@@ -56,6 +57,7 @@ git add -A && git commit -m "feat: project scaffold" && git push -u origin maste
 ```
 
 Register with agent-kanban:
+
 ```bash
 ak repo add --name <name> --url <url>
 ```
@@ -72,6 +74,7 @@ git remote -v                  # repo URL (use this, never guess)
 ```
 
 Read CLAUDE.md and recent git history to understand:
+
 - What was shipped recently
 - What patterns/conventions exist
 - What the project architecture looks like
@@ -79,6 +82,7 @@ Read CLAUDE.md and recent git history to understand:
 ## Phase 2: Analyze Gaps
 
 Use Explore agents to thoroughly scan the codebase for gaps related to the goals. Consider:
+
 - Missing features vs stated goals
 - Backend gaps (API, data model)
 - CLI gaps (missing commands)
@@ -109,6 +113,7 @@ Create tasks with full specs. For each task:
 6. **`--depends-on`** — task IDs this depends on
 
 Create tasks in dependency order so earlier task IDs can be referenced:
+
 ```bash
 T1=$(ak task create --board $BOARD --title "..." --repo $REPO --priority high --format json | jq -r .id)
 T2=$(ak task create --board $BOARD --title "..." --repo $REPO --depends-on $T1 --format json | jq -r .id)
@@ -140,14 +145,17 @@ Vague descriptions produce vague code. Be specific.
 ## Phase 4: Assign
 
 Match tasks to agents by role/capability:
+
 ```bash
 ak task assign <task-id> --agent <agent-id>
 ```
 
 Check existing agents. For a typical project you need:
+
 - **fullstack-developer** or backend + frontend split
 
 Create missing agents if needed:
+
 ```bash
 ak agent create --template <template> --name "<Name>"
 ```

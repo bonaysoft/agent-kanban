@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { api } from "../lib/api";
-import { authClient } from "../lib/auth-client";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { AddMachineSteps } from "./AddMachineSteps";
+import { useState } from 'react';
+import { api } from '../lib/api';
+import { authClient } from '../lib/auth-client';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { AddMachineSteps } from './AddMachineSteps';
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -11,20 +11,20 @@ interface OnboardingProps {
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
-  const [boardName, setBoardName] = useState("My Board");
-  const [apiKeyDisplay, setApiKeyDisplay] = useState("");
-  const [apiKeyId, setApiKeyId] = useState("");
+  const [boardName, setBoardName] = useState('My Board');
+  const [apiKeyDisplay, setApiKeyDisplay] = useState('');
+  const [apiKeyId, setApiKeyId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   async function handleCreateBoard() {
     setLoading(true);
-    setError("");
+    setError('');
     await api.boards.create({ name: boardName });
 
-    const { data, error: keyError } = await authClient.apiKey.create({ name: "onboarding" });
+    const { data, error: keyError } = await authClient.apiKey.create({ name: 'onboarding' });
     if (keyError || !data?.key) {
-      setError("Failed to create API key. You can create one later from Machines page.");
+      setError('Failed to create API key. You can create one later from Machines page.');
       setLoading(false);
       return;
     }
@@ -42,9 +42,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <h1 className="text-2xl font-bold text-content-primary">
             Agent <span className="text-accent">Kanban</span>
           </h1>
-          <p className="text-sm text-content-secondary mt-2">
-            Your AI workforce starts here.
-          </p>
+          <p className="text-sm text-content-secondary mt-2">Your AI workforce starts here.</p>
         </div>
 
         {/* Step indicators */}
@@ -52,7 +50,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           {[0, 1].map((s) => (
             <div
               key={s}
-              className={`w-2 h-2 rounded-full ${s <= step ? "bg-accent" : "bg-surface-tertiary"}`}
+              className={`w-2 h-2 rounded-full ${s <= step ? 'bg-accent' : 'bg-surface-tertiary'}`}
             />
           ))}
         </div>
@@ -62,29 +60,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
               Board name
             </label>
-            <Input
-              value={boardName}
-              onChange={(e) => setBoardName(e.target.value)}
-            />
-            {error && (
-              <p className="text-xs text-red-400">{error}</p>
-            )}
+            <Input value={boardName} onChange={(e) => setBoardName(e.target.value)} />
+            {error && <p className="text-xs text-red-400">{error}</p>}
             <Button
               onClick={handleCreateBoard}
               disabled={loading || !boardName.trim()}
               className="w-full"
             >
-              {loading ? "Creating..." : "Create Board"}
+              {loading ? 'Creating...' : 'Create Board'}
             </Button>
           </div>
         )}
 
         {step === 1 && apiKeyDisplay && apiKeyId && (
-          <AddMachineSteps
-            apiKey={apiKeyDisplay}
-            apiKeyId={apiKeyId}
-            onDone={onComplete}
-          />
+          <AddMachineSteps apiKey={apiKeyDisplay} apiKeyId={apiKeyId} onDone={onComplete} />
         )}
       </div>
     </div>

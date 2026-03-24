@@ -24,7 +24,7 @@ Thanks for your interest in Agent Kanban! Here's how to get involved.
 - Thin repo layer for data access — no raw SQL in route handlers
 - Centralized error handling via `HTTPException`
 - Short functions (< 30 lines), small files (< 300 lines)
-- Name things clearly — if it needs a comment to explain *what*, rename it
+- Name things clearly — if it needs a comment to explain _what_, rename it
 
 ## Commit Messages
 
@@ -48,6 +48,7 @@ If your change modifies the D1 schema:
 ## Reporting Issues
 
 Open an issue with:
+
 - What you expected vs. what happened
 - Steps to reproduce
 - Environment (OS, Node version, browser)

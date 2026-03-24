@@ -43,3 +43,8 @@ test-results/
 
 # Root wrangler config (local dev workaround)
 /wrangler.jsonc
+
+# agent skills (managed by daemon)
+.claude/skills/
+.agents/
+skills-lock.json

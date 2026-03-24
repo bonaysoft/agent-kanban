@@ -1,18 +1,19 @@
-import type { D1 } from "./db";
-import type { Env } from "./types";
-import { getTaskLogs } from "./taskRepo";
-import { listMessages } from "./messageRepo";
+import type { D1 } from './db';
+import type { Env } from './types';
+import { getTaskLogs } from './taskRepo';
+import { listMessages } from './messageRepo';
 
 interface SSEEvent {
   id: string;
-  type: "log" | "message";
+  type: 'log' | 'message';
   data: string;
   created_at: string;
 }
 
 function mergeByTime(logs: SSEEvent[], messages: SSEEvent[]): SSEEvent[] {
   const merged: SSEEvent[] = [];
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
   while (i < logs.length && j < messages.length) {
     if (logs[i].created_at <= messages[j].created_at) merged.push(logs[i++]);
     else merged.push(messages[j++]);
@@ -44,9 +45,12 @@ export async function createSSEResponse(
     // Resolve lastEventId to a timestamp for since-based filtering
     let since: string | undefined;
     if (lastEventId) {
-      const ref = await db.prepare(
-        "SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?",
-      ).bind(lastEventId, lastEventId).first<{ created_at: string }>();
+      const ref = await db
+        .prepare(
+          'SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?',
+        )
+        .bind(lastEventId, lastEventId)
+        .first<{ created_at: string }>();
       since = ref?.created_at;
     }
 
@@ -55,19 +59,28 @@ export async function createSSEResponse(
       listMessages(db, taskId, since),
     ]);
 
-    const logEvents: SSEEvent[] = (since ? initialLogs : initialLogs.slice(-50))
-      .map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
-    const msgEvents: SSEEvent[] = (since ? initialMessages : initialMessages.slice(-50))
-      .map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
+    const logEvents: SSEEvent[] = (since ? initialLogs : initialLogs.slice(-50)).map((l) => ({
+      id: l.id,
+      type: 'log' as const,
+      data: JSON.stringify(l),
+      created_at: l.created_at,
+    }));
+    const msgEvents: SSEEvent[] = (since ? initialMessages : initialMessages.slice(-50)).map(
+      (m) => ({
+        id: m.id,
+        type: 'message' as const,
+        data: JSON.stringify(m),
+        created_at: m.created_at,
+      }),
+    );
 
     const batch = mergeByTime(logEvents, msgEvents);
     for (const event of batch) {
       await write(event);
     }
 
-    let lastSeen = batch.length > 0
-      ? batch[batch.length - 1].created_at
-      : (since || new Date().toISOString());
+    let lastSeen =
+      batch.length > 0 ? batch[batch.length - 1].created_at : since || new Date().toISOString();
 
     // Poll every 2s for up to 25s (CF Workers 30s limit)
     const deadline = Date.now() + 25000;
@@ -79,8 +92,18 @@ export async function createSSEResponse(
         listMessages(db, taskId, lastSeen),
       ]);
 
-      const newLogEvents = newLogs.map((l) => ({ id: l.id, type: "log" as const, data: JSON.stringify(l), created_at: l.created_at }));
-      const newMsgEvents = newMessages.map((m) => ({ id: m.id, type: "message" as const, data: JSON.stringify(m), created_at: m.created_at }));
+      const newLogEvents = newLogs.map((l) => ({
+        id: l.id,
+        type: 'log' as const,
+        data: JSON.stringify(l),
+        created_at: l.created_at,
+      }));
+      const newMsgEvents = newMessages.map((m) => ({
+        id: m.id,
+        type: 'message' as const,
+        data: JSON.stringify(m),
+        created_at: m.created_at,
+      }));
       const merged = mergeByTime(newLogEvents, newMsgEvents);
 
       for (const event of merged) {
@@ -100,9 +123,9 @@ export async function createSSEResponse(
 
   return new Response(readable, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   });
 }

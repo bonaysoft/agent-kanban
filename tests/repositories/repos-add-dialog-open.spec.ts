@@ -20,10 +20,14 @@ test.describe('Repositories Page', () => {
     await expect(page.getByRole('textbox', { name: 'my-repo' })).toBeVisible();
 
     // expect: A 'Clone URL' input field is present with placeholder 'https://github.com/user/repo.git'
-    await expect(page.getByRole('textbox', { name: 'https://github.com/user/repo.' })).toBeVisible();
+    await expect(
+      page.getByRole('textbox', { name: 'https://github.com/user/repo.' }),
+    ).toBeVisible();
 
     // expect: An 'Add Repository' submit button is present inside the dialog
-    await expect(page.getByRole('dialog').getByRole('button', { name: 'Add Repository' })).toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('button', { name: 'Add Repository' }),
+    ).toBeVisible();
 
     // expect: A close button is visible in the dialog header
     await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();

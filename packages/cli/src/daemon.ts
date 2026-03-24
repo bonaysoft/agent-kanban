@@ -1,16 +1,16 @@
-import { existsSync, writeFileSync, unlinkSync, readFileSync, appendFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { hostname, platform, arch, release } from "os";
-import { execSync } from "child_process";
-import { randomUUID } from "crypto";
-import { MachineClient, AgentClient, ApiError } from "./client.js";
-import { ProcessManager } from "./processManager.js";
-import { PrMonitor } from "./prMonitor.js";
-import { generateSystemPrompt, writePromptFile, type AgentInfo } from "./systemPrompt.js";
-import { getLinks, findPathForRepository, setLink } from "./links.js";
-import { getConfigValue, setConfigValue, PID_FILE } from "./config.js";
-import { getUsage } from "./usage.js";
-import { REPOS_DIR, WORKTREES_DIR } from "./paths.js";
+import { existsSync, writeFileSync, unlinkSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { hostname, platform, arch, release } from 'os';
+import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
+import { MachineClient, AgentClient, ApiError } from './client.js';
+import { ProcessManager } from './processManager.js';
+import { PrMonitor } from './prMonitor.js';
+import { generateSystemPrompt, writePromptFile, type AgentInfo } from './systemPrompt.js';
+import { getLinks, findPathForRepository, setLink } from './links.js';
+import { getConfigValue, setConfigValue, PID_FILE } from './config.js';
+import { getUsage } from './usage.js';
+import { REPOS_DIR, WORKTREES_DIR } from './paths.js';
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -29,7 +29,7 @@ export interface DaemonOptions {
 export async function startDaemon(opts: DaemonOptions): Promise<void> {
   // PID lock
   if (existsSync(PID_FILE)) {
-    const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
+    const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10);
     try {
       process.kill(pid, 0);
       console.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
@@ -42,10 +42,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   // Preflight: gh must be installed and authenticated
   try {
-    execSync("gh auth status", { stdio: "pipe" });
+    execSync('gh auth status', { stdio: 'pipe' });
   } catch {
     removePidFile();
-    console.error("[FATAL] `gh` is not installed or not authenticated. Run `gh auth login` first.");
+    console.error('[FATAL] `gh` is not installed or not authenticated. Run `gh auth login` first.');
     process.exit(1);
   }
 
@@ -54,7 +54,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const linkedRepoCount = Object.keys(links).length;
 
   if (linkedRepoCount === 0) {
-    console.warn("[WARN] No linked repositories. Run `ak link` in your repo directories.");
+    console.warn('[WARN] No linked repositories. Run `ak link` in your repo directories.');
   } else {
     console.log(`[INFO] Linked repositories: ${linkedRepoCount}`);
   }
@@ -63,9 +63,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   let resumeTimer: ReturnType<typeof setTimeout> | null = null;
   let resumeTargetMs = 0;
 
-  const pm = new ProcessManager(client, opts.agentCli, () => {
-    schedulePoll(baseInterval);
-  }, pauseForRateLimit, opts.taskTimeout);
+  const pm = new ProcessManager(
+    client,
+    opts.agentCli,
+    () => {
+      schedulePoll(baseInterval);
+    },
+    pauseForRateLimit,
+    opts.taskTimeout,
+  );
 
   const prMonitor = new PrMonitor(client);
   prMonitor.start();
@@ -79,41 +85,52 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const shutdown = async () => {
     if (!running) return;
     running = false;
-    console.log("\n[INFO] Shutting down daemon...");
+    console.log('\n[INFO] Shutting down daemon...');
     prMonitor.stop();
     clearInterval(heartbeatInterval);
     if (pollTimer) clearTimeout(pollTimer);
     if (resumeTimer) clearTimeout(resumeTimer);
     await pm.killAll();
     removePidFile();
-    console.log("[INFO] Daemon stopped.");
+    console.log('[INFO] Daemon stopped.');
     process.exit(0);
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 
-  console.log(`[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
+  console.log(
+    `[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`,
+  );
 
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
-  let machineId = getConfigValue("machine-id");
+  let machineId = getConfigValue('machine-id');
 
   if (!machineId) {
     const machine = await client.registerMachine(machineInfo);
     machineId = machine.id;
-    setConfigValue("machine-id", machineId);
+    setConfigValue('machine-id', machineId);
     console.log(`[INFO] Machine registered: ${machineId}`);
   }
 
-  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
+  await client.heartbeat(machineId, {
+    version: machineInfo.version,
+    runtimes: machineInfo.runtimes,
+  });
   await cleanupStaleSessions(client, machineId);
-  console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
+  console.log(
+    `[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(', ') || 'none'})`,
+  );
 
   const heartbeatInterval = setInterval(async () => {
     const usageInfo = await getUsage();
-    client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo }).catch((err: any) =>
-      console.error(`[WARN] Heartbeat failed: ${err.message}`)
-    );
+    client
+      .heartbeat(machineId!, {
+        version: machineInfo.version,
+        runtimes: machineInfo.runtimes,
+        usage_info: usageInfo,
+      })
+      .catch((err: any) => console.error(`[WARN] Heartbeat failed: ${err.message}`));
   }, 30000);
 
   function pauseForRateLimit(resetAt: string) {
@@ -123,14 +140,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     paused = true;
     resumeTargetMs = resetTime;
     const waitMs = Math.max(resetTime - Date.now(), 60_000);
-    console.warn(`[WARN] Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
+    console.warn(
+      `[WARN] Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`,
+    );
     if (resumeTimer) clearTimeout(resumeTimer);
     resumeTimer = setTimeout(resume, waitMs);
   }
 
   async function resume() {
     if (!running || !paused) return;
-    console.log("[INFO] Rate limit window reset, resuming");
+    console.log('[INFO] Rate limit window reset, resuming');
     paused = false;
     resumeTargetMs = 0;
     await resumeSuspended();
@@ -141,8 +160,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     const sessions = pm.getSuspended();
     pm.clearSuspended();
     for (const s of sessions) {
-      const task = await client.getTask(s.taskId) as any;
-      if (!task || task.status === "cancelled" || task.status === "done") continue;
+      const task = (await client.getTask(s.taskId)) as any;
+      if (!task || task.status === 'cancelled' || task.status === 'done') continue;
 
       try {
         await client.reopenSession(s.agentId, s.sessionId);
@@ -153,7 +172,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       }
 
       const agentClient = new AgentClient(
-        getConfigValue("api-url")!,
+        getConfigValue('api-url')!,
         s.agentId,
         s.sessionId,
         s.privateKey,
@@ -163,13 +182,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         AK_AGENT_ID: s.agentId,
         AK_SESSION_ID: s.sessionId,
         AK_AGENT_KEY: JSON.stringify(s.privateKeyJwk),
-        AK_API_URL: getConfigValue("api-url")!,
+        AK_API_URL: getConfigValue('api-url')!,
       };
 
       console.log(`[INFO] Resuming task ${s.taskId} (session=${s.sessionId.slice(0, 8)})`);
       try {
         const resumeCleanup = () => removeWorktree(s.repoDir, s.cwd, s.branchName);
-        await pm.spawnAgent(s.taskId, s.sessionId, s.cwd, s.repoDir, s.branchName, "", agentClient, agentEnv, s.privateKey, s.privateKeyJwk, undefined, true, resumeCleanup);
+        await pm.spawnAgent(
+          s.taskId,
+          s.sessionId,
+          s.cwd,
+          s.repoDir,
+          s.branchName,
+          '',
+          agentClient,
+          agentEnv,
+          s.privateKey,
+          s.privateKeyJwk,
+          undefined,
+          true,
+          resumeCleanup,
+        );
       } catch {
         console.warn(`[WARN] Failed to resume task ${s.taskId}, releasing`);
         await client.releaseTask(s.taskId).catch(() => {});
@@ -190,8 +223,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       // Check for cancelled tasks and kill their agents
       const activeTaskIds = pm.getActiveTaskIds();
       for (const taskId of activeTaskIds) {
-        const task = await client.getTask(taskId) as any;
-        if (task?.status === "cancelled") {
+        const task = (await client.getTask(taskId)) as any;
+        if (task?.status === 'cancelled') {
           await pm.killTask(taskId);
         }
       }
@@ -201,7 +234,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
-      const tasks = await client.listTasks({ status: "todo" }) as any[];
+      const tasks = (await client.listTasks({ status: 'todo' })) as any[];
 
       // Auto-clone repos that have no local link
       const unlinkedRepoIds = new Set<string>();
@@ -218,7 +251,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       }
 
       const available = tasks.filter((t: any) => {
-        if (t.blocked || !t.assigned_to) return false;  // must be assigned to an agent
+        if (t.blocked || !t.assigned_to) return false; // must be assigned to an agent
         if (pm.hasTask(t.id)) return false;
         if (!t.repository_id) return false;
         if (!findPathForRepository(t.repository_id)) return false;
@@ -255,26 +288,30 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const sessionId = randomUUID();
 
       const { publicKey, privateKey } = await crypto.subtle.generateKey(
-        { name: "Ed25519" } as any, true, ["sign", "verify"]
+        { name: 'Ed25519' } as any,
+        true,
+        ['sign', 'verify'],
       );
-      const pubKeyJwk = await crypto.subtle.exportKey("jwk", publicKey);
-      const privKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
+      const pubKeyJwk = await crypto.subtle.exportKey('jwk', publicKey);
+      const privKeyJwk = await crypto.subtle.exportKey('jwk', privateKey);
       const pubKeyBase64 = pubKeyJwk.x!;
 
       try {
         await client.createSession(agentId, sessionId, pubKeyBase64);
       } catch (err: any) {
-        if (err.message.includes("409") || err.message.includes("not found")) {
+        if (err.message.includes('409') || err.message.includes('not found')) {
           schedulePoll(1000);
           return;
         }
         throw err;
       }
 
-      console.log(`[INFO] Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`);
+      console.log(
+        `[INFO] Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`,
+      );
 
       // Fetch agent details early — needed for both skill install and system prompt
-      const agentDetails = await client.getAgent(agentId) as AgentInfo | null;
+      const agentDetails = (await client.getAgent(agentId)) as AgentInfo | null;
       if (!agentDetails) {
         console.error(`[ERROR] Agent ${agentId} not found, releasing task ${task.id}`);
         await client.releaseTask(task.id).catch(() => {});
@@ -299,16 +336,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       if (!ensureSkills(worktreeDir, agentSkills)) {
         console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
         removeWorktree(repoDir, worktreeDir, branchName);
-        await client.releaseTask(task.id).catch((err: any) =>
-          console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`)
-        );
+        await client
+          .releaseTask(task.id)
+          .catch((err: any) =>
+            console.error(
+              `[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`,
+            ),
+          );
         await client.closeSession(agentId, sessionId).catch(() => {});
         schedulePoll(baseInterval);
         return;
       }
 
       const agentClient = new AgentClient(
-        getConfigValue("api-url")!,
+        getConfigValue('api-url')!,
         agentId,
         sessionId,
         privateKey,
@@ -318,7 +359,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         AK_AGENT_ID: agentId,
         AK_SESSION_ID: sessionId,
         AK_AGENT_KEY: JSON.stringify(privKeyJwk),
-        AK_API_URL: getConfigValue("api-url")!,
+        AK_API_URL: getConfigValue('api-url')!,
       };
       const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
 
@@ -332,15 +373,30 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         task.priority ? `Priority: ${task.priority}` : null,
         `Repository: ${taskRepo?.url ?? task.repository_id}`,
         `Board: ${task.board_id}`,
-      ].filter(Boolean).join("\n");
+      ]
+        .filter(Boolean)
+        .join('\n');
 
       const cleanup = () => removeWorktree(repoDir, worktreeDir, branchName);
-      await pm.spawnAgent(task.id, sessionId, worktreeDir, repoDir, branchName, taskContext, agentClient, agentEnv, privateKey, privKeyJwk, systemPromptFile, false, cleanup);
+      await pm.spawnAgent(
+        task.id,
+        sessionId,
+        worktreeDir,
+        repoDir,
+        branchName,
+        taskContext,
+        agentClient,
+        agentEnv,
+        privateKey,
+        privKeyJwk,
+        systemPromptFile,
+        false,
+        cleanup,
+      );
       prMonitor.track(task.id);
 
       backoffMs = baseInterval;
       schedulePoll(baseInterval);
-
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 429) {
         console.warn(`[WARN] Rate limited, backing off`);
@@ -356,9 +412,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   schedulePoll(0);
 }
 
-
-const SKILL_SOURCE = "saltbo/agent-kanban";
-const SKILL_NAME = "agent-kanban";
+const SKILL_SOURCE = 'saltbo/agent-kanban';
+const SKILL_NAME = 'agent-kanban';
 
 function installSkill(repoDir: string, source: string, skill: string): boolean {
   const skillFile = join(repoDir, `.claude/skills/${skill}/SKILL.md`);
@@ -366,14 +421,14 @@ function installSkill(repoDir: string, source: string, skill: string): boolean {
     console.log(`[INFO] Installing skill "${skill}" from ${source} in ${repoDir}`);
     execSync(`npx skills add ${source} --skill ${skill} --agent claude-code --agent universal -y`, {
       cwd: repoDir,
-      stdio: "pipe",
+      stdio: 'pipe',
     });
     return true;
   }
   return false;
 }
 
-const SKILL_GITIGNORE_ENTRIES = [".claude/skills/", ".agents/", "skills-lock.json"];
+const SKILL_GITIGNORE_ENTRIES = ['.claude/skills/', '.agents/', 'skills-lock.json'];
 
 function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
   try {
@@ -381,7 +436,7 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
 
     for (const entry of agentSkills) {
       // format: "source@skill-name"
-      const atIdx = entry.indexOf("@");
+      const atIdx = entry.indexOf('@');
       if (atIdx === -1) {
         console.warn(`[WARN] Skipping invalid skill entry (missing @): ${entry}`);
         continue;
@@ -392,17 +447,20 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
     }
 
     if (!changed) {
-      const result = execSync("npx skills update", { cwd: worktreeDir, stdio: "pipe" }).toString();
-      if (result.includes("up to date")) return true;
+      const result = execSync('npx skills update', { cwd: worktreeDir, stdio: 'pipe' }).toString();
+      if (result.includes('up to date')) return true;
       console.log(`[INFO] Skills updated in ${worktreeDir}`);
     }
 
     // Ensure skill paths are gitignored so agents don't commit them
-    const gitignorePath = join(worktreeDir, ".gitignore");
-    const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+    const gitignorePath = join(worktreeDir, '.gitignore');
+    const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, 'utf-8') : '';
     const missing = SKILL_GITIGNORE_ENTRIES.filter((e) => !existing.includes(e));
     if (missing.length > 0) {
-      appendFileSync(gitignorePath, "\n# agent skills (managed by daemon)\n" + missing.join("\n") + "\n");
+      appendFileSync(
+        gitignorePath,
+        '\n# agent skills (managed by daemon)\n' + missing.join('\n') + '\n',
+      );
     }
 
     return true;
@@ -412,10 +470,16 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
   }
 }
 
-const LEFTHOOK_LABEL = "setup:lefthook";
+const LEFTHOOK_LABEL = 'setup:lefthook';
 const LEFTHOOK_CONFIG_FILES = [
-  "lefthook.yml", "lefthook.yaml", "lefthook.json", "lefthook.toml",
-  ".lefthook.yml", ".lefthook.yaml", ".lefthook.json", ".lefthook.toml",
+  'lefthook.yml',
+  'lefthook.yaml',
+  'lefthook.json',
+  'lefthook.toml',
+  '.lefthook.yml',
+  '.lefthook.yaml',
+  '.lefthook.json',
+  '.lefthook.toml',
 ];
 
 function hasLefthookConfig(repoDir: string): boolean {
@@ -423,27 +487,33 @@ function hasLefthookConfig(repoDir: string): boolean {
 }
 
 /** Returns true if a lefthook setup task was created (caller should skip this poll cycle). */
-async function ensureLefthookTask(client: MachineClient, task: any, repoDir: string, allTasks: any[]): Promise<boolean> {
+async function ensureLefthookTask(
+  client: MachineClient,
+  task: any,
+  repoDir: string,
+  allTasks: any[],
+): Promise<boolean> {
   if (hasLefthookConfig(repoDir)) return false;
   if (task.labels?.includes(LEFTHOOK_LABEL)) return false;
 
   console.log(`[INFO] No lefthook config in ${repoDir}, creating setup task`);
 
-  const agents = await client.listAgents() as any[];
-  const qualityAgent = agents.find((a: any) => a.builtin && a.role === "quality-goalkeeper");
+  const agents = (await client.listAgents()) as any[];
+  const qualityAgent = agents.find((a: any) => a.builtin && a.role === 'quality-goalkeeper');
   if (!qualityAgent) {
-    console.log("[WARN] No builtin quality-goalkeeper agent found, skipping lefthook setup");
+    console.log('[WARN] No builtin quality-goalkeeper agent found, skipping lefthook setup');
     return false;
   }
 
-  const setupTask = await client.createTask({
-    title: "Setup lefthook quality gates for this repository",
-    description: "This repository has no lefthook configuration. Analyze the project's tech stack, set up appropriate quality checks, and enforce them via lefthook pre-commit hooks.",
+  const setupTask = (await client.createTask({
+    title: 'Setup lefthook quality gates for this repository',
+    description:
+      "This repository has no lefthook configuration. Analyze the project's tech stack, set up appropriate quality checks, and enforce them via lefthook pre-commit hooks.",
     board_id: task.board_id,
     repository_id: task.repository_id,
     labels: [LEFTHOOK_LABEL],
     assigned_to: qualityAgent.id,
-  }) as any;
+  })) as any;
 
   console.log(`[INFO] Created lefthook setup task ${setupTask.id}`);
 
@@ -461,7 +531,7 @@ async function ensureLefthookTask(client: MachineClient, task: any, repoDir: str
 
 function cloneAndLink(repo: any): void {
   try {
-    const repoPath = repo.url.replace(/^https?:\/\//, "");
+    const repoPath = repo.url.replace(/^https?:\/\//, '');
     const repoDir = join(REPOS_DIR, repoPath);
     if (existsSync(repoDir)) {
       console.log(`[INFO] Directory exists, linking repository ${repo.name} → ${repoDir}`);
@@ -470,7 +540,7 @@ function cloneAndLink(repo: any): void {
     }
 
     console.log(`[INFO] Cloning ${repo.full_name} → ${repoDir}`);
-    execSync(`gh repo clone ${repo.full_name} ${repoDir}`, { stdio: "pipe" });
+    execSync(`gh repo clone ${repo.full_name} ${repoDir}`, { stdio: 'pipe' });
     setLink(repo.id, repoDir);
     console.log(`[INFO] Linked repository ${repo.name} → ${repoDir}`);
   } catch (err: any) {
@@ -480,14 +550,16 @@ function cloneAndLink(repo: any): void {
 
 function prepareRepo(repoDir: string): boolean {
   try {
-    const status = execSync("git status --porcelain", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+    const status = execSync('git status --porcelain', { cwd: repoDir, stdio: 'pipe' })
+      .toString()
+      .trim();
     if (status) {
       console.log(`[INFO] Stashing dirty working tree in ${repoDir}`);
-      execSync("git stash --include-untracked", { cwd: repoDir, stdio: "pipe" });
+      execSync('git stash --include-untracked', { cwd: repoDir, stdio: 'pipe' });
     }
 
     console.log(`[INFO] Pulling latest code in ${repoDir}`);
-    execSync("git pull --ff-only", { cwd: repoDir, stdio: "pipe" });
+    execSync('git pull --ff-only', { cwd: repoDir, stdio: 'pipe' });
     return true;
   } catch (err: any) {
     console.error(`[ERROR] Failed to prepare repo ${repoDir}: ${err.message}`);
@@ -495,19 +567,22 @@ function prepareRepo(repoDir: string): boolean {
   }
 }
 
-function createWorktree(repoDir: string, sessionId: string): { worktreeDir: string; branchName: string } {
+function createWorktree(
+  repoDir: string,
+  sessionId: string,
+): { worktreeDir: string; branchName: string } {
   const branchName = `ak/${sessionId.slice(0, 8)}`;
   mkdirSync(WORKTREES_DIR, { recursive: true });
   const worktreeDir = join(WORKTREES_DIR, sessionId.slice(0, 8));
-  execSync(`git worktree add "${worktreeDir}" -b "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
+  execSync(`git worktree add "${worktreeDir}" -b "${branchName}"`, { cwd: repoDir, stdio: 'pipe' });
   console.log(`[INFO] Created worktree ${worktreeDir} (branch ${branchName})`);
   return { worktreeDir, branchName };
 }
 
 function removeWorktree(repoDir: string, worktreeDir: string, branchName: string): void {
   try {
-    execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: repoDir, stdio: "pipe" });
-    execSync(`git branch -D "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
+    execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: repoDir, stdio: 'pipe' });
+    execSync(`git branch -D "${branchName}"`, { cwd: repoDir, stdio: 'pipe' });
     console.log(`[INFO] Removed worktree ${worktreeDir}`);
   } catch (err: any) {
     console.error(`[WARN] Failed to remove worktree ${worktreeDir}: ${err.message}`);
@@ -515,28 +590,34 @@ function removeWorktree(repoDir: string, worktreeDir: string, branchName: string
 }
 
 function removePidFile() {
-  try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+  try {
+    unlinkSync(PID_FILE);
+  } catch {
+    /* ignore */
+  }
 }
 
 function detectRuntimes(): string[] {
   const commands: [string, string][] = [
-    ["claude", "Claude Code"],
-    ["codex", "Codex"],
-    ["gemini", "Gemini CLI"],
+    ['claude', 'Claude Code'],
+    ['codex', 'Codex'],
+    ['gemini', 'Gemini CLI'],
   ];
   const found: string[] = [];
   for (const [cmd, label] of commands) {
     try {
-      execSync(`which ${cmd}`, { stdio: "ignore" });
+      execSync(`which ${cmd}`, { stdio: 'ignore' });
       found.push(label);
-    } catch { /* not installed */ }
+    } catch {
+      /* not installed */
+    }
   }
   return found;
 }
 
 function isProcessAlive(sessionId: string): boolean {
   try {
-    const output = execSync(`ps ax -o args=`, { stdio: ["pipe", "pipe", "ignore"] }).toString();
+    const output = execSync(`ps ax -o args=`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
     return output.includes(sessionId);
   } catch {
     return false;
@@ -545,12 +626,12 @@ function isProcessAlive(sessionId: string): boolean {
 
 async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
   try {
-    const agents = await client.listAgents() as any[];
+    const agents = (await client.listAgents()) as any[];
     let closed = 0;
     for (const agent of agents) {
-      const sessions = await client.listSessions(agent.id) as any[];
+      const sessions = (await client.listSessions(agent.id)) as any[];
       for (const session of sessions) {
-        if (session.status !== "active" || session.machine_id !== machineId) continue;
+        if (session.status !== 'active' || session.machine_id !== machineId) continue;
         if (!isProcessAlive(session.id)) {
           await client.closeSession(agent.id, session.id).catch(() => {});
           closed++;
@@ -566,10 +647,12 @@ async function cleanupStaleSessions(client: MachineClient, machineId: string): P
 function getMachineInfo() {
   const os = `${platform()} ${arch()} ${release()}`;
   const runtimes = detectRuntimes();
-  let version = "unknown";
+  let version = 'unknown';
   try {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf-8'));
     version = pkg.version;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return { name: hostname(), os, version, runtimes };
 }

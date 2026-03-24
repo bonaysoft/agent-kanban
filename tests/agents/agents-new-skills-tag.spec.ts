@@ -13,7 +13,9 @@ test.describe('Agents Page', () => {
 
     // expect: Skills tag input is visible with placeholder text
     const workflowGroup = page.getByRole('group', { name: 'Workflow' });
-    const skillsInput = workflowGroup.getByRole('textbox', { name: 'Type a skill and press Enter' });
+    const skillsInput = workflowGroup.getByRole('textbox', {
+      name: 'Type a skill and press Enter',
+    });
     await expect(skillsInput).toBeVisible();
 
     // 2. Click the Skills field, type 'typescript', and press Enter
@@ -26,7 +28,9 @@ test.describe('Agents Page', () => {
 
     // expect: The text input clears for the next entry
     // After a tag is added, the placeholder is hidden but the input is still present
-    const skillsInputAfterFirstTag = workflowGroup.locator('input[type="text"], input:not([type])').last();
+    const skillsInputAfterFirstTag = workflowGroup
+      .locator('input[type="text"], input:not([type])')
+      .last();
     await expect(skillsInputAfterFirstTag).toHaveValue('');
 
     // 3. Type 'react' and press Enter

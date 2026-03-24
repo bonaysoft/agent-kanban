@@ -4,7 +4,10 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Routing and Navigation Guards', () => {
-  test('Protected agents URL redirects unauthenticated user to /auth', async ({ page, context }) => {
+  test('Protected agents URL redirects unauthenticated user to /auth', async ({
+    page,
+    context,
+  }) => {
     // 1. With no active session, navigate to /agents
     await context.clearCookies();
 

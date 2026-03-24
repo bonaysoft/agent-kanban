@@ -21,7 +21,9 @@ test.describe('Header and Navigation', () => {
 
     // expect: A user avatar button is visible on the right
     // The avatar is inside a DropdownMenuTrigger button
-    const avatarButton = header.locator('button').filter({ has: page.locator('[data-slot="avatar"]') });
+    const avatarButton = header
+      .locator('button')
+      .filter({ has: page.locator('[data-slot="avatar"]') });
     await expect(avatarButton).toBeVisible();
 
     // expect: A theme toggle icon button is visible on the right

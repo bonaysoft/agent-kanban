@@ -1,29 +1,33 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Header } from "../components/Header";
-import { getTheme, setTheme, type Theme } from "../lib/theme";
-import { api } from "../lib/api";
-import { useBoards } from "../hooks/useBoard";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Header } from '../components/Header';
+import { getTheme, setTheme, type Theme } from '../lib/theme';
+import { api } from '../lib/api';
+import { useBoards } from '../hooks/useBoard';
 
-function BoardItem({ board, onUpdate, onDelete }: {
+function BoardItem({
+  board,
+  onUpdate,
+  onDelete,
+}: {
   board: any;
   onUpdate: () => void;
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(board.name);
-  const [editDesc, setEditDesc] = useState(board.description || "");
+  const [editDesc, setEditDesc] = useState(board.description || '');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     setEditName(board.name);
-    setEditDesc(board.description || "");
+    setEditDesc(board.description || '');
   }, [board.id, board.name, board.description]);
 
   const nameChanged = editName.trim() !== board.name;
-  const descChanged = editDesc.trim() !== (board.description || "");
+  const descChanged = editDesc.trim() !== (board.description || '');
   const hasChanges = nameChanged || descChanged;
 
   async function handleSave() {
@@ -49,14 +53,26 @@ function BoardItem({ board, onUpdate, onDelete }: {
         onClick={() => setExpanded(!expanded)}
       >
         <svg
-          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`shrink-0 text-content-tertiary transition-transform ${expanded ? "rotate-90" : ""}`}
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`shrink-0 text-content-tertiary transition-transform ${expanded ? 'rotate-90' : ''}`}
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
-        <span className="text-sm font-medium text-content-primary flex-1 truncate">{board.name}</span>
+        <span className="text-sm font-medium text-content-primary flex-1 truncate">
+          {board.name}
+        </span>
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/boards/${board.id}`); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/boards/${board.id}`);
+          }}
           className="text-xs text-content-tertiary hover:text-accent transition-colors"
         >
           Open
@@ -88,11 +104,26 @@ function BoardItem({ board, onUpdate, onDelete }: {
               {confirmDelete ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-error">Delete?</span>
-                  <button onClick={handleDelete} className="text-xs font-medium text-error hover:underline">Yes</button>
-                  <button onClick={() => setConfirmDelete(false)} className="text-xs text-content-tertiary hover:text-content-secondary">No</button>
+                  <button
+                    onClick={handleDelete}
+                    className="text-xs font-medium text-error hover:underline"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="text-xs text-content-tertiary hover:text-content-secondary"
+                  >
+                    No
+                  </button>
                 </div>
               ) : (
-                <button onClick={() => setConfirmDelete(true)} className="text-xs text-error hover:underline">Delete</button>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-xs text-error hover:underline"
+                >
+                  Delete
+                </button>
               )}
             </div>
             {hasChanges && (
@@ -101,7 +132,7 @@ function BoardItem({ board, onUpdate, onDelete }: {
                 disabled={saving || !editName.trim()}
                 className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save"}
+                {saving ? 'Saving...' : 'Save'}
               </button>
             )}
           </div>
@@ -132,16 +163,18 @@ export function AccountSettingsPage() {
 
         {/* Theme */}
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">Theme</h2>
+          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">
+            Theme
+          </h2>
           <div className="flex gap-2">
-            {(["light", "dark", "system"] as Theme[]).map((t) => (
+            {(['light', 'dark', 'system'] as Theme[]).map((t) => (
               <button
                 key={t}
                 onClick={() => handleTheme(t)}
                 className={`text-sm px-4 py-2 rounded-lg border transition-colors capitalize ${
                   currentTheme === t
-                    ? "border-accent text-accent bg-accent-soft"
-                    : "border-border text-content-secondary hover:border-content-tertiary"
+                    ? 'border-accent text-accent bg-accent-soft'
+                    : 'border-border text-content-secondary hover:border-content-tertiary'
                 }`}
               >
                 {t}
@@ -152,7 +185,9 @@ export function AccountSettingsPage() {
 
         {/* Boards */}
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">Boards</h2>
+          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">
+            Boards
+          </h2>
           {boards.length === 0 ? (
             <p className="text-sm text-content-tertiary">No boards yet.</p>
           ) : (

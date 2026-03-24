@@ -1,5 +1,5 @@
-import { Navigate } from "react-router-dom";
-import { useBoards, getLastBoardId } from "../hooks/useBoard";
+import { Navigate } from 'react-router-dom';
+import { useBoards, getLastBoardId } from '../hooks/useBoard';
 
 export function BoardRedirect() {
   const { boards, loading } = useBoards();
@@ -7,9 +7,7 @@ export function BoardRedirect() {
   if (loading) return null;
 
   const lastId = getLastBoardId();
-  const target = lastId && boards.some((b: any) => b.id === lastId)
-    ? lastId
-    : boards[0]?.id;
+  const target = lastId && boards.some((b: any) => b.id === lastId) ? lastId : boards[0]?.id;
 
   if (target) {
     return <Navigate to={`/boards/${target}`} replace />;

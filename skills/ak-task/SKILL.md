@@ -4,7 +4,7 @@ description: |
   Quickly create a single task for a new feature or bug fix in an existing board.
   Use when asked to "add a feature", "fix a bug", "create a task", "加个功能",
   "修个 bug", or "/ak-task <description>".
-argument-hint: "<feature or bug description>"
+argument-hint: '<feature or bug description>'
 disable-model-invocation: true
 allowed-tools:
   - Bash
@@ -22,6 +22,7 @@ Create a single task for a feature or bug fix and assign it to an agent.
 ## Input
 
 Parse the user's input:
+
 - **What** — feature description or bug report (required)
 - **Board** — which board (if not specified, use the first board)
 - **Priority** — infer from context, default to medium
@@ -39,6 +40,7 @@ If there's only one board, use it. Otherwise ask which board.
 ## Step 2: Investigate
 
 Before creating the task, understand what's involved:
+
 - Read relevant source files to understand current implementation
 - Identify which files need to change
 - Check for existing related tasks: `ak task list --format json`
@@ -46,6 +48,7 @@ Before creating the task, understand what's involved:
 ## Step 3: Create Task
 
 Write a detailed description with:
+
 - Goal (one sentence)
 - Files to modify
 - Specific behavior/spec
@@ -66,6 +69,7 @@ If this task depends on existing tasks, add `--depends-on`.
 ## Step 4: Assign
 
 Pick the best-fit agent based on the task's domain:
+
 ```bash
 ak task assign <task-id> --agent <agent-id>
 ```

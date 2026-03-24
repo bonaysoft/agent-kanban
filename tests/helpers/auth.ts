@@ -38,7 +38,7 @@ export async function signUpAndGetBoard(
     const res = await fetch('/api/boards', {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const boards = await res.json() as { id: string }[];
+    const boards = (await res.json()) as { id: string }[];
     return boards[0]?.id ?? null;
   });
 

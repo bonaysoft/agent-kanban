@@ -1,16 +1,16 @@
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import { CONFIG_FILE, PID_FILE } from "./paths.js";
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+import { CONFIG_FILE, PID_FILE } from './paths.js';
 
 interface Config {
-  "api-url"?: string;
-  "api-key"?: string;
-  "machine-id"?: string;
+  'api-url'?: string;
+  'api-key'?: string;
+  'machine-id'?: string;
 }
 
 export function readConfig(): Config {
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+    return JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
   } catch {
     return {};
   }
@@ -18,7 +18,7 @@ export function readConfig(): Config {
 
 export function writeConfig(config: Config): void {
   mkdirSync(dirname(CONFIG_FILE), { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n');
 }
 
 export function getConfigValue(key: string): string | undefined {

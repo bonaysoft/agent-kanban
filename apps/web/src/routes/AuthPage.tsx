@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { authClient, signIn, signUp, setAuthToken } from "../lib/auth-client";
-import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
+import { authClient, signIn, signUp, setAuthToken } from '../lib/auth-client';
+import { useNavigate } from 'react-router-dom';
 
 function GitHubIcon() {
   return (
@@ -11,10 +11,10 @@ function GitHubIcon() {
 }
 
 export function AuthPage() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -25,28 +25,28 @@ export function AuthPage() {
     setLoading(true);
 
     const onSuccess = (ctx: any) => {
-      const token = ctx.response.headers.get("set-auth-token");
+      const token = ctx.response.headers.get('set-auth-token');
       if (token) setAuthToken(token);
     };
 
-    if (mode === "signin") {
+    if (mode === 'signin') {
       const { error } = await signIn.email({ email, password }, { onSuccess });
       if (error) {
-        setError(error.message || "Sign in failed");
+        setError(error.message || 'Sign in failed');
         setLoading(false);
         return;
       }
     } else {
       const { error } = await signUp.email({ email, password, name }, { onSuccess });
       if (error) {
-        setError(error.message || "Sign up failed");
+        setError(error.message || 'Sign up failed');
         setLoading(false);
         return;
       }
     }
 
     setLoading(false);
-    navigate("/");
+    navigate('/');
   }
 
   return (
@@ -57,12 +57,12 @@ export function AuthPage() {
             Agent <span className="text-accent">Kanban</span>
           </h1>
           <p className="mt-2 text-sm text-content-secondary">
-            {mode === "signin" ? "Sign in to your account" : "Create a new account"}
+            {mode === 'signin' ? 'Sign in to your account' : 'Create a new account'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "signup" && (
+          {mode === 'signup' && (
             <input
               type="text"
               placeholder="Name"
@@ -90,16 +90,14 @@ export function AuthPage() {
             className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
           />
 
-          {error && (
-            <p className="text-sm text-error">{error}</p>
-          )}
+          {error && <p className="text-sm text-error">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-accent text-surface-primary font-semibold text-sm py-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {loading ? "..." : mode === "signin" ? "Sign In" : "Sign Up"}
+            {loading ? '...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
           </button>
         </form>
 
@@ -113,7 +111,9 @@ export function AuthPage() {
         </div>
 
         <button
-          onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/auth/callback" })}
+          onClick={() =>
+            authClient.signIn.social({ provider: 'github', callbackURL: '/auth/callback' })
+          }
           className="w-full flex items-center justify-center gap-2 bg-surface-secondary border border-border text-content-primary font-semibold text-sm py-2 rounded-lg hover:bg-surface-tertiary transition-colors"
         >
           <GitHubIcon />
@@ -121,12 +121,15 @@ export function AuthPage() {
         </button>
 
         <p className="text-center text-xs text-content-tertiary">
-          {mode === "signin" ? "No account? " : "Already have an account? "}
+          {mode === 'signin' ? 'No account? ' : 'Already have an account? '}
           <button
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+            onClick={() => {
+              setMode(mode === 'signin' ? 'signup' : 'signin');
+              setError(null);
+            }}
             className="text-accent hover:underline"
           >
-            {mode === "signin" ? "Sign up" : "Sign in"}
+            {mode === 'signin' ? 'Sign up' : 'Sign in'}
           </button>
         </p>
       </div>

@@ -1,57 +1,67 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { Miniflare } from "miniflare";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { Miniflare } from 'miniflare';
+import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 // Integration test: validates CLI AgentClient JWT passthrough with new session model
 // User creates agent → machine creates session → AgentClient uses session JWT
 
-const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
-const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
-const BETTER_AUTH_URL = "http://localhost:8788";
+const MIGRATIONS_DIR = join(__dirname, '../apps/web/migrations');
+const AUTH_SECRET = 'test-secret-32-chars-minimum-ok!!';
+const BETTER_AUTH_URL = 'http://localhost:8788';
 
 const testEnv = {
   DB: null as any as D1Database,
   AUTH_SECRET,
-  ALLOWED_HOSTS: "localhost:8788",
-  GITHUB_CLIENT_ID: "x",
-  GITHUB_CLIENT_SECRET: "x",
+  ALLOWED_HOSTS: 'localhost:8788',
+  GITHUB_CLIENT_ID: 'x',
+  GITHUB_CLIENT_SECRET: 'x',
 };
 
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql"];
+  const files = ['0001_initial.sql'];
   for (const file of files) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
+    for (const stmt of sql
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
 }
 
 async function seedUser(db: D1Database): Promise<string> {
-  const userId = "test-user-cli-jwt";
+  const userId = 'test-user-cli-jwt';
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(userId, "CLI JWT Test", "cli-jwt@example.com", now, now).run();
+  await db
+    .prepare(
+      'INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)',
+    )
+    .bind(userId, 'CLI JWT Test', 'cli-jwt@example.com', now, now)
+    .run();
   return userId;
 }
 
 async function createApiKeyForUser(db: D1Database, userId: string): Promise<string> {
-  const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  const { createAuth } = await import('../apps/web/functions/api/betterAuth');
   const auth = createAuth({ ...testEnv, DB: db });
   const result = await auth.api.createApiKey({ body: { userId } });
   return result.key;
 }
 
 async function honoRequest(method: string, path: string, body?: any, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
-  const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const { api } = await import('../apps/web/functions/api/routes');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Host: 'localhost:8788',
+    'x-forwarded-proto': 'http',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
   if (body) init.body = JSON.stringify(body);
   return api.request(path, init, testEnv);
@@ -61,9 +71,9 @@ beforeAll(async () => {
   mf = new Miniflare({
     modules: true,
     script: "export default { fetch() { return new Response('ok'); } }",
-    d1Databases: { DB: "test-db" },
+    d1Databases: { DB: 'test-db' },
   });
-  const db = await mf.getD1Database("DB");
+  const db = await mf.getD1Database('DB');
   testEnv.DB = db;
   await applyMigrations(db);
 });
@@ -72,7 +82,7 @@ afterAll(async () => {
   await mf.dispose();
 });
 
-describe("CLI ApiClient agent JWT passthrough", () => {
+describe('CLI ApiClient agent JWT passthrough', () => {
   let userId: string;
   let apiKey: string;
   let machineId: string;
@@ -99,47 +109,75 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     vi.restoreAllMocks();
   });
 
-  it("sets up machine + agent + session + board + task", async () => {
+  it('sets up machine + agent + session + board + task', async () => {
     userId = await seedUser(testEnv.DB);
     apiKey = await createApiKeyForUser(testEnv.DB, userId);
 
     // Create machine
-    const machineRes = await honoRequest("POST", "/api/machines", {
-      name: "jwt-test-machine", os: "test", version: "1.0.0", runtimes: ["claude"],
-    }, apiKey);
+    const machineRes = await honoRequest(
+      'POST',
+      '/api/machines',
+      {
+        name: 'jwt-test-machine',
+        os: 'test',
+        version: '1.0.0',
+        runtimes: ['claude'],
+      },
+      apiKey,
+    );
     expect(machineRes.status).toBe(201);
     machineId = ((await machineRes.json()) as any).id;
 
     // Create persistent agent (user-only, use repo directly)
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(testEnv.DB, userId, { name: "JWT Test Agent", runtime: "claude" });
+    const { createAgent } = await import('../apps/web/functions/api/agentRepo');
+    const agent = await createAgent(testEnv.DB, userId, {
+      name: 'JWT Test Agent',
+      runtime: 'claude',
+    });
     agentId = agent.id;
 
     // Create session keypair (CSR — daemon generates locally)
     sessionId = randomUUID();
-    const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
-    const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
-    sessionPrivKeyJwk = await crypto.subtle.exportKey("jwk", (keypair as any).privateKey);
+    const keypair = await crypto.subtle.generateKey({ name: 'Ed25519' } as any, true, [
+      'sign',
+      'verify',
+    ]);
+    const pubJwk = await crypto.subtle.exportKey('jwk', (keypair as any).publicKey);
+    sessionPrivKeyJwk = await crypto.subtle.exportKey('jwk', (keypair as any).privateKey);
 
     // Register session via API
-    const sessionRes = await honoRequest("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: pubJwk.x!,
-    }, apiKey);
+    const sessionRes = await honoRequest(
+      'POST',
+      `/api/agents/${agentId}/sessions`,
+      {
+        session_id: sessionId,
+        session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
     expect(sessionRes.status).toBe(201);
 
     // Create board + task + assign
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const board = await createBoard(testEnv.DB, userId, "jwt-test-board");
+    const { createBoard } = await import('../apps/web/functions/api/boardRepo');
+    const { createTask } = await import('../apps/web/functions/api/taskRepo');
+    const board = await createBoard(testEnv.DB, userId, 'jwt-test-board');
     boardId = board.id;
-    const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
+    const task = await createTask(testEnv.DB, userId, {
+      title: 'JWT test task',
+      board_id: boardId,
+    });
     taskId = task.id;
 
-    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
+    const assignRes = await honoRequest(
+      'POST',
+      `/api/tasks/${taskId}/assign`,
+      { agent_id: agentId },
+      apiKey,
+    );
     expect(assignRes.status).toBe(200);
   });
 
-  it("ApiClient constructs valid session JWT that server accepts for claim", async () => {
+  it('ApiClient constructs valid session JWT that server accepts for claim', async () => {
     setEnv({
       AK_AGENT_ID: agentId,
       AK_SESSION_ID: sessionId,
@@ -148,24 +186,29 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     });
 
     let capturedToken: string | null = null;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
       const path = new URL(url).pathname;
       const headers = new Headers(init?.headers);
-      capturedToken = headers.get("Authorization")?.replace("Bearer ", "") || null;
-      return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
+      capturedToken = headers.get('Authorization')?.replace('Bearer ', '') || null;
+      return honoRequest(
+        init?.method || 'GET',
+        path,
+        init?.body ? JSON.parse(init.body as string) : undefined,
+        capturedToken!,
+      );
     });
 
-    const { createClient } = await import("../packages/cli/src/client.js");
+    const { createClient } = await import('../packages/cli/src/client.js');
     const client = await createClient();
 
-    const claimed = await client.claimTask(taskId) as any;
-    expect(claimed.status).toBe("in_progress");
+    const claimed = (await client.claimTask(taskId)) as any;
+    expect(claimed.status).toBe('in_progress');
     expect(claimed.assigned_to).toBe(agentId);
-    expect(capturedToken!.split(".")).toHaveLength(3);
+    expect(capturedToken!.split('.')).toHaveLength(3);
   });
 
-  it("ApiClient constructs valid session JWT that server accepts for review", async () => {
+  it('ApiClient constructs valid session JWT that server accepts for review', async () => {
     setEnv({
       AK_AGENT_ID: agentId,
       AK_SESSION_ID: sessionId,
@@ -174,23 +217,35 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     });
 
     let capturedToken: string | null = null;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
       const path = new URL(url).pathname;
       const headers = new Headers(init?.headers);
-      capturedToken = headers.get("Authorization")?.replace("Bearer ", "") || null;
-      return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
+      capturedToken = headers.get('Authorization')?.replace('Bearer ', '') || null;
+      return honoRequest(
+        init?.method || 'GET',
+        path,
+        init?.body ? JSON.parse(init.body as string) : undefined,
+        capturedToken!,
+      );
     });
 
-    const { createClient } = await import("../packages/cli/src/client.js");
+    const { createClient } = await import('../packages/cli/src/client.js');
     const client = await createClient();
 
-    const reviewed = await client.reviewTask(taskId, { pr_url: "https://github.com/test/pull/1" }) as any;
-    expect(reviewed.status).toBe("in_review");
+    const reviewed = (await client.reviewTask(taskId, {
+      pr_url: 'https://github.com/test/pull/1',
+    })) as any;
+    expect(reviewed.status).toBe('in_review');
   });
 
-  it("machine API key is correctly rejected for claim (agent-only endpoint)", async () => {
-    const res = await honoRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, apiKey);
+  it('machine API key is correctly rejected for claim (agent-only endpoint)', async () => {
+    const res = await honoRequest(
+      'POST',
+      `/api/tasks/${taskId}/claim`,
+      { agent_id: agentId },
+      apiKey,
+    );
     expect(res.status).toBe(403);
   });
 });

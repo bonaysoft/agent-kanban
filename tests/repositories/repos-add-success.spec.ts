@@ -19,7 +19,9 @@ test.describe('Repositories Page', () => {
     // 2. Type 'test-repo' in Name and 'https://github.com/user/test-repo.git' in Clone URL,
     //    then click 'Add Repository'
     await page.getByRole('textbox', { name: 'my-repo' }).fill('test-repo');
-    await page.getByRole('textbox', { name: 'https://github.com/user/repo.' }).fill('https://github.com/user/test-repo.git');
+    await page
+      .getByRole('textbox', { name: 'https://github.com/user/repo.' })
+      .fill('https://github.com/user/test-repo.git');
     await page.getByRole('dialog').getByRole('button', { name: 'Add Repository' }).click();
 
     // expect: The dialog closes

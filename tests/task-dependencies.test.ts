@@ -1,27 +1,30 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { Miniflare } from 'miniflare';
+import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
+const MIGRATIONS_DIR = join(__dirname, '../apps/web/migrations');
 
 const env = {
   DB: null as any as D1Database,
-  AUTH_SECRET: "test-secret-32-chars-minimum-ok!!",
-  ALLOWED_HOSTS: "localhost:8788",
-  GITHUB_CLIENT_ID: "x",
-  GITHUB_CLIENT_SECRET: "x",
+  AUTH_SECRET: 'test-secret-32-chars-minimum-ok!!',
+  ALLOWED_HOSTS: 'localhost:8788',
+  GITHUB_CLIENT_ID: 'x',
+  GITHUB_CLIENT_SECRET: 'x',
 };
 
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql"];
+  const files = ['0001_initial.sql'];
   for (const file of files) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
+    for (const stmt of sql
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -31,33 +34,35 @@ beforeAll(async () => {
   mf = new Miniflare({
     modules: true,
     script: "export default { fetch() { return new Response('ok'); } }",
-    d1Databases: { DB: "test-db" },
+    d1Databases: { DB: 'test-db' },
   });
-  env.DB = await mf.getD1Database("DB");
+  env.DB = await mf.getD1Database('DB');
   await applyMigrations(env.DB);
 
   const now = new Date().toISOString();
   await env.DB.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind("test-user-deps", "Deps User", "deps@example.com", now, now).run();
+    'INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)',
+  )
+    .bind('test-user-deps', 'Deps User', 'deps@example.com', now, now)
+    .run();
 });
 
 afterAll(async () => {
   await mf.dispose();
 });
 
-describe("task dependencies", () => {
-  const userId = "test-user-deps";
+describe('task dependencies', () => {
+  const userId = 'test-user-deps';
   let boardId: string;
 
   beforeAll(async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "deps-board");
+    const { createBoard } = await import('../apps/web/functions/api/boardRepo');
+    const board = await createBoard(env.DB, userId, 'deps-board');
     boardId = board.id;
   });
 
   async function createTask(opts: { title?: string; depends_on?: string[] } = {}) {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import('../apps/web/functions/api/taskRepo');
     return createTask(env.DB, userId, {
       title: opts.title || `Task ${randomUUID().slice(0, 8)}`,
       board_id: boardId,
@@ -65,30 +70,30 @@ describe("task dependencies", () => {
     });
   }
 
-  it("listTasks returns depends_on for each task", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const t1 = await createTask({ title: "dep-parent" });
-    const t2 = await createTask({ title: "dep-child", depends_on: [t1.id] });
+  it('listTasks returns depends_on for each task', async () => {
+    const { listTasks } = await import('../apps/web/functions/api/taskRepo');
+    const t1 = await createTask({ title: 'dep-parent' });
+    const t2 = await createTask({ title: 'dep-child', depends_on: [t1.id] });
 
     const tasks = await listTasks(env.DB, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id) as any;
     expect(child.depends_on).toEqual([t1.id]);
   });
 
-  it("listTasks returns empty depends_on for tasks with no deps", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const t = await createTask({ title: "no-deps" });
+  it('listTasks returns empty depends_on for tasks with no deps', async () => {
+    const { listTasks } = await import('../apps/web/functions/api/taskRepo');
+    const t = await createTask({ title: 'no-deps' });
 
     const tasks = await listTasks(env.DB, { board_id: boardId });
     const found = tasks.find((task: any) => task.id === t.id) as any;
     expect(found.depends_on).toEqual([]);
   });
 
-  it("listTasks returns multiple depends_on", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const t1 = await createTask({ title: "multi-dep-a" });
-    const t2 = await createTask({ title: "multi-dep-b" });
-    const t3 = await createTask({ title: "multi-dep-child", depends_on: [t1.id, t2.id] });
+  it('listTasks returns multiple depends_on', async () => {
+    const { listTasks } = await import('../apps/web/functions/api/taskRepo');
+    const t1 = await createTask({ title: 'multi-dep-a' });
+    const t2 = await createTask({ title: 'multi-dep-b' });
+    const t3 = await createTask({ title: 'multi-dep-child', depends_on: [t1.id, t2.id] });
 
     const tasks = await listTasks(env.DB, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t3.id) as any;
@@ -97,32 +102,32 @@ describe("task dependencies", () => {
     expect(child.depends_on).toContain(t2.id);
   });
 
-  it("blocked is true when dependency is not done", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const t1 = await createTask({ title: "blocker" });
-    const t2 = await createTask({ title: "blocked-task", depends_on: [t1.id] });
+  it('blocked is true when dependency is not done', async () => {
+    const { listTasks } = await import('../apps/web/functions/api/taskRepo');
+    const t1 = await createTask({ title: 'blocker' });
+    const t2 = await createTask({ title: 'blocked-task', depends_on: [t1.id] });
 
     const tasks = await listTasks(env.DB, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id);
     expect(child!.blocked).toBe(true);
   });
 
-  it("blocked is false when dependency is done", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const t1 = await createTask({ title: "done-blocker" });
+  it('blocked is false when dependency is done', async () => {
+    const { listTasks } = await import('../apps/web/functions/api/taskRepo');
+    const t1 = await createTask({ title: 'done-blocker' });
     await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(t1.id).run();
-    const t2 = await createTask({ title: "unblocked-task", depends_on: [t1.id] });
+    const t2 = await createTask({ title: 'unblocked-task', depends_on: [t1.id] });
 
     const tasks = await listTasks(env.DB, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id);
     expect(child!.blocked).toBe(false);
   });
 
-  it("setDependencies preserves existing deps when appending", async () => {
-    const { listTasks, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const t1 = await createTask({ title: "original-dep" });
-    const t2 = await createTask({ title: "appended-dep" });
-    const t3 = await createTask({ title: "child-with-append", depends_on: [t1.id] });
+  it('setDependencies preserves existing deps when appending', async () => {
+    const { listTasks, updateTask } = await import('../apps/web/functions/api/taskRepo');
+    const t1 = await createTask({ title: 'original-dep' });
+    const t2 = await createTask({ title: 'appended-dep' });
+    const t3 = await createTask({ title: 'child-with-append', depends_on: [t1.id] });
 
     // Simulate what daemon does: read depends_on from listTasks, append new dep
     const tasks = await listTasks(env.DB, { board_id: boardId });

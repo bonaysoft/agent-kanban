@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Button } from "./ui/button";
-import { api } from "../lib/api";
-import { getAuthToken } from "../lib/auth-client";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Button } from './ui/button';
+import { api } from '../lib/api';
+import { getAuthToken } from '../lib/auth-client';
 
 interface AddMachineStepsProps {
   apiKey: string;
@@ -29,11 +29,11 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       if (!res.ok) return;
-      const keyData = await res.json() as any;
+      const keyData = (await res.json()) as any;
       const machineId = keyData?.metadata?.machineId;
       if (!machineId) return;
       const m = await api.machines.get(machineId);
-      if (m && m.status === "online") {
+      if (m && m.status === 'online') {
         setConnected(true);
         setConnectedMachine(m);
         stopPolling();
@@ -56,7 +56,9 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
             <span className="font-mono text-sm text-content-primary">{connectedMachine.name}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Status</span>
+            <span className="text-[11px] text-content-tertiary uppercase tracking-wide">
+              Status
+            </span>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-success" />
               <span className="text-xs text-success">Online</span>
@@ -65,15 +67,24 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
           {connectedMachine.os && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-content-tertiary uppercase tracking-wide">OS</span>
-              <span className="font-mono text-[11px] text-content-primary">{connectedMachine.os}</span>
+              <span className="font-mono text-[11px] text-content-primary">
+                {connectedMachine.os}
+              </span>
             </div>
           )}
           {connectedMachine.runtimes && (
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Runtimes</span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">
+                Runtimes
+              </span>
               <div className="flex gap-1">
                 {connectedMachine.runtimes.map((r: string) => (
-                  <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">{r}</span>
+                  <span
+                    key={r}
+                    className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded"
+                  >
+                    {r}
+                  </span>
                 ))}
               </div>
             </div>
@@ -108,9 +119,11 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
       <Button
         variant="outline"
         className="w-full"
-        onClick={() => navigator.clipboard.writeText(
-          `npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKey}`
-        )}
+        onClick={() =>
+          navigator.clipboard.writeText(
+            `npx agent-kanban start --api-url ${apiUrl} --api-key ${apiKey}`,
+          )
+        }
       >
         Copy to clipboard
       </Button>

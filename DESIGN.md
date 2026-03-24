@@ -1,18 +1,21 @@
 # Design System — Agent Kanban
 
 ## Product Context
+
 - **What this is:** An agent-first cross-project kanban board. Mission control for your AI workforce.
 - **Who it's for:** Developers who use AI coding agents (Claude Code, Codex, Gemini CLI) daily.
 - **Space/industry:** Developer tools, project management. Peers: Linear, Trello, Notion. Differentiator: agents are first-class citizens.
 - **Project type:** Web app (dashboard / monitoring tool) + CLI
 
 ## Aesthetic Direction
+
 - **Direction:** Industrial/Utilitarian — function-first, data-aware, monospace accents
 - **Decoration level:** Minimal — typography and spacing do the work. No gradients, no glassmorphism, no decorative borders. Surfaces separated by shade, not lines.
 - **Mood:** A spacecraft dashboard, not a SaaS landing page. Serious, focused, alive when agents work. The board should feel like a window into active AI work.
 - **Reference sites:** [Linear](https://linear.app), [Raycast](https://raycast.com), [Warp](https://warp.dev), [Vercel](https://vercel.com)
 
 ## Typography
+
 - **Display/Hero:** Geist (700) — clean, modern, excellent at large sizes. letter-spacing: -0.03em
 - **Body:** Geist (400/500) — same family for coherence. 14px base, line-height 1.6
 - **UI/Labels:** Geist (500/600) — 12-13px, used for column headers, field labels, nav items
@@ -32,9 +35,11 @@
 ## Color
 
 ### Approach: Restrained
+
 Color is rare and meaningful. The cyan accent is reserved for agent activity and interactive elements. Everything else is monochrome.
 
 ### Dark Mode (default)
+
 - **Background primary:** #09090B — app background
 - **Background secondary:** #18181B — cards, surfaces, panels
 - **Background tertiary:** #27272A — elevated surfaces, hover states
@@ -47,6 +52,7 @@ Color is rare and meaningful. The cyan accent is reserved for agent activity and
 - **Accent glow:** rgba(34, 211, 238, 0.12) — agent-active card box-shadow
 
 ### Light Mode
+
 - **Background primary:** #FAFAFA
 - **Background secondary:** #F4F4F5
 - **Background tertiary:** #E4E4E7
@@ -60,21 +66,25 @@ Color is rare and meaningful. The cyan accent is reserved for agent activity and
 - **Accent glow:** rgba(34, 211, 238, 0.15)
 
 ### Semantic Colors (both modes)
+
 - **Success:** #22C55E — task completed, positive status
 - **Warning:** #EAB308 — stale agent, medium priority
 - **Error:** #EF4444 — failures, urgent priority
 - **Info:** same as accent (#22D3EE dark / #0891B2 light)
 
 ### Priority Colors
+
 - **Urgent:** #EF4444 (red)
 - **High:** #F97316 (orange)
 - **Medium:** #EAB308 (amber)
 - **Low:** #71717A dark / #A1A1AA light (gray)
 
 ### Dark Mode Strategy
+
 Dark is the default. Light mode uses the same hue relationships with adjusted lightness for readability. Accent shifts from #22D3EE (bright cyan) to #0891B2 (deeper cyan) to maintain WCAG AA contrast on light backgrounds.
 
 ## Spacing
+
 - **Base unit:** 4px
 - **Density:** Comfortable — not cramped (not a trading terminal) but not wasteful (kanban needs screen real estate)
 - **Scale:**
@@ -91,6 +101,7 @@ Dark is the default. Light mode uses the same hue relationships with adjusted li
 - **Section spacing:** 16px (space-y-4)
 
 ## Layout
+
 - **Approach:** Grid-disciplined — strict columns for the kanban board, predictable alignment
 - **Grid:** 5 equal columns (kanban: Todo, In Progress, In Review, Done, Cancelled), 12-column grid for other layouts
 - **Max content width:** 1200px
@@ -105,6 +116,7 @@ Dark is the default. Light mode uses the same hue relationships with adjusted li
   - Mobile: <768px — tab switcher (Todo | In Progress | In Review | Done | Cancelled), full-screen detail
 
 ## Motion
+
 - **Approach:** Intentional — card transitions on poll refresh are the magic moment. Everything else is functional.
 - **Easing:**
   - Enter: ease-out (elements appearing)
@@ -122,7 +134,9 @@ Dark is the default. Light mode uses the same hue relationships with adjusted li
   - Skeleton shimmer: gradient sweep, 1.5s infinite
 
 ## Agent Visual Identity
+
 Agents are first-class citizens in the UI. Their activity should be visually distinct from human activity:
+
 - **Agent-claimed cards:** cyan accent border + subtle radial glow
 - **Agent name:** displayed in Geist Mono, cyan color, with pulsing dot indicator
 - **Agent log entries:** monospace font, slightly different background, left border in cyan
@@ -130,17 +144,20 @@ Agents are first-class citizens in the UI. Their activity should be visually dis
 - **"In Progress" column:** header text turns cyan when any card was updated in last 5 minutes
 
 ## Component Library
+
 Built on **shadcn/ui** (Tailwind + Radix UI primitives):
+
 - Card, Badge, Button, Input, Sheet (slide-out panel), Skeleton
 - DropdownMenu (filter dropdowns)
 - Toast (errors only, not success — card appearance IS the success confirmation)
 
 ## Decisions Log
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-03-20 | Cyan (#22D3EE) as primary accent | Every dev tool uses blue. Cyan reads as "digital," "machine," "active" — fits agent identity. Stands out in screenshots. |
-| 2026-03-20 | Geist + Geist Mono | Inter is invisible (everything uses it). Geist has character without being distracting. Mono variant is perfect for agent logs. |
-| 2026-03-20 | Agent glow effect on cards | The board should literally light up when agents work. This is the product's magic moment. Subtle enough to avoid gimmick, strong enough to notice. |
-| 2026-03-20 | Dark mode first | Category baseline — every dev tool defaults dark. Light mode exists but dark is home. |
-| 2026-03-20 | Restrained color | Color is rare and meaningful. The monochrome foundation makes cyan accents pop. Agent activity stands out because everything else is quiet. |
-| 2026-03-20 | Industrial/Utilitarian aesthetic | This is mission control, not a SaaS landing page. Every pixel earns its place. |
+
+| Date       | Decision                         | Rationale                                                                                                                                          |
+| ---------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-03-20 | Cyan (#22D3EE) as primary accent | Every dev tool uses blue. Cyan reads as "digital," "machine," "active" — fits agent identity. Stands out in screenshots.                           |
+| 2026-03-20 | Geist + Geist Mono               | Inter is invisible (everything uses it). Geist has character without being distracting. Mono variant is perfect for agent logs.                    |
+| 2026-03-20 | Agent glow effect on cards       | The board should literally light up when agents work. This is the product's magic moment. Subtle enough to avoid gimmick, strong enough to notice. |
+| 2026-03-20 | Dark mode first                  | Category baseline — every dev tool defaults dark. Light mode exists but dark is home.                                                              |
+| 2026-03-20 | Restrained color                 | Color is rare and meaningful. The monochrome foundation makes cyan accents pop. Agent activity stands out because everything else is quiet.        |
+| 2026-03-20 | Industrial/Utilitarian aesthetic | This is mission control, not a SaaS landing page. Every pixel earns its place.                                                                     |

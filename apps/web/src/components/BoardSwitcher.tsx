@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { useState, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 interface Board {
   id: string;
@@ -17,8 +17,14 @@ interface BoardSwitcherProps {
   onClose: () => void;
 }
 
-export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClose }: BoardSwitcherProps) {
-  const [newName, setNewName] = useState("");
+export function BoardSwitcher({
+  boards,
+  activeBoardId,
+  onSelect,
+  onCreate,
+  onClose,
+}: BoardSwitcherProps) {
+  const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -26,12 +32,17 @@ export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClo
     const name = newName.trim();
     if (!name) return;
     onCreate(name);
-    setNewName("");
+    setNewName('');
     setCreating(false);
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em]">
@@ -47,21 +58,26 @@ export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClo
             return (
               <button
                 key={b.id}
-                onClick={() => { onSelect(b.id); onClose(); }}
+                onClick={() => {
+                  onSelect(b.id);
+                  onClose();
+                }}
                 className={`w-full text-left px-3.5 py-3 rounded-lg transition-colors group ${
-                  isActive
-                    ? "bg-accent-soft"
-                    : "hover:bg-surface-tertiary"
+                  isActive ? 'bg-accent-soft' : 'hover:bg-surface-tertiary'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    isActive ? "bg-accent" : "bg-transparent"
-                  }`} />
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      isActive ? 'bg-accent' : 'bg-transparent'
+                    }`}
+                  />
                   <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-medium truncate ${
-                      isActive ? "text-accent" : "text-content-primary"
-                    }`}>
+                    <div
+                      className={`text-sm font-medium truncate ${
+                        isActive ? 'text-accent' : 'text-content-primary'
+                      }`}
+                    >
                       {b.name}
                     </div>
                     {b.description && (
@@ -91,17 +107,16 @@ export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClo
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") { setCreating(false); setNewName(""); }
+                  if (e.key === 'Enter') handleCreate();
+                  if (e.key === 'Escape') {
+                    setCreating(false);
+                    setNewName('');
+                  }
                 }}
                 placeholder="Board name"
                 autoFocus
               />
-              <Button
-                onClick={handleCreate}
-                disabled={!newName.trim()}
-                size="sm"
-              >
+              <Button onClick={handleCreate} disabled={!newName.trim()} size="sm">
                 Create
               </Button>
             </div>
@@ -112,7 +127,16 @@ export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClo
               onClick={() => setCreating(true)}
               className="w-full justify-start text-content-tertiary"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>

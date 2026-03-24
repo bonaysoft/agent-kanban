@@ -1,6 +1,6 @@
-import { AgentIdenticon } from "./AgentIdenticon";
-import { agentColor } from "../lib/agentIdentity";
-import { Badge } from "./ui/badge";
+import { AgentIdenticon } from './AgentIdenticon';
+import { agentColor } from '../lib/agentIdentity';
+import { Badge } from './ui/badge';
 
 interface TaskCardProps {
   task: any;
@@ -10,10 +10,10 @@ interface TaskCardProps {
 }
 
 const priorityColors: Record<string, string> = {
-  urgent: "bg-red-500/15 text-red-500",
-  high: "bg-orange-500/15 text-orange-500",
-  medium: "bg-yellow-500/15 text-yellow-500",
-  low: "bg-zinc-500/15 text-content-tertiary",
+  urgent: 'bg-red-500/15 text-red-500',
+  high: 'bg-orange-500/15 text-orange-500',
+  medium: 'bg-yellow-500/15 text-yellow-500',
+  low: 'bg-zinc-500/15 text-content-tertiary',
 };
 
 export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) {
@@ -25,22 +25,31 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
       className={`
         w-full text-left bg-surface-card border rounded-lg p-3
         transition-all duration-150 cursor-pointer
-        ${isAgentActive
-          ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
-          : "border-border hover:border-content-tertiary"}
-        ${isNew ? "animate-card-highlight" : ""}
+        ${
+          isAgentActive
+            ? 'border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]'
+            : 'border-border hover:border-content-tertiary'
+        }
+        ${isNew ? 'animate-card-highlight' : ''}
       `}
-      style={isAgentActive && task.agent_public_key ? {
-        borderColor: `color-mix(in srgb, ${agentColor(task.agent_public_key)} 30%, transparent)`,
-        boxShadow: `0 0 20px color-mix(in srgb, ${agentColor(task.agent_public_key)} 12%, transparent)`,
-      } : undefined}
+      style={
+        isAgentActive && task.agent_public_key
+          ? {
+              borderColor: `color-mix(in srgb, ${agentColor(task.agent_public_key)} 30%, transparent)`,
+              boxShadow: `0 0 20px color-mix(in srgb, ${agentColor(task.agent_public_key)} 12%, transparent)`,
+            }
+          : undefined
+      }
     >
       <div className="flex items-center gap-1.5 mb-2">
         <div className="text-[13px] font-medium leading-snug text-content-primary flex-1">
           {task.title}
         </div>
         {task.blocked && (
-          <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase shrink-0">
+          <Badge
+            variant="destructive"
+            className="text-[10px] font-mono font-semibold uppercase shrink-0"
+          >
             Blocked
           </Badge>
         )}
@@ -48,12 +57,18 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
 
       <div className="flex items-center gap-1.5 flex-wrap">
         {task.repository_name && (
-          <Badge variant="secondary" className="text-[11px] font-mono bg-accent-soft text-accent border-none">
+          <Badge
+            variant="secondary"
+            className="text-[11px] font-mono bg-accent-soft text-accent border-none"
+          >
             {task.repository_name}
           </Badge>
         )}
         {task.priority && (
-          <Badge variant="secondary" className={`text-[11px] font-mono border-none ${priorityColors[task.priority]}`}>
+          <Badge
+            variant="secondary"
+            className={`text-[11px] font-mono border-none ${priorityColors[task.priority]}`}
+          >
             {task.priority}
           </Badge>
         )}
@@ -79,7 +94,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
 
       {task.result && (
         <div className="font-mono text-[11px] text-success mt-1.5">
-          Completed{task.duration_minutes ? ` in ${task.duration_minutes} min` : ""}
+          Completed{task.duration_minutes ? ` in ${task.duration_minutes} min` : ''}
         </div>
       )}
     </button>

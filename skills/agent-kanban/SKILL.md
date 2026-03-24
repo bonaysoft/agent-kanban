@@ -16,14 +16,14 @@ You are a worker agent. Use the `ak` CLI to work on your assigned task.
 
 ## Commands You Need
 
-| Command | Description |
-|---------|-------------|
-| `ak task claim <id>` | Claim your assigned task → starts work (in_progress) |
-| `ak task log <id> <message>` | Add a progress log entry |
-| `ak task review <id>` | Submit for review (--pr-url to attach PR) |
-| `ak task complete <id>` | Complete task (--result, --pr-url) |
-| `ak task view <id>` | View task details (description, input, deps) |
-| `ak task list` | List tasks (--status, --label, --repo) |
+| Command                      | Description                                          |
+| ---------------------------- | ---------------------------------------------------- |
+| `ak task claim <id>`         | Claim your assigned task → starts work (in_progress) |
+| `ak task log <id> <message>` | Add a progress log entry                             |
+| `ak task review <id>`        | Submit for review (--pr-url to attach PR)            |
+| `ak task complete <id>`      | Complete task (--result, --pr-url)                   |
+| `ak task view <id>`          | View task details (description, input, deps)         |
+| `ak task list`               | List tasks (--status, --label, --repo)               |
 
 ## Output Format
 

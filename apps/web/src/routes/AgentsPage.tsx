@@ -1,20 +1,20 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Header } from "../components/Header";
-import { AgentIdenticon } from "../components/AgentIdenticon";
-import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
-import { api } from "../lib/api";
-import { formatRelative } from "../components/TaskDetailFields";
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Header } from '../components/Header';
+import { AgentIdenticon } from '../components/AgentIdenticon';
+import { agentFingerprint, agentColor, agentColorRgb } from '../lib/agentIdentity';
+import { api } from '../lib/api';
+import { formatRelative } from '../components/TaskDetailFields';
 
 function formatTokens(n: number): string {
-  if (!n) return "0";
+  if (!n) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
 }
 
 function formatCost(microUsd: number): string {
-  if (!microUsd) return "$0.00";
+  if (!microUsd) return '$0.00';
   return `$${(microUsd / 1_000_000).toFixed(2)}`;
 }
 
@@ -30,7 +30,7 @@ export function AgentsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const online = agents.filter((a) => a.status === "online").length;
+  const online = agents.filter((a) => a.status === 'online').length;
 
   return (
     <div className="min-h-screen bg-surface-primary">
@@ -38,7 +38,10 @@ export function AgentsPage() {
       <div className="max-w-5xl mx-auto px-8 py-10">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-baseline gap-4">
-            <h1 className="text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
+            <h1
+              className="text-2xl font-bold text-content-primary"
+              style={{ letterSpacing: '-0.02em' }}
+            >
               Agents
             </h1>
             {agents.length > 0 && (
@@ -84,20 +87,20 @@ export function AgentsPage() {
 }
 
 function AgentCard({ agent }: { agent: any }) {
-  const isOnline = agent.status === "online";
-  const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
-  const rgb = agent.public_key ? agentColorRgb(agent.public_key) : "34, 211, 238";
-  const fp = agent.fingerprint ? agentFingerprint(agent.fingerprint) : "";
+  const isOnline = agent.status === 'online';
+  const color = agent.public_key ? agentColor(agent.public_key) : '#22D3EE';
+  const rgb = agent.public_key ? agentColorRgb(agent.public_key) : '34, 211, 238';
+  const fp = agent.fingerprint ? agentFingerprint(agent.fingerprint) : '';
 
   return (
     <Link
       to={`/agents/${agent.id}`}
       className="group block rounded-lg overflow-hidden transition-all hover:translate-y-[-2px]"
       style={{
-        background: "var(--bg-secondary)",
+        background: 'var(--bg-secondary)',
         boxShadow: isOnline
           ? `0 4px 24px rgba(${rgb}, 0.15), 0 0 0 1px rgba(${rgb}, 0.1)`
-          : "0 0 0 1px var(--border)",
+          : '0 0 0 1px var(--border)',
       }}
     >
       {/* Top edge — agent color */}
@@ -112,7 +115,16 @@ function AgentCard({ agent }: { agent: any }) {
             {agent.name}
           </h2>
           {agent.builtin ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              className="text-content-tertiary shrink-0"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
@@ -122,9 +134,18 @@ function AgentCard({ agent }: { agent: any }) {
         {/* Fingerprint badge */}
         <div
           className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
-          style={{ background: "var(--bg-secondary)" }}
+          style={{ background: 'var(--bg-secondary)' }}
         >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="opacity-50"
+          >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
@@ -136,11 +157,15 @@ function AgentCard({ agent }: { agent: any }) {
         {/* Status */}
         <div className="mt-2 flex items-center gap-1.5">
           <span
-            className={`w-[6px] h-[6px] rounded-full ${isOnline ? "animate-pulse-glow" : ""}`}
-            style={{ backgroundColor: isOnline ? color : "#3f3f46" }}
+            className={`w-[6px] h-[6px] rounded-full ${isOnline ? 'animate-pulse-glow' : ''}`}
+            style={{ backgroundColor: isOnline ? color : '#3f3f46' }}
           />
           <span className="text-[11px] text-content-tertiary">
-            {isOnline ? "Online" : agent.last_active_at ? formatRelative(agent.last_active_at) : "Offline"}
+            {isOnline
+              ? 'Online'
+              : agent.last_active_at
+                ? formatRelative(agent.last_active_at)
+                : 'Offline'}
           </span>
         </div>
       </div>
@@ -154,4 +179,3 @@ function AgentCard({ agent }: { agent: any }) {
     </Link>
   );
 }
-

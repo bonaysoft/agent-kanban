@@ -1,18 +1,18 @@
-import { execSync } from "child_process";
-import { existsSync, rmSync } from "fs";
-import { basename } from "path";
-import type { Command } from "commander";
-import { MachineClient } from "../client.js";
-import { setLink, removeLink, findPathForRepository } from "../links.js";
-import { REPOS_DIR } from "../paths.js";
+import { execSync } from 'child_process';
+import { existsSync, rmSync } from 'fs';
+import { basename } from 'path';
+import type { Command } from 'commander';
+import { MachineClient } from '../client.js';
+import { setLink, removeLink, findPathForRepository } from '../links.js';
+import { REPOS_DIR } from '../paths.js';
 
 function getGitRepoRoot(): string {
-  return execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
+  return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
 }
 
 function getGitRemoteUrl(): string | undefined {
   try {
-    return execSync("git remote get-url origin", { encoding: "utf-8" }).trim();
+    return execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
   } catch {
     return undefined;
   }
@@ -29,20 +29,20 @@ function extractFullName(url: string): string | null {
 
 export function registerLinkCommand(program: Command) {
   program
-    .command("link")
-    .description("Register current repo and map local directory to it")
+    .command('link')
+    .description('Register current repo and map local directory to it')
     .action(async () => {
       let repoRoot: string;
       try {
         repoRoot = getGitRepoRoot();
       } catch {
-        console.error("Not a git repository. Run this command from a git repo.");
+        console.error('Not a git repository. Run this command from a git repo.');
         process.exit(1);
       }
 
       const remoteUrl = getGitRemoteUrl();
       if (!remoteUrl) {
-        console.error("No git remote found. Add an origin remote first.");
+        console.error('No git remote found. Add an origin remote first.');
         process.exit(1);
       }
 
@@ -72,23 +72,22 @@ export function registerLinkCommand(program: Command) {
     });
 }
 
-
 export function registerUnlinkCommand(program: Command) {
   program
-    .command("unlink")
-    .description("Remove local directory link for current repo")
+    .command('unlink')
+    .description('Remove local directory link for current repo')
     .action(async () => {
       let repoRoot: string;
       try {
         repoRoot = getGitRepoRoot();
       } catch {
-        console.error("Not a git repository. Run this command from a git repo.");
+        console.error('Not a git repository. Run this command from a git repo.');
         process.exit(1);
       }
 
       const remoteUrl = getGitRemoteUrl();
       if (!remoteUrl) {
-        console.error("No git remote found. Add an origin remote first.");
+        console.error('No git remote found. Add an origin remote first.');
         process.exit(1);
       }
 
@@ -97,13 +96,13 @@ export function registerUnlinkCommand(program: Command) {
       const repos = await client.listRepositories();
       const repo = repos.find((r: any) => r.full_name === fullName);
       if (!repo) {
-        console.error("Repository not registered.");
+        console.error('Repository not registered.');
         process.exit(1);
       }
 
       const linkedPath = findPathForRepository(repo.id);
       if (!linkedPath) {
-        console.error("Repository is not linked.");
+        console.error('Repository is not linked.');
         process.exit(1);
       }
 

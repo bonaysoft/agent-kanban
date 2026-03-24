@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { authClient, setAuthToken } from "../lib/auth-client";
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { authClient, setAuthToken } from '../lib/auth-client';
 
 export function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -9,9 +9,9 @@ export function AuthCallbackPage() {
     authClient.getSession().then(({ data }) => {
       if (data?.session?.token) {
         setAuthToken(data.session.token);
-        navigate("/", { replace: true });
+        navigate('/', { replace: true });
       } else {
-        navigate("/auth", { replace: true });
+        navigate('/auth', { replace: true });
       }
     });
   }, [navigate]);

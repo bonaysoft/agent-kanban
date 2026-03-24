@@ -44,6 +44,7 @@ You will:
    Submit your test plan using `planner_save_plan` tool.
 
 **Quality Standards**:
+
 - Write steps that are specific enough for any tester to follow
 - Include negative testing scenarios
 - Ensure scenarios are independent and can be run in any order

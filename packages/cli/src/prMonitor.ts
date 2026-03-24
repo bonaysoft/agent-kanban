@@ -1,8 +1,8 @@
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import type { ApiClient } from "./client.js";
-import { TRACKED_TASKS_FILE } from "./paths.js";
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+import type { ApiClient } from './client.js';
+import { TRACKED_TASKS_FILE } from './paths.js';
 
 // PR Monitor: watches in_review tasks spawned by this machine.
 //   PR merged  → task done
@@ -54,18 +54,18 @@ export class PrMonitor {
     this.checking = true;
 
     try {
-      const tasks = (await this.client.listTasks({ status: "in_review" })) as ReviewTask[];
+      const tasks = (await this.client.listTasks({ status: 'in_review' })) as ReviewTask[];
       const monitored = tasks.filter((t) => t.pr_url && this.trackedTasks.has(t.id));
 
       for (const task of monitored) {
         const state = getPrState(task.pr_url);
         if (!state) continue;
 
-        if (state === "MERGED") {
+        if (state === 'MERGED') {
           console.log(`[INFO] PR merged for task ${task.id}, marking done`);
-          await this.client.completeTask(task.id, { result: "PR merged" });
+          await this.client.completeTask(task.id, { result: 'PR merged' });
           this.untrack(task.id);
-        } else if (state === "CLOSED") {
+        } else if (state === 'CLOSED') {
           console.log(`[INFO] PR closed for task ${task.id}, marking cancelled`);
           await this.client.cancelTask(task.id);
           this.untrack(task.id);
@@ -79,13 +79,15 @@ export class PrMonitor {
   }
 }
 
-function getPrState(prUrl: string): "OPEN" | "MERGED" | "CLOSED" | null {
+function getPrState(prUrl: string): 'OPEN' | 'MERGED' | 'CLOSED' | null {
   try {
     const raw = execSync(`gh pr view "${prUrl}" --json state -q .state`, {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 10_000,
-    }).toString().trim();
-    if (raw === "OPEN" || raw === "MERGED" || raw === "CLOSED") return raw;
+    })
+      .toString()
+      .trim();
+    if (raw === 'OPEN' || raw === 'MERGED' || raw === 'CLOSED') return raw;
     return null;
   } catch {
     return null;
@@ -94,7 +96,7 @@ function getPrState(prUrl: string): "OPEN" | "MERGED" | "CLOSED" | null {
 
 function loadTrackedTasks(): Set<string> {
   try {
-    const data = JSON.parse(readFileSync(TRACKED_TASKS_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync(TRACKED_TASKS_FILE, 'utf-8'));
     return new Set(Array.isArray(data) ? data : []);
   } catch {
     return new Set();
@@ -103,5 +105,5 @@ function loadTrackedTasks(): Set<string> {
 
 function saveTrackedTasks(tasks: Set<string>): void {
   mkdirSync(dirname(TRACKED_TASKS_FILE), { recursive: true });
-  writeFileSync(TRACKED_TASKS_FILE, JSON.stringify([...tasks]) + "\n");
+  writeFileSync(TRACKED_TASKS_FILE, JSON.stringify([...tasks]) + '\n');
 }
