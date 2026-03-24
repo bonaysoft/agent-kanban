@@ -124,9 +124,15 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   if (metadata?.machineId) c.set("machineId", metadata.machineId);
 
   const key = result.key;
-  if (key.rateLimitMax != null) {
-    c.header("X-RateLimit-Limit", String(key.rateLimitMax));
-    c.header("X-RateLimit-Remaining", String(Math.max(0, key.rateLimitMax - (key.requestCount || 0))));
+  if (key) {
+    const limit = key.rateLimitMax ?? key.rate_limit_max;
+    const count = key.requestCount ?? key.request_count;
+    if (limit != null) {
+      c.header("X-RateLimit-Limit", String(limit));
+      c.header("X-RateLimit-Remaining", String(Math.max(0, limit - (count || 0))));
+    } else {
+      console.log(`[rate-limit-debug] key fields: ${Object.keys(key).join(",")}`);
+    }
   }
 
   return enforceRouteRule(c, next);
