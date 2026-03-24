@@ -194,6 +194,18 @@ describe("machine → agent session flow", () => {
     expect(session!.output_tokens).toBe(800);
   });
 
+  it("GET /api/machines/:id returns agents with correct fields", async () => {
+    const res = await apiRequest("GET", `/api/machines/${machineId}`, undefined, apiKey);
+    expect(res.status).toBe(200);
+    const machine = await res.json() as any;
+    expect(machine.agents).toHaveLength(1);
+    const agent = machine.agents[0];
+    expect(agent.id).toBe(agentId);
+    expect(agent.name).toBe("Test Agent");
+    expect(agent.status).toBe("working");
+    expect(agent.last_active_at).toBeTruthy();
+  });
+
   it("final state is consistent", async () => {
     const machine = await env.DB.prepare("SELECT status FROM machines WHERE id = ?").bind(machineId).first();
     expect(machine!.status).toBe("online");

@@ -77,15 +77,18 @@ export async function getMachine(db: D1, machineId: string, ownerId: string): Pr
 
   if (!machine) return null;
 
-  const sessions = await db.prepare(`
-    SELECT s.id, s.agent_id, s.status, s.created_at, a.name as agent_name
-    FROM agent_sessions s
-    JOIN agents a ON s.agent_id = a.id
+  const agents = await db.prepare(`
+    SELECT a.id, a.name,
+      CASE WHEN SUM(s.status = 'active') > 0 THEN 'working' ELSE 'idle' END as status,
+      MAX(s.created_at) as last_active_at
+    FROM agents a
+    JOIN agent_sessions s ON s.agent_id = a.id
     WHERE s.machine_id = ?
-    ORDER BY s.created_at DESC
+    GROUP BY a.id
+    ORDER BY last_active_at DESC
   `).bind(machineId).all();
 
-  return { ...parseMachine(machine), agents: sessions.results };
+  return { ...parseMachine(machine), agents: agents.results };
 }
 
 const parseMachine = <T extends Machine>(row: T) => parseJsonFields(row, ["runtimes", "usage_info"]);
