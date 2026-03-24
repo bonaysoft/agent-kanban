@@ -10,7 +10,7 @@ import { generateSystemPrompt, writePromptFile, type AgentInfo } from './systemP
 import { getLinks, findPathForRepository, setLink } from './links.js';
 import { getConfigValue, setConfigValue, PID_FILE } from './config.js';
 import { getUsage } from './usage.js';
-import { REPOS_DIR, WORKTREES_DIR } from './paths.js';
+import { REPOS_DIR, WORKTREES_DIR, SESSION_PIDS_FILE } from './paths.js';
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -66,10 +66,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const pm = new ProcessManager(
     client,
     opts.agentCli,
-    () => {
-      schedulePoll(baseInterval);
+    {
+      onSlotFreed: () => schedulePoll(baseInterval),
+      onRateLimited: pauseForRateLimit,
+      onProcessStarted: saveSessionPid,
+      onProcessExited: removeSessionPid,
     },
-    pauseForRateLimit,
     opts.taskTimeout,
   );
 
@@ -91,6 +93,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     if (pollTimer) clearTimeout(pollTimer);
     if (resumeTimer) clearTimeout(resumeTimer);
     await pm.killAll();
+    clearSessionPids();
     removePidFile();
     console.log('[INFO] Daemon stopped.');
     process.exit(0);
@@ -620,10 +623,44 @@ function detectRuntimes(): string[] {
   return found;
 }
 
-function isProcessAlive(sessionId: string): boolean {
+function loadSessionPids(): Map<string, number> {
   try {
-    const output = execSync(`ps ax -o args=`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
-    return output.includes(sessionId);
+    const data = JSON.parse(readFileSync(SESSION_PIDS_FILE, 'utf-8'));
+    return new Map(Object.entries(data));
+  } catch {
+    return new Map();
+  }
+}
+
+function writeSessionPids(pids: Map<string, number>): void {
+  writeFileSync(SESSION_PIDS_FILE, JSON.stringify(Object.fromEntries(pids)));
+}
+
+function saveSessionPid(sessionId: string, pid: number): void {
+  const pids = loadSessionPids();
+  pids.set(sessionId, pid);
+  writeSessionPids(pids);
+}
+
+function removeSessionPid(sessionId: string): void {
+  const pids = loadSessionPids();
+  if (pids.delete(sessionId)) writeSessionPids(pids);
+}
+
+function clearSessionPids(): void {
+  try {
+    unlinkSync(SESSION_PIDS_FILE);
+  } catch {
+    /* ignore */
+  }
+}
+
+function isProcessAlive(sessionId: string): boolean {
+  const pid = loadSessionPids().get(sessionId);
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
   } catch {
     return false;
   }
@@ -632,18 +669,25 @@ function isProcessAlive(sessionId: string): boolean {
 async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
   try {
     const agents = (await client.listAgents()) as any[];
-    let closed = 0;
+    const closedSessionIds: string[] = [];
     for (const agent of agents) {
       const sessions = (await client.listSessions(agent.id)) as any[];
       for (const session of sessions) {
         if (session.status !== 'active' || session.machine_id !== machineId) continue;
         if (!isProcessAlive(session.id)) {
           await client.closeSession(agent.id, session.id).catch(() => {});
-          closed++;
+          closedSessionIds.push(session.id);
         }
       }
     }
-    if (closed > 0) console.log(`[INFO] Cleaned up ${closed} stale session(s) from previous run`);
+    if (closedSessionIds.length > 0) {
+      const pids = loadSessionPids();
+      for (const id of closedSessionIds) pids.delete(id);
+      writeSessionPids(pids);
+      console.log(
+        `[INFO] Cleaned up ${closedSessionIds.length} stale session(s) from previous run`,
+      );
+    }
   } catch (err: any) {
     console.warn(`[WARN] Session cleanup failed: ${err.message}`);
   }
