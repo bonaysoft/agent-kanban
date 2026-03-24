@@ -1,41 +1,45 @@
 // spec: specs/agent-kanban.plan.md
 // section: 7.8 Agent creation — add a skill tag with Enter key
 
-import { test, expect } from '@playwright/test';
-import { signUpAndGetBoard } from '../helpers/auth';
+import { expect, test } from "@playwright/test";
+import { signUpAndGetBoard } from "../helpers/auth";
 
-test.describe('Agents Page', () => {
-  test('Agent creation — add a skill tag with Enter key', async ({ page }) => {
+test.describe("Agents Page", () => {
+  test("Agent creation — add a skill tag with Enter key", async ({ page }) => {
     // 1. Sign in, navigate to /agents/new, click 'Custom', scroll to the Skills field in the Workflow section
     await signUpAndGetBoard(page, `agents_skills_${Date.now()}@example.com`);
-    await page.goto('/agents/new');
-    await page.getByRole('button', { name: 'Custom Build your own from' }).click();
+    await page.goto("/agents/new");
+    await page.getByRole("button", { name: "Custom Build your own from" }).click();
 
     // expect: Skills tag input is visible with placeholder text
-    const workflowGroup = page.getByRole('group', { name: 'Workflow' });
-    const skillsInput = workflowGroup.getByRole('textbox', { name: 'Type a skill and press Enter' });
+    const workflowGroup = page.getByRole("group", { name: "Workflow" });
+    const skillsInput = workflowGroup.getByRole("textbox", {
+      name: "Type a skill and press Enter",
+    });
     await expect(skillsInput).toBeVisible();
 
     // 2. Click the Skills field, type 'typescript', and press Enter
     await skillsInput.click();
-    await skillsInput.fill('typescript');
-    await page.keyboard.press('Enter');
+    await skillsInput.fill("typescript");
+    await page.keyboard.press("Enter");
 
     // expect: A 'typescript' tag chip appears in the input
-    await expect(workflowGroup.getByText('typescript')).toBeVisible();
+    await expect(workflowGroup.getByText("typescript")).toBeVisible();
 
     // expect: The text input clears for the next entry
     // After a tag is added, the placeholder is hidden but the input is still present
-    const skillsInputAfterFirstTag = workflowGroup.locator('input[type="text"], input:not([type])').last();
-    await expect(skillsInputAfterFirstTag).toHaveValue('');
+    const skillsInputAfterFirstTag = workflowGroup
+      .locator('input[type="text"], input:not([type])')
+      .last();
+    await expect(skillsInputAfterFirstTag).toHaveValue("");
 
     // 3. Type 'react' and press Enter
-    await skillsInputAfterFirstTag.fill('react');
-    await page.keyboard.press('Enter');
+    await skillsInputAfterFirstTag.fill("react");
+    await page.keyboard.press("Enter");
 
     // expect: A 'react' tag chip also appears
     // expect: Two skill tags are now visible: 'typescript' and 'react'
-    await expect(workflowGroup.getByText('typescript')).toBeVisible();
-    await expect(workflowGroup.getByText('react')).toBeVisible();
+    await expect(workflowGroup.getByText("typescript")).toBeVisible();
+    await expect(workflowGroup.getByText("react")).toBeVisible();
   });
 });

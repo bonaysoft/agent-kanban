@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
-import { api } from "../lib/api";
+import { useEffect, useState } from "react";
 import { agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetDescription } from "./ui/sheet";
 import { Separator } from "./ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
 
 interface AgentProfileProps {
@@ -37,11 +37,19 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.agents.get(agentId).then(setAgent).finally(() => setLoading(false));
+    api.agents
+      .get(agentId)
+      .then(setAgent)
+      .finally(() => setLoading(false));
   }, [agentId]);
 
   return (
-    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <SheetContent showCloseButton={false} className="overflow-y-auto p-0 gap-0">
         <SheetTitle className="sr-only">Agent profile</SheetTitle>
         <SheetDescription className="sr-only">Agent details and activity</SheetDescription>
@@ -64,7 +72,9 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
                   <h2 className="font-mono text-lg text-accent font-semibold">{agent.name}</h2>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[agent.status]}`} />
-                    <span className="text-xs text-content-secondary">{statusLabels[agent.status] || agent.status}</span>
+                    <span className="text-xs text-content-secondary">
+                      {statusLabels[agent.status] || agent.status}
+                    </span>
                   </div>
                   {agent.fingerprint && (
                     <span className="font-mono text-[10px] text-content-tertiary">
@@ -78,11 +88,15 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Tasks</div>
+                  <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
+                    Tasks
+                  </div>
                   <span className="font-mono text-content-primary">{agent.task_count}</span>
                 </div>
                 <div>
-                  <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Last Active</div>
+                  <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
+                    Last Active
+                  </div>
                   <span className="font-mono text-content-primary text-[13px]">
                     {agent.last_active_at ? formatRelative(agent.last_active_at) : "—"}
                   </span>
@@ -92,7 +106,9 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
               <Separator />
 
               <div>
-                <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-2">Activity</div>
+                <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-2">
+                  Activity
+                </div>
                 <div className="space-y-0 max-h-96 overflow-y-auto">
                   {(agent.logs || []).map((log: any) => (
                     <div
@@ -102,7 +118,9 @@ export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProp
                       <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
                         {formatRelative(log.created_at)}
                       </span>
-                      <span className={`text-[13px] ${actionStyles[log.action] || "text-content-secondary"}`}>
+                      <span
+                        className={`text-[13px] ${actionStyles[log.action] || "text-content-secondary"}`}
+                      >
                         {log.action}
                       </span>
                       {log.task_title && (

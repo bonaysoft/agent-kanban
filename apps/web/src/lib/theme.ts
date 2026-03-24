@@ -11,8 +11,7 @@ export function setTheme(theme: Theme) {
 
 export function applyTheme(theme: Theme) {
   const isDark =
-    theme === "dark" ||
-    (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+    theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
 
   document.documentElement.classList.toggle("dark", isDark);
 }

@@ -1,11 +1,18 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
 import type { UsageWindow } from "@agent-kanban/shared";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
-import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { Button } from "../components/ui/button";
-import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
+import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { api } from "../lib/api";
 
 const USAGE_LABELS: Record<string, string> = {
   five_hour: "5-Hour",
@@ -50,7 +57,10 @@ export function MachineDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    api.machines.get(id).then(setMachine).finally(() => setLoading(false));
+    api.machines
+      .get(id)
+      .then(setMachine)
+      .finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.machines.get(id).then(setMachine);
     }, 15000);
@@ -97,7 +107,9 @@ export function MachineDetailPage() {
       <div className="max-w-4xl mx-auto p-8 space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-content-tertiary">
-          <Link to="/machines" className="hover:text-content-secondary transition-colors">Machines</Link>
+          <Link to="/machines" className="hover:text-content-secondary transition-colors">
+            Machines
+          </Link>
           <span>/</span>
           <span className="text-content-secondary">{machine.name}</span>
         </div>
@@ -112,6 +124,7 @@ export function MachineDetailPage() {
             </span>
           </div>
           <button
+            type="button"
             onClick={() => setShowDeleteDialog(true)}
             className="text-xs text-error hover:underline"
           >
@@ -127,17 +140,25 @@ export function MachineDetailPage() {
               <span className="font-mono text-xs text-content-primary">{machine.os || "—"}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Version</span>
-              <span className="font-mono text-xs text-content-primary">{machine.version || "—"}</span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">
+                Version
+              </span>
+              <span className="font-mono text-xs text-content-primary">
+                {machine.version || "—"}
+              </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Last Heartbeat</span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">
+                Last Heartbeat
+              </span>
               <span className="font-mono text-xs text-content-primary">
                 {machine.last_heartbeat_at ? formatRelative(machine.last_heartbeat_at) : "—"}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Created</span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">
+                Created
+              </span>
               <span className="font-mono text-xs text-content-primary">
                 {formatRelative(machine.created_at)}
               </span>
@@ -145,10 +166,15 @@ export function MachineDetailPage() {
           </div>
           {runtimes.length > 0 && (
             <div>
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">
+                Runtimes
+              </span>
               <div className="flex gap-1.5">
                 {runtimes.map((r: string) => (
-                  <span key={r} className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded">
+                  <span
+                    key={r}
+                    className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded"
+                  >
                     {r}
                   </span>
                 ))}
@@ -160,51 +186,64 @@ export function MachineDetailPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Sessions</div>
+            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
+              Sessions
+            </div>
             <span className="font-mono text-lg text-content-primary">{machine.session_count}</span>
           </div>
           <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Active</div>
+            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">
+              Active
+            </div>
             <span className="font-mono text-lg text-accent">{machine.active_session_count}</span>
           </div>
         </div>
 
         {/* Usage quota */}
-        {machine.usage_info && (() => {
-          const windows = Object.entries(machine.usage_info)
-            .filter(([k]) => k !== "updated_at" && USAGE_LABELS[k])
-            .map(([k, v]) => ({ key: k, label: USAGE_LABELS[k], ...(v as UsageWindow) }));
-          if (windows.length === 0) return null;
-          return (
-            <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
-                <span className="text-[11px] font-mono text-content-tertiary">
-                  {machine.usage_info.updated_at ? formatRelative(machine.usage_info.updated_at) : ""}
-                </span>
-              </div>
-              <div className="space-y-2.5">
-                {windows.map(w => (
-                  <div key={w.key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-content-secondary">{w.label}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-content-primary">{Math.round(w.utilization)}%</span>
-                        <span className="text-[11px] text-content-tertiary">resets {formatResetCountdown(w.resets_at)}</span>
+        {machine.usage_info &&
+          (() => {
+            const windows = Object.entries(machine.usage_info)
+              .filter(([k]) => k !== "updated_at" && USAGE_LABELS[k])
+              .map(([k, v]) => ({ key: k, label: USAGE_LABELS[k], ...(v as UsageWindow) }));
+            if (windows.length === 0) return null;
+            return (
+              <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">
+                    Usage
+                  </span>
+                  <span className="text-[11px] font-mono text-content-tertiary">
+                    {machine.usage_info.updated_at
+                      ? formatRelative(machine.usage_info.updated_at)
+                      : ""}
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {windows.map((w) => (
+                    <div key={w.key}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-content-secondary">{w.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-content-primary">
+                            {Math.round(w.utilization)}%
+                          </span>
+                          <span className="text-[11px] text-content-tertiary">
+                            resets {formatResetCountdown(w.resets_at)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
+                          style={{ width: `${Math.min(w.utilization, 100)}%` }}
+                        />
                       </div>
                     </div>
-                    <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
-                        style={{ width: `${Math.min(w.utilization, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
 
         {/* Offline reconnect guide */}
         {isOffline && (
@@ -214,7 +253,7 @@ export function MachineDetailPage() {
               Restart the daemon to reconnect this machine:
             </p>
             <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
-{`ak start --api-url ${apiUrl}`}
+              {`ak start --api-url ${apiUrl}`}
             </pre>
           </div>
         )}
@@ -233,7 +272,9 @@ export function MachineDetailPage() {
                   key={agent.id}
                   to={`/agents/${agent.id}`}
                   className={`flex items-center justify-between bg-surface-secondary border rounded-lg px-4 py-3 hover:border-accent/30 transition-colors ${
-                    agent.status === "working" ? "border-accent/30 shadow-[0_0_16px_rgba(34,211,238,0.06)]" : "border-border"
+                    agent.status === "working"
+                      ? "border-accent/30 shadow-[0_0_16px_rgba(34,211,238,0.06)]"
+                      : "border-border"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -245,8 +286,12 @@ export function MachineDetailPage() {
                     <div>
                       <span className="font-mono text-sm text-accent">{agent.name}</span>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${agentStatusDotColors[agent.status] || "bg-content-tertiary"}`} />
-                        <span className="text-[11px] text-content-tertiary capitalize">{agent.status}</span>
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${agentStatusDotColors[agent.status] || "bg-content-tertiary"}`}
+                        />
+                        <span className="text-[11px] text-content-tertiary capitalize">
+                          {agent.status}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -266,11 +311,15 @@ export function MachineDetailPage() {
           <DialogHeader>
             <DialogTitle>Delete Machine</DialogTitle>
             <DialogDescription>
-              This will revoke the API key for <span className="font-mono text-content-primary">{machine.name}</span>. The daemon will stop authenticating and any running agents will lose access.
+              This will revoke the API key for{" "}
+              <span className="font-mono text-content-primary">{machine.name}</span>. The daemon
+              will stop authenticating and any running agents will lose access.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
             </Button>

@@ -1,12 +1,23 @@
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fetchTemplate } from "@agent-kanban/shared";
 import { Command } from "commander";
-import { setConfigValue, getConfigValue } from "./config.js";
-import { type ApiClient, MachineClient, createClient } from "./client.js";
-import { getFormat, output, formatTaskList, formatTask, formatTaskLogs, formatBoard, formatAgent, formatAgentList, formatBoardList, formatRepositoryList } from "./output.js";
+import { type ApiClient, createClient } from "./client.js";
 import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
-import { fetchTemplate } from "@agent-kanban/shared";
+import { getConfigValue, setConfigValue } from "./config.js";
+import {
+  formatAgent,
+  formatAgentList,
+  formatBoard,
+  formatBoardList,
+  formatRepositoryList,
+  formatTask,
+  formatTaskList,
+  formatTaskLogs,
+  getFormat,
+  output,
+} from "./output.js";
 
 function isUrl(value: string): boolean {
   return value.includes("://") || value.startsWith("git@");
@@ -84,8 +95,12 @@ taskCmd
     if (opts.parent) body.created_from = opts.parent;
     if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
     if (opts.input) {
-      try { body.input = JSON.parse(opts.input); }
-      catch { console.error("Invalid JSON for --input"); process.exit(1); }
+      try {
+        body.input = JSON.parse(opts.input);
+      } catch {
+        console.error("Invalid JSON for --input");
+        process.exit(1);
+      }
     }
 
     const task = await client.createTask(body);
@@ -207,8 +222,12 @@ taskCmd
     if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
     if (opts.repo) body.repository_id = await resolveRepoId(client, opts.repo);
     if (opts.input) {
-      try { body.input = JSON.parse(opts.input); }
-      catch { console.error("Invalid JSON for --input"); process.exit(1); }
+      try {
+        body.input = JSON.parse(opts.input);
+      } catch {
+        console.error("Invalid JSON for --input");
+        process.exit(1);
+      }
     }
     if (Object.keys(body).length === 0) {
       console.error("Nothing to update. Provide at least one option.");
@@ -450,9 +469,11 @@ boardCmd
 
 async function resolveBoardId(client: ApiClient, nameOrId: string): Promise<string> {
   try {
-    const board = await client.getBoard(nameOrId) as any;
+    const board = (await client.getBoard(nameOrId)) as any;
     if (board?.id) return board.id;
-  } catch { /* not a valid ID, try name lookup */ }
+  } catch {
+    /* not a valid ID, try name lookup */
+  }
   const boards = await client.listBoards();
   const match = boards.find((b: any) => b.name === nameOrId);
   if (!match) {

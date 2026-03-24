@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SignJWT } from "jose";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Integration tests for Agent Entity Redesign:
 // - Agent CRUD (update, delete)
@@ -32,7 +33,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -40,9 +44,12 @@ async function applyMigrations(db: D1Database) {
 
 async function seedUser(db: D1Database, id: string, email: string): Promise<string> {
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(id, "Test User", email, now, now).run();
+  await db
+    .prepare(
+      "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)",
+    )
+    .bind(id, "Test User", email, now, now)
+    .run();
   return id;
 }
 
@@ -53,22 +60,33 @@ async function createApiKeyForUser(userId: string): Promise<string> {
   return result.key;
 }
 
-async function apiRequest(method: string, path: string, body?: any, token?: string) {
+async function _apiRequest(method: string, path: string, body?: any, token?: string) {
   const { api } = await import("../apps/web/functions/api/routes");
-  const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Host: "localhost:8788",
+    "x-forwarded-proto": "http",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
   if (body) init.body = JSON.stringify(body);
   return api.request(path, init, env);
 }
 
 async function createSessionKeypair() {
-  const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+  const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, [
+    "sign",
+    "verify",
+  ]);
   const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
   return { publicKey: pubJwk.x!, privateKey: (keypair as any).privateKey };
 }
 
-async function signJWT(sessionId: string, agentId: string, privateKey: CryptoKey): Promise<string> {
+async function _signJWT(
+  sessionId: string,
+  agentId: string,
+  privateKey: CryptoKey,
+): Promise<string> {
   return new SignJWT({ sub: sessionId, aid: agentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
     .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
     .setIssuedAt()
@@ -97,7 +115,13 @@ describe("agent CRUD", () => {
   it("setup user", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     userId = await seedUser(env.DB, "user-crud", "crud@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "CrudAgent", bio: "test bio", soul: "be helpful", runtime: "claude", model: "opus" });
+    const agent = await createAgent(env.DB, userId, {
+      name: "CrudAgent",
+      bio: "test bio",
+      soul: "be helpful",
+      runtime: "claude",
+      model: "opus",
+    });
     agentId = agent.id;
     expect(agent.name).toBe("CrudAgent");
     expect(agent.bio).toBe("test bio");
@@ -105,7 +129,11 @@ describe("agent CRUD", () => {
 
   it("updates agent fields", async () => {
     const { updateAgent, getAgent } = await import("../apps/web/functions/api/agentRepo");
-    await updateAgent(env.DB, agentId, { name: "UpdatedAgent", bio: "new bio", soul: "be precise" });
+    await updateAgent(env.DB, agentId, {
+      name: "UpdatedAgent",
+      bio: "new bio",
+      soul: "be precise",
+    });
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.name).toBe("UpdatedAgent");
     expect(agent!.bio).toBe("new bio");
@@ -135,14 +163,19 @@ describe("agent status computation", () => {
   let userId: string;
   let agentId: string;
   let machineId: string;
-  let apiKey: string;
+  let _apiKey: string;
 
   it("setup", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { createMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-status", "status@test.com");
-    apiKey = await createApiKeyForUser(userId);
-    const machine = await createMachine(env.DB, userId, { name: "status-machine", os: "test", version: "1.0", runtimes: [] });
+    _apiKey = await createApiKeyForUser(userId);
+    const machine = await createMachine(env.DB, userId, {
+      name: "status-machine",
+      os: "test",
+      version: "1.0",
+      runtimes: [],
+    });
     machineId = machine.id;
 
     // Create BA agentHost
@@ -151,7 +184,15 @@ describe("agent status computation", () => {
     const authCtx = await auth.$context;
     await (authCtx.adapter.create as any)({
       model: "agentHost",
-      data: { id: machineId, name: "status-machine", userId, status: "active", activatedAt: new Date(), createdAt: new Date(), updatedAt: new Date() },
+      data: {
+        id: machineId,
+        name: "status-machine",
+        userId,
+        status: "active",
+        activatedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
       forceAllowId: true,
     });
 
@@ -189,7 +230,11 @@ describe("agent status computation", () => {
 
   it("agent goes offline when all sessions are closed", async () => {
     const { closeSession } = await import("../apps/web/functions/api/agentSessionRepo");
-    const sessions = await env.DB.prepare("SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'").bind(agentId).all();
+    const sessions = await env.DB.prepare(
+      "SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'",
+    )
+      .bind(agentId)
+      .all();
     for (const s of sessions.results as any[]) {
       await closeSession(env.DB, s.id);
     }
@@ -210,14 +255,27 @@ describe("session lifecycle", () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { createMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-session", "session@test.com");
-    const machine = await createMachine(env.DB, userId, { name: "session-machine", os: "test", version: "1.0", runtimes: [] });
+    const machine = await createMachine(env.DB, userId, {
+      name: "session-machine",
+      os: "test",
+      version: "1.0",
+      runtimes: [],
+    });
     machineId = machine.id;
 
     const { createAuth } = await import("../apps/web/functions/api/betterAuth");
-    const authCtx = await (createAuth(env)).$context;
+    const authCtx = await createAuth(env).$context;
     await (authCtx.adapter.create as any)({
       model: "agentHost",
-      data: { id: machineId, name: "session-machine", userId, status: "active", activatedAt: new Date(), createdAt: new Date(), updatedAt: new Date() },
+      data: {
+        id: machineId,
+        name: "session-machine",
+        userId,
+        status: "active",
+        activatedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
       forceAllowId: true,
     });
 
@@ -226,7 +284,9 @@ describe("session lifecycle", () => {
   });
 
   it("close session sets status and closed_at", async () => {
-    const { createSession, closeSession, getSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession, closeSession, getSession } = await import(
+      "../apps/web/functions/api/agentSessionRepo"
+    );
     const { publicKey } = await createSessionKeypair();
     sessionId = randomUUID();
     await createSession(env.DB, env, agentId, machineId, sessionId, publicKey, userId);
@@ -238,7 +298,9 @@ describe("session lifecycle", () => {
   });
 
   it("list sessions shows full history", async () => {
-    const { createSession, listSessions } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession, listSessions } = await import(
+      "../apps/web/functions/api/agentSessionRepo"
+    );
     const { publicKey } = await createSessionKeypair();
     await createSession(env.DB, env, agentId, machineId, randomUUID(), publicKey, userId);
 
@@ -251,12 +313,30 @@ describe("session lifecycle", () => {
 
   it("session usage accumulates", async () => {
     const { updateSessionUsage } = await import("../apps/web/functions/api/agentSessionRepo");
-    const active = await env.DB.prepare("SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'").bind(agentId).first<{ id: string }>();
+    const active = await env.DB.prepare(
+      "SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'",
+    )
+      .bind(agentId)
+      .first<{ id: string }>();
 
-    await updateSessionUsage(env.DB, active!.id, { input_tokens: 100, output_tokens: 50, cache_read_tokens: 10, cache_creation_tokens: 5, cost_micro_usd: 500 });
-    await updateSessionUsage(env.DB, active!.id, { input_tokens: 200, output_tokens: 100, cache_read_tokens: 20, cache_creation_tokens: 10, cost_micro_usd: 1000 });
+    await updateSessionUsage(env.DB, active!.id, {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 10,
+      cache_creation_tokens: 5,
+      cost_micro_usd: 500,
+    });
+    await updateSessionUsage(env.DB, active!.id, {
+      input_tokens: 200,
+      output_tokens: 100,
+      cache_read_tokens: 20,
+      cache_creation_tokens: 10,
+      cost_micro_usd: 1000,
+    });
 
-    const session = await env.DB.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(active!.id).first<any>();
+    const session = await env.DB.prepare("SELECT * FROM agent_sessions WHERE id = ?")
+      .bind(active!.id)
+      .first<any>();
     expect(session.input_tokens).toBe(300);
     expect(session.output_tokens).toBe(150);
     expect(session.cost_micro_usd).toBe(1500);
@@ -316,20 +396,24 @@ describe("message sender model", () => {
 
 describe("delegation proof security", () => {
   it("tampered proof is rejected", async () => {
-    const { generateKeypair, computeFingerprint, signDelegation, verifyDelegation } = await import("@agent-kanban/shared");
+    const { generateKeypair, signDelegation, verifyDelegation } = await import(
+      "@agent-kanban/shared"
+    );
 
     const agent = await generateKeypair();
     const session = await generateKeypair();
     const proof = await signDelegation(agent.privateKeyJwk, session.publicKeyBase64);
 
     // Tamper with the proof
-    const tampered = proof.slice(0, -2) + "XX";
+    const tampered = `${proof.slice(0, -2)}XX`;
     const valid = await verifyDelegation(agent.publicKeyBase64, session.publicKeyBase64, tampered);
     expect(valid).toBe(false);
   });
 
   it("wrong agent key rejects proof", async () => {
-    const { generateKeypair, signDelegation, verifyDelegation } = await import("@agent-kanban/shared");
+    const { generateKeypair, signDelegation, verifyDelegation } = await import(
+      "@agent-kanban/shared"
+    );
 
     const agent1 = await generateKeypair();
     const agent2 = await generateKeypair();
@@ -342,7 +426,9 @@ describe("delegation proof security", () => {
   });
 
   it("wrong session key rejects proof", async () => {
-    const { generateKeypair, signDelegation, verifyDelegation } = await import("@agent-kanban/shared");
+    const { generateKeypair, signDelegation, verifyDelegation } = await import(
+      "@agent-kanban/shared"
+    );
 
     const agent = await generateKeypair();
     const session1 = await generateKeypair();
@@ -380,7 +466,11 @@ describe("user assigns task to agent", () => {
   });
 
   it("task logs record assignment with persistent agent ID", async () => {
-    const logs = await env.DB.prepare("SELECT * FROM task_logs WHERE task_id = ? AND action = 'assigned'").bind(taskId).all();
+    const logs = await env.DB.prepare(
+      "SELECT * FROM task_logs WHERE task_id = ? AND action = 'assigned'",
+    )
+      .bind(taskId)
+      .all();
     expect(logs.results.length).toBe(1);
     expect((logs.results[0] as any).agent_id).toBe(agentId);
   });

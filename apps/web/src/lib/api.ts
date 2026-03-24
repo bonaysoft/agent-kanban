@@ -15,7 +15,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
 
   if (!res.ok) {
     const err = new Error(data.error?.message || `HTTP ${res.status}`);
@@ -30,20 +30,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   tasks: {
     list: (params?: Record<string, string>) => {
-      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
       return request<any[]>("GET", `/tasks${qs}`);
     },
     get: (id: string) => request<any>("GET", `/tasks/${id}`),
     create: (input: Record<string, unknown>) => request<any>("POST", "/tasks", input),
-    update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/tasks/${id}`, body),
+    update: (id: string, body: Record<string, unknown>) =>
+      request<any>("PATCH", `/tasks/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/tasks/${id}`),
     claim: (id: string) => request<any>("POST", `/tasks/${id}/claim`),
-    complete: (id: string, body?: Record<string, unknown>) => request<any>("POST", `/tasks/${id}/complete`, body),
+    complete: (id: string, body?: Record<string, unknown>) =>
+      request<any>("POST", `/tasks/${id}/complete`, body),
     release: (id: string) => request<any>("POST", `/tasks/${id}/release`),
     cancel: (id: string) => request<any>("POST", `/tasks/${id}/cancel`),
     review: (id: string) => request<any>("POST", `/tasks/${id}/review`),
     reject: (id: string) => request<any>("POST", `/tasks/${id}/reject`),
-    assign: (id: string, agentId: string) => request<any>("POST", `/tasks/${id}/assign`, { agent_id: agentId }),
+    assign: (id: string, agentId: string) =>
+      request<any>("POST", `/tasks/${id}/assign`, { agent_id: agentId }),
     addLog: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/logs`, { detail }),
     getLogs: (id: string, since?: string) => {
       const qs = since ? `?since=${encodeURIComponent(since)}` : "";
@@ -61,9 +64,18 @@ export const api = {
   agents: {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
-    create: (input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) =>
-      request<any>("POST", "/agents", input),
-    update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
+    create: (input: {
+      name: string;
+      bio?: string;
+      soul?: string;
+      role?: string;
+      handoff_to?: string[];
+      runtime?: string;
+      model?: string;
+      skills?: string[];
+    }) => request<any>("POST", "/agents", input),
+    update: (id: string, body: Record<string, unknown>) =>
+      request<any>("PATCH", `/agents/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/agents/${id}`),
     sessions: (agentId: string) => request<any[]>("GET", `/agents/${agentId}/sessions`),
   },
@@ -75,8 +87,10 @@ export const api = {
   boards: {
     list: () => request<any[]>("GET", "/boards"),
     get: (id: string) => request<any>("GET", `/boards/${id}`),
-    create: (input: { name: string; description?: string }) => request<any>("POST", "/boards", input),
-    update: (id: string, body: { name?: string; description?: string }) => request<any>("PATCH", `/boards/${id}`, body),
+    create: (input: { name: string; description?: string }) =>
+      request<any>("POST", "/boards", input),
+    update: (id: string, body: { name?: string; description?: string }) =>
+      request<any>("PATCH", `/boards/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
   },
   repositories: {

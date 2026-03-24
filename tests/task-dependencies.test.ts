@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Miniflare } from "miniflare";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -21,7 +22,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -38,8 +42,10 @@ beforeAll(async () => {
 
   const now = new Date().toISOString();
   await env.DB.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind("test-user-deps", "Deps User", "deps@example.com", now, now).run();
+    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)",
+  )
+    .bind("test-user-deps", "Deps User", "deps@example.com", now, now)
+    .run();
 });
 
 afterAll(async () => {

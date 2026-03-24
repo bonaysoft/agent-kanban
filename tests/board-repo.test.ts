@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+
+import type { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -71,8 +72,15 @@ describe("boardRepo", () => {
     const { createBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const board = await createBoard(env.DB, "board-test-user", "Blocked Board");
-    const taskA = await createTask(env.DB, "board-test-user", { title: "Task A", board_id: board.id });
-    await createTask(env.DB, "board-test-user", { title: "Task B", board_id: board.id, depends_on: [taskA.id] });
+    const taskA = await createTask(env.DB, "board-test-user", {
+      title: "Task A",
+      board_id: board.id,
+    });
+    await createTask(env.DB, "board-test-user", {
+      title: "Task B",
+      board_id: board.id,
+      depends_on: [taskA.id],
+    });
     const result = await getBoard(env.DB, board.id);
     const taskB = result!.tasks.find((t: any) => t.title === "Task B");
     expect(taskB!.blocked).toBe(true);
@@ -108,7 +116,10 @@ describe("boardRepo", () => {
   it("updateBoard updates both name and description", async () => {
     const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
     const board = await createBoard(env.DB, "board-test-user", "Update Both Board");
-    const updated = await updateBoard(env.DB, board.id, { name: "Both Name", description: "Both Desc" });
+    const updated = await updateBoard(env.DB, board.id, {
+      name: "Both Name",
+      description: "Both Desc",
+    });
     expect(updated!.name).toBe("Both Name");
     expect(updated!.description).toBe("Both Desc");
   });
@@ -127,7 +138,9 @@ describe("boardRepo", () => {
   });
 
   it("deleteBoard removes a board", async () => {
-    const { createBoard, deleteBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard, deleteBoard, getBoard } = await import(
+      "../apps/web/functions/api/boardRepo"
+    );
     const board = await createBoard(env.DB, "board-test-user", "Delete Board");
     const deleted = await deleteBoard(env.DB, board.id);
     expect(deleted).toBe(true);

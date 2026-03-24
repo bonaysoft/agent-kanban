@@ -1,6 +1,6 @@
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { execSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { ApiClient } from "./client.js";
 import { TRACKED_TASKS_FILE } from "./paths.js";
 
@@ -84,7 +84,9 @@ function getPrState(prUrl: string): "OPEN" | "MERGED" | "CLOSED" | null {
     const raw = execSync(`gh pr view "${prUrl}" --json state -q .state`, {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10_000,
-    }).toString().trim();
+    })
+      .toString()
+      .trim();
     if (raw === "OPEN" || raw === "MERGED" || raw === "CLOSED") return raw;
     return null;
   } catch {
@@ -103,5 +105,5 @@ function loadTrackedTasks(): Set<string> {
 
 function saveTrackedTasks(tasks: Set<string>): void {
   mkdirSync(dirname(TRACKED_TASKS_FILE), { recursive: true });
-  writeFileSync(TRACKED_TASKS_FILE, JSON.stringify([...tasks]) + "\n");
+  writeFileSync(TRACKED_TASKS_FILE, `${JSON.stringify([...tasks])}\n`);
 }

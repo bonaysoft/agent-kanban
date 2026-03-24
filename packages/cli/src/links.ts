@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { LINKS_FILE } from "./paths.js";
 
 interface Links {
@@ -16,7 +16,7 @@ function readLinks(): Links {
 
 function writeLinks(links: Links): void {
   mkdirSync(dirname(LINKS_FILE), { recursive: true });
-  writeFileSync(LINKS_FILE, JSON.stringify(links, null, 2) + "\n");
+  writeFileSync(LINKS_FILE, `${JSON.stringify(links, null, 2)}\n`);
 }
 
 export function setLink(repositoryId: string, localPath: string): void {

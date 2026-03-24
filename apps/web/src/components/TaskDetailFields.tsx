@@ -1,15 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { Button } from "./ui/button";
 
-export function EditableText({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
+export function EditableText({
+  value,
+  onSave,
+  className,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+  className?: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -24,29 +36,48 @@ export function EditableText({ value, onSave, className }: { value: string; onSa
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
         className={`${className} border-accent`}
       />
     );
   }
 
   return (
-    <span
+    <button
+      type="button"
       onClick={() => setEditing(true)}
       className={`${className} cursor-pointer hover:border-b hover:border-content-tertiary`}
     >
       {value}
-    </span>
+    </button>
   );
 }
 
-export function EditableTextarea({ value, placeholder, onSave }: { value: string; placeholder: string; onSave: (v: string) => void }) {
+export function EditableTextarea({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder: string;
+  onSave: (v: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (editing) ref.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -60,7 +91,12 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
         rows={3}
         className="resize-y"
       />
@@ -68,24 +104,39 @@ export function EditableTextarea({ value, placeholder, onSave }: { value: string
   }
 
   return (
-    <p
+    <button
+      type="button"
       onClick={() => setEditing(true)}
-      className={`text-sm cursor-pointer rounded-md p-2 hover:bg-surface-tertiary transition-colors ${
+      className={`text-sm cursor-pointer rounded-md p-2 hover:bg-surface-tertiary transition-colors w-full text-left ${
         value ? "text-content-secondary" : "text-content-tertiary"
       }`}
     >
       {value || placeholder}
-    </p>
+    </button>
   );
 }
 
-export function EditableBadge({ value, placeholder, onSave, className }: { value: string | null; placeholder: string; onSave: (v: string) => void; className: string }) {
+export function EditableBadge({
+  value,
+  placeholder,
+  onSave,
+  className,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (v: string) => void;
+  className: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
   const ref = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setDraft(value || ""); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value || "");
+  }, [value]);
+  useEffect(() => {
+    if (editing) ref.current?.focus();
+  }, [editing]);
 
   function commit() {
     setEditing(false);
@@ -99,7 +150,13 @@ export function EditableBadge({ value, placeholder, onSave, className }: { value
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value || ""); setEditing(false); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value || "");
+            setEditing(false);
+          }
+        }}
         placeholder="project name"
         className="text-[11px] font-mono h-6 w-24"
       />
@@ -108,16 +165,25 @@ export function EditableBadge({ value, placeholder, onSave, className }: { value
 
   if (!value) {
     return (
-      <Button variant="outline" size="xs" onClick={() => setEditing(true)} className="text-[11px] font-mono border-dashed">
+      <Button
+        variant="outline"
+        size="xs"
+        onClick={() => setEditing(true)}
+        className="text-[11px] font-mono border-dashed"
+      >
         {placeholder}
       </Button>
     );
   }
 
   return (
-    <span onClick={() => setEditing(true)} className={`text-[11px] font-mono px-2 py-0.5 rounded cursor-pointer ${className}`}>
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className={`text-[11px] font-mono px-2 py-0.5 rounded cursor-pointer ${className}`}
+    >
       {value}
-    </span>
+    </button>
   );
 }
 

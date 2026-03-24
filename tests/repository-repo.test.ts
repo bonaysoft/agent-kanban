@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+
+import type { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -41,7 +42,10 @@ describe("normalizeGitUrl", () => {
 describe("repositoryRepo", () => {
   it("createRepository creates a repo", async () => {
     const { createRepository } = await import("../apps/web/functions/api/repositoryRepo");
-    const repo = await createRepository(env.DB, "repo-test-user", { name: "my-repo", url: "https://github.com/org/my-repo" });
+    const repo = await createRepository(env.DB, "repo-test-user", {
+      name: "my-repo",
+      url: "https://github.com/org/my-repo",
+    });
     expect(repo.name).toBe("my-repo");
     expect(repo.url).toBe("https://github.com/org/my-repo");
   });
@@ -54,29 +58,42 @@ describe("repositoryRepo", () => {
 
   it("listRepositories filters by URL", async () => {
     const { listRepositories } = await import("../apps/web/functions/api/repositoryRepo");
-    const repos = await listRepositories(env.DB, "repo-test-user", { url: "https://github.com/org/my-repo" });
+    const repos = await listRepositories(env.DB, "repo-test-user", {
+      url: "https://github.com/org/my-repo",
+    });
     expect(repos.length).toBe(1);
     expect(repos[0].url).toBe("https://github.com/org/my-repo");
   });
 
   it("listRepositories URL filter normalizes input", async () => {
     const { listRepositories } = await import("../apps/web/functions/api/repositoryRepo");
-    const repos = await listRepositories(env.DB, "repo-test-user", { url: "git@github.com:org/my-repo.git" });
+    const repos = await listRepositories(env.DB, "repo-test-user", {
+      url: "git@github.com:org/my-repo.git",
+    });
     expect(repos.length).toBe(1);
   });
 
   it("listRepositories returns empty for unknown URL", async () => {
     const { listRepositories } = await import("../apps/web/functions/api/repositoryRepo");
-    const repos = await listRepositories(env.DB, "repo-test-user", { url: "https://github.com/org/nonexistent" });
+    const repos = await listRepositories(env.DB, "repo-test-user", {
+      url: "https://github.com/org/nonexistent",
+    });
     expect(repos.length).toBe(0);
   });
 
   it("deleteRepository removes a repo", async () => {
-    const { createRepository, deleteRepository, listRepositories } = await import("../apps/web/functions/api/repositoryRepo");
-    const repo = await createRepository(env.DB, "repo-test-user", { name: "del-repo", url: "https://github.com/org/del-repo" });
+    const { createRepository, deleteRepository, listRepositories } = await import(
+      "../apps/web/functions/api/repositoryRepo"
+    );
+    const repo = await createRepository(env.DB, "repo-test-user", {
+      name: "del-repo",
+      url: "https://github.com/org/del-repo",
+    });
     const deleted = await deleteRepository(env.DB, repo.id);
     expect(deleted).toBe(true);
-    const repos = await listRepositories(env.DB, "repo-test-user", { url: "https://github.com/org/del-repo" });
+    const repos = await listRepositories(env.DB, "repo-test-user", {
+      url: "https://github.com/org/del-repo",
+    });
     expect(repos.length).toBe(0);
   });
 
@@ -88,14 +105,23 @@ describe("repositoryRepo", () => {
 
   it("findOrCreateRepository creates if not found", async () => {
     const { findOrCreateRepository } = await import("../apps/web/functions/api/repositoryRepo");
-    const repo = await findOrCreateRepository(env.DB, "repo-test-user", { name: "find-create", url: "https://github.com/org/find-create" });
+    const repo = await findOrCreateRepository(env.DB, "repo-test-user", {
+      name: "find-create",
+      url: "https://github.com/org/find-create",
+    });
     expect(repo.name).toBe("find-create");
   });
 
   it("findOrCreateRepository returns existing if found", async () => {
     const { findOrCreateRepository } = await import("../apps/web/functions/api/repositoryRepo");
-    const first = await findOrCreateRepository(env.DB, "repo-test-user", { name: "find-create-dup", url: "https://github.com/org/find-create-dup" });
-    const second = await findOrCreateRepository(env.DB, "repo-test-user", { name: "find-create-dup-2", url: "https://github.com/org/find-create-dup" });
+    const first = await findOrCreateRepository(env.DB, "repo-test-user", {
+      name: "find-create-dup",
+      url: "https://github.com/org/find-create-dup",
+    });
+    const second = await findOrCreateRepository(env.DB, "repo-test-user", {
+      name: "find-create-dup-2",
+      url: "https://github.com/org/find-create-dup",
+    });
     expect(second.id).toBe(first.id);
   });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
 interface SubtaskListProps {
@@ -10,7 +10,10 @@ export function SubtaskList({ parentId, onTaskClick }: SubtaskListProps) {
   const [subtasks, setSubtasks] = useState<any[]>([]);
 
   useEffect(() => {
-    api.tasks.list({ parent: parentId }).then(setSubtasks).catch(() => {});
+    api.tasks
+      .list({ parent: parentId })
+      .then(setSubtasks)
+      .catch(() => {});
   }, [parentId]);
 
   if (subtasks.length === 0) return null;
@@ -19,13 +22,16 @@ export function SubtaskList({ parentId, onTaskClick }: SubtaskListProps) {
     <div className="space-y-1 pl-6 md:pl-4">
       {subtasks.map((task) => (
         <button
+          type="button"
           key={task.id}
           onClick={() => onTaskClick(task.id)}
           className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded hover:bg-surface-tertiary transition-colors"
         >
-          <span className={`w-1.5 h-1.5 rounded-full ${
-            task.result ? "bg-success" : task.assigned_to ? "bg-accent" : "bg-content-tertiary"
-          }`} />
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              task.result ? "bg-success" : task.assigned_to ? "bg-accent" : "bg-content-tertiary"
+            }`}
+          />
           <span className="text-sm text-content-secondary truncate">{task.title}</span>
           <span className="font-mono text-[10px] text-content-tertiary ml-auto">{task.id}</span>
         </button>

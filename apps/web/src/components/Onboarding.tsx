@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
+import { AddMachineSteps } from "./AddMachineSteps";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { AddMachineSteps } from "./AddMachineSteps";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -42,9 +42,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <h1 className="text-2xl font-bold text-content-primary">
             Agent <span className="text-accent">Kanban</span>
           </h1>
-          <p className="text-sm text-content-secondary mt-2">
-            Your AI workforce starts here.
-          </p>
+          <p className="text-sm text-content-secondary mt-2">Your AI workforce starts here.</p>
         </div>
 
         {/* Step indicators */}
@@ -59,16 +57,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
         {step === 0 && (
           <div className="space-y-4">
-            <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
+            <label
+              htmlFor="onboarding-board-name"
+              className="block text-xs font-medium text-content-tertiary uppercase tracking-wide"
+            >
               Board name
             </label>
             <Input
+              id="onboarding-board-name"
               value={boardName}
               onChange={(e) => setBoardName(e.target.value)}
             />
-            {error && (
-              <p className="text-xs text-red-400">{error}</p>
-            )}
+            {error && <p className="text-xs text-red-400">{error}</p>}
             <Button
               onClick={handleCreateBoard}
               disabled={loading || !boardName.trim()}
@@ -80,11 +80,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         )}
 
         {step === 1 && apiKeyDisplay && apiKeyId && (
-          <AddMachineSteps
-            apiKey={apiKeyDisplay}
-            apiKeyId={apiKeyId}
-            onDone={onComplete}
-          />
+          <AddMachineSteps apiKey={apiKeyDisplay} apiKeyId={apiKeyId} onDone={onComplete} />
         )}
       </div>
     </div>

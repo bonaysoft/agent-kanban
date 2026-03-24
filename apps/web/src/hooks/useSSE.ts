@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthToken } from "../lib/auth-client";
 
 interface UseSSEOptions {
@@ -69,7 +69,9 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       ]);
       if (logsRes.ok) setLogs(await logsRes.json());
       if (msgsRes.ok) setMessages(await msgsRes.json());
-    } catch { /* ignore polling errors */ }
+    } catch {
+      /* ignore polling errors */
+    }
   }, [taskId, token]);
 
   useEffect(() => {

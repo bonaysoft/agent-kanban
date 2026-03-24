@@ -12,7 +12,8 @@
       "apps/web/functions/**",
       "packages/cli/src/**",
       "packages/shared/src/**",
-      "tests/**"
+      "tests/**",
+      "!**/*.css"
     ]
   },
   "formatter": {
@@ -43,10 +44,29 @@
       }
     }
   },
+  "css": {
+    "parser": {
+      "cssModules": false,
+      "allowWrongLineComments": true
+    },
+    "linter": {
+      "enabled": false
+    },
+    "formatter": {
+      "enabled": false
+    }
+  },
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
       "semicolons": "always"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.css"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false }
+    }
+  ]
 }

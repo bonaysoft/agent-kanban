@@ -1,20 +1,23 @@
 // spec: specs/agent-kanban.plan.md
 // section: 2.3 Protected machines URL redirects unauthenticated user to /auth
 
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-test.describe('Routing and Navigation Guards', () => {
-  test('Protected machines URL redirects unauthenticated user to /auth', async ({ page, context }) => {
+test.describe("Routing and Navigation Guards", () => {
+  test("Protected machines URL redirects unauthenticated user to /auth", async ({
+    page,
+    context,
+  }) => {
     // 1. With no active session, navigate to /machines
     await context.clearCookies();
 
-    await page.goto('/machines');
+    await page.goto("/machines");
 
     // expect: The browser is redirected to /auth
     await expect(page).toHaveURL(/\/auth/, { timeout: 5000 });
 
     // expect: The sign-in form is displayed
-    await expect(page.getByText('Sign in to your account')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+    await expect(page.getByText("Sign in to your account")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
   });
 });

@@ -1,13 +1,13 @@
-import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-import { Header } from "../components/Header";
-import { FilterBar } from "../components/FilterBar";
-import { KanbanColumn } from "../components/KanbanColumn";
-import { TaskDetail } from "../components/TaskDetail";
+import { useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { AgentProfile } from "../components/AgentProfile";
+import { FilterBar } from "../components/FilterBar";
+import { Header } from "../components/Header";
+import { KanbanColumn } from "../components/KanbanColumn";
 import { Onboarding } from "../components/Onboarding";
+import { TaskDetail } from "../components/TaskDetail";
 import { useBoard } from "../hooks/useBoard";
+import { api } from "../lib/api";
 
 const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -62,12 +62,18 @@ export function BoardPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <div className="grid gap-0 p-4" style={{ gridTemplateColumns: `repeat(5, minmax(0, 1fr))` }}>
+        <div
+          className="grid gap-0 p-4"
+          style={{ gridTemplateColumns: `repeat(5, minmax(0, 1fr))` }}
+        >
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="p-4 space-y-3">
               <div className="h-4 w-20 bg-surface-tertiary rounded animate-pulse" />
               {[0, 1].map((j) => (
-                <div key={j} className="h-20 bg-surface-secondary border border-border rounded-lg animate-pulse" />
+                <div
+                  key={j}
+                  className="h-20 bg-surface-secondary border border-border rounded-lg animate-pulse"
+                />
               ))}
             </div>
           ))}
@@ -81,10 +87,12 @@ export function BoardPage() {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <Onboarding onComplete={async () => {
-          const boards = await api.boards.list();
-          if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
-        }} />
+        <Onboarding
+          onComplete={async () => {
+            const boards = await api.boards.list();
+            if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
+          }}
+        />
       </div>
     );
   }
@@ -92,12 +100,18 @@ export function BoardPage() {
   return (
     <div className="min-h-screen bg-surface-primary">
       <Header />
-      <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
+      <FilterBar
+        repositories={repositories}
+        activeRepository={activeRepository}
+        onRepositoryChange={setActiveRepository}
+      />
 
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">
           {error}
-          <button onClick={refresh} className="ml-2 underline">Retry</button>
+          <button type="button" onClick={refresh} className="ml-2 underline">
+            Retry
+          </button>
         </div>
       )}
 
@@ -105,6 +119,7 @@ export function BoardPage() {
       <div className="flex md:hidden border-b border-border">
         {columns.map((col, i) => (
           <button
+            type="button"
             key={col.status}
             onClick={() => setMobileTab(i)}
             className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide text-center transition-colors ${
@@ -117,7 +132,10 @@ export function BoardPage() {
       </div>
 
       {/* Desktop: 5-column grid */}
-      <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
+      <div
+        className="hidden md:grid min-h-[calc(100vh-100px)]"
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
+      >
         {columns.map((col) => (
           <KanbanColumn
             key={col.status}
@@ -130,14 +148,16 @@ export function BoardPage() {
 
       {/* Mobile: single column based on tab */}
       <div className="md:hidden min-h-[calc(100vh-160px)]">
-        {columns.filter((_, i) => i === mobileTab).map((col) => (
-          <KanbanColumn
-            key={col.status}
-            column={col}
-            onTaskClick={setSelectedTask}
-            onAgentClick={setSelectedAgent}
-          />
-        ))}
+        {columns
+          .filter((_, i) => i === mobileTab)
+          .map((col) => (
+            <KanbanColumn
+              key={col.status}
+              column={col}
+              onTaskClick={setSelectedTask}
+              onAgentClick={setSelectedAgent}
+            />
+          ))}
       </div>
 
       {selectedTask && (
@@ -145,7 +165,10 @@ export function BoardPage() {
           taskId={selectedTask}
           onClose={() => setSelectedTask(null)}
           onRefresh={refresh}
-          onAgentClick={(agentId) => { setSelectedTask(null); setSelectedAgent(agentId); }}
+          onAgentClick={(agentId) => {
+            setSelectedTask(null);
+            setSelectedAgent(agentId);
+          }}
         />
       )}
 
@@ -153,7 +176,10 @@ export function BoardPage() {
         <AgentProfile
           agentId={selectedAgent}
           onClose={() => setSelectedAgent(null)}
-          onTaskClick={(taskId) => { setSelectedAgent(null); setSelectedTask(taskId); }}
+          onTaskClick={(taskId) => {
+            setSelectedAgent(null);
+            setSelectedTask(taskId);
+          }}
         />
       )}
     </div>

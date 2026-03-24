@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+
+import type { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -29,7 +30,7 @@ async function readSSEUntil(
     const result = await Promise.race([
       reader.read(),
       new Promise<{ done: true; value: undefined }>((resolve) =>
-        setTimeout(() => resolve({ done: true, value: undefined }), readTimeoutMs)
+        setTimeout(() => resolve({ done: true, value: undefined }), readTimeoutMs),
       ),
     ]);
     if (result.value) {
@@ -111,7 +112,10 @@ describe("createSSEResponse", () => {
 
   it("returns stream for task with only creation log", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const freshTask = await createTask(env.DB, "sse-user", { title: "Fresh SSE Task", board_id: boardId });
+    const freshTask = await createTask(env.DB, "sse-user", {
+      title: "Fresh SSE Task",
+      board_id: boardId,
+    });
 
     const { createSSEResponse } = await import("../apps/web/functions/api/sse");
     const response = await createSSEResponse(env as any, freshTask.id, null);
@@ -127,7 +131,10 @@ describe("createSSEResponse", () => {
   it("merges logs and messages by time order", async () => {
     const { createTask, addTaskLog } = await import("../apps/web/functions/api/taskRepo");
     const { createMessage } = await import("../apps/web/functions/api/messageRepo");
-    const mergeTask = await createTask(env.DB, "sse-user", { title: "Merge SSE Task", board_id: boardId });
+    const mergeTask = await createTask(env.DB, "sse-user", {
+      title: "Merge SSE Task",
+      board_id: boardId,
+    });
 
     await createMessage(env.DB, mergeTask.id, "user", "sse-user", "Message first");
     // Small delay to ensure distinct timestamp in D1 (millisecond resolution)
@@ -153,7 +160,10 @@ describe("createSSEResponse", () => {
 
   it("poll loop picks up new events after initial batch", async () => {
     const { createTask, addTaskLog } = await import("../apps/web/functions/api/taskRepo");
-    const pollTask = await createTask(env.DB, "sse-user", { title: "Poll SSE Task", board_id: boardId });
+    const pollTask = await createTask(env.DB, "sse-user", {
+      title: "Poll SSE Task",
+      board_id: boardId,
+    });
 
     setTimeout(async () => {
       await addTaskLog(env.DB, pollTask.id, null, "commented", "Polled event from loop");
@@ -184,7 +194,10 @@ describe("createSSEResponse", () => {
 
   it("limits initial events to 50 per type", async () => {
     const { createTask, addTaskLog } = await import("../apps/web/functions/api/taskRepo");
-    const bigTask = await createTask(env.DB, "sse-user", { title: "Big SSE Task", board_id: boardId });
+    const bigTask = await createTask(env.DB, "sse-user", {
+      title: "Big SSE Task",
+      board_id: boardId,
+    });
 
     for (let i = 0; i < 55; i++) {
       await addTaskLog(env.DB, bigTask.id, null, "commented", `Bulk log ${i}`);

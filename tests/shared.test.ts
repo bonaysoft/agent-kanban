@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { TASK_ACTIONS, AGENT_STATUSES, STALE_TIMEOUT_MS, PRIORITIES } from "@agent-kanban/shared";
+import { AGENT_STATUSES, PRIORITIES, STALE_TIMEOUT_MS, TASK_ACTIONS } from "@agent-kanban/shared";
+import { describe, expect, it } from "vitest";
 
 describe("shared constants", () => {
   it("TASK_ACTIONS includes all v2 actions", () => {

@@ -1,22 +1,23 @@
-import { test, expect } from '@playwright/test';
-import { signUpAndGetBoard } from '../helpers/auth';
+import { expect, test } from "@playwright/test";
+import { signUpAndGetBoard } from "../helpers/auth";
 
-test.describe('Board Page', () => {
-  test('Task detail shows only reject/complete in review state', async ({ page }) => {
+test.describe("Board Page", () => {
+  test("Task detail shows only reject/complete in review state", async ({ page }) => {
     await signUpAndGetBoard(page, `reviewactions_${Date.now()}@example.com`);
 
     // Create a task via API and move it to in_review status
     const taskTitle = `Review Task ${Date.now()}`;
-    const taskId = await page.evaluate(async (title) => {
-      const token = localStorage.getItem('auth-token');
-      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const _taskId = await page.evaluate(async (title) => {
+      const token = localStorage.getItem("auth-token");
+      const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
       // Create task
-      const createRes = await fetch('/api/tasks', {
-        method: 'POST', headers,
+      const createRes = await fetch("/api/tasks", {
+        method: "POST",
+        headers,
         body: JSON.stringify({ title }),
       });
-      const task = await createRes.json() as { id: string };
+      const task = (await createRes.json()) as { id: string };
 
       // Move to in_progress then in_review via direct DB manipulation isn't possible,
       // so use PATCH to set status indirectly — actually we need lifecycle endpoints.
@@ -28,7 +29,7 @@ test.describe('Board Page', () => {
 
     // Reload the board to see the new task
     await page.reload();
-    await expect(page.locator('.hidden.md\\:grid')).toBeVisible();
+    await expect(page.locator(".hidden.md\\:grid")).toBeVisible();
 
     // Click the task card to open detail
     await page.getByText(taskTitle).first().click();
@@ -38,16 +39,16 @@ test.describe('Board Page', () => {
     await expect(sheet).toBeVisible();
 
     // expect: In todo status, NO action buttons should be visible
-    await expect(sheet.getByRole('button', { name: 'Reject' })).not.toBeVisible();
-    await expect(sheet.getByRole('button', { name: 'Complete' })).not.toBeVisible();
-    await expect(sheet.getByRole('button', { name: 'Claim' })).not.toBeVisible();
-    await expect(sheet.getByRole('button', { name: 'Cancel' })).not.toBeVisible();
-    await expect(sheet.getByRole('button', { name: 'Release' })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Reject" })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Complete" })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Claim" })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Cancel" })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Release" })).not.toBeVisible();
 
     // expect: No assign dropdown
-    await expect(sheet.getByText('Assign...')).not.toBeVisible();
+    await expect(sheet.getByText("Assign...")).not.toBeVisible();
 
     // expect: No delete button
-    await expect(sheet.getByRole('button', { name: 'Delete task' })).not.toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Delete task" })).not.toBeVisible();
   });
 });

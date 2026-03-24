@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+
+import type { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -26,7 +27,10 @@ describe("updateTask position field", () => {
 
   it("updateTask accepts position and persists the new value", async () => {
     const { createTask, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Position Task", board_id: boardId });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Position Task",
+      board_id: boardId,
+    });
 
     const updated = await updateTask(env.DB, task.id, { position: 99 });
 
@@ -36,7 +40,11 @@ describe("updateTask position field", () => {
 
   it("updateTask preserves other fields when only position is updated", async () => {
     const { createTask, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Position Preserve", board_id: boardId, priority: "high" });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Position Preserve",
+      board_id: boardId,
+      priority: "high",
+    });
 
     const updated = await updateTask(env.DB, task.id, { position: 5 });
 
@@ -47,7 +55,10 @@ describe("updateTask position field", () => {
 
   it("updateTask with position zero persists zero", async () => {
     const { createTask, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Zero Position", board_id: boardId });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Zero Position",
+      board_id: boardId,
+    });
 
     const updated = await updateTask(env.DB, task.id, { position: 0 });
 
@@ -56,7 +67,10 @@ describe("updateTask position field", () => {
 
   it("updateTask position does not affect status", async () => {
     const { createTask, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Status Stable", board_id: boardId });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Status Stable",
+      board_id: boardId,
+    });
 
     const updated = await updateTask(env.DB, task.id, { position: 10 });
 
@@ -71,7 +85,10 @@ describe("updateTask position field", () => {
 
   it("updateTask can update position together with title", async () => {
     const { createTask, updateTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Multi Update", board_id: boardId });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Multi Update",
+      board_id: boardId,
+    });
 
     const updated = await updateTask(env.DB, task.id, { title: "Renamed", position: 7 });
 
@@ -81,7 +98,10 @@ describe("updateTask position field", () => {
 
   it("updateTask persists position to DB and can be read back via getTask", async () => {
     const { createTask, updateTask, getTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Persist Position", board_id: boardId });
+    const task = await createTask(env.DB, "pos-test-user", {
+      title: "Persist Position",
+      board_id: boardId,
+    });
 
     await updateTask(env.DB, task.id, { position: 42 });
     const fetched = await getTask(env.DB, task.id);

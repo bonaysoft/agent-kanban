@@ -1,15 +1,26 @@
-import { useState, useEffect, useRef } from "react";
+import {
+  type AgentTemplate,
+  fetchTemplate,
+  fetchTemplateIndex,
+  type TemplateIndex,
+} from "@agent-kanban/shared";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
+import { Header } from "../components/Header";
+import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
-import { Button } from "../components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { api } from "../lib/api";
 import { agentColor } from "../lib/agentIdentity";
-import { fetchTemplateIndex, fetchTemplate, type AgentTemplate, type TemplateIndex } from "@agent-kanban/shared";
+import { api } from "../lib/api";
 
 type Step = "choose" | "recruit" | "form";
 
@@ -51,8 +62,14 @@ export function AgentNewPage() {
 
   function startCustom() {
     setSelectedTemplate(null);
-    setName(""); setBio(""); setSoul(""); setRole("");
-    setHandoffTo([]); setRuntime("claude-code"); setModel(""); setSkills([]);
+    setName("");
+    setBio("");
+    setSoul("");
+    setRole("");
+    setHandoffTo([]);
+    setRuntime("claude-code");
+    setModel("");
+    setSkills([]);
     setStep("form");
   }
 
@@ -92,15 +109,24 @@ export function AgentNewPage() {
           <FormStep
             template={selectedTemplate}
             existingRoles={existingRoles}
-            name={name} setName={setName}
-            bio={bio} setBio={setBio}
-            soul={soul} setSoul={setSoul}
-            role={role} setRole={setRole}
-            handoffTo={handoffTo} setHandoffTo={setHandoffTo}
-            runtime={runtime} setRuntime={setRuntime}
-            model={model} setModel={setModel}
-            skills={skills} setSkills={setSkills}
-            creating={creating} error={error}
+            name={name}
+            setName={setName}
+            bio={bio}
+            setBio={setBio}
+            soul={soul}
+            setSoul={setSoul}
+            role={role}
+            setRole={setRole}
+            handoffTo={handoffTo}
+            setHandoffTo={setHandoffTo}
+            runtime={runtime}
+            setRuntime={setRuntime}
+            model={model}
+            setModel={setModel}
+            skills={skills}
+            setSkills={setSkills}
+            creating={creating}
+            error={error}
             onBack={() => setStep(selectedTemplate ? "recruit" : "choose")}
             onCreate={handleCreate}
           />
@@ -116,26 +142,50 @@ function ChooseStep({ onRecruit, onCustom }: { onRecruit: () => void; onCustom: 
   return (
     <div>
       <button
+        type="button"
         onClick={() => window.history.back()}
         className="flex items-center gap-1.5 text-sm text-content-tertiary hover:text-content-secondary transition-colors mb-6"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
         Back to agents
       </button>
-      <h1 className="text-2xl font-bold text-content-primary mb-2" style={{ letterSpacing: "-0.02em" }}>
+      <h1
+        className="text-2xl font-bold text-content-primary mb-2"
+        style={{ letterSpacing: "-0.02em" }}
+      >
         New agent
       </h1>
       <p className="text-sm text-content-tertiary mb-8">Choose how to create your agent</p>
 
       <div className="grid grid-cols-2 gap-4 max-w-xl">
         <button
+          type="button"
           onClick={onRecruit}
           className="group flex flex-col items-start gap-4 p-6 rounded-lg border border-border hover:border-accent/40 bg-surface-secondary transition-all text-left"
         >
           <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-accent"
+            >
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <line x1="19" y1="8" x2="19" y2="14" />
@@ -143,21 +193,36 @@ function ChooseStep({ onRecruit, onCustom }: { onRecruit: () => void; onCustom: 
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-content-primary group-hover:text-accent transition-colors">Recruit</p>
+            <p className="text-sm font-semibold text-content-primary group-hover:text-accent transition-colors">
+              Recruit
+            </p>
             <p className="text-xs text-content-tertiary mt-1">Choose from battle-tested roles</p>
           </div>
         </button>
         <button
+          type="button"
           onClick={onCustom}
           className="group flex flex-col items-start gap-4 p-6 rounded-lg border border-border hover:border-accent/40 bg-surface-secondary transition-all text-left"
         >
           <div className="w-10 h-10 rounded-full bg-surface-tertiary flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-content-tertiary">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-content-tertiary"
+            >
               <path d="M12 5v14M5 12h14" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-content-primary group-hover:text-accent transition-colors">Custom</p>
+            <p className="text-sm font-semibold text-content-primary group-hover:text-accent transition-colors">
+              Custom
+            </p>
             <p className="text-xs text-content-tertiary mt-1">Build your own from scratch</p>
           </div>
         </button>
@@ -168,15 +233,21 @@ function ChooseStep({ onRecruit, onCustom }: { onRecruit: () => void; onCustom: 
 
 /* ── Step 2: Recruit — pick a template ── */
 
-function RecruitStep({ onSelect, onBack }: {
-  onSelect: (t: AgentTemplate) => void; onBack: () => void;
+function RecruitStep({
+  onSelect,
+  onBack,
+}: {
+  onSelect: (t: AgentTemplate) => void;
+  onBack: () => void;
 }) {
   const [index, setIndex] = useState<TemplateIndex[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTemplateIndex().then(setIndex).finally(() => setLoading(false));
+    fetchTemplateIndex()
+      .then(setIndex)
+      .finally(() => setLoading(false));
   }, []);
 
   async function handleSelect(slug: string) {
@@ -193,15 +264,28 @@ function RecruitStep({ onSelect, onBack }: {
   return (
     <div>
       <button
+        type="button"
         onClick={onBack}
         className="flex items-center gap-1.5 text-sm text-content-tertiary hover:text-content-secondary transition-colors mb-6"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
         Back
       </button>
-      <h1 className="text-2xl font-bold text-content-primary mb-2" style={{ letterSpacing: "-0.02em" }}>
+      <h1
+        className="text-2xl font-bold text-content-primary mb-2"
+        style={{ letterSpacing: "-0.02em" }}
+      >
         Recruit an agent
       </h1>
       <p className="text-sm text-content-tertiary mb-8">Select a role template to get started</p>
@@ -216,6 +300,7 @@ function RecruitStep({ onSelect, onBack }: {
         <div className="grid grid-cols-3 gap-3">
           {index.map((entry) => (
             <button
+              type="button"
               key={entry.slug}
               onClick={() => handleSelect(entry.slug)}
               disabled={loadingSlug === entry.slug}
@@ -244,24 +329,52 @@ function RecruitStep({ onSelect, onBack }: {
 interface FormStepProps {
   template: AgentTemplate | null;
   existingRoles: string[];
-  name: string; setName: (v: string) => void;
-  bio: string; setBio: (v: string) => void;
-  soul: string; setSoul: (v: string) => void;
-  role: string; setRole: (v: string) => void;
-  handoffTo: string[]; setHandoffTo: (v: string[]) => void;
-  runtime: string; setRuntime: (v: string) => void;
-  model: string; setModel: (v: string) => void;
-  skills: string[]; setSkills: (v: string[]) => void;
-  creating: boolean; error: string | null;
+  name: string;
+  setName: (v: string) => void;
+  bio: string;
+  setBio: (v: string) => void;
+  soul: string;
+  setSoul: (v: string) => void;
+  role: string;
+  setRole: (v: string) => void;
+  handoffTo: string[];
+  setHandoffTo: (v: string[]) => void;
+  runtime: string;
+  setRuntime: (v: string) => void;
+  model: string;
+  setModel: (v: string) => void;
+  skills: string[];
+  setSkills: (v: string[]) => void;
+  creating: boolean;
+  error: string | null;
   onBack: () => void;
   onCreate: () => void;
 }
 
 function FormStep(props: FormStepProps) {
   const {
-    template, existingRoles, name, setName, bio, setBio, soul, setSoul, role, setRole,
-    handoffTo, setHandoffTo, runtime, setRuntime, model, setModel,
-    skills, setSkills, creating, error, onBack, onCreate,
+    template,
+    existingRoles,
+    name,
+    setName,
+    bio,
+    setBio,
+    soul,
+    setSoul,
+    role,
+    setRole,
+    handoffTo,
+    setHandoffTo,
+    runtime,
+    setRuntime,
+    model,
+    setModel,
+    skills,
+    setSkills,
+    creating,
+    error,
+    onBack,
+    onCreate,
   } = props;
 
   const previewKey = name.trim() || "preview";
@@ -270,15 +383,28 @@ function FormStep(props: FormStepProps) {
   return (
     <div>
       <button
+        type="button"
         onClick={onBack}
         className="flex items-center gap-1.5 text-sm text-content-tertiary hover:text-content-secondary transition-colors mb-6"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
         Back
       </button>
-      <h1 className="text-2xl font-bold text-content-primary mb-8" style={{ letterSpacing: "-0.02em" }}>
+      <h1
+        className="text-2xl font-bold text-content-primary mb-8"
+        style={{ letterSpacing: "-0.02em" }}
+      >
         {template ? `Recruit ${template.name}` : "Create agent"}
       </h1>
 
@@ -287,34 +413,67 @@ function FormStep(props: FormStepProps) {
         <div className="space-y-6">
           {/* Identity */}
           <fieldset className="space-y-4">
-            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Identity</legend>
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">
+              Identity
+            </legend>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="agent-name">Name</Label>
-                <Input id="agent-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bolt" className="font-mono" />
+                <Input
+                  id="agent-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Bolt"
+                  className="font-mono"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="agent-role">Role</Label>
-                <Input id="agent-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. backend-developer" className="font-mono" />
+                <Input
+                  id="agent-role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="e.g. backend-developer"
+                  className="font-mono"
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="agent-bio">Bio</Label>
-              <Input id="agent-bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Short description" />
+              <Input
+                id="agent-bio"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Short description"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="agent-soul">Soul</Label>
-              <Textarea id="agent-soul" value={soul} onChange={(e) => setSoul(e.target.value)} placeholder="Personality prompt..." rows={4} className="resize-none" />
+              <Textarea
+                id="agent-soul"
+                value={soul}
+                onChange={(e) => setSoul(e.target.value)}
+                placeholder="Personality prompt..."
+                rows={4}
+                className="resize-none"
+              />
             </div>
           </fieldset>
 
           {/* Runtime */}
           <fieldset className="space-y-4">
-            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Runtime</legend>
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">
+              Runtime
+            </legend>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="agent-runtime">Runtime</Label>
-                <Select value={runtime} onValueChange={(v) => { if (v) setRuntime(v); }}>
+                <Select
+                  value={runtime}
+                  onValueChange={(v) => {
+                    if (v) setRuntime(v);
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -327,28 +486,45 @@ function FormStep(props: FormStepProps) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="agent-model">Model</Label>
-                <Input id="agent-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. claude-sonnet-4-6" />
+                <Input
+                  id="agent-model"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="e.g. claude-sonnet-4-6"
+                />
               </div>
             </div>
           </fieldset>
 
           {/* Workflow */}
           <fieldset className="space-y-4">
-            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Workflow</legend>
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">
+              Workflow
+            </legend>
             <div className="space-y-1.5">
               <Label>Handoff to</Label>
-              <RoleMultiSelect selected={handoffTo} onChange={setHandoffTo} options={existingRoles} />
+              <RoleMultiSelect
+                selected={handoffTo}
+                onChange={setHandoffTo}
+                options={existingRoles}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Skills</Label>
-              <TagInput tags={skills} onChange={setSkills} placeholder="Type a skill and press Enter" />
+              <TagInput
+                tags={skills}
+                onChange={setSkills}
+                placeholder="Type a skill and press Enter"
+              />
             </div>
           </fieldset>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <div className="flex items-center gap-3 pt-2">
-            <Button variant="ghost" onClick={onBack}>Cancel</Button>
+            <Button variant="ghost" onClick={onBack}>
+              Cancel
+            </Button>
             <Button onClick={onCreate} disabled={!name.trim() || creating}>
               {creating ? "Creating..." : template ? "Recruit" : "Create agent"}
             </Button>
@@ -357,7 +533,9 @@ function FormStep(props: FormStepProps) {
 
         {/* Right: live preview card */}
         <div className="sticky top-24">
-          <p className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Preview</p>
+          <p className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">
+            Preview
+          </p>
           <div className="rounded-lg overflow-hidden border border-border bg-surface-secondary">
             <div className="h-[3px]" style={{ background: previewColor }} />
             <div className="flex flex-col items-center pt-6 pb-4 px-5">
@@ -374,7 +552,16 @@ function FormStep(props: FormStepProps) {
                 className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
                 style={{ background: "var(--bg-secondary)" }}
               >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={previewColor} strokeWidth="2" strokeLinecap="round" className="opacity-50">
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={previewColor}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  className="opacity-50"
+                >
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
@@ -402,8 +589,14 @@ function FormStep(props: FormStepProps) {
 
 /* ── Shared components ── */
 
-function RoleMultiSelect({ selected, onChange, options }: {
-  selected: string[]; onChange: (v: string[]) => void; options: string[];
+function RoleMultiSelect({
+  selected,
+  onChange,
+  options,
+}: {
+  selected: string[];
+  onChange: (v: string[]) => void;
+  options: string[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -424,17 +617,48 @@ function RoleMultiSelect({ selected, onChange, options }: {
 
   return (
     <div ref={ref} className="relative">
+      {/* biome-ignore lint/a11y/useSemanticElements: container with nested interactive children cannot be a button */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => options.length > 0 && setOpen(!open)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            options.length > 0 && setOpen(!open);
+          }
+        }}
         className={`flex h-9 w-full items-center gap-1.5 rounded-md border px-3 text-sm shadow-xs ${
-          options.length === 0 ? "border-input/50 cursor-not-allowed" : "border-input cursor-pointer"
+          options.length === 0
+            ? "border-input/50 cursor-not-allowed"
+            : "border-input cursor-pointer"
         } focus-within:ring-1 focus-within:ring-ring`}
       >
         {selected.map((r) => (
-          <span key={r} className="inline-flex items-center gap-1 bg-accent/10 text-accent font-mono text-xs px-2 py-0.5 rounded">
+          <span
+            key={r}
+            className="inline-flex items-center gap-1 bg-accent/10 text-accent font-mono text-xs px-2 py-0.5 rounded"
+          >
             {r}
-            <button onClick={(e) => { e.stopPropagation(); toggle(r); }} className="hover:opacity-70">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(r);
+              }}
+              className="hover:opacity-70"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
             </button>
           </span>
         ))}
@@ -447,7 +671,12 @@ function RoleMultiSelect({ selected, onChange, options }: {
       {open && available.length > 0 && (
         <div className="absolute z-10 mt-1 w-full bg-popover border border-border rounded-md shadow-lg py-1 max-h-40 overflow-y-auto">
           {available.map((r) => (
-            <button key={r} onClick={() => toggle(r)} className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-surface-tertiary transition-colors">
+            <button
+              type="button"
+              key={r}
+              onClick={() => toggle(r)}
+              className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-surface-tertiary transition-colors"
+            >
               {r}
             </button>
           ))}
@@ -457,8 +686,14 @@ function RoleMultiSelect({ selected, onChange, options }: {
   );
 }
 
-function TagInput({ tags, onChange, placeholder }: {
-  tags: string[]; onChange: (v: string[]) => void; placeholder: string;
+function TagInput({
+  tags,
+  onChange,
+  placeholder,
+}: {
+  tags: string[];
+  onChange: (v: string[]) => void;
+  placeholder: string;
 }) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -481,15 +716,44 @@ function TagInput({ tags, onChange, placeholder }: {
   }
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: container with nested interactive children cannot be a button
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => inputRef.current?.focus()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          inputRef.current?.focus();
+        }
+      }}
       className="flex flex-wrap items-center gap-1.5 rounded-md border border-input px-3 py-1.5 min-h-9 cursor-text shadow-xs focus-within:ring-1 focus-within:ring-ring"
     >
       {tags.map((tag) => (
-        <span key={tag} className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground font-mono text-xs px-2 py-0.5 rounded">
+        <span
+          key={tag}
+          className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground font-mono text-xs px-2 py-0.5 rounded"
+        >
           {tag}
-          <button onClick={(e) => { e.stopPropagation(); onChange(tags.filter((t) => t !== tag)); }} className="hover:opacity-70">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(tags.filter((t) => t !== tag));
+            }}
+            className="hover:opacity-70"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </span>
       ))}

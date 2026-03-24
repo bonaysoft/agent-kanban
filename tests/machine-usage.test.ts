@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Miniflare } from "miniflare";
-import { readFileSync } from "fs";
-import { join } from "path";
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { UsageInfo } from "@agent-kanban/shared";
+import { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -14,7 +15,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map(s => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -40,7 +44,10 @@ describe("machine usage tracking", () => {
   it("createMachine stores os/version/runtimes and returns usage_info as null", async () => {
     const { createMachine } = await import("../apps/web/functions/api/machineRepo");
     const machine = await createMachine(db, "user-001", {
-      name: "test-machine", os: "darwin arm64", version: "1.0.0", runtimes: ["Claude Code"],
+      name: "test-machine",
+      os: "darwin arm64",
+      version: "1.0.0",
+      runtimes: ["Claude Code"],
     });
     machineId = machine.id;
     expect(machine.os).toBe("darwin arm64");
@@ -86,7 +93,7 @@ describe("machine usage tracking", () => {
     const machines = await listMachines(db, "user-001");
 
     expect(machines.length).toBeGreaterThan(0);
-    const m = machines.find(m => m.id === machineId)!;
+    const m = machines.find((m) => m.id === machineId)!;
     expect(typeof m.usage_info).toBe("object");
     expect(m.usage_info!.five_hour!.utilization).toBe(23.5);
   });
@@ -108,7 +115,8 @@ describe("machine usage tracking", () => {
   it("heartbeat updates version and runtimes", async () => {
     const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
     const machine = await heartbeat(db, machineId, "user-001", {
-      version: "2.0.0", runtimes: ["Claude Code", "Codex"],
+      version: "2.0.0",
+      runtimes: ["Claude Code", "Codex"],
     });
 
     expect(machine.version).toBe("2.0.0");
@@ -131,7 +139,7 @@ describe("machine usage tracking", () => {
     expect(single!.runtimes).toEqual(["Claude Code", "Codex"]);
 
     const list = await listMachines(db, "user-001");
-    const m = list.find(m => m.id === machineId)!;
+    const m = list.find((m) => m.id === machineId)!;
     expect(Array.isArray(m.runtimes)).toBe(true);
   });
 });

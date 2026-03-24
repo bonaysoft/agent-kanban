@@ -78,17 +78,13 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
 
   if (displayed.length === 0) {
     return (
-      <p className="text-sm text-content-tertiary">
-        No activity yet. Assign an agent to see logs.
-      </p>
+      <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see logs.</p>
     );
   }
 
   return (
     <div className="relative">
-      {reconnecting && (
-        <div className="text-[10px] text-warning mb-1">Reconnecting...</div>
-      )}
+      {reconnecting && <div className="text-[10px] text-warning mb-1">Reconnecting...</div>}
 
       {newCount > 0 && !autoScroll && (
         <Button
@@ -116,15 +112,21 @@ export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps)
             <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">
               {formatRelative(log.created_at)}
             </span>
-            <span className={`text-[13px] ${
-              log.action === "commented"
-                ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
-                : "text-content-secondary"
-            }`}>
-              {log.action === "commented"
-                ? log.detail
-                : <span className={actionStyles[log.action] || ""}>{actionLabels[log.action] || log.action}{log.detail ? `: ${log.detail}` : ""}</span>
-              }
+            <span
+              className={`text-[13px] ${
+                log.action === "commented"
+                  ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
+                  : "text-content-secondary"
+              }`}
+            >
+              {log.action === "commented" ? (
+                log.detail
+              ) : (
+                <span className={actionStyles[log.action] || ""}>
+                  {actionLabels[log.action] || log.action}
+                  {log.detail ? `: ${log.detail}` : ""}
+                </span>
+              )}
             </span>
           </div>
         ))}

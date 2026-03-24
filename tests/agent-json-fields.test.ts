@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Miniflare } from "miniflare";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -13,7 +14,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map(s => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -41,13 +45,19 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const agent = await createAgent(db, ownerId, {
       name: "Test Agent",
-      skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
+      skills: [
+        "trailofbits/skills@differential-review",
+        "obra/superpowers@verification-before-completion",
+      ],
       handoff_to: ["quality-goalkeeper", "enduser"],
     });
     agentId = agent.id;
 
     expect(Array.isArray(agent.skills)).toBe(true);
-    expect(agent.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
+    expect(agent.skills).toEqual([
+      "trailofbits/skills@differential-review",
+      "obra/superpowers@verification-before-completion",
+    ]);
     expect(Array.isArray(agent.handoff_to)).toBe(true);
     expect(agent.handoff_to).toEqual(["quality-goalkeeper", "enduser"]);
   });
@@ -63,10 +73,13 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   it("listAgents returns parsed arrays", async () => {
     const { listAgents } = await import("../apps/web/functions/api/agentRepo");
     const agents = await listAgents(db, ownerId);
-    const agent = agents.find(a => a.id === agentId)!;
+    const agent = agents.find((a) => a.id === agentId)!;
 
     expect(Array.isArray(agent.skills)).toBe(true);
-    expect(agent.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
+    expect(agent.skills).toEqual([
+      "trailofbits/skills@differential-review",
+      "obra/superpowers@verification-before-completion",
+    ]);
     expect(Array.isArray(agent.handoff_to)).toBe(true);
     expect(agent.handoff_to).toEqual(["quality-goalkeeper", "enduser"]);
   });
@@ -77,7 +90,10 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
 
     expect(agent).toBeTruthy();
     expect(Array.isArray(agent!.skills)).toBe(true);
-    expect(agent!.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
+    expect(agent!.skills).toEqual([
+      "trailofbits/skills@differential-review",
+      "obra/superpowers@verification-before-completion",
+    ]);
     expect(Array.isArray(agent!.handoff_to)).toBe(true);
   });
 

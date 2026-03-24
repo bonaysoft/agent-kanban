@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Miniflare } from "miniflare";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Integration test: validates CLI AgentClient JWT passthrough with new session model
 // User creates agent → machine creates session → AgentClient uses session JWT
@@ -26,7 +27,10 @@ async function applyMigrations(db: D1Database) {
   const files = ["0001_initial.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+    for (const stmt of sql
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       await db.prepare(stmt).run();
     }
   }
@@ -35,9 +39,12 @@ async function applyMigrations(db: D1Database) {
 async function seedUser(db: D1Database): Promise<string> {
   const userId = "test-user-cli-jwt";
   const now = new Date().toISOString();
-  await db.prepare(
-    "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)"
-  ).bind(userId, "CLI JWT Test", "cli-jwt@example.com", now, now).run();
+  await db
+    .prepare(
+      "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)",
+    )
+    .bind(userId, "CLI JWT Test", "cli-jwt@example.com", now, now)
+    .run();
   return userId;
 }
 
@@ -50,8 +57,12 @@ async function createApiKeyForUser(db: D1Database, userId: string): Promise<stri
 
 async function honoRequest(method: string, path: string, body?: any, token?: string) {
   const { api } = await import("../apps/web/functions/api/routes");
-  const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Host: "localhost:8788",
+    "x-forwarded-proto": "http",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
   if (body) init.body = JSON.stringify(body);
   return api.request(path, init, testEnv);
@@ -75,7 +86,7 @@ afterAll(async () => {
 describe("CLI ApiClient agent JWT passthrough", () => {
   let userId: string;
   let apiKey: string;
-  let machineId: string;
+  let _machineId: string;
   let agentId: string;
   let sessionId: string;
   let boardId: string;
@@ -104,27 +115,47 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     apiKey = await createApiKeyForUser(testEnv.DB, userId);
 
     // Create machine
-    const machineRes = await honoRequest("POST", "/api/machines", {
-      name: "jwt-test-machine", os: "test", version: "1.0.0", runtimes: ["claude"],
-    }, apiKey);
+    const machineRes = await honoRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "jwt-test-machine",
+        os: "test",
+        version: "1.0.0",
+        runtimes: ["claude"],
+      },
+      apiKey,
+    );
     expect(machineRes.status).toBe(201);
-    machineId = ((await machineRes.json()) as any).id;
+    _machineId = ((await machineRes.json()) as any).id;
 
     // Create persistent agent (user-only, use repo directly)
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(testEnv.DB, userId, { name: "JWT Test Agent", runtime: "claude" });
+    const agent = await createAgent(testEnv.DB, userId, {
+      name: "JWT Test Agent",
+      runtime: "claude",
+    });
     agentId = agent.id;
 
     // Create session keypair (CSR — daemon generates locally)
     sessionId = randomUUID();
-    const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, [
+      "sign",
+      "verify",
+    ]);
     const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
     sessionPrivKeyJwk = await crypto.subtle.exportKey("jwk", (keypair as any).privateKey);
 
     // Register session via API
-    const sessionRes = await honoRequest("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: pubJwk.x!,
-    }, apiKey);
+    const sessionRes = await honoRequest(
+      "POST",
+      `/api/agents/${agentId}/sessions`,
+      {
+        session_id: sessionId,
+        session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
     expect(sessionRes.status).toBe(201);
 
     // Create board + task + assign
@@ -132,10 +163,18 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const board = await createBoard(testEnv.DB, userId, "jwt-test-board");
     boardId = board.id;
-    const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
+    const task = await createTask(testEnv.DB, userId, {
+      title: "JWT test task",
+      board_id: boardId,
+    });
     taskId = task.id;
 
-    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
+    const assignRes = await honoRequest(
+      "POST",
+      `/api/tasks/${taskId}/assign`,
+      { agent_id: agentId },
+      apiKey,
+    );
     expect(assignRes.status).toBe(200);
   });
 
@@ -153,13 +192,18 @@ describe("CLI ApiClient agent JWT passthrough", () => {
       const path = new URL(url).pathname;
       const headers = new Headers(init?.headers);
       capturedToken = headers.get("Authorization")?.replace("Bearer ", "") || null;
-      return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
+      return honoRequest(
+        init?.method || "GET",
+        path,
+        init?.body ? JSON.parse(init.body as string) : undefined,
+        capturedToken!,
+      );
     });
 
     const { createClient } = await import("../packages/cli/src/client.js");
     const client = await createClient();
 
-    const claimed = await client.claimTask(taskId) as any;
+    const claimed = (await client.claimTask(taskId)) as any;
     expect(claimed.status).toBe("in_progress");
     expect(claimed.assigned_to).toBe(agentId);
     expect(capturedToken!.split(".")).toHaveLength(3);
@@ -179,18 +223,30 @@ describe("CLI ApiClient agent JWT passthrough", () => {
       const path = new URL(url).pathname;
       const headers = new Headers(init?.headers);
       capturedToken = headers.get("Authorization")?.replace("Bearer ", "") || null;
-      return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
+      return honoRequest(
+        init?.method || "GET",
+        path,
+        init?.body ? JSON.parse(init.body as string) : undefined,
+        capturedToken!,
+      );
     });
 
     const { createClient } = await import("../packages/cli/src/client.js");
     const client = await createClient();
 
-    const reviewed = await client.reviewTask(taskId, { pr_url: "https://github.com/test/pull/1" }) as any;
+    const reviewed = (await client.reviewTask(taskId, {
+      pr_url: "https://github.com/test/pull/1",
+    })) as any;
     expect(reviewed.status).toBe("in_review");
   });
 
   it("machine API key is correctly rejected for claim (agent-only endpoint)", async () => {
-    const res = await honoRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, apiKey);
+    const res = await honoRequest(
+      "POST",
+      `/api/tasks/${taskId}/claim`,
+      { agent_id: agentId },
+      apiKey,
+    );
     expect(res.status).toBe(403);
   });
 });

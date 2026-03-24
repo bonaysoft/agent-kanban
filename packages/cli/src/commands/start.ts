@@ -1,7 +1,7 @@
-import { createInterface } from "readline";
+import { createInterface } from "node:readline";
 import type { Command } from "commander";
+import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
 import { startDaemon } from "../daemon.js";
-import { setConfigValue, getConfigValue, deleteConfigValue } from "../config.js";
 import { clearLinks } from "../links.js";
 
 function confirm(question: string): Promise<boolean> {
@@ -31,7 +31,7 @@ export function registerStartCommand(program: Command) {
         if (oldKey && oldKey !== opts.apiKey && getConfigValue("machine-id")) {
           const machineId = getConfigValue("machine-id");
           const yes = await confirm(
-            `This machine is already registered (${machineId}) with a different API key.\nSwitch to the new key and re-register? [y/N] `
+            `This machine is already registered (${machineId}) with a different API key.\nSwitch to the new key and re-register? [y/N] `,
           );
           if (!yes) {
             console.log("Aborted.");
@@ -44,7 +44,9 @@ export function registerStartCommand(program: Command) {
       }
 
       if (!getConfigValue("api-url") || !getConfigValue("api-key")) {
-        console.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
+        console.error(
+          "API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>",
+        );
         process.exit(1);
       }
 

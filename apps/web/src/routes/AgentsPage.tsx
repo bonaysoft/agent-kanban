@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Header } from "../components/Header";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
-import { api } from "../lib/api";
+import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
+import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 
 function formatTokens(n: number): string {
   if (!n) return "0";
@@ -38,7 +38,10 @@ export function AgentsPage() {
       <div className="max-w-5xl mx-auto px-8 py-10">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-baseline gap-4">
-            <h1 className="text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
+            <h1
+              className="text-2xl font-bold text-content-primary"
+              style={{ letterSpacing: "-0.02em" }}
+            >
               Agents
             </h1>
             {agents.length > 0 && (
@@ -112,7 +115,16 @@ function AgentCard({ agent }: { agent: any }) {
             {agent.name}
           </h2>
           {agent.builtin ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              className="text-content-tertiary shrink-0"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
@@ -124,7 +136,16 @@ function AgentCard({ agent }: { agent: any }) {
           className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
           style={{ background: "var(--bg-secondary)" }}
         >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="opacity-50"
+          >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
@@ -140,7 +161,11 @@ function AgentCard({ agent }: { agent: any }) {
             style={{ backgroundColor: isOnline ? color : "#3f3f46" }}
           />
           <span className="text-[11px] text-content-tertiary">
-            {isOnline ? "Online" : agent.last_active_at ? formatRelative(agent.last_active_at) : "Offline"}
+            {isOnline
+              ? "Online"
+              : agent.last_active_at
+                ? formatRelative(agent.last_active_at)
+                : "Offline"}
           </span>
         </div>
       </div>
@@ -154,4 +179,3 @@ function AgentCard({ agent }: { agent: any }) {
     </Link>
   );
 }
-

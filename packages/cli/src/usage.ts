@@ -1,7 +1,7 @@
-import { execSync } from "child_process";
-import { readFileSync } from "fs";
-import { join } from "path";
-import { homedir, platform } from "os";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
 import type { UsageInfo } from "./types.js";
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
@@ -21,7 +21,11 @@ function readOAuthToken(): string | null {
   if (cachedToken) return cachedToken;
   try {
     if (platform() === "darwin") {
-      const raw = execSync('security find-generic-password -s "Claude Code-credentials" -w', { stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+      const raw = execSync('security find-generic-password -s "Claude Code-credentials" -w', {
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+        .toString()
+        .trim();
       cachedToken = parseToken(raw);
     } else {
       cachedToken = parseToken(readFileSync(CREDENTIALS_PATH, "utf-8"));
@@ -54,12 +58,12 @@ export async function getUsage(): Promise<UsageInfo | null> {
       return cachedUsage;
     }
 
-    const data = await res.json() as Record<string, { utilization: number; resets_at: string }>;
+    const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
     cachedUsage = {
-      ...data.five_hour && { five_hour: data.five_hour },
-      ...data.seven_day && { seven_day: data.seven_day },
-      ...data.seven_day_sonnet && { seven_day_sonnet: data.seven_day_sonnet },
-      ...data.seven_day_opus && { seven_day_opus: data.seven_day_opus },
+      ...(data.five_hour && { five_hour: data.five_hour }),
+      ...(data.seven_day && { seven_day: data.seven_day }),
+      ...(data.seven_day_sonnet && { seven_day_sonnet: data.seven_day_sonnet }),
+      ...(data.seven_day_opus && { seven_day_opus: data.seven_day_opus }),
       updated_at: new Date().toISOString(),
     };
     cachedAt = Date.now();

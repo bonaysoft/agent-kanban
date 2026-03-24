@@ -1,14 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  formatTask,
-  formatTaskLogs,
   formatAgent,
-  formatTaskList,
   formatAgentList,
+  formatBoard,
   formatBoardList,
   formatRepositoryList,
-  formatBoard,
+  formatTask,
+  formatTaskList,
+  formatTaskLogs,
   getFormat,
   output,
 } from "../packages/cli/src/output";
@@ -57,7 +57,13 @@ describe("formatTask", () => {
   });
 
   it("includes labels when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, labels: ["bug", "urgent"] };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "todo",
+      priority: null,
+      labels: ["bug", "urgent"],
+    };
     const result = formatTask(task);
     expect(result).toContain("bug");
     expect(result).toContain("urgent");
@@ -82,7 +88,13 @@ describe("formatTask", () => {
   });
 
   it("includes repository_name when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, repository_name: "my-repo" };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "todo",
+      priority: null,
+      repository_name: "my-repo",
+    };
     const result = formatTask(task);
     expect(result).toContain("my-repo");
   });
@@ -94,7 +106,13 @@ describe("formatTask", () => {
   });
 
   it("includes depends_on IDs when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, depends_on: ["dep1", "dep2"] };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "todo",
+      priority: null,
+      depends_on: ["dep1", "dep2"],
+    };
     const result = formatTask(task);
     expect(result).toContain("dep1");
     expect(result).toContain("dep2");
@@ -107,7 +125,13 @@ describe("formatTask", () => {
   });
 
   it("includes pr_url when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, pr_url: "https://github.com/org/repo/pull/42" };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "todo",
+      priority: null,
+      pr_url: "https://github.com/org/repo/pull/42",
+    };
     const result = formatTask(task);
     expect(result).toContain("https://github.com/org/repo/pull/42");
   });
@@ -119,7 +143,13 @@ describe("formatTask", () => {
   });
 
   it("includes description when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, description: "A task description" };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "todo",
+      priority: null,
+      description: "A task description",
+    };
     const result = formatTask(task);
     expect(result).toContain("A task description");
   });
@@ -144,7 +174,13 @@ describe("formatTask", () => {
   });
 
   it("includes result when present", () => {
-    const task = { id: "t1", title: "T", status: "done", priority: null, result: "Completed successfully" };
+    const task = {
+      id: "t1",
+      title: "T",
+      status: "done",
+      priority: null,
+      result: "Completed successfully",
+    };
     const result = formatTask(task);
     expect(result).toContain("Completed successfully");
   });
@@ -163,7 +199,14 @@ describe("formatTaskLogs", () => {
 
   it("includes the action for each log entry", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: null,
+        action: "created",
+        detail: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     expect(result).toContain("created");
@@ -171,7 +214,14 @@ describe("formatTaskLogs", () => {
 
   it("includes the detail text when present", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "commented", detail: "This is the detail", created_at: "2024-01-01T00:00:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: null,
+        action: "commented",
+        detail: "This is the detail",
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     expect(result).toContain("This is the detail");
@@ -179,7 +229,14 @@ describe("formatTaskLogs", () => {
 
   it("includes actor_id when present", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: "agent-5", action: "claimed", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: "agent-5",
+        action: "claimed",
+        detail: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     expect(result).toContain("agent-5");
@@ -187,7 +244,14 @@ describe("formatTaskLogs", () => {
 
   it("omits actor bracket when actor_id is absent", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: null,
+        action: "created",
+        detail: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     expect(result).not.toContain("[null]");
@@ -196,8 +260,22 @@ describe("formatTaskLogs", () => {
 
   it("formats multiple log entries each on its own line", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
-      { id: "l2", task_id: "t1", actor_id: "ag1", action: "claimed", detail: null, created_at: "2024-01-02T00:00:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: null,
+        action: "created",
+        detail: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+      {
+        id: "l2",
+        task_id: "t1",
+        actor_id: "ag1",
+        action: "claimed",
+        detail: null,
+        created_at: "2024-01-02T00:00:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     const lines = result.split("\n");
@@ -206,7 +284,14 @@ describe("formatTaskLogs", () => {
 
   it("formats the created_at timestamp", () => {
     const logs = [
-      { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-06-15T10:30:00.000Z" },
+      {
+        id: "l1",
+        task_id: "t1",
+        actor_id: null,
+        action: "created",
+        detail: null,
+        created_at: "2024-06-15T10:30:00.000Z",
+      },
     ];
     const result = formatTaskLogs(logs);
     // The timestamp should be a recognisable date string (locale-formatted)
@@ -344,13 +429,17 @@ describe("formatTaskList", () => {
   });
 
   it("includes repository name when present", () => {
-    const tasks = [{ id: "t1", title: "T", status: "todo", priority: null, repository_name: "my-repo" }];
+    const tasks = [
+      { id: "t1", title: "T", status: "todo", priority: null, repository_name: "my-repo" },
+    ];
     const result = formatTaskList(tasks);
     expect(result).toContain("my-repo");
   });
 
   it("includes assigned_to agent when present", () => {
-    const tasks = [{ id: "t1", title: "T", status: "todo", priority: null, assigned_to: "agent-9" }];
+    const tasks = [
+      { id: "t1", title: "T", status: "todo", priority: null, assigned_to: "agent-9" },
+    ];
     const result = formatTaskList(tasks);
     expect(result).toContain("agent-9");
   });
@@ -371,26 +460,40 @@ describe("formatAgentList", () => {
   });
 
   it("includes agent ID and name", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: null }];
+    const agents = [
+      { id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: null },
+    ];
     const result = formatAgentList(agents);
     expect(result).toContain("a1");
     expect(result).toContain("Claude");
   });
 
   it("includes status", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "working", task_count: 2, last_active_at: null }];
+    const agents = [
+      { id: "a1", name: "Claude", status: "working", task_count: 2, last_active_at: null },
+    ];
     const result = formatAgentList(agents);
     expect(result).toContain("[working]");
   });
 
   it("shows 'never active' when last_active_at is null", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: null }];
+    const agents = [
+      { id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: null },
+    ];
     const result = formatAgentList(agents);
     expect(result).toContain("never active");
   });
 
   it("includes last_active_at when present", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: "2024-01-01T00:00:00Z" }];
+    const agents = [
+      {
+        id: "a1",
+        name: "Claude",
+        status: "idle",
+        task_count: 0,
+        last_active_at: "2024-01-01T00:00:00Z",
+      },
+    ];
     const result = formatAgentList(agents);
     expect(result).toContain("2024-01-01T00:00:00Z");
   });
@@ -458,9 +561,7 @@ describe("formatBoard", () => {
   it("renders task titles inside column cells", () => {
     const board = {
       name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [{ title: "Build feature" }] },
-      ],
+      columns: [{ name: "Todo", tasks: [{ title: "Build feature" }] }],
     };
     const result = formatBoard(board);
     expect(result).toContain("Build feature");
@@ -470,9 +571,7 @@ describe("formatBoard", () => {
     const longTitle = "A".repeat(40);
     const board = {
       name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [{ title: longTitle }] },
-      ],
+      columns: [{ name: "Todo", tasks: [{ title: longTitle }] }],
     };
     const result = formatBoard(board);
     expect(result).toContain("...");
@@ -528,7 +627,10 @@ describe("getFormat", () => {
 describe("output", () => {
   it("calls textFormatter in text mode when provided", () => {
     let called = false;
-    const formatter = (_data: any) => { called = true; return "formatted"; };
+    const formatter = (_data: any) => {
+      called = true;
+      return "formatted";
+    };
     // Redirect console.log to avoid test noise
     const original = console.log;
     console.log = () => {};
@@ -540,7 +642,9 @@ describe("output", () => {
   it("falls back to JSON.stringify in text mode when no formatter provided", () => {
     let logged = "";
     const original = console.log;
-    console.log = (v: string) => { logged = v; };
+    console.log = (v: string) => {
+      logged = v;
+    };
     output({ foo: "bar" }, "text");
     console.log = original;
     expect(logged).toContain('"foo"');
@@ -549,7 +653,9 @@ describe("output", () => {
   it("outputs pretty-printed JSON in json mode", () => {
     let logged = "";
     const original = console.log;
-    console.log = (v: string) => { logged = v; };
+    console.log = (v: string) => {
+      logged = v;
+    };
     output({ foo: "bar" }, "json");
     console.log = original;
     expect(JSON.parse(logged)).toEqual({ foo: "bar" });

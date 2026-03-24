@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
-import { randomUUID } from "crypto";
-import type { UsageInfo } from "./types.js";
 import { getConfigValue } from "./config.js";
+import type { UsageInfo } from "./types.js";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -30,7 +33,7 @@ export abstract class ApiClient {
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json() as T & { error?: { code: string; message: string } };
+    const data = (await res.json()) as T & { error?: { code: string; message: string } };
 
     if (!res.ok) {
       let msg = (data as any).error?.message || `HTTP ${res.status}`;
@@ -45,12 +48,16 @@ export abstract class ApiClient {
   }
 
   // Tasks
-  createTask(input: Record<string, unknown>) { return this.request("POST", "/api/tasks", input); }
+  createTask(input: Record<string, unknown>) {
+    return this.request("POST", "/api/tasks", input);
+  }
   listTasks(params?: Record<string, string>) {
-    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
     return this.request("GET", `/api/tasks${qs}`);
   }
-  getTask(id: string) { return this.request("GET", `/api/tasks/${id}`); }
+  getTask(id: string) {
+    return this.request("GET", `/api/tasks/${id}`);
+  }
   claimTask(id: string) {
     return this.request("POST", `/api/tasks/${id}/claim`);
   }
@@ -75,7 +82,9 @@ export abstract class ApiClient {
   addLog(taskId: string, detail: string) {
     return this.request("POST", `/api/tasks/${taskId}/logs`, { detail });
   }
-  deleteTask(id: string) { return this.request("DELETE", `/api/tasks/${id}`); }
+  deleteTask(id: string) {
+    return this.request("DELETE", `/api/tasks/${id}`);
+  }
   rejectTask(id: string, body: Record<string, unknown> = {}) {
     return this.request("POST", `/api/tasks/${id}/reject`, body);
   }
@@ -83,21 +92,29 @@ export abstract class ApiClient {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
     return this.request("GET", `/api/tasks/${taskId}/logs${qs}`);
   }
-  getAgent(agentId: string) { return this.request("GET", `/api/agents/${agentId}`); }
-  deleteAgent(agentId: string) { return this.request("DELETE", `/api/agents/${agentId}`); }
+  getAgent(agentId: string) {
+    return this.request("GET", `/api/agents/${agentId}`);
+  }
+  deleteAgent(agentId: string) {
+    return this.request("DELETE", `/api/agents/${agentId}`);
+  }
 
   // Machines
   registerMachine(info: { name: string; os: string; version: string; runtimes: string[] }) {
     return this.request<{ id: string; name: string }>("POST", "/api/machines", info);
   }
-  heartbeat(machineId: string, info: { version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
+  heartbeat(
+    machineId: string,
+    info: { version?: string; runtimes?: string[]; usage_info?: UsageInfo | null },
+  ) {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 
   // Agent Sessions
   createSession(agentId: string, sessionId: string, sessionPublicKey: string) {
     return this.request<{ delegation_proof: string }>("POST", `/api/agents/${agentId}/sessions`, {
-      session_id: sessionId, session_public_key: sessionPublicKey,
+      session_id: sessionId,
+      session_public_key: sessionPublicKey,
     });
   }
   closeSession(agentId: string, sessionId: string) {
@@ -106,9 +123,22 @@ export abstract class ApiClient {
   reopenSession(agentId: string, sessionId: string) {
     return this.request("POST", `/api/agents/${agentId}/sessions/${sessionId}/reopen`);
   }
-  listAgents() { return this.request("GET", "/api/agents"); }
-  listSessions(agentId: string) { return this.request<any[]>("GET", `/api/agents/${agentId}/sessions`); }
-  createAgent(input: { name: string; bio?: string; soul?: string; role?: string; handoff_to?: string[]; runtime?: string; model?: string; skills?: string[] }) {
+  listAgents() {
+    return this.request("GET", "/api/agents");
+  }
+  listSessions(agentId: string) {
+    return this.request<any[]>("GET", `/api/agents/${agentId}/sessions`);
+  }
+  createAgent(input: {
+    name: string;
+    bio?: string;
+    soul?: string;
+    role?: string;
+    handoff_to?: string[];
+    runtime?: string;
+    model?: string;
+    skills?: string[];
+  }) {
     return this.request("POST", "/api/agents", input);
   }
 
@@ -116,13 +146,21 @@ export abstract class ApiClient {
   createBoard(input: { name: string; description?: string }) {
     return this.request("POST", "/api/boards", input);
   }
-  listBoards() { return this.request<any[]>("GET", "/api/boards"); }
-  getBoardByName(name: string) { return this.request("GET", `/api/boards?name=${encodeURIComponent(name)}`); }
-  getBoard(boardId: string) { return this.request("GET", `/api/boards/${boardId}`); }
+  listBoards() {
+    return this.request<any[]>("GET", "/api/boards");
+  }
+  getBoardByName(name: string) {
+    return this.request("GET", `/api/boards?name=${encodeURIComponent(name)}`);
+  }
+  getBoard(boardId: string) {
+    return this.request("GET", `/api/boards/${boardId}`);
+  }
   updateBoard(boardId: string, body: Record<string, unknown>) {
     return this.request("PATCH", `/api/boards/${boardId}`, body);
   }
-  deleteBoard(boardId: string) { return this.request("DELETE", `/api/boards/${boardId}`); }
+  deleteBoard(boardId: string) {
+    return this.request("DELETE", `/api/boards/${boardId}`);
+  }
 
   // Repositories
   createRepository(input: { name: string; url: string }) {
@@ -134,10 +172,22 @@ export abstract class ApiClient {
     const qs = params.toString();
     return this.request<any[]>("GET", `/api/repositories${qs ? `?${qs}` : ""}`);
   }
-  deleteRepository(repoId: string) { return this.request("DELETE", `/api/repositories/${repoId}`); }
+  deleteRepository(repoId: string) {
+    return this.request("DELETE", `/api/repositories/${repoId}`);
+  }
 
   // Session usage
-  updateSessionUsage(agentId: string, sessionId: string, usage: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost_micro_usd: number }) {
+  updateSessionUsage(
+    agentId: string,
+    sessionId: string,
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_tokens: number;
+      cache_creation_tokens: number;
+      cost_micro_usd: number;
+    },
+  ) {
     return this.request("PATCH", `/api/agents/${agentId}/sessions/${sessionId}/usage`, usage);
   }
 
@@ -188,13 +238,22 @@ export class AgentClient extends ApiClient {
     if (!agentId || !sessionId || !keyJson || !apiUrl) return null;
 
     const privateKey = await crypto.subtle.importKey(
-      "jwk", JSON.parse(keyJson), { name: "Ed25519" } as any, false, ["sign"],
+      "jwk",
+      JSON.parse(keyJson),
+      { name: "Ed25519" } as any,
+      false,
+      ["sign"],
     );
     return new AgentClient(apiUrl, agentId, sessionId, privateKey);
   }
 
   protected async authorize(): Promise<string> {
-    const jwt = await new SignJWT({ sub: this.sessionId, aid: this.agentId, jti: randomUUID(), aud: this.baseUrl })
+    const jwt = await new SignJWT({
+      sub: this.sessionId,
+      aid: this.agentId,
+      jti: randomUUID(),
+      aud: this.baseUrl,
+    })
       .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
       .setIssuedAt()
       .setExpirationTime("60s")
@@ -202,8 +261,12 @@ export class AgentClient extends ApiClient {
     return `Bearer ${jwt}`;
   }
 
-  getAgentId(): string { return this.agentId; }
-  getSessionId(): string { return this.sessionId; }
+  getAgentId(): string {
+    return this.agentId;
+  }
+  getSessionId(): string {
+    return this.sessionId;
+  }
 }
 
 /**
@@ -211,5 +274,5 @@ export class AgentClient extends ApiClient {
  * otherwise MachineClient (API key from config).
  */
 export async function createClient(): Promise<ApiClient> {
-  return await AgentClient.fromEnv() ?? new MachineClient();
+  return (await AgentClient.fromEnv()) ?? new MachineClient();
 }

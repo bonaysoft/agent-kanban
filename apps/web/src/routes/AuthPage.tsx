@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { authClient, signIn, signUp, setAuthToken } from "../lib/auth-client";
 import { useNavigate } from "react-router-dom";
+import { authClient, setAuthToken, signIn, signUp } from "../lib/auth-client";
 
 function GitHubIcon() {
   return (
@@ -90,9 +90,7 @@ export function AuthPage() {
             className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
           />
 
-          {error && (
-            <p className="text-sm text-error">{error}</p>
-          )}
+          {error && <p className="text-sm text-error">{error}</p>}
 
           <button
             type="submit"
@@ -113,7 +111,10 @@ export function AuthPage() {
         </div>
 
         <button
-          onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/auth/callback" })}
+          type="button"
+          onClick={() =>
+            authClient.signIn.social({ provider: "github", callbackURL: "/auth/callback" })
+          }
           className="w-full flex items-center justify-center gap-2 bg-surface-secondary border border-border text-content-primary font-semibold text-sm py-2 rounded-lg hover:bg-surface-tertiary transition-colors"
         >
           <GitHubIcon />
@@ -123,7 +124,11 @@ export function AuthPage() {
         <p className="text-center text-xs text-content-tertiary">
           {mode === "signin" ? "No account? " : "Already have an account? "}
           <button
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+            type="button"
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setError(null);
+            }}
             className="text-accent hover:underline"
           >
             {mode === "signin" ? "Sign up" : "Sign in"}

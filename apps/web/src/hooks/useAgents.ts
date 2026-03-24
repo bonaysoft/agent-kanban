@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 
 export function useAgents() {
@@ -9,11 +9,16 @@ export function useAgents() {
     try {
       const result = await api.agents.list();
       setAgents(result);
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return { agents, loading, refresh: load };
 }

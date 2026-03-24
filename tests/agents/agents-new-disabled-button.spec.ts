@@ -1,18 +1,18 @@
 // spec: specs/agent-kanban.plan.md
 // section: 7.7 Agent creation — 'Create agent' button disabled when name is empty
 
-import { test, expect } from '@playwright/test';
-import { signUpAndGetBoard } from '../helpers/auth';
+import { expect, test } from "@playwright/test";
+import { signUpAndGetBoard } from "../helpers/auth";
 
-test.describe('Agents Page', () => {
+test.describe("Agents Page", () => {
   test("Agent creation — 'Create agent' button disabled when name is empty", async ({ page }) => {
     // 1. Sign in, navigate to /agents/new, click 'Custom'
     await signUpAndGetBoard(page, `agents_disabled_${Date.now()}@example.com`);
-    await page.goto('/agents/new');
-    await page.getByRole('button', { name: 'Custom Build your own from' }).click();
+    await page.goto("/agents/new");
+    await page.getByRole("button", { name: "Custom Build your own from" }).click();
 
     // expect: The 'Create agent' button is visible
-    const createButton = page.getByRole('button', { name: 'Create agent' });
+    const createButton = page.getByRole("button", { name: "Create agent" });
     await expect(createButton).toBeVisible();
 
     // 2. Leave the Name field empty
@@ -20,7 +20,7 @@ test.describe('Agents Page', () => {
     await expect(createButton).toBeDisabled();
 
     // 3. Type any name in the Name field
-    await page.getByRole('textbox', { name: 'Name' }).fill('TestAgent');
+    await page.getByRole("textbox", { name: "Name" }).fill("TestAgent");
 
     // expect: The 'Create agent' button becomes enabled
     await expect(createButton).toBeEnabled();

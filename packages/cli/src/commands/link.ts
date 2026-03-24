@@ -1,9 +1,9 @@
-import { execSync } from "child_process";
-import { existsSync, rmSync } from "fs";
-import { basename } from "path";
+import { execSync } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
+import { basename } from "node:path";
 import type { Command } from "commander";
 import { MachineClient } from "../client.js";
-import { setLink, removeLink, findPathForRepository } from "../links.js";
+import { findPathForRepository, removeLink, setLink } from "../links.js";
 import { REPOS_DIR } from "../paths.js";
 
 function getGitRepoRoot(): string {
@@ -72,15 +72,14 @@ export function registerLinkCommand(program: Command) {
     });
 }
 
-
 export function registerUnlinkCommand(program: Command) {
   program
     .command("unlink")
     .description("Remove local directory link for current repo")
     .action(async () => {
-      let repoRoot: string;
+      let _repoRoot: string;
       try {
-        repoRoot = getGitRepoRoot();
+        _repoRoot = getGitRepoRoot();
       } catch {
         console.error("Not a git repository. Run this command from a git repo.");
         process.exit(1);

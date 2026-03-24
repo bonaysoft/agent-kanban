@@ -1,8 +1,14 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "../components/Header";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { api } from "../lib/api";
 import { formatRelative } from "../components/TaskDetailFields";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { api } from "../lib/api";
 
 export function RepositoriesPage() {
   const [repos, setRepos] = useState<any[]>([]);
@@ -13,7 +19,10 @@ export function RepositoriesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.repositories.list().then(setRepos).finally(() => setLoading(false));
+    api.repositories
+      .list()
+      .then(setRepos)
+      .finally(() => setLoading(false));
   }, []);
 
   async function handleAdd() {
@@ -39,10 +48,9 @@ export function RepositoriesPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-content-primary">Repositories</h1>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-content-tertiary font-mono">
-              {repos.length} total
-            </span>
+            <span className="text-xs text-content-tertiary font-mono">{repos.length} total</span>
             <button
+              type="button"
               onClick={() => setShowDialog(true)}
               className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90 transition-opacity"
             >
@@ -54,23 +62,32 @@ export function RepositoriesPage() {
         {loading ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-16 bg-surface-secondary border border-border rounded-lg animate-pulse" />
+              <div
+                key={i}
+                className="h-16 bg-surface-secondary border border-border rounded-lg animate-pulse"
+              />
             ))}
           </div>
         ) : repos.length === 0 ? (
           <div className="text-center py-16 space-y-3">
             <p className="text-content-secondary text-sm">No repositories registered.</p>
             <p className="text-content-tertiary text-xs">
-              Repositories are added when you run <code className="font-mono text-accent">ak link</code> in a project directory.
+              Repositories are added when you run{" "}
+              <code className="font-mono text-accent">ak link</code> in a project directory.
             </p>
             <pre className="inline-block bg-surface-secondary border border-border rounded-lg px-4 py-2 text-xs font-mono text-content-secondary mt-2">
               npx agent-kanban link
             </pre>
             <p className="text-content-tertiary text-xs mt-3">
               Or{" "}
-              <button onClick={() => setShowDialog(true)} className="text-accent hover:underline">
+              <button
+                type="button"
+                onClick={() => setShowDialog(true)}
+                className="text-accent hover:underline"
+              >
                 add manually
-              </button>.
+              </button>
+              .
             </p>
           </div>
         ) : (
@@ -90,6 +107,7 @@ export function RepositoriesPage() {
                     </span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleDelete(repo.id)}
                     className="text-xs text-content-tertiary hover:text-error transition-colors shrink-0 ml-3"
                   >
@@ -117,16 +135,29 @@ export function RepositoriesPage() {
         )}
       </div>
 
-      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) setShowDialog(false); }}>
+      <Dialog
+        open={showDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowDialog(false);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Repository</DialogTitle>
-            <DialogDescription className="sr-only">Add a new repository to track tasks</DialogDescription>
+            <DialogDescription className="sr-only">
+              Add a new repository to track tasks
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Name</label>
+              <label
+                htmlFor="repo-name"
+                className="text-xs text-content-tertiary uppercase tracking-wide font-medium"
+              >
+                Name
+              </label>
               <input
+                id="repo-name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="my-repo"
@@ -134,8 +165,14 @@ export function RepositoriesPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs text-content-tertiary uppercase tracking-wide font-medium">Clone URL</label>
+              <label
+                htmlFor="repo-clone-url"
+                className="text-xs text-content-tertiary uppercase tracking-wide font-medium"
+              >
+                Clone URL
+              </label>
               <input
+                id="repo-clone-url"
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
                 placeholder="https://github.com/user/repo.git"
@@ -143,6 +180,7 @@ export function RepositoriesPage() {
               />
             </div>
             <button
+              type="button"
               onClick={handleAdd}
               disabled={!newName.trim() || !newUrl.trim() || submitting}
               className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"

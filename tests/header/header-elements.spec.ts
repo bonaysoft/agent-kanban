@@ -1,32 +1,34 @@
 // spec: specs/agent-kanban.plan.md
 // section: 4.1 Header renders logo, nav links, theme toggle, and user avatar
 
-import { test, expect } from '@playwright/test';
-import { signUpAndGetBoard } from '../helpers/auth';
+import { expect, test } from "@playwright/test";
+import { signUpAndGetBoard } from "../helpers/auth";
 
-test.describe('Header and Navigation', () => {
-  test('Header renders logo, nav links, theme toggle, and user avatar', async ({ page }) => {
+test.describe("Header and Navigation", () => {
+  test("Header renders logo, nav links, theme toggle, and user avatar", async ({ page }) => {
     // 1. Sign in and navigate to any protected page (e.g. /settings)
     await signUpAndGetBoard(page, `headerelemts_${Date.now()}@example.com`);
-    await page.goto('/settings');
+    await page.goto("/settings");
 
     // expect: The header shows 'Agent Kanban' logo on the left
-    const header = page.locator('header');
+    const header = page.locator("header");
     await expect(header).toBeVisible();
-    await expect(header.getByRole('link', { name: 'Agent Kanban' })).toBeVisible();
+    await expect(header.getByRole("link", { name: "Agent Kanban" })).toBeVisible();
 
     // expect: Nav links 'Agents' and 'Machines' are visible on desktop
-    await expect(header.getByRole('link', { name: 'Agents' })).toBeVisible();
-    await expect(header.getByRole('link', { name: 'Machines' })).toBeVisible();
+    await expect(header.getByRole("link", { name: "Agents" })).toBeVisible();
+    await expect(header.getByRole("link", { name: "Machines" })).toBeVisible();
 
     // expect: A user avatar button is visible on the right
     // The avatar is inside a DropdownMenuTrigger button
-    const avatarButton = header.locator('button').filter({ has: page.locator('[data-slot="avatar"]') });
+    const avatarButton = header
+      .locator("button")
+      .filter({ has: page.locator('[data-slot="avatar"]') });
     await expect(avatarButton).toBeVisible();
 
     // expect: A theme toggle icon button is visible on the right
     // The theme toggle is the last button in the header (after the avatar)
-    const themeToggle = header.locator('button').last();
+    const themeToggle = header.locator("button").last();
     await expect(themeToggle).toBeVisible();
   });
 });

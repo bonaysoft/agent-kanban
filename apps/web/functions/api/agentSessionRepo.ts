@@ -1,8 +1,12 @@
-import type { AgentSession, AgentSessionWithMachine, SessionUsageInput } from "@agent-kanban/shared";
+import type {
+  AgentSession,
+  AgentSessionWithMachine,
+  SessionUsageInput,
+} from "@agent-kanban/shared";
 import { signDelegation } from "@agent-kanban/shared";
-import type { D1 } from "./db";
 import { getAgentPrivateKey } from "./agentRepo";
 import { createAuth } from "./betterAuth";
+import type { D1 } from "./db";
 import type { Env } from "./types";
 
 export async function createSession(
@@ -20,23 +24,34 @@ export async function createSession(
   const delegationProof = await signDelegation(agentPrivateKey, sessionPublicKey);
   const now = new Date().toISOString();
 
-  await db.prepare(`
+  await db
+    .prepare(`
     INSERT INTO agent_sessions (id, agent_id, machine_id, status, public_key, delegation_proof, created_at)
     VALUES (?, ?, ?, 'active', ?, ?, ?)
-  `).bind(sessionId, agentId, machineId, sessionPublicKey, delegationProof, now).run();
+  `)
+    .bind(sessionId, agentId, machineId, sessionPublicKey, delegationProof, now)
+    .run();
 
   // Register in Better Auth agent table for JWT verification
   const auth = createAuth(env);
   const authCtx = await auth.$context;
 
   // Ensure agentHost exists for this machine
-  const existingHost = await authCtx.adapter.findOne({ model: "agentHost", where: [{ field: "id", value: machineId }] });
+  const existingHost = await authCtx.adapter.findOne({
+    model: "agentHost",
+    where: [{ field: "id", value: machineId }],
+  });
   if (!existingHost) {
     await authCtx.adapter.create({
       model: "agentHost",
       data: {
-        id: machineId, name: `machine-${machineId.slice(0, 8)}`, userId: ownerId,
-        status: "active", activatedAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
+        id: machineId,
+        name: `machine-${machineId.slice(0, 8)}`,
+        userId: ownerId,
+        status: "active",
+        activatedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       forceAllowId: true,
     });
@@ -46,9 +61,16 @@ export async function createSession(
   await authCtx.adapter.create({
     model: "agent",
     data: {
-      id: sessionId, name: `session-${sessionId.slice(0, 8)}`, userId: ownerId,
-      hostId: machineId, status: "active", mode: "autonomous", publicKey: jwk,
-      activatedAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
+      id: sessionId,
+      name: `session-${sessionId.slice(0, 8)}`,
+      userId: ownerId,
+      hostId: machineId,
+      status: "active",
+      mode: "autonomous",
+      publicKey: jwk,
+      activatedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     forceAllowId: true,
   });
@@ -58,9 +80,16 @@ export async function createSession(
     await authCtx.adapter.create({
       model: "agentCapabilityGrant",
       data: {
-        agentId: sessionId, capability: cap, grantedBy: ownerId, deniedBy: null,
-        expiresAt: null, status: "active", reason: null, constraints: null,
-        createdAt: new Date(), updatedAt: new Date(),
+        agentId: sessionId,
+        capability: cap,
+        grantedBy: ownerId,
+        deniedBy: null,
+        expiresAt: null,
+        status: "active",
+        reason: null,
+        constraints: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     });
   }
@@ -69,23 +98,37 @@ export async function createSession(
 }
 
 export async function getSession(db: D1, sessionId: string): Promise<AgentSession | null> {
-  return db.prepare("SELECT * FROM agent_sessions WHERE id = ?").bind(sessionId).first<AgentSession>();
+  return db
+    .prepare("SELECT * FROM agent_sessions WHERE id = ?")
+    .bind(sessionId)
+    .first<AgentSession>();
 }
 
 export async function closeSession(db: D1, sessionId: string): Promise<void> {
   const now = new Date().toISOString();
-  await db.prepare("UPDATE agent_sessions SET status = 'closed', closed_at = ? WHERE id = ?").bind(now, sessionId).run();
+  await db
+    .prepare("UPDATE agent_sessions SET status = 'closed', closed_at = ? WHERE id = ?")
+    .bind(now, sessionId)
+    .run();
 }
 
 export async function reopenSession(db: D1, sessionId: string): Promise<void> {
-  const result = await db.prepare(
-    "UPDATE agent_sessions SET status = 'active', closed_at = NULL WHERE id = ? AND status = 'closed'",
-  ).bind(sessionId).run();
+  const result = await db
+    .prepare(
+      "UPDATE agent_sessions SET status = 'active', closed_at = NULL WHERE id = ? AND status = 'closed'",
+    )
+    .bind(sessionId)
+    .run();
   if (!result.meta.changes) throw new Error(`Session ${sessionId} not found or not closed`);
 }
 
-export async function updateSessionUsage(db: D1, sessionId: string, usage: SessionUsageInput): Promise<void> {
-  await db.prepare(`
+export async function updateSessionUsage(
+  db: D1,
+  sessionId: string,
+  usage: SessionUsageInput,
+): Promise<void> {
+  await db
+    .prepare(`
     UPDATE agent_sessions SET
       input_tokens = input_tokens + ?,
       output_tokens = output_tokens + ?,
@@ -93,20 +136,28 @@ export async function updateSessionUsage(db: D1, sessionId: string, usage: Sessi
       cache_creation_tokens = cache_creation_tokens + ?,
       cost_micro_usd = cost_micro_usd + ?
     WHERE id = ?
-  `).bind(
-    usage.input_tokens, usage.output_tokens,
-    usage.cache_read_tokens, usage.cache_creation_tokens,
-    usage.cost_micro_usd, sessionId,
-  ).run();
+  `)
+    .bind(
+      usage.input_tokens,
+      usage.output_tokens,
+      usage.cache_read_tokens,
+      usage.cache_creation_tokens,
+      usage.cost_micro_usd,
+      sessionId,
+    )
+    .run();
 }
 
 export async function listSessions(db: D1, agentId: string): Promise<AgentSessionWithMachine[]> {
-  const result = await db.prepare(`
+  const result = await db
+    .prepare(`
     SELECT s.*, m.name as machine_name
     FROM agent_sessions s
     JOIN machines m ON s.machine_id = m.id
     WHERE s.agent_id = ?
     ORDER BY s.created_at DESC
-  `).bind(agentId).all<AgentSessionWithMachine>();
+  `)
+    .bind(agentId)
+    .all<AgentSessionWithMachine>();
   return result.results;
 }

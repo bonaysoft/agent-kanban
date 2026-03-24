@@ -15,7 +15,9 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
   return (
     <div className="min-w-0 border-r border-border last:border-r-0 p-4">
       <div className="flex items-center justify-between mb-3">
-        <span className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}>
+        <span
+          className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}
+        >
           {column.name}
         </span>
         <span className="font-mono text-[11px] text-content-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">

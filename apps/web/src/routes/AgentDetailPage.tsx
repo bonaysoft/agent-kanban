@@ -1,20 +1,32 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Header } from "../components/Header";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { api } from "../lib/api";
-import { agentFingerprint, agentColor, agentColorRgb } from "../lib/agentIdentity";
+import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 
 const actionStyles: Record<string, string> = {
-  claimed: "text-accent", assigned: "text-accent", completed: "text-success",
-  released: "text-warning", timed_out: "text-error", review_requested: "text-accent",
+  claimed: "text-accent",
+  assigned: "text-accent",
+  completed: "text-success",
+  released: "text-warning",
+  timed_out: "text-error",
+  review_requested: "text-accent",
 };
 
 const taskStatusStyles: Record<string, string> = {
-  in_progress: "bg-accent/15 text-accent", in_review: "bg-yellow-500/15 text-yellow-500",
-  done: "bg-green-500/15 text-green-500", todo: "bg-zinc-500/15 text-content-tertiary",
+  in_progress: "bg-accent/15 text-accent",
+  in_review: "bg-yellow-500/15 text-yellow-500",
+  done: "bg-green-500/15 text-green-500",
+  todo: "bg-zinc-500/15 text-content-tertiary",
   cancelled: "bg-red-500/15 text-red-500",
 };
 
@@ -43,15 +55,30 @@ export function AgentDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    api.agents.get(id).then((a) => {
-      setAgent(a);
-      api.agents.sessions(id).then(setSessions).catch(() => {});
-      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
-    }).finally(() => setLoading(false));
+    api.agents
+      .get(id)
+      .then((a) => {
+        setAgent(a);
+        api.agents
+          .sessions(id)
+          .then(setSessions)
+          .catch(() => {});
+        api.tasks
+          .list({ assigned_to: id })
+          .then((ts) => setTask(ts[0] ?? null))
+          .catch(() => {});
+      })
+      .finally(() => setLoading(false));
     const interval = setInterval(() => {
       api.agents.get(id).then(setAgent);
-      api.agents.sessions(id).then(setSessions).catch(() => {});
-      api.tasks.list({ assigned_to: id }).then((ts) => setTask(ts[0] ?? null)).catch(() => {});
+      api.agents
+        .sessions(id)
+        .then(setSessions)
+        .catch(() => {});
+      api.tasks
+        .list({ assigned_to: id })
+        .then((ts) => setTask(ts[0] ?? null))
+        .catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, [id]);
@@ -82,7 +109,8 @@ export function AgentDetailPage() {
   const color = agent.public_key ? agentColor(agent.public_key) : "#22D3EE";
   const fp = agent.fingerprint ? agentFingerprint(agent.fingerprint) : "";
   const isOnline = agent.status === "online";
-  const totalTokens = (agent.input_tokens || 0) + (agent.output_tokens || 0) + (agent.cache_read_tokens || 0);
+  const totalTokens =
+    (agent.input_tokens || 0) + (agent.output_tokens || 0) + (agent.cache_read_tokens || 0);
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "mission", label: "Mission" },
@@ -94,7 +122,10 @@ export function AgentDetailPage() {
     <div className="min-h-screen bg-surface-primary">
       <Header />
       <div className="max-w-4xl mx-auto px-8 py-10">
-        <Link to="/agents" className="text-xs text-content-tertiary hover:text-content-secondary transition-colors">
+        <Link
+          to="/agents"
+          className="text-xs text-content-tertiary hover:text-content-secondary transition-colors"
+        >
           &larr; Agents
         </Link>
 
@@ -114,10 +145,21 @@ export function AgentDetailPage() {
           <div className="px-6 py-12 relative overflow-hidden">
             {/* Fingerprint watermark — right side, clickable */}
             <button
+              type="button"
               onClick={() => setShowIdentity(true)}
               className="absolute right-12 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 cursor-pointer group transition-opacity hover:opacity-100 opacity-100"
             >
-              <svg width="128" height="128" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-15 group-hover:opacity-30 transition-opacity">
+              <svg
+                width="128"
+                height="128"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="opacity-15 group-hover:opacity-30 transition-opacity"
+              >
                 <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
                 <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
                 <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
@@ -128,7 +170,9 @@ export function AgentDetailPage() {
                 <path d="M8.65 22c.21-.66.45-1.32.57-2" />
                 <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
               </svg>
-              <span className="font-mono text-[11px] tracking-[0.2em] font-medium text-content-tertiary transition-opacity">{fp}</span>
+              <span className="font-mono text-[11px] tracking-[0.2em] font-medium text-content-tertiary transition-opacity">
+                {fp}
+              </span>
             </button>
 
             <div className="flex items-start gap-6 relative">
@@ -136,11 +180,23 @@ export function AgentDetailPage() {
 
               <div className="flex-1 min-w-0 pt-1">
                 <div className="flex items-center gap-3">
-                  <h1 className="font-mono text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
+                  <h1
+                    className="font-mono text-2xl font-bold text-content-primary"
+                    style={{ letterSpacing: "-0.02em" }}
+                  >
                     {agent.name}
                   </h1>
                   {agent.builtin ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-content-tertiary shrink-0">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      className="text-content-tertiary shrink-0"
+                    >
                       <title>Built-in — cannot be modified</title>
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -152,9 +208,7 @@ export function AgentDetailPage() {
                   />
                 </div>
 
-                {agent.bio && (
-                  <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>
-                )}
+                {agent.bio && <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>}
 
                 {/* Meta */}
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -177,7 +231,6 @@ export function AgentDetailPage() {
                     </span>
                   )}
                 </div>
-
               </div>
             </div>
           </div>
@@ -192,7 +245,9 @@ export function AgentDetailPage() {
               { label: "COST", value: formatCost(agent.cost_micro_usd || 0) },
             ].map((stat) => (
               <div key={stat.label} className="py-3 px-4 text-center">
-                <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider">{stat.label}</div>
+                <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider">
+                  {stat.label}
+                </div>
                 <div className="font-mono text-base text-content-primary mt-0.5">{stat.value}</div>
               </div>
             ))}
@@ -201,8 +256,20 @@ export function AgentDetailPage() {
           {/* Token composition bar */}
           {totalTokens > 0 && (
             <div className="h-1 flex">
-              <div style={{ width: `${(agent.input_tokens / totalTokens) * 100}%`, background: color, opacity: 0.8 }} />
-              <div style={{ width: `${(agent.output_tokens / totalTokens) * 100}%`, background: color, opacity: 0.35 }} />
+              <div
+                style={{
+                  width: `${(agent.input_tokens / totalTokens) * 100}%`,
+                  background: color,
+                  opacity: 0.8,
+                }}
+              />
+              <div
+                style={{
+                  width: `${(agent.output_tokens / totalTokens) * 100}%`,
+                  background: color,
+                  opacity: 0.35,
+                }}
+              />
               <div style={{ flex: 1, background: color, opacity: 0.1 }} />
             </div>
           )}
@@ -220,9 +287,16 @@ export function AgentDetailPage() {
 
         {/* ─── Soul ─── */}
         {agent.soul && (
-          <div className="mt-6 bg-surface-secondary rounded-lg px-5 py-4" style={{ boxShadow: "0 0 0 1px var(--border)" }}>
-            <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider mb-2">Soul</div>
-            <p className="font-mono text-xs text-content-secondary leading-relaxed whitespace-pre-wrap">{agent.soul}</p>
+          <div
+            className="mt-6 bg-surface-secondary rounded-lg px-5 py-4"
+            style={{ boxShadow: "0 0 0 1px var(--border)" }}
+          >
+            <div className="text-[9px] font-mono text-content-tertiary uppercase tracking-wider mb-2">
+              Soul
+            </div>
+            <p className="font-mono text-xs text-content-secondary leading-relaxed whitespace-pre-wrap">
+              {agent.soul}
+            </p>
           </div>
         )}
 
@@ -230,6 +304,7 @@ export function AgentDetailPage() {
         <div className="mt-10 flex items-center gap-6 border-b border-border">
           {tabs.map((t) => (
             <button
+              type="button"
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`pb-2.5 text-sm font-medium transition-colors relative ${
@@ -240,10 +315,15 @@ export function AgentDetailPage() {
             >
               {t.label}
               {t.count !== undefined && t.count > 0 && (
-                <span className="ml-1.5 text-[10px] font-mono text-content-tertiary">{t.count}</span>
+                <span className="ml-1.5 text-[10px] font-mono text-content-tertiary">
+                  {t.count}
+                </span>
               )}
               {tab === t.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full" style={{ background: color }} />
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+                  style={{ background: color }}
+                />
               )}
             </button>
           ))}
@@ -260,7 +340,7 @@ export function AgentDetailPage() {
   );
 }
 
-function ActivityTab({ logs, rgb }: { logs: any[]; rgb: string }) {
+function ActivityTab({ logs, rgb: _rgb }: { logs: any[]; rgb: string }) {
   if (!logs || logs.length === 0) {
     return <p className="text-sm text-content-tertiary">No activity yet.</p>;
   }
@@ -272,7 +352,9 @@ function ActivityTab({ logs, rgb }: { logs: any[]; rgb: string }) {
           <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
             {formatRelative(log.created_at)}
           </span>
-          <span className={`font-mono text-[12px] w-32 shrink-0 ${actionStyles[log.action] || "text-content-tertiary"}`}>
+          <span
+            className={`font-mono text-[12px] w-32 shrink-0 ${actionStyles[log.action] || "text-content-tertiary"}`}
+          >
             {log.action}
           </span>
           {log.task_title && (
@@ -304,14 +386,20 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
             <span className="font-mono text-[11px] text-content-tertiary w-20 shrink-0">
               {formatRelative(s.created_at)}
             </span>
-            <code className="font-mono text-[11px] text-content-secondary">{s.id.slice(0, 12)}</code>
-            <span className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
-              isActive ? "text-accent bg-accent/10" : "text-content-tertiary bg-surface-tertiary"
-            }`}>
+            <code className="font-mono text-[11px] text-content-secondary">
+              {s.id.slice(0, 12)}
+            </code>
+            <span
+              className={`text-[10px] font-mono rounded px-1.5 py-0.5 ${
+                isActive ? "text-accent bg-accent/10" : "text-content-tertiary bg-surface-tertiary"
+              }`}
+            >
               {s.status}
             </span>
             {s.machine_name && (
-              <span className="text-[11px] text-content-tertiary font-mono ml-auto">{s.machine_name}</span>
+              <span className="text-[11px] text-content-tertiary font-mono ml-auto">
+                {s.machine_name}
+              </span>
             )}
           </div>
         );
@@ -320,34 +408,54 @@ function SessionsTab({ sessions, color }: { sessions: any[]; color: string }) {
   );
 }
 
-function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
-  open: boolean; onOpenChange: (open: boolean) => void;
-  fingerprint: string; publicKey: string; color: string; rgb: string;
+function IdentityModal({
+  open,
+  onOpenChange,
+  fingerprint,
+  publicKey,
+  rgb,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fingerprint: string;
+  publicKey: string;
+  color: string;
+  rgb: string;
 }) {
-  const formatFullFingerprint = (fp: string) =>
-    fp.match(/.{2}/g)?.join(":") ?? fp;
+  const formatFullFingerprint = (fp: string) => fp.match(/.{2}/g)?.join(":") ?? fp;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" style={{ boxShadow: `0 0 0 1px rgba(${rgb}, 0.15)` }}>
         <DialogHeader>
           <DialogTitle>Cryptographic Identity</DialogTitle>
-          <DialogDescription className="sr-only">Agent cryptographic identity details</DialogDescription>
+          <DialogDescription className="sr-only">
+            Agent cryptographic identity details
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Fingerprint</span>
+              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">
+                Fingerprint
+              </span>
               <button
+                type="button"
                 onClick={() => navigator.clipboard.writeText(fingerprint)}
                 className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
               >
                 Copy
               </button>
             </div>
-            <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
-              <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all" style={{ wordSpacing: "0.15em" }}>
+            <div
+              className="bg-surface-primary rounded-md p-4"
+              style={{ border: `1px solid rgba(${rgb}, 0.1)` }}
+            >
+              <code
+                className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all"
+                style={{ wordSpacing: "0.15em" }}
+              >
                 {formatFullFingerprint(fingerprint)}
               </code>
             </div>
@@ -355,15 +463,21 @@ function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">Ed25519 Public Key</span>
+              <span className="text-[10px] font-mono text-content-tertiary uppercase tracking-wider">
+                Ed25519 Public Key
+              </span>
               <button
+                type="button"
                 onClick={() => navigator.clipboard.writeText(publicKey)}
                 className="text-[10px] text-content-tertiary hover:text-content-secondary transition-colors"
               >
                 Copy
               </button>
             </div>
-            <div className="bg-surface-primary rounded-md p-4" style={{ border: `1px solid rgba(${rgb}, 0.1)` }}>
+            <div
+              className="bg-surface-primary rounded-md p-4"
+              style={{ border: `1px solid rgba(${rgb}, 0.1)` }}
+            >
               <code className="font-mono text-[12px] text-content-secondary break-all leading-relaxed block select-all">
                 {publicKey}
               </code>
@@ -375,7 +489,7 @@ function IdentityModal({ open, onOpenChange, fingerprint, publicKey, rgb }: {
   );
 }
 
-function MissionTab({ task, color, rgb }: { task: any; color: string; rgb: string }) {
+function MissionTab({ task, color, rgb: _rgb }: { task: any; color: string; rgb: string }) {
   if (!task) {
     return <p className="text-sm text-content-tertiary">No active mission.</p>;
   }
@@ -389,13 +503,20 @@ function MissionTab({ task, color, rgb }: { task: any; color: string; rgb: strin
         boxShadow: "0 0 0 1px var(--border)",
       }}
     >
-      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}>
+      <span
+        className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${taskStatusStyles[task.status]}`}
+      >
         {task.status.replace("_", " ")}
       </span>
       <span className="text-sm text-content-primary flex-1 truncate">{task.title}</span>
       {task.pr_url && (
-        <a href={task.pr_url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}
-          className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary">
+        <a
+          href={task.pr_url}
+          target="_blank"
+          rel="noopener"
+          onClick={(e) => e.stopPropagation()}
+          className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary"
+        >
           PR &rarr;
         </a>
       )}
