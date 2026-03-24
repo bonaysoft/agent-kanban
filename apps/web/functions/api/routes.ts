@@ -16,12 +16,22 @@ import { createAuth } from "./betterAuth";
 
 const api = new Hono<{ Bindings: Env }>();
 
+// Access log
+api.use("*", async (c, next) => {
+  const start = Date.now();
+  await next();
+  const status = c.res.status;
+  if (status >= 400) {
+    console.log(`${c.req.method} ${c.req.path} ${status} ${Date.now() - start}ms`);
+  }
+});
+
 // Error handler
 api.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: { code: err.message, message: err.message } }, err.status);
   }
-  console.error("Unhandled error:", err.message, err.stack);
+  console.error(`${c.req.method} ${c.req.path} 500 ${err.message}`);
   return c.json({ error: { code: "INTERNAL_ERROR", message: err.message || "Internal server error" } }, 500);
 });
 
