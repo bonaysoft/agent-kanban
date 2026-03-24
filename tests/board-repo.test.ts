@@ -1,0 +1,143 @@
+// @vitest-environment node
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Miniflare } from "miniflare";
+import { createTestEnv, setupMiniflare, seedUser } from "./helpers/db";
+
+const env = createTestEnv();
+let mf: Miniflare;
+
+beforeAll(async () => {
+  ({ mf, db: env.DB } = await setupMiniflare());
+  await seedUser(env.DB, "board-test-user", "board@test.com");
+  await seedUser(env.DB, "board-test-user-2", "board2@test.com");
+});
+
+afterAll(async () => {
+  await mf.dispose();
+});
+
+describe("boardRepo", () => {
+  it("createBoard creates a board with default description", async () => {
+    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "My Board");
+    expect(board.name).toBe("My Board");
+    expect(board.owner_id).toBe("board-test-user");
+    expect(board.id).toBeDefined();
+  });
+
+  it("createBoard creates a board with custom description", async () => {
+    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Described Board", "A description");
+    expect(board.description).toBe("A description");
+  });
+
+  it("listBoards returns boards for a specific owner", async () => {
+    const { listBoards, createBoard } = await import("../apps/web/functions/api/boardRepo");
+    await createBoard(env.DB, "board-test-user-2", "User2 Board");
+    const boards = await listBoards(env.DB, "board-test-user-2");
+    expect(boards.length).toBeGreaterThanOrEqual(1);
+    expect(boards.every((b: any) => b.owner_id === "board-test-user-2")).toBe(true);
+  });
+
+  it("getBoardByName returns a board by name", async () => {
+    const { getBoardByName } = await import("../apps/web/functions/api/boardRepo");
+    const board = await getBoardByName(env.DB, "board-test-user", "My Board");
+    expect(board).not.toBeNull();
+    expect(board!.name).toBe("My Board");
+  });
+
+  it("getBoardByName returns null for unknown name", async () => {
+    const { getBoardByName } = await import("../apps/web/functions/api/boardRepo");
+    const board = await getBoardByName(env.DB, "board-test-user", "Nonexistent Board");
+    expect(board).toBeNull();
+  });
+
+  it("getBoard returns board with tasks array", async () => {
+    const { createBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const created = await createBoard(env.DB, "board-test-user", "Get Board");
+    const board = await getBoard(env.DB, created.id);
+    expect(board).not.toBeNull();
+    expect(board!.id).toBe(created.id);
+    expect(Array.isArray(board!.tasks)).toBe(true);
+  });
+
+  it("getBoard returns null for unknown id", async () => {
+    const { getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await getBoard(env.DB, "nonexistent");
+    expect(board).toBeNull();
+  });
+
+  it("getBoard includes blocked status on tasks", async () => {
+    const { createBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Blocked Board");
+    const taskA = await createTask(env.DB, "board-test-user", { title: "Task A", board_id: board.id });
+    await createTask(env.DB, "board-test-user", { title: "Task B", board_id: board.id, depends_on: [taskA.id] });
+    const result = await getBoard(env.DB, board.id);
+    const taskB = result!.tasks.find((t: any) => t.title === "Task B");
+    expect(taskB!.blocked).toBe(true);
+  });
+
+  it("getDefaultBoard returns the first board for a user", async () => {
+    const { getDefaultBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await getDefaultBoard(env.DB, "board-test-user");
+    expect(board).not.toBeNull();
+    expect(board!.owner_id).toBe("board-test-user");
+  });
+
+  it("getDefaultBoard returns null for user with no boards", async () => {
+    const { getDefaultBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await getDefaultBoard(env.DB, "no-boards-user");
+    expect(board).toBeNull();
+  });
+
+  it("updateBoard updates name only", async () => {
+    const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Update Name Board");
+    const updated = await updateBoard(env.DB, board.id, { name: "New Name" });
+    expect(updated!.name).toBe("New Name");
+  });
+
+  it("updateBoard updates description only", async () => {
+    const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Update Desc Board");
+    const updated = await updateBoard(env.DB, board.id, { description: "New Desc" });
+    expect(updated!.description).toBe("New Desc");
+  });
+
+  it("updateBoard updates both name and description", async () => {
+    const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Update Both Board");
+    const updated = await updateBoard(env.DB, board.id, { name: "Both Name", description: "Both Desc" });
+    expect(updated!.name).toBe("Both Name");
+    expect(updated!.description).toBe("Both Desc");
+  });
+
+  it("updateBoard with empty update returns board unchanged", async () => {
+    const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "No Update Board");
+    const updated = await updateBoard(env.DB, board.id, {});
+    expect(updated!.name).toBe("No Update Board");
+  });
+
+  it("updateBoard returns null for unknown board", async () => {
+    const { updateBoard } = await import("../apps/web/functions/api/boardRepo");
+    const updated = await updateBoard(env.DB, "nonexistent", { name: "X" });
+    expect(updated).toBeNull();
+  });
+
+  it("deleteBoard removes a board", async () => {
+    const { createBoard, deleteBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const board = await createBoard(env.DB, "board-test-user", "Delete Board");
+    const deleted = await deleteBoard(env.DB, board.id);
+    expect(deleted).toBe(true);
+    const found = await getBoard(env.DB, board.id);
+    expect(found).toBeNull();
+  });
+
+  it("deleteBoard returns false for unknown board", async () => {
+    const { deleteBoard } = await import("../apps/web/functions/api/boardRepo");
+    const deleted = await deleteBoard(env.DB, "nonexistent");
+    expect(deleted).toBe(false);
+  });
+});

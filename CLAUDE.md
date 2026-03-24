@@ -41,11 +41,14 @@ After every significant code change, follow this sequence:
    - ALL PASS → proceed to step 2.
    - FAILURES → you (main agent) read the failure, decide if the bug is in source code or test code.
      - Source bug → fix the source code, re-run tests yourself.
-     - Test bug → state why the test is wrong, then fix the test.
+     - Test bug → state why the test is wrong, then forward to test-writer agent to fix.
    - After all tests pass, proceed to step 2.
 2. **Review** — invoke clean-code-reviewer agent (reviews both source and test code).
-   - REVISE → fix issues, run round 2.
+   - REVISE on source code → you (main agent) fix, then re-run review.
+   - REVISE on test code → forward issues to test-writer agent to fix.
    - PASS → proceed to step 3.
+
+**Ownership rule**: you (main agent) only modify source code. Test code is owned by the test-writer agent — all test modifications go through it.
 3. **Regression** — run build + type check + full test suite to catch breakage.
    - `pnpm build && pnpm tsc --noEmit && npx vitest run`
    - Any failure → fix and re-run. If fix touches source code, go back to step 1.
