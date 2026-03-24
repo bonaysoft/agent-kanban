@@ -11,6 +11,15 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     include: ["**/*.test.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      include: [
+        "apps/web/functions/**/*.ts",
+        "packages/shared/src/**/*.ts",
+        "packages/cli/src/**/*.ts",
+      ],
+      exclude: ["**/*.d.ts", "**/types.ts"],
+    },
     server: {
       deps: {
         inline: ["jose", "miniflare"],

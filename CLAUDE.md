@@ -34,7 +34,28 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Repo linking: `ak link` registers repo at tenant level and maps local directory to repository ID. Stored in `~/.agent-kanban/links.json`.
 - Data model: Board is the workspace unit. Repositories belong to owner (tenant-level, like machines). Tasks belong to boards, optionally linked to a repository. Machines belong to owner (user/org).
 
+## Post-Write Workflow
+After every significant code change, follow this sequence:
+
+1. **Test** — invoke test-writer agent to write/update tests and run them.
+   - ALL PASS → proceed to step 2.
+   - FAILURES → you (main agent) read the failure, decide if the bug is in source code or test code.
+     - Source bug → fix the source code, re-run tests yourself.
+     - Test bug → state why the test is wrong, then fix the test.
+   - After all tests pass, proceed to step 2.
+2. **Review** — invoke clean-code-reviewer agent (reviews both source and test code).
+   - REVISE → fix issues, run round 2.
+   - PASS → proceed to step 3.
+3. **Regression** — run build + type check + full test suite to catch breakage.
+   - `pnpm build && pnpm tsc --noEmit && npx vitest run`
+   - Any failure → fix and re-run. If fix touches source code, go back to step 1.
+
 ## Testing
 - Framework: vitest (root `vitest.config.ts`)
 - Run: `npx vitest run`
+- Run with coverage: `npx vitest run --coverage --coverage.include='<glob>'`
+- Coverage provider: `@vitest/coverage-v8` (install with `pnpm add -Dw @vitest/coverage-v8` if missing)
 - Tests in `tests/` directory
+- Unit/integration tests: `*.test.ts` — direct import of modules, real D1 via Miniflare (no mocks)
+- E2E tests: `*.spec.ts` — Playwright browser tests
+- Test data setup: Miniflare D1 with migrations from `apps/web/migrations/`, seed helpers in test files

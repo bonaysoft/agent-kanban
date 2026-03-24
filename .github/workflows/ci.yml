@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @agent-kanban/shared build
+
+      - name: Type check
+        run: pnpm tsc --noEmit
+
+      - name: Run tests with coverage
+        run: npx vitest run --coverage --coverage.reporter=json-summary --coverage.reporter=text
+
+      - name: Coverage report on PR
+        if: github.event_name == 'pull_request'
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          json-summary-path: coverage/coverage-summary.json
+
+      - name: Generate badge JSON
+        if: github.ref == 'refs/heads/master'
+        run: |
+          pct=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.lines.pct)")
+          if [ "$(echo "$pct >= 80" | bc)" -eq 1 ]; then color="brightgreen"
+          elif [ "$(echo "$pct >= 60" | bc)" -eq 1 ]; then color="yellow"
+          else color="red"; fi
+          mkdir -p badge
+          echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${pct}%\",\"color\":\"${color}\"}" > badge/coverage.json
+
+      - name: Upload badge to Pages
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: badge
+
+  deploy-badge:
+    if: github.ref == 'refs/heads/master'
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
