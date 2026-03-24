@@ -26,6 +26,8 @@ Thumbs.db
 
 # Test
 coverage/
+playwright-report/
+test-results/
 
 # Symlink (local dev workaround)
 /functions
