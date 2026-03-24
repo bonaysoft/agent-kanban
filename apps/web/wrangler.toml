@@ -10,6 +10,9 @@ GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
 # Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET) are set via `wrangler pages secret put`
 # Local dev overrides are in .dev.vars
 
+[observability]
+enabled = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"
