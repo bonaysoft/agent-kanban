@@ -233,6 +233,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const task = available[0];
       const repoDir = findPathForRepository(task.repository_id)!;
 
+      if (!prepareRepo(repoDir)) {
+        console.error(`[ERROR] Repo not ready at ${repoDir}, skipping task ${task.id}`);
+        schedulePoll(baseInterval);
+        return;
+      }
+
       // Ensure lefthook quality gates before first real task
       if (await ensureLefthookTask(client, task, repoDir, tasks)) {
         schedulePoll(baseInterval);
@@ -448,6 +454,23 @@ function cloneAndLink(repo: any): void {
     console.log(`[INFO] Linked repository ${repo.name} → ${repoDir}`);
   } catch (err: any) {
     console.error(`[ERROR] Auto-clone failed for repository ${repo.id}: ${err.message}`);
+  }
+}
+
+function prepareRepo(repoDir: string): boolean {
+  try {
+    const status = execSync("git status --porcelain", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+    if (status) {
+      console.log(`[INFO] Stashing dirty working tree in ${repoDir}`);
+      execSync("git stash --include-untracked", { cwd: repoDir, stdio: "pipe" });
+    }
+
+    console.log(`[INFO] Pulling latest code in ${repoDir}`);
+    execSync("git pull --ff-only", { cwd: repoDir, stdio: "pipe" });
+    return true;
+  } catch (err: any) {
+    console.error(`[ERROR] Failed to prepare repo ${repoDir}: ${err.message}`);
+    return false;
   }
 }
 
