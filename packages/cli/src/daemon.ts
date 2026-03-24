@@ -380,7 +380,7 @@ function ensureSkills(repoDir: string, agentSkills: string[]): boolean {
       console.log(`[INFO] Skills updated in ${repoDir}`);
     }
 
-    execSync(`git add .claude/skills/ && git diff --cached --quiet || git commit -m "chore: update skills"`, {
+    execSync(`git add .claude/skills/ && (git diff --cached --quiet || (git commit -m "chore: update skills" && git push))`, {
       cwd: repoDir,
       stdio: "pipe",
     });
