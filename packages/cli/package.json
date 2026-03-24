@@ -4,7 +4,7 @@
   "description": "CLI for Agent Kanban — agent-first cross-project task board",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bonaysoft/agent-kanban.git",
+    "url": "git+https://github.com/saltbo/agent-kanban.git",
     "directory": "packages/cli"
   },
   "type": "module",

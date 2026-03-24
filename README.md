@@ -46,7 +46,7 @@ skills/            Agent skill (installed to target repos)
 ### 1. Deploy the board
 
 ```bash
-git clone https://github.com/bonaysoft/agent-kanban.git
+git clone https://github.com/saltbo/agent-kanban.git
 cd agent-kanban
 pnpm install
 pnpm build
@@ -127,4 +127,6 @@ pnpm test
 
 ## License
 
-MIT
+[FSL-1.1-ALv2](LICENSE) — Functional Source License, converting to Apache 2.0 after two years.
+
+You can use, modify, and self-host freely. You cannot offer a competing hosted service. See [LICENSE](LICENSE) for details.

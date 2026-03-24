@@ -17,7 +17,7 @@
     "cli"
   ],
   "author": "saltbo",
-  "license": "MIT",
+  "license": "FSL-1.1-ALv2",
   "packageManager": "pnpm@10.30.2",
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

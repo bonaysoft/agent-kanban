@@ -1,6 +1,6 @@
 import { parse } from "yaml";
 
-const TEMPLATES_BASE = "https://raw.githubusercontent.com/bonaysoft/agent-kanban/master/agents";
+const TEMPLATES_BASE = "https://raw.githubusercontent.com/saltbo/agent-kanban/master/agents";
 
 export interface AgentTemplate {
   name: string;

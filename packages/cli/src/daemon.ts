@@ -357,7 +357,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 }
 
 
-const SKILL_SOURCE = "bonaysoft/agent-kanban";
+const SKILL_SOURCE = "saltbo/agent-kanban";
 const SKILL_NAME = "agent-kanban";
 
 function installSkill(repoDir: string, source: string, skill: string): boolean {
