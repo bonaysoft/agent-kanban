@@ -2,12 +2,10 @@ import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import { useSSE } from "../hooks/useSSE";
 import { useSession } from "../lib/auth-client";
-import { getAllowedActions, type TaskTransition } from "@agent-kanban/shared";
 import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
 import { ActivityLog } from "./ActivityLog";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
-import { AssignDropdown } from "./AssignDropdown";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "./ui/sheet";
@@ -24,22 +22,9 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const ACTION_LABELS: Record<TaskTransition, string> = {
-  claim: "Claim",
-  review: "Request Review",
-  reject: "Reject",
-  complete: "Complete",
-  cancel: "Cancel",
-  release: "Release",
-};
-
-const ACTION_VARIANTS: Record<TaskTransition, "default" | "destructive" | "outline"> = {
-  claim: "default",
-  review: "default",
-  reject: "outline",
-  complete: "default",
-  cancel: "destructive",
-  release: "outline",
+const REVIEW_ACTIONS = {
+  reject: { label: "Reject", variant: "outline" as const },
+  complete: { label: "Complete", variant: "default" as const },
 };
 
 interface TaskDetailProps {
@@ -84,23 +69,10 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     onRefresh();
   }
 
-  async function handleAction(action: TaskTransition) {
-    const handlers: Record<TaskTransition, () => Promise<any>> = {
-      claim: () => api.tasks.claim(taskId),
-      review: () => api.tasks.review(taskId),
-      reject: () => api.tasks.reject(taskId),
-      complete: () => api.tasks.complete(taskId),
-      cancel: () => api.tasks.cancel(taskId),
-      release: () => api.tasks.release(taskId),
-    };
-    await handlers[action]();
+  async function handleReviewAction(action: "reject" | "complete") {
+    if (action === "reject") await api.tasks.reject(taskId);
+    else await api.tasks.complete(taskId);
     await reload();
-    onRefresh();
-  }
-
-  async function handleDelete() {
-    await api.tasks.delete(taskId);
-    onClose();
     onRefresh();
   }
 
@@ -139,15 +111,11 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
           <FieldLabel>Status</FieldLabel>
           <span className="text-sm font-medium text-accent">{TASK_STATUS_LABELS[task.status] || task.status}</span>
         </div>
-        <div>
-          <FieldLabel>Assigned to</FieldLabel>
-          <AssignDropdown
-            taskId={taskId}
-            taskStatus={task.status}
-            currentAgent={task.agent_name || null}
-            onAssigned={() => { reload(); onRefresh(); }}
-          />
-        </div>
+        <Field label="Assigned to" value={
+          task.agent_name
+            ? <span className="font-mono text-[13px]">{task.agent_name}</span>
+            : <span className="text-content-tertiary">—</span>
+        } />
         <Field label="Duration" value={
           task.duration_minutes != null
             ? <span className="font-mono text-[13px]">{task.duration_minutes} min</span>
@@ -155,24 +123,20 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
         } />
       </div>
 
-      {(() => {
-        const actions = getAllowedActions(task.status, "user");
-        if (actions.length === 0) return null;
-        return (
-          <div className="flex gap-2">
-            {actions.map((action) => (
-              <Button
-                key={action}
-                variant={ACTION_VARIANTS[action]}
-                size="sm"
-                onClick={() => handleAction(action)}
-              >
-                {ACTION_LABELS[action]}
-              </Button>
-            ))}
-          </div>
-        );
-      })()}
+      {task.status === "in_review" && (
+        <div className="flex gap-2">
+          {(Object.entries(REVIEW_ACTIONS) as [keyof typeof REVIEW_ACTIONS, typeof REVIEW_ACTIONS[keyof typeof REVIEW_ACTIONS]][]).map(([action, config]) => (
+            <Button
+              key={action}
+              variant={config.variant}
+              size="sm"
+              onClick={() => handleReviewAction(action)}
+            >
+              {config.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {dependsOn.length > 0 && (
         <div>
@@ -244,11 +208,6 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
       <Separator />
 
-      {((task.status === "todo" && !task.assigned_to) || task.status === "cancelled") && (
-        <Button variant="destructive" size="xs" onClick={handleDelete}>
-          Delete task
-        </Button>
-      )}
     </div>
   );
 

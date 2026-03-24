@@ -124,7 +124,6 @@ export function BoardPage() {
             column={col}
             onTaskClick={setSelectedTask}
             onAgentClick={setSelectedAgent}
-            onRefresh={refresh}
           />
         ))}
       </div>
@@ -137,7 +136,6 @@ export function BoardPage() {
             column={col}
             onTaskClick={setSelectedTask}
             onAgentClick={setSelectedAgent}
-            onRefresh={refresh}
           />
         ))}
       </div>

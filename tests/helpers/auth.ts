@@ -1,15 +1,14 @@
 import { Page, expect } from '@playwright/test';
 
 /**
- * Signs up a new user and completes the full onboarding flow (3 steps),
+ * Signs up a new user and completes the onboarding flow (2 steps),
  * then navigates to the actual board page at /boards/:id.
  *
  * Onboarding steps:
- *   0 - Create Board (board name input + "Create Board" button)
- *   1 - Create first task ("First task" input + "Create Task" button)
- *   2 - AddMachineSteps (shows API key + "Waiting for connection..." - no skip)
+ *   0 - Create Board (board name input + "Create Board" button, also creates API key)
+ *   1 - AddMachineSteps (shows API key + "Waiting for connection..." - no skip)
  *
- * After step 1 completes, the board exists. We fetch the board list via the API
+ * After step 0 completes, the board exists. We fetch the board list via the API
  * and navigate directly instead of waiting for a machine to connect.
  */
 export async function signUpAndGetBoard(
@@ -27,15 +26,11 @@ export async function signUpAndGetBoard(
   // Wait to land on the onboarding page
   await page.waitForURL(/\/boards\/_new/);
 
-  // Step 0: create the board
+  // Step 0: create the board (also creates API key, advances to step 1)
   await page.getByRole('button', { name: 'Create Board' }).click();
 
-  // Step 1: create the first task
-  await expect(page.getByRole('button', { name: 'Create Task' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create Task' }).click();
-
-  // Step 2 is now shown (AddMachineSteps / "Waiting for connection").
-  // The board and task already exist in the DB — fetch the board ID and navigate directly.
+  // Step 1 is now shown (AddMachineSteps / "Waiting for connection").
+  // The board already exists in the DB — fetch the board ID and navigate directly.
   await expect(page.getByText('Waiting for connection...')).toBeVisible();
 
   const boardId = await page.evaluate(async () => {

@@ -17,6 +17,14 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Shared types: packages/shared/ — proper package with build step
 - Agent skill: skills/agent-kanban/ — installed via `npx skills add` to target repos
 
+## UI Principles
+- **Read-only board** — the web UI is for observation and review, not task management
+- **No task creation UI** — tasks are created exclusively by agents via CLI/API
+- **No status transition buttons** — no claim/cancel/release/assign in the UI
+- **No drag-and-drop** — card ordering is managed by agents
+- **Only two human actions in UI**: reject (send back to agent) and complete (accept)
+- Board switcher and task detail (logs, PR, chat) are the only navigation interactions
+
 ## Patterns
 - Data access: thin repo layer (taskRepo.ts, boardRepo.ts, agentRepo.ts, messageRepo.ts) — no raw SQL in route handlers
 - Error handling: Hono onError + HTTPException — centralized error envelope { error: { code, message } }
@@ -37,18 +45,19 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 ## Post-Write Workflow
 After every significant code change, follow this sequence:
 
-1. **Test** — invoke test-writer agent to write/update tests and run them.
+1. **Test** — invoke test-writer agent to write/update unit/integration tests and run them.
+   - If changes touch frontend components (`apps/web/src/`), also invoke playwright-test-generator agent to create/update E2E tests, and playwright-test-healer to fix any broken existing E2E tests.
    - ALL PASS → proceed to step 2.
    - FAILURES → you (main agent) read the failure, decide if the bug is in source code or test code.
      - Source bug → fix the source code, re-run tests yourself.
-     - Test bug → state why the test is wrong, then forward to test-writer agent to fix.
+     - Test bug → state why the test is wrong, then forward to test-writer (unit) or playwright-test-healer (E2E) agent to fix.
    - After all tests pass, proceed to step 2.
 2. **Review** — invoke clean-code-reviewer agent (reviews both source and test code).
    - REVISE on source code → you (main agent) fix, then re-run review.
-   - REVISE on test code → forward issues to test-writer agent to fix.
+   - REVISE on test code → forward issues to the appropriate test agent to fix.
    - PASS → proceed to step 3.
 
-**Ownership rule**: you (main agent) only modify source code. Test code is owned by the test-writer agent — all test modifications go through it.
+**Ownership rule**: you (main agent) only modify source code. Test code is owned by test agents — all test modifications go through them.
 3. **Regression** — run build + type check + full test suite to catch breakage.
    - `pnpm build && pnpm tsc --noEmit && npx vitest run`
    - Any failure → fix and re-run. If fix touches source code, go back to step 1.

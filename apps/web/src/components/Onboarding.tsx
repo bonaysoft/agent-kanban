@@ -12,7 +12,6 @@ interface OnboardingProps {
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const [boardName, setBoardName] = useState("My Board");
-  const [taskTitle, setTaskTitle] = useState("First task");
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
   const [apiKeyId, setApiKeyId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,15 +19,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   async function handleCreateBoard() {
     setLoading(true);
-    await api.boards.create({ name: boardName });
-    setLoading(false);
-    setStep(1);
-  }
-
-  async function handleCreateTask() {
-    setLoading(true);
     setError("");
-    await api.tasks.create({ title: taskTitle, priority: "high" });
+    await api.boards.create({ name: boardName });
 
     const { data, error: keyError } = await authClient.apiKey.create({ name: "onboarding" });
     if (keyError || !data?.key) {
@@ -40,11 +32,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     setApiKeyId(data.id);
 
     setLoading(false);
-    setStep(2);
-  }
-
-  function handleDone() {
-    onComplete();
+    setStep(1);
   }
 
   return (
@@ -61,7 +49,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
         {/* Step indicators */}
         <div className="flex justify-center gap-2">
-          {[0, 1, 2].map((s) => (
+          {[0, 1].map((s) => (
             <div
               key={s}
               className={`w-2 h-2 rounded-full ${s <= step ? "bg-accent" : "bg-surface-tertiary"}`}
@@ -78,6 +66,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               value={boardName}
               onChange={(e) => setBoardName(e.target.value)}
             />
+            {error && (
+              <p className="text-xs text-red-400">{error}</p>
+            )}
             <Button
               onClick={handleCreateBoard}
               disabled={loading || !boardName.trim()}
@@ -88,33 +79,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        {step === 1 && (
-          <div className="space-y-4">
-            <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">
-              First task
-            </label>
-            <Input
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-            />
-            {error && (
-              <p className="text-xs text-red-400">{error}</p>
-            )}
-            <Button
-              onClick={handleCreateTask}
-              disabled={loading || !taskTitle.trim()}
-              className="w-full"
-            >
-              {loading ? "Creating..." : "Create Task"}
-            </Button>
-          </div>
-        )}
-
-        {step === 2 && apiKeyDisplay && apiKeyId && (
+        {step === 1 && apiKeyDisplay && apiKeyId && (
           <AddMachineSteps
             apiKey={apiKeyDisplay}
             apiKeyId={apiKeyId}
-            onDone={handleDone}
+            onDone={onComplete}
           />
         )}
       </div>
