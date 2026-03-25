@@ -10,9 +10,10 @@ import { createLogger } from "./logger.js";
 import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
+import { getAvailableProviders } from "./providers/registry.js";
+import type { AgentProvider } from "./providers/types.js";
 import { loadReviewSessions, removeReviewSession } from "./reviewSessions.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
-import { getUsage } from "./usage.js";
 
 const logger = createLogger("daemon");
 
@@ -25,7 +26,7 @@ const logger = createLogger("daemon");
 
 export interface DaemonOptions {
   maxConcurrent: number;
-  agentCli: string;
+  provider: AgentProvider;
   pollInterval?: number;
   taskTimeout?: number; // ms, default 2h
 }
@@ -68,8 +69,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   let resumeTargetMs = 0;
 
   const pm = new ProcessManager(
+    opts.provider,
     client,
-    opts.agentCli,
     {
       onSlotFreed: () => schedulePoll(baseInterval),
       onRateLimited: pauseForRateLimit,
@@ -105,7 +106,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
+  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, provider=${opts.provider.name})`);
 
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
@@ -126,7 +127,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
-    const usageInfo = await getUsage();
+    const usageInfo = opts.provider.getUsage ? await opts.provider.getUsage() : null;
     client
       .heartbeat(machineId!, {
         version: machineInfo.version,
@@ -648,24 +649,6 @@ function removePidFile() {
   }
 }
 
-function detectRuntimes(): string[] {
-  const commands: [string, string][] = [
-    ["claude", "Claude Code"],
-    ["codex", "Codex"],
-    ["gemini", "Gemini CLI"],
-  ];
-  const found: string[] = [];
-  for (const [cmd, label] of commands) {
-    try {
-      execSync(`which ${cmd}`, { stdio: "ignore" });
-      found.push(label);
-    } catch {
-      /* not installed */
-    }
-  }
-  return found;
-}
-
 function loadSessionPids(): Map<string, number> {
   try {
     const data = JSON.parse(readFileSync(SESSION_PIDS_FILE, "utf-8"));
@@ -736,7 +719,7 @@ async function cleanupStaleSessions(client: MachineClient, machineId: string): P
 
 function getMachineInfo() {
   const os = `${platform()} ${arch()} ${release()}`;
-  const runtimes = detectRuntimes();
+  const runtimes = getAvailableProviders().map((p) => p.label);
   let version = "unknown";
   try {
     const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
