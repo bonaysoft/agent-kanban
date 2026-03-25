@@ -64,7 +64,7 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
 });
 
 // Ping — public health check
-api.get("/api/ping", (c) => c.json({ pong: true }));
+api.get("/api/ping", (c) => c.json({ pong: true }, 200, { "Content-Type": "application/json" }));
 
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
