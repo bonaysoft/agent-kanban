@@ -1,3 +1,4 @@
+// Provider registry - manages provider registration and discovery
 import { execSync } from "node:child_process";
 import { claudeProvider } from "./claude.js";
 import { geminiProvider } from "./gemini.js";
