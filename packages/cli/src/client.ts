@@ -95,6 +95,9 @@ export abstract class ApiClient {
   getAgent(agentId: string) {
     return this.request("GET", `/api/agents/${agentId}`);
   }
+  updateAgent(agentId: string, body: Record<string, unknown>) {
+    return this.request("PATCH", `/api/agents/${agentId}`, body);
+  }
   deleteAgent(agentId: string) {
     return this.request("DELETE", `/api/agents/${agentId}`);
   }
