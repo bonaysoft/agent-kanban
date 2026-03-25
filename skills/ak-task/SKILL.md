@@ -83,7 +83,7 @@ ak task list --label <label>    # poll status
 Poll every 30-60 seconds. When the task reaches `in_review` with a PR:
 1. Check CI: `gh pr checks <pr-number> --repo <owner>/<repo>`
 2. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
-3. Complete: `ak task complete <task-id> --result "PR #<n> merged: <summary>"`
+3. The daemon's PR Monitor will automatically complete the task — do NOT manually `ak task complete`.
 4. If CI fails → investigate, reject if needed: `ak task reject <task-id>`
 
 If a PR has merge conflicts, rebase it:
