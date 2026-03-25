@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
 
 export function EditableText({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
   const [editing, setEditing] = useState(false);
@@ -44,54 +43,6 @@ export function EditableText({ value, onSave, className }: { value: string; onSa
     <span onClick={() => setEditing(true)} className={`${className} cursor-pointer hover:border-b hover:border-content-tertiary`}>
       {value}
     </span>
-  );
-}
-
-export function EditableTextarea({ value, placeholder, onSave }: { value: string; placeholder: string; onSave: (v: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-  useEffect(() => {
-    if (editing) ref.current?.focus();
-  }, [editing]);
-
-  function commit() {
-    setEditing(false);
-    if (draft !== value) onSave(draft);
-  }
-
-  if (editing) {
-    return (
-      <Textarea
-        ref={ref}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        rows={3}
-        className="resize-y"
-      />
-    );
-  }
-
-  return (
-    <p
-      onClick={() => setEditing(true)}
-      className={`text-sm cursor-pointer rounded-md p-2 hover:bg-surface-tertiary transition-colors ${
-        value ? "text-content-secondary" : "text-content-tertiary"
-      }`}
-    >
-      {value || placeholder}
-    </p>
   );
 }
 
