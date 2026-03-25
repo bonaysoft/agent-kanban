@@ -20,6 +20,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
 
   // Merge initial + SSE messages, dedup by ID
   const allMessages = (() => {
@@ -34,12 +35,20 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
     return merged.sort((a: any, b: any) => a.created_at.localeCompare(b.created_at));
   })();
 
-  // Auto-scroll to bottom on new messages
+  // Track whether user is near the bottom
+  function handleScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 80;
+  }
+
+  // Auto-scroll to bottom when messages arrive, only if user was already at bottom
   useEffect(() => {
-    if (containerRef.current) {
+    if (isNearBottomRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, []);
+  }, [allMessages]);
 
   async function handleSend() {
     if (!input.trim() || !agentId) return;
@@ -77,10 +86,10 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
-      {/* Session ID for resume */}
-      <div className="flex items-center gap-2 text-[11px] font-mono text-content-tertiary shrink-0">
+      {/* Session ID for resume — subtle */}
+      <div className="flex items-center gap-2 text-[11px] font-mono text-content-tertiary shrink-0 opacity-60">
         <span>Session:</span>
-        <Badge variant="secondary" className="font-mono text-accent select-all">
+        <Badge variant="secondary" className="font-mono text-[10px] select-all">
           {agentId}
         </Badge>
         <Tooltip>
@@ -94,7 +103,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       </div>
 
       {/* Messages — fills available space */}
-      <div ref={containerRef} className="flex-1 min-h-0 overflow-y-auto space-y-2">
+      <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto space-y-2">
         {allMessages.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-content-tertiary">
