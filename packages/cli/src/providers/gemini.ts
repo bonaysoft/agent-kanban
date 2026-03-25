@@ -1,7 +1,17 @@
+import { readFileSync } from "node:fs";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentProvider, SpawnOpts } from "./types.js";
 
 const logger = createLogger("gemini");
+
+function readSystemPrompt(filePath?: string): string {
+  if (!filePath) return "";
+  try {
+    return readFileSync(filePath, "utf-8");
+  } catch {
+    return "";
+  }
+}
 
 export const geminiProvider: AgentProvider = {
   name: "gemini",
@@ -9,7 +19,8 @@ export const geminiProvider: AgentProvider = {
   command: "gemini",
 
   buildArgs(opts: SpawnOpts): string[] {
-    const args = ["--prompt", "", "--output-format", "stream-json", "--yolo"];
+    const systemPrompt = readSystemPrompt(opts.systemPromptFile);
+    const args = ["--prompt", systemPrompt, "--output-format", "stream-json", "--yolo"];
     return args;
   },
 
