@@ -3,6 +3,8 @@ import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
 import { startDaemon } from "../daemon.js";
 import { clearLinks } from "../links.js";
+import { getAvailableProviders, getProvider } from "../providers/registry.js";
+import type { AgentProvider } from "../providers/types.js";
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -21,7 +23,8 @@ export function registerStartCommand(program: Command) {
     .option("--api-url <url>", "API server URL")
     .option("--api-key <key>", "Machine API key")
     .option("--max-concurrent <n>", "Max concurrent agents", "3")
-    .option("--agent-cli <cmd>", "Agent CLI command to spawn", "claude")
+    .option("--provider <name>", "Agent provider to use (auto-detect if omitted)")
+    .option("--agent-cli <cmd>", "(deprecated) Use --provider instead")
     .option("--poll-interval <ms>", "Poll interval in ms", "10000")
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
@@ -48,9 +51,28 @@ export function registerStartCommand(program: Command) {
         process.exit(1);
       }
 
+      // Resolve provider: --provider flag > --agent-cli (deprecated) > auto-detect
+      let providerName = opts.provider;
+      if (!providerName && opts.agentCli) {
+        console.warn("Warning: --agent-cli is deprecated, use --provider instead");
+        providerName = opts.agentCli;
+      }
+
+      let provider: AgentProvider;
+      if (providerName) {
+        provider = getProvider(providerName);
+      } else {
+        const available = getAvailableProviders();
+        if (available.length === 0) {
+          console.error("No agent providers found. Install claude, codex, or gemini CLI.");
+          process.exit(1);
+        }
+        provider = available[0];
+      }
+
       await startDaemon({
         maxConcurrent: parseInt(opts.maxConcurrent, 10),
-        agentCli: opts.agentCli,
+        provider,
         pollInterval: parseInt(opts.pollInterval, 10),
         taskTimeout: parseInt(opts.taskTimeout, 10),
       });
