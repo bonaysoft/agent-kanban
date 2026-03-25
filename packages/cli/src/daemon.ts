@@ -10,8 +10,8 @@ import { createLogger } from "./logger.js";
 import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
-import { getAvailableProviders } from "./providers/registry.js";
-import type { AgentProvider } from "./providers/types.js";
+import { getAvailableProviders, getProvider } from "./providers/registry.js";
+
 import { loadReviewSessions, removeReviewSession } from "./reviewSessions.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
 
@@ -26,9 +26,14 @@ const logger = createLogger("daemon");
 
 export interface DaemonOptions {
   maxConcurrent: number;
-  provider: AgentProvider;
+  defaultProvider?: string;
   pollInterval?: number;
   taskTimeout?: number; // ms, default 2h
+}
+
+function normalizeRuntime(runtime: string): string {
+  if (runtime === "claude-code") return "claude";
+  return runtime;
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<void> {
@@ -69,7 +74,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   let resumeTargetMs = 0;
 
   const pm = new ProcessManager(
-    opts.provider,
     client,
     {
       onSlotFreed: () => schedulePoll(baseInterval),
@@ -106,7 +110,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, provider=${opts.provider.name})`);
+  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, default_provider=${opts.defaultProvider ?? "auto"})`);
 
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
@@ -126,8 +130,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   await cleanupStaleSessions(client, machineId);
   logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
+  const defaultProvider = opts.defaultProvider ? getProvider(normalizeRuntime(opts.defaultProvider)) : null;
+
   const heartbeatInterval = setInterval(async () => {
-    const usageInfo = opts.provider.getUsage ? await opts.provider.getUsage() : null;
+    const usageInfo = defaultProvider?.getUsage ? await defaultProvider.getUsage() : null;
     client
       .heartbeat(machineId!, {
         version: machineInfo.version,
@@ -186,6 +192,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       try {
         const resumeCleanup = () => removeWorktree(s.repoDir, s.cwd, s.branchName);
         await pm.spawnAgent(
+          s.provider,
           s.taskId,
           s.sessionId,
           s.cwd,
@@ -199,6 +206,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
           undefined,
           true,
           resumeCleanup,
+          s.model,
         );
       } catch {
         logger.warn(`Failed to resume task ${s.taskId}, releasing`);
@@ -247,6 +255,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
           AK_API_URL: apiUrl,
         };
 
+        const agentDetails = (await client.getAgent(rs.agentId)) as AgentInfo | null;
+        const providerName = normalizeRuntime(agentDetails?.runtime ?? opts.defaultProvider ?? "claude");
+        const reviewProvider = getProvider(providerName);
+
         const logs = (await client.getTaskLogs(rs.taskId)) as any[];
         const rejectLog = [...logs].reverse().find((l: any) => l.action === "rejected");
         const rejectReason = rejectLog?.detail || "No reason provided";
@@ -254,6 +266,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         try {
           const rejectMessage = `Task rejected. Reason: ${rejectReason}\n\nPlease fix the issues and submit for review again.`;
           await pm.spawnAgent(
+            reviewProvider,
             rs.taskId,
             rs.sessionId,
             rs.cwd,
@@ -267,6 +280,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
             undefined,
             true,
             () => removeWorktree(rs.repoDir, rs.cwd, rs.branchName),
+            agentDetails?.model ?? undefined,
           );
         } catch {
           logger.warn(`Failed to resume rejected task ${rs.taskId}, releasing`);
@@ -398,6 +412,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         return;
       }
 
+      // Resolve provider from agent runtime
+      const providerName = normalizeRuntime(agentDetails.runtime ?? opts.defaultProvider ?? "claude");
+      const taskProvider = getProvider(providerName);
+
       const agentSkills = agentDetails.skills ?? [];
       if (!ensureSkills(worktreeDir, agentSkills)) {
         logger.error(`Skill install failed for task ${task.id}, releasing task`);
@@ -434,6 +452,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const cleanup = () => removeWorktree(repoDir, worktreeDir, branchName);
       await pm.spawnAgent(
+        taskProvider,
         task.id,
         sessionId,
         worktreeDir,
@@ -447,6 +466,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         systemPromptFile,
         false,
         cleanup,
+        agentDetails.model ?? undefined,
       );
       prMonitor.track(task.id);
 

@@ -78,11 +78,14 @@ export const claudeProvider: AgentProvider = {
     if (opts.systemPromptFile) {
       args.push("--system-prompt-file", opts.systemPromptFile);
     }
+    if (opts.model) {
+      args.push("--model", opts.model);
+    }
     return args;
   },
 
-  buildResumeArgs(sessionId: string): string[] {
-    return [
+  buildResumeArgs(sessionId: string, model?: string): string[] {
+    const args = [
       "--resume",
       sessionId,
       "--print",
@@ -93,6 +96,10 @@ export const claudeProvider: AgentProvider = {
       "stream-json",
       "--dangerously-skip-permissions",
     ];
+    if (model) {
+      args.push("--model", model);
+    }
+    return args;
   },
 
   parseEvent(raw: string): AgentEvent | null {
