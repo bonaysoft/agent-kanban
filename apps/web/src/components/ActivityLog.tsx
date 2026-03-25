@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useSSE } from "../hooks/useSSE";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
 
 interface ActivityLogProps {
-  taskId: string;
   initialLogs: any[];
-  assigned: boolean;
+  sseLogs: any[];
+  reconnecting: boolean;
 }
 
 const actionStyles: Record<string, string> = {
@@ -33,8 +32,7 @@ const actionLabels: Record<string, string> = {
   review_requested: "Moved to review",
 };
 
-export function ActivityLog({ taskId, initialLogs, assigned }: ActivityLogProps) {
-  const { logs: sseLogs, reconnecting } = useSSE({ taskId, enabled: assigned });
+export function ActivityLog({ initialLogs, sseLogs, reconnecting }: ActivityLogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [newCount, setNewCount] = useState(0);

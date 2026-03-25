@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth-client";
@@ -43,9 +43,9 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
   const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
   const [depTitles, setDepTitles] = useState<Record<string, string>>({});
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
-  const { messages: sseMessages } = useSSE({ taskId, enabled: true });
+  const { logs: sseLogs, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
 
-  const reload = () => api.tasks.get(taskId).then(setTask);
+  const reload = useCallback(() => api.tasks.get(taskId).then(setTask), [taskId]);
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
@@ -217,7 +217,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
       <div>
         <FieldLabel>Activity</FieldLabel>
-        <ActivityLog taskId={taskId} initialLogs={task.logs || []} assigned={!!task.assigned_to} />
+        <ActivityLog initialLogs={task.logs || []} sseLogs={sseLogs} reconnecting={reconnecting} />
       </div>
 
       <Separator />
