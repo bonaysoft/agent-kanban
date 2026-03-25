@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth-client";
 import { ActivityLog } from "./ActivityLog";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
-import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
+import { EditableText, Field, FieldLabel } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
@@ -176,7 +178,13 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
       <div>
         <FieldLabel>Description</FieldLabel>
-        <EditableTextarea value={task.description || ""} placeholder="Add a description..." onSave={(v) => handleUpdate("description", v || null)} />
+        {task.description ? (
+          <div className="overflow-x-auto prose-sm text-[13px] text-content-secondary [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-content-primary [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-content-primary [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-content-primary [&_h3]:mt-2 [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:mb-2 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:mb-0.5 [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 [&_pre]:bg-surface-primary [&_pre]:border [&_pre]:border-border [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:overflow-x-auto [&_pre]:font-mono [&_pre]:text-[12px] [&_code]:font-mono [&_code]:text-accent [&_code]:bg-surface-primary [&_code]:px-1 [&_code]:rounded [&_code]:text-[12px] [&_pre_code]:bg-transparent [&_pre_code]:text-content-secondary [&_pre_code]:p-0 [&_table]:w-full [&_table]:border-collapse [&_th]:text-left [&_th]:text-[11px] [&_th]:font-medium [&_th]:text-content-tertiary [&_th]:uppercase [&_th]:tracking-wide [&_th]:border-b [&_th]:border-border [&_th]:pb-1 [&_td]:border-b [&_td]:border-border [&_td]:py-1 [&_td]:pr-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-content-tertiary [&_hr]:border-border">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
+          </div>
+        ) : (
+          <p className="text-[13px] text-content-tertiary">No description.</p>
+        )}
       </div>
 
       {task.input && (
