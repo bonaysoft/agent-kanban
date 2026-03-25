@@ -49,7 +49,7 @@ Run \`ak agent list --format json\` to see your teammates and their roles.
 
 ## Rules
 
-- Always claim before working.
+- Always claim before working. **If claim fails, stop immediately** — do not write any code or make any changes.
 - Never call \`task complete\` — only humans complete tasks.
 - Always create a PR and submit via \`task review --pr-url\` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
