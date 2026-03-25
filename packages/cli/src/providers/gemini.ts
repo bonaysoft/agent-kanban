@@ -1,3 +1,4 @@
+// Gemini CLI provider — handles Gemini CLI spawning and event parsing
 import { readFileSync } from "node:fs";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentProvider, SpawnOpts } from "./types.js";
