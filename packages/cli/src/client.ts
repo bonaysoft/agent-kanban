@@ -169,6 +169,9 @@ export abstract class ApiClient {
     const qs = params.toString();
     return this.request<any[]>("GET", `/api/repositories${qs ? `?${qs}` : ""}`);
   }
+  getRepository(repoId: string) {
+    return this.request("GET", `/api/repositories/${repoId}`);
+  }
   deleteRepository(repoId: string) {
     return this.request("DELETE", `/api/repositories/${repoId}`);
   }

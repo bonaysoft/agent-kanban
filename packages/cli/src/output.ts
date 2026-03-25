@@ -53,6 +53,15 @@ export function formatBoardList(boards: any[]): string {
   return lines.join("\n");
 }
 
+export function formatRepository(repo: any): string {
+  const lines: string[] = [];
+  lines.push(`${repo.name}`);
+  lines.push(`  ID:   ${repo.id}`);
+  lines.push(`  URL:  ${repo.url}`);
+  if (repo.created_at) lines.push(`  Created: ${repo.created_at}`);
+  return lines.join("\n");
+}
+
 export function formatRepositoryList(repos: any[]): string {
   if (repos.length === 0) return "No repositories found.";
 

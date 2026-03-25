@@ -5,9 +5,11 @@ import {
   formatAgentList,
   formatBoard,
   formatBoardList,
+  formatRepository,
   formatRepositoryList,
   formatTask,
   formatTaskList,
+  formatTaskLogs,
   getFormat,
   output,
 } from "../output.js";
@@ -18,6 +20,12 @@ export function registerGetCommand(program: Command) {
     .command("get <resource> [id]")
     .description("Get a resource or list resources")
     .option("--format <format>", "Output format (json, text)")
+    .option("--board <id>", "Filter tasks by board ID")
+    .option("--status <status>", "Filter tasks by status")
+    .option("--label <label>", "Filter tasks by label")
+    .option("--repo <id>", "Filter tasks by repository ID")
+    .option("--task <id>", "Task ID (required for notes)")
+    .option("--since <timestamp>", "Only show notes after this timestamp")
     .action(async (resource: string, id: string | undefined, opts) => {
       const name = normalizeResource(resource);
       const client = await createClient();
@@ -38,7 +46,12 @@ export function registerGetCommand(program: Command) {
             const task = await client.getTask(id);
             output(task, fmt, formatTask);
           } else {
-            const tasks = await client.listTasks({});
+            const params: Record<string, string> = {};
+            if (opts.board) params.board_id = opts.board;
+            if (opts.status) params.status = opts.status;
+            if (opts.label) params.label = opts.label;
+            if (opts.repo) params.repository_id = opts.repo;
+            const tasks = await client.listTasks(params);
             output(tasks, fmt, formatTaskList);
           }
           break;
@@ -53,17 +66,24 @@ export function registerGetCommand(program: Command) {
           break;
         case "repo":
           if (id) {
-            console.error("ak get repo <id> is not implemented yet.");
-            process.exit(1);
+            const repo = await client.getRepository(id);
+            output(repo, fmt, formatRepository);
           } else {
             const repos = await client.listRepositories();
             output(repos, fmt, formatRepositoryList);
           }
           break;
-        case "note":
-          console.error("ak get note is not implemented yet.");
-          process.exit(1);
+        case "note": {
+          const taskId = id ? undefined : opts.task;
+          const noteTaskId = id ?? opts.task;
+          if (!noteTaskId) {
+            console.error("Usage: ak get note --task <task-id> or ak get note <task-id>");
+            process.exit(1);
+          }
+          const logs = await client.getTaskLogs(noteTaskId, opts.since);
+          output(logs, fmt, formatTaskLogs);
           break;
+        }
       }
     });
 }
