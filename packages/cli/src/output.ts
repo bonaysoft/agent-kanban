@@ -89,9 +89,9 @@ export function formatTask(task: any): string {
   return lines.join("\n");
 }
 
-export function formatTaskLogs(logs: any[]): string {
-  if (logs.length === 0) return "No logs.";
-  return logs
+export function formatTaskNotes(notes: any[]): string {
+  if (notes.length === 0) return "No notes.";
+  return notes
     .map((l) => {
       const time = new Date(l.created_at).toLocaleString();
       const actor = l.actor_id ? ` [${l.actor_id}]` : "";

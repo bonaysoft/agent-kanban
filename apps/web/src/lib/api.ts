@@ -44,10 +44,10 @@ export const api = {
     review: (id: string) => request<any>("POST", `/tasks/${id}/review`),
     reject: (id: string) => request<any>("POST", `/tasks/${id}/reject`),
     assign: (id: string, agentId: string) => request<any>("POST", `/tasks/${id}/assign`, { agent_id: agentId }),
-    addLog: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/logs`, { detail }),
-    getLogs: (id: string, since?: string) => {
+    addNote: (id: string, detail: string) => request<any>("POST", `/tasks/${id}/notes`, { detail }),
+    getNotes: (id: string, since?: string) => {
       const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-      return request<any[]>("GET", `/tasks/${id}/logs${qs}`);
+      return request<any[]>("GET", `/tasks/${id}/notes${qs}`);
     },
   },
   messages: {

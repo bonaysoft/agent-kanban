@@ -400,42 +400,42 @@ describe("routes", () => {
     expect(body.status).toBe("in_progress");
   });
 
-  // ─── Task Logs ───
+  // ─── Task Notes ───
 
-  it("POST /api/tasks/:id/logs creates a log", async () => {
+  it("POST /api/tasks/:id/notes creates a note", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Log Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/logs`, { detail: "A log entry" }, apiKey);
+    const task = await createTask(env.DB, userId, { title: "Note Task", board_id: boardId });
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, { detail: "A note entry" }, apiKey);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
-    expect(body.detail).toBe("A log entry");
+    expect(body.detail).toBe("A note entry");
   });
 
-  it("POST /api/tasks/:id/logs requires detail", async () => {
+  it("POST /api/tasks/:id/notes requires detail", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Log Task 2", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/logs`, {}, apiKey);
+    const task = await createTask(env.DB, userId, { title: "Note Task 2", board_id: boardId });
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, {}, apiKey);
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/tasks/:id/logs returns 404 for unknown task", async () => {
-    const res = await apiRequest("POST", "/api/tasks/nonexistent/logs", { detail: "X" }, apiKey);
+  it("POST /api/tasks/:id/notes returns 404 for unknown task", async () => {
+    const res = await apiRequest("POST", "/api/tasks/nonexistent/notes", { detail: "X" }, apiKey);
     expect(res.status).toBe(404);
   });
 
-  it("GET /api/tasks/:id/logs returns logs", async () => {
-    const { createTask, addTaskLog } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Get Logs Task", board_id: boardId });
-    await addTaskLog(env.DB, task.id, null, "commented", "Test log");
-    const res = await apiRequest("GET", `/api/tasks/${task.id}/logs`, undefined, apiKey);
+  it("GET /api/tasks/:id/notes returns notes", async () => {
+    const { createTask, addTaskNote } = await import("../apps/web/functions/api/taskRepo");
+    const task = await createTask(env.DB, userId, { title: "Get Notes Task", board_id: boardId });
+    await addTaskNote(env.DB, task.id, null, "commented", "Test note");
+    const res = await apiRequest("GET", `/api/tasks/${task.id}/notes`, undefined, apiKey);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("GET /api/tasks/:id/logs returns 404 for unknown task", async () => {
-    const res = await apiRequest("GET", "/api/tasks/nonexistent/logs", undefined, apiKey);
+  it("GET /api/tasks/:id/notes returns 404 for unknown task", async () => {
+    const res = await apiRequest("GET", "/api/tasks/nonexistent/notes", undefined, apiKey);
     expect(res.status).toBe(404);
   });
 

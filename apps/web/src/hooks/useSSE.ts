@@ -7,7 +7,7 @@ interface UseSSEOptions {
 }
 
 export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -41,8 +41,8 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
         }
       };
 
-      es.addEventListener("log", (e: MessageEvent) => {
-        setLogs((prev) => [...prev, JSON.parse(e.data)]);
+      es.addEventListener("note", (e: MessageEvent) => {
+        setNotes((prev) => [...prev, JSON.parse(e.data)]);
       });
 
       es.addEventListener("message", (e: MessageEvent) => {
@@ -71,11 +71,11 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
       const poll = async () => {
         try {
           const headers = { Authorization: `Bearer ${tk}` };
-          const [logsRes, msgsRes] = await Promise.all([
-            fetch(`/api/tasks/${taskId}/logs`, { headers }),
+          const [notesRes, msgsRes] = await Promise.all([
+            fetch(`/api/tasks/${taskId}/notes`, { headers }),
             fetch(`/api/tasks/${taskId}/messages`, { headers }),
           ]);
-          if (logsRes.ok) setLogs(await logsRes.json());
+          if (notesRes.ok) setNotes(await notesRes.json());
           if (msgsRes.ok) setMessages(await msgsRes.json());
         } catch {
           /* ignore polling errors */
@@ -95,5 +95,5 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
     };
   }, [taskId, enabled]);
 
-  return { logs, messages, connected, reconnecting };
+  return { notes, messages, connected, reconnecting };
 }

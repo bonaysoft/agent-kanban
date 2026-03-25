@@ -79,8 +79,8 @@ export abstract class ApiClient {
   assignTask(id: string, agentId: string) {
     return this.request("POST", `/api/tasks/${id}/assign`, { agent_id: agentId });
   }
-  addLog(taskId: string, detail: string) {
-    return this.request("POST", `/api/tasks/${taskId}/logs`, { detail });
+  addNote(taskId: string, detail: string) {
+    return this.request("POST", `/api/tasks/${taskId}/notes`, { detail });
   }
   deleteTask(id: string) {
     return this.request("DELETE", `/api/tasks/${id}`);
@@ -88,9 +88,9 @@ export abstract class ApiClient {
   rejectTask(id: string, body: Record<string, unknown> = {}) {
     return this.request("POST", `/api/tasks/${id}/reject`, body);
   }
-  getTaskLogs(taskId: string, since?: string) {
+  getTaskNotes(taskId: string, since?: string) {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-    return this.request("GET", `/api/tasks/${taskId}/logs${qs}`);
+    return this.request("GET", `/api/tasks/${taskId}/notes${qs}`);
   }
   getAgent(agentId: string) {
     return this.request("GET", `/api/agents/${agentId}`);

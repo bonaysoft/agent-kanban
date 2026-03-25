@@ -3,8 +3,8 @@ import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
 
 interface ActivityLogProps {
-  initialLogs: any[];
-  sseLogs: any[];
+  initialNotes: any[];
+  sseNotes: any[];
   reconnecting: boolean;
 }
 
@@ -32,34 +32,34 @@ const actionLabels: Record<string, string> = {
   review_requested: "Moved to review",
 };
 
-export function ActivityLog({ initialLogs, sseLogs, reconnecting }: ActivityLogProps) {
+export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
-  // Merge initial logs with SSE logs (dedup by ID)
-  const allLogs = (() => {
+  // Merge initial notes with SSE notes (dedup by ID)
+  const allNotes = (() => {
     const seen = new Set<string>();
     const merged: any[] = [];
-    for (const log of [...initialLogs, ...sseLogs]) {
-      if (!seen.has(log.id)) {
-        seen.add(log.id);
-        merged.push(log);
+    for (const note of [...initialNotes, ...sseNotes]) {
+      if (!seen.has(note.id)) {
+        seen.add(note.id);
+        merged.push(note);
       }
     }
     return merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
   })();
 
-  const displayed = allLogs.slice().reverse();
+  const displayed = allNotes.slice().reverse();
 
-  // Auto-scroll when new logs arrive
+  // Auto-scroll when new notes arrive
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = 0;
-    } else if (!autoScroll && sseLogs.length > 0) {
+    } else if (!autoScroll && sseNotes.length > 0) {
       setNewCount((c) => c + 1);
     }
-  }, [autoScroll, sseLogs.length]);
+  }, [autoScroll, sseNotes.length]);
 
   function handleScroll() {
     if (!containerRef.current) return;
@@ -75,7 +75,7 @@ export function ActivityLog({ initialLogs, sseLogs, reconnecting }: ActivityLogP
   }
 
   if (displayed.length === 0) {
-    return <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see logs.</p>;
+    return <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see notes.</p>;
   }
 
   return (

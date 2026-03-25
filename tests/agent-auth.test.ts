@@ -18,7 +18,7 @@ let db: D1Database;
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     const statements = sql
