@@ -504,11 +504,12 @@ describe("task lifecycle repo functions", () => {
       expect(result).toBe(true);
     });
 
-    it("rejects delete of assigned todo", async () => {
+    it("allows delete of assigned todo", async () => {
       const { deleteTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId);
-      await expect(deleteTask(env.DB, task.id)).rejects.toThrow("Cannot delete");
+      const result = await deleteTask(env.DB, task.id);
+      expect(result).toBe(true);
     });
 
     it("rejects delete of in_progress task", async () => {

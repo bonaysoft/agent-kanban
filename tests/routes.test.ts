@@ -278,7 +278,7 @@ describe("routes", () => {
   // ─── Tasks ───
 
   it("POST /api/tasks creates a task", async () => {
-    const res = await apiRequest("POST", "/api/tasks", { title: "Route Task", board_id: boardId }, apiKey);
+    const res = await apiRequest("POST", "/api/tasks", { title: "Route Task", board_id: boardId, assigned_to: agentId }, apiKey);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.title).toBe("Route Task");
