@@ -13,6 +13,7 @@ const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
   "gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
   "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.5 },
 };
+// Pricing last updated: 2026-03-25
 
 function readSystemPrompt(filePath?: string): string {
   if (!filePath) return "";
