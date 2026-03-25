@@ -152,6 +152,33 @@ Create missing agents if needed:
 ak agent create --template <template> --name "<Name>"
 ```
 
+## Phase 5: Monitor & Merge
+
+After assigning tasks, enter a monitoring loop until all tasks are done.
+
+### Poll task status
+```bash
+ak task list --format json | jq '.[] | select(.labels != null and (.labels | index("<version>"))) | {id, title: .title[0:50], status, pr_url}'
+```
+
+Poll every 30-60 seconds. Track progress and report status changes to the user.
+
+### When a task reaches `in_review` with a PR:
+1. Check CI status: `gh pr checks <pr-number> --repo <owner>/<repo>`
+2. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
+3. Complete the task: `ak task complete <task-id> --result "PR #<n> merged: <summary>"`
+4. If CI fails → check the failure, reject if needed: `ak task reject <task-id>`
+
+### Handle merge conflicts:
+If a PR can't merge cleanly (conflicts with previously merged PRs):
+1. Checkout the branch: `git fetch origin && git checkout <branch> && git rebase origin/master`
+2. Resolve conflicts manually
+3. Force-push: `git push --force-with-lease origin <branch>`
+4. Wait for CI to re-run, then merge
+
+### Completion:
+When all tasks are done, report the final summary to the user.
+
 ## Rules
 
 - **Always get repo URL from `git remote -v`** — never guess
