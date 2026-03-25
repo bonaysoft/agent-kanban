@@ -1,6 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { AgentClient, ApiClient } from "./client.js";
+import { createLogger } from "./logger.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
+
+const logger = createLogger("process");
 
 // Agent Process Lifecycle:
 //   SPAWN → stdin task notification → RUNNING
@@ -114,13 +117,13 @@ export class ProcessManager {
         env: { ...process.env, ...agentEnv },
       });
     } catch (err: any) {
-      console.error(`[ERROR] Failed to spawn ${this.agentCli}: ${err.message}`);
+      logger.error(`Failed to spawn ${this.agentCli}: ${err.message}`);
       await this.releaseTask(taskId);
       return;
     }
 
     if (!proc.pid) {
-      console.error(`[ERROR] ${this.agentCli} not found or failed to start`);
+      logger.error(`${this.agentCli} not found or failed to start`);
       await this.releaseTask(taskId);
       return;
     }
@@ -142,7 +145,7 @@ export class ProcessManager {
 
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
-        console.warn(`[WARN] Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
+        logger.warn(`Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
         this.terminateProcess(proc);
       }, this.taskTimeoutMs);
     }
@@ -204,10 +207,10 @@ export class ProcessManager {
       await this.closeSession(agentClient);
 
       if (code === 0) {
-        console.log(`[INFO] Agent finished task ${taskId}`);
+        logger.info(`Agent finished task ${taskId}`);
         agent.onCleanup?.();
       } else if (agent.rateLimited) {
-        console.warn(`[WARN] Agent for task ${taskId} exited due to rate limit, suspending`);
+        logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
         this.suspended.push({
           taskId,
           sessionId,
@@ -219,10 +222,10 @@ export class ProcessManager {
           privateKeyJwk: agent.privateKeyJwk,
         });
       } else {
-        console.warn(`[WARN] Agent crashed on task ${taskId} (exit ${code})`);
+        logger.warn(`Agent crashed on task ${taskId} (exit ${code})`);
         if (stderrBuffer.trim()) {
           const lastLines = stderrBuffer.trim().split("\n").slice(-10).join("\n");
-          console.warn(`  stderr: ${lastLines}`);
+          logger.warn(`stderr: ${lastLines}`);
         }
         await this.releaseTask(taskId);
         agent.onCleanup?.();
@@ -233,7 +236,7 @@ export class ProcessManager {
 
     proc.on("error", async (err) => {
       if (!this.agents.has(taskId)) return;
-      console.error(`[ERROR] Agent process error for task ${taskId}: ${err.message}`);
+      logger.error(`Agent process error for task ${taskId}: ${err.message}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
       agent.onCleanup?.();
@@ -242,20 +245,20 @@ export class ProcessManager {
       this.onSlotFreed();
     });
 
-    console.log(`[INFO] Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`);
+    logger.info(`Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`);
   }
 
   async killTask(taskId: string): Promise<void> {
     const agent = this.agents.get(taskId);
     if (!agent) return;
-    console.log(`[INFO] Killing agent for cancelled task ${taskId}`);
+    logger.info(`Killing agent for cancelled task ${taskId}`);
     if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
     this.agents.delete(taskId);
     await this.terminateProcess(agent.process);
     agent.onCleanup?.();
     await this.client
       .closeSession(agent.agentClient.getAgentId(), agent.sessionId)
-      .catch((err: any) => console.error(`[WARN] Failed to close session for cancelled task ${taskId}: ${err.message}`));
+      .catch((err: any) => logger.warn(`Failed to close session for cancelled task ${taskId}: ${err.message}`));
     this.onSlotFreed();
   }
 
@@ -274,7 +277,7 @@ export class ProcessManager {
   async killAll(): Promise<void> {
     const entries = [...this.agents.entries()];
     for (const [taskId, agent] of entries) {
-      console.log(`[INFO] Killing agent for task ${taskId}`);
+      logger.info(`Killing agent for task ${taskId}`);
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
       await this.terminateProcess(agent.process);
@@ -315,7 +318,7 @@ export class ProcessManager {
       const info = event.rate_limit_info;
       if (info && info.status !== "allowed") {
         const resetAt = new Date(info.resetsAt * 1000).toISOString();
-        console.warn(`[WARN] Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`);
+        logger.warn(`Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`);
         const agent = this.agents.get(taskId);
         if (agent) agent.rateLimited = true;
         this.onRateLimited(resetAt);
@@ -327,13 +330,13 @@ export class ProcessManager {
     const err = this.detectError(event);
     if (err) {
       if (err.code && RATE_LIMIT_CODES.has(err.code)) {
-        console.warn(`[WARN] Claude error rate limited (${err.code}) on task ${taskId}`);
+        logger.warn(`Claude error rate limited (${err.code}) on task ${taskId}`);
         const agent = this.agents.get(taskId);
         if (agent) agent.rateLimited = true;
         // resetAt already captured from preceding rate_limit_event; fire again as fallback
         this.onRateLimited(new Date(Date.now() + 60 * 60 * 1000).toISOString());
       } else {
-        console.warn(`[WARN] Claude error on task ${taskId}: ${err.detail}`);
+        logger.warn(`Claude error on task ${taskId}: ${err.detail}`);
       }
       return;
     }
@@ -347,14 +350,14 @@ export class ProcessManager {
               sender_id: agentClient.getAgentId(),
               content: block.text,
             })
-            .catch((e: any) => console.error(`[ERROR] Failed to send message for task ${taskId}: ${e.message}`));
+            .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
         }
       }
     }
     if (event.type === "result") {
       const cost = event.total_cost_usd || 0;
       const usage = event.usage || {};
-      console.log(`[INFO] Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
+      logger.info(`Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
       agentClient
         .updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
           input_tokens: usage.input_tokens || 0,
@@ -363,14 +366,14 @@ export class ProcessManager {
           cache_creation_tokens: usage.cache_creation_input_tokens || 0,
           cost_micro_usd: Math.round(cost * 1_000_000),
         })
-        .catch((e: any) => console.error(`[ERROR] Failed to report usage for task ${taskId}: ${e.message}`));
+        .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
     }
   }
 
   private async closeSession(agentClient: AgentClient): Promise<void> {
     await this.client
       .closeSession(agentClient.getAgentId(), agentClient.getSessionId())
-      .catch((err: any) => console.error(`[WARN] Failed to close session ${agentClient.getSessionId()}: ${err.message}`));
+      .catch((err: any) => logger.warn(`Failed to close session ${agentClient.getSessionId()}: ${err.message}`));
   }
 
   private terminateProcess(proc: ChildProcess): Promise<void> {
@@ -404,10 +407,10 @@ export class ProcessManager {
         await this.client.releaseTask(taskId);
         return;
       } catch (err: any) {
-        console.error(`[WARN] Failed to release task ${taskId} (attempt ${i + 1}/${retries}): ${err.message}`);
+        logger.warn(`Failed to release task ${taskId} (attempt ${i + 1}/${retries}): ${err.message}`);
         if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
       }
     }
-    console.error(`[ERROR] Could not release task ${taskId} after ${retries} attempts. Task will remain locked until stale detection.`);
+    logger.error(`Could not release task ${taskId} after ${retries} attempts. Task will remain locked until stale detection.`);
   }
 }

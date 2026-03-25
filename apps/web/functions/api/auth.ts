@@ -1,6 +1,9 @@
 import type { Context, Next } from "hono";
 import { createAuth } from "./betterAuth";
+import { createLogger } from "./logger";
 import type { Env } from "./types";
+
+const logger = createLogger("api");
 
 type IdentityType = "user" | "machine" | "agent";
 
@@ -110,7 +113,7 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   if (!result?.valid) {
     if (result?.error?.code === "RATE_LIMITED") {
       const retryAfter = result.error.details?.tryAgainIn ? Math.ceil(result.error.details.tryAgainIn / 1000) : 60;
-      console.log(`[rate-limit] retry_after=${retryAfter}s path=${c.req.path}`);
+      logger.info(`Rate limited: retry_after=${retryAfter}s path=${c.req.path}`);
       return c.json(
         { error: { code: "RATE_LIMITED", message: `Rate limit exceeded. Retry after ${retryAfter}s` } },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },

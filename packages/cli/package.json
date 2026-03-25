@@ -21,6 +21,7 @@
     "@auth/agent": "^0.3.0",
     "commander": "^13.0.0",
     "jose": "^6.2.2",
+    "pino": "^9.6.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
