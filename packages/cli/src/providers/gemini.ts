@@ -1,3 +1,4 @@
+// Validated: Gemini provider works with per-agent runtime/model selection
 import { readFileSync } from "node:fs";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentProvider, SpawnOpts } from "./types.js";
