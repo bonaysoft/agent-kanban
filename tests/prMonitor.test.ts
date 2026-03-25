@@ -371,7 +371,7 @@ describe("PrMonitor — stuck task detection", () => {
 
     const infoCall = spy.mock.calls.find((args) => String(args[0]).includes("[INFO]") && String(args[0]).includes("task-stuck"));
     expect(infoCall).toBeDefined();
-    expect(String(infoCall![0])).toContain("no longer in_review");
+    expect(String(infoCall![0])).toContain("untracking");
     spy.mockRestore();
   });
 
@@ -396,11 +396,14 @@ describe("PrMonitor — stuck task detection", () => {
   it("untracks multiple stuck tasks in a single check", async () => {
     makeExecSync("OPEN");
 
-    // API returns only task-3; task-1 and task-2 should be untracked
+    // API returns only task-3 as in_review; task-1 and task-2 are done/unknown
     const task3 = { id: "task-3", pr_url: "https://github.com/org/repo/pull/3", assigned_to: null };
-    const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task3]),
-    });
+    const task3WithStatus = { ...task3, status: "in_review" };
+    const listTasks = vi
+      .fn()
+      .mockResolvedValueOnce([task3]) // first call: listTasks({ status: "in_review" })
+      .mockResolvedValueOnce([task3WithStatus]); // second call: listTasks({}) for all tasks
+    const client = makeClient({ listTasks });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
     monitor.track("task-2");
@@ -409,7 +412,7 @@ describe("PrMonitor — stuck task detection", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCheck(monitor);
 
-    const untrackCalls = spy.mock.calls.filter((args) => String(args[0]).includes("no longer in_review"));
+    const untrackCalls = spy.mock.calls.filter((args) => String(args[0]).includes("untracking"));
     expect(untrackCalls).toHaveLength(2);
     spy.mockRestore();
   });
@@ -522,12 +525,13 @@ describe("PrMonitor — check guard conditions", () => {
   it("does not call listTasks on a concurrent overlapping check", async () => {
     makeExecSync("OPEN");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
+    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null, status: "in_review" };
     // listTasks resolves on the next tick to allow overlap simulation
     let resolveFirst!: () => void;
     const firstCall = new Promise<any[]>((res) => {
       resolveFirst = () => res([task]);
     });
+    // check() now calls listTasks twice: once for in_review, once for all tasks
     const listTasks = vi.fn().mockReturnValueOnce(firstCall).mockResolvedValue([task]);
 
     const monitor = new PrMonitor(makeClient({ listTasks }));
@@ -541,7 +545,7 @@ describe("PrMonitor — check guard conditions", () => {
     resolveFirst();
     await Promise.all([first, second]);
 
-    // Second check should have been skipped due to `this.checking` guard
-    expect(listTasks).toHaveBeenCalledTimes(1);
+    // check() calls listTasks twice per run; second check should be skipped
+    expect(listTasks).toHaveBeenCalledTimes(2);
   });
 });
