@@ -11,7 +11,7 @@ let db: D1Database;
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -137,11 +137,11 @@ describe("task JSON field parsing (labels, input)", () => {
     const assigned = await assignTask(db, taskId, agent.id);
     expect(Array.isArray(assigned!.labels)).toBe(true);
 
-    const claimed = await claimTask(db, taskId, agent.id, "agent");
+    const claimed = await claimTask(db, taskId, agent.id, "agent:worker");
     expect(Array.isArray(claimed!.labels)).toBe(true);
     expect(typeof claimed!.input).toBe("object");
 
-    const reviewed = await reviewTask(db, taskId, agent.id, "https://github.com/pr/1", "agent");
+    const reviewed = await reviewTask(db, taskId, agent.id, "https://github.com/pr/1", "agent:worker");
     expect(Array.isArray(reviewed!.labels)).toBe(true);
     expect(typeof reviewed!.input).toBe("object");
   });

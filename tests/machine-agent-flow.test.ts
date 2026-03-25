@@ -25,7 +25,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -76,6 +76,9 @@ describe("machine → agent session flow", () => {
   let agentId: string;
   let sessionId: string;
   let sessionPrivateKey: CryptoKey;
+  let leaderAgentId: string;
+  let leaderSessionId: string;
+  let leaderSessionPrivateKey: CryptoKey;
   let boardId: string;
   let taskId: string;
 
@@ -94,6 +97,14 @@ describe("machine → agent session flow", () => {
       .setIssuedAt()
       .setExpirationTime("60s")
       .sign(sessionPrivateKey);
+  }
+
+  async function signLeaderSessionJWT(): Promise<string> {
+    return new SignJWT({ sub: leaderSessionId, aid: leaderAgentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(leaderSessionPrivateKey);
   }
 
   it("creates user and API key", async () => {
@@ -163,6 +174,25 @@ describe("machine → agent session flow", () => {
     expect(res.status).toBe(200);
   });
 
+  it("machine creates a leader agent and session", async () => {
+    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+    const leaderAgent = await createAgent(env.DB, userId, { name: "Flow Leader Agent", runtime: "Claude Code", kind: "leader" });
+    leaderAgentId = leaderAgent.id;
+
+    leaderSessionId = randomUUID();
+    const keypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    leaderSessionPrivateKey = (keypair as any).privateKey;
+    const pubJwk = await crypto.subtle.exportKey("jwk", (keypair as any).publicKey);
+
+    const res = await apiRequest(
+      "POST",
+      `/api/agents/${leaderAgentId}/sessions`,
+      { session_id: leaderSessionId, session_public_key: pubJwk.x! },
+      apiKey,
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("creates a board and task", async () => {
     const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board");
     boardId = board.id;
@@ -173,14 +203,21 @@ describe("machine → agent session flow", () => {
     taskId = task.id;
   });
 
-  it("machine assigns task to persistent agent", async () => {
-    const res = await apiRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
+  it("leader agent self-assigns task via assign route", async () => {
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/assign`, {}, leaderJwt);
     expect(res.status).toBe(200);
     const task = (await res.json()) as any;
-    expect(task.assigned_to).toBe(agentId);
+    // Route assigns to the caller (leader agent), not a body-provided agent
+    expect(task.assigned_to).toBe(leaderAgentId);
   });
 
-  it("agent claims the assigned task via session JWT", async () => {
+  it("agent claims the worker-assigned task via session JWT", async () => {
+    // Re-assign the task to the worker agent directly via repo so the worker can claim it
+    const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+    await env.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
+    await assignTask(env.DB, taskId, agentId);
+
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, jwt);
     expect(res.status).toBe(200);
@@ -227,12 +264,13 @@ describe("machine → agent session flow", () => {
     const res = await apiRequest("GET", `/api/machines/${machineId}`, undefined, apiKey);
     expect(res.status).toBe(200);
     const machine = (await res.json()) as any;
-    expect(machine.agents).toHaveLength(1);
-    const agent = machine.agents[0];
-    expect(agent.id).toBe(agentId);
-    expect(agent.name).toBe("Test Agent");
-    expect(agent.status).toBe("working");
-    expect(agent.last_active_at).toBeTruthy();
+    // Both worker and leader agents have sessions on this machine
+    expect(machine.agents.length).toBeGreaterThanOrEqual(1);
+    const workerAgent = machine.agents.find((a: any) => a.id === agentId);
+    expect(workerAgent).toBeDefined();
+    expect(workerAgent.name).toBe("Test Agent");
+    expect(workerAgent.status).toBe("working");
+    expect(workerAgent.last_active_at).toBeTruthy();
   });
 
   it("final state is consistent", async () => {

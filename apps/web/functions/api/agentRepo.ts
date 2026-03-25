@@ -14,8 +14,8 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
 
   await db
     .prepare(`
-    INSERT INTO agents (id, owner_id, name, bio, soul, role, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .bind(
       id,
@@ -24,6 +24,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
       input.bio ?? null,
       input.soul ?? null,
       input.role ?? null,
+      input.kind ?? "worker",
       handoffJson,
       input.runtime ?? null,
       input.model ?? null,
@@ -44,6 +45,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     bio: input.bio ?? null,
     soul: input.soul ?? null,
     role: input.role ?? null,
+    kind: input.kind ?? "worker",
     handoff_to: input.handoff_to ?? null,
     runtime: input.runtime ?? null,
     model: input.model ?? null,
@@ -69,7 +71,7 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
 export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
   const result = await db
     .prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_notes tl WHERE tl.agent_id = a.id) as last_active_at,
@@ -91,7 +93,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
   return db
     .prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_notes tl WHERE tl.agent_id = a.id) as last_active_at,

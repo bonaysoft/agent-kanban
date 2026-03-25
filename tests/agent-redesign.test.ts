@@ -30,7 +30,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -351,7 +351,7 @@ describe("message sender model", () => {
 
 describe("delegation proof security", () => {
   it("tampered proof is rejected", async () => {
-    const { generateKeypair, computeFingerprint, signDelegation, verifyDelegation } = await import("@agent-kanban/shared");
+    const { generateKeypair, signDelegation, verifyDelegation } = await import("@agent-kanban/shared");
 
     const agent = await generateKeypair();
     const session = await generateKeypair();
@@ -422,7 +422,7 @@ describe("user assigns task to agent", () => {
 
   it("release resets status from in_progress to todo", async () => {
     const { claimTask, releaseTask } = await import("../apps/web/functions/api/taskRepo");
-    await claimTask(env.DB, taskId, agentId, "agent");
+    await claimTask(env.DB, taskId, agentId, "agent:worker");
     const task = await releaseTask(env.DB, taskId, agentId, "machine");
     expect(task!.status).toBe("todo");
   });

@@ -20,3 +20,4 @@ export const WORKTREES_DIR = join(DATA_DIR, "worktrees");
 export const TRACKED_TASKS_FILE = join(DATA_DIR, "tracked-tasks.json");
 export const SESSION_PIDS_FILE = join(DATA_DIR, "session-pids.json");
 export const SAVED_SESSIONS_FILE = join(DATA_DIR, "saved-sessions.json");
+export const IDENTITIES_DIR = join(CONFIG_DIR, "identities");

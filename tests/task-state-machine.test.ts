@@ -22,7 +22,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -75,36 +75,28 @@ describe("validateTransition", () => {
   });
 
   // Valid transitions
-  it("allows claim: todo → in_progress (agent)", () => {
-    expect(validateTransition("claim", "todo", "agent")).toBeNull();
+  it("allows claim: todo → in_progress (agent:worker)", () => {
+    expect(validateTransition("claim", "todo", "agent:worker")).toBeNull();
   });
 
-  it("allows review: in_progress → in_review (agent)", () => {
-    expect(validateTransition("review", "in_progress", "agent")).toBeNull();
+  it("allows review: in_progress → in_review (agent:worker)", () => {
+    expect(validateTransition("review", "in_progress", "agent:worker")).toBeNull();
   });
 
-  it("allows reject: in_review → in_progress (user)", () => {
-    expect(validateTransition("reject", "in_review", "user")).toBeNull();
+  it("allows reject: in_review → in_progress (agent:leader)", () => {
+    expect(validateTransition("reject", "in_review", "agent:leader")).toBeNull();
   });
 
-  it("allows reject: in_review → in_progress (machine)", () => {
-    expect(validateTransition("reject", "in_review", "machine")).toBeNull();
+  it("allows complete: in_review → done (agent:leader)", () => {
+    expect(validateTransition("complete", "in_review", "agent:leader")).toBeNull();
   });
 
-  it("allows complete: in_review → done (user)", () => {
-    expect(validateTransition("complete", "in_review", "user")).toBeNull();
+  it("allows cancel: in_progress → cancelled (agent:leader)", () => {
+    expect(validateTransition("cancel", "in_progress", "agent:leader")).toBeNull();
   });
 
-  it("allows complete: in_review → done (machine)", () => {
-    expect(validateTransition("complete", "in_review", "machine")).toBeNull();
-  });
-
-  it("allows cancel: in_progress → cancelled (user)", () => {
-    expect(validateTransition("cancel", "in_progress", "user")).toBeNull();
-  });
-
-  it("allows cancel: in_review → cancelled (user)", () => {
-    expect(validateTransition("cancel", "in_review", "user")).toBeNull();
+  it("allows cancel: in_review → cancelled (agent:leader)", () => {
+    expect(validateTransition("cancel", "in_review", "agent:leader")).toBeNull();
   });
 
   it("allows release: in_progress → todo (machine)", () => {
@@ -117,52 +109,52 @@ describe("validateTransition", () => {
 
   // Invalid transitions — wrong source status
   it("rejects claim from in_progress", () => {
-    const err = validateTransition("claim", "in_progress", "agent");
+    const err = validateTransition("claim", "in_progress", "agent:worker");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects claim from done", () => {
-    const err = validateTransition("claim", "done", "agent");
+    const err = validateTransition("claim", "done", "agent:worker");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects review from todo", () => {
-    const err = validateTransition("review", "todo", "agent");
+    const err = validateTransition("review", "todo", "agent:worker");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects review from in_review", () => {
-    const err = validateTransition("review", "in_review", "agent");
+    const err = validateTransition("review", "in_review", "agent:worker");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects complete from todo", () => {
-    const err = validateTransition("complete", "todo", "user");
+    const err = validateTransition("complete", "todo", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects complete from in_progress", () => {
-    const err = validateTransition("complete", "in_progress", "user");
+    const err = validateTransition("complete", "in_progress", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects cancel from todo", () => {
-    const err = validateTransition("cancel", "todo", "user");
+    const err = validateTransition("cancel", "todo", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects cancel from done", () => {
-    const err = validateTransition("cancel", "done", "user");
+    const err = validateTransition("cancel", "done", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects cancel from cancelled", () => {
-    const err = validateTransition("cancel", "cancelled", "user");
+    const err = validateTransition("cancel", "cancelled", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
   it("rejects reject from in_progress", () => {
-    const err = validateTransition("reject", "in_progress", "user");
+    const err = validateTransition("reject", "in_progress", "agent:leader");
     expect(err?.code).toBe("INVALID_TRANSITION");
   });
 
@@ -179,7 +171,7 @@ describe("validateTransition", () => {
   // Terminal states — nothing allowed
   it("rejects all actions from done", () => {
     for (const action of ["claim", "review", "reject", "complete", "cancel", "release"] as const) {
-      const identities = ["user", "machine", "agent"] as const;
+      const identities = ["machine", "agent:worker", "agent:leader"] as const;
       for (const id of identities) {
         const err = validateTransition(action, "done", id);
         expect(err).not.toBeNull();
@@ -189,7 +181,7 @@ describe("validateTransition", () => {
 
   it("rejects all actions from cancelled", () => {
     for (const action of ["claim", "review", "reject", "complete", "cancel", "release"] as const) {
-      const identities = ["user", "machine", "agent"] as const;
+      const identities = ["machine", "agent:worker", "agent:leader"] as const;
       for (const id of identities) {
         const err = validateTransition(action, "cancelled", id);
         expect(err).not.toBeNull();
@@ -198,18 +190,13 @@ describe("validateTransition", () => {
   });
 
   // Permission violations — wrong identity
-  it("rejects claim by user", () => {
-    const err = validateTransition("claim", "todo", "user");
-    expect(err?.code).toBe("FORBIDDEN");
-  });
-
   it("rejects claim by machine", () => {
     const err = validateTransition("claim", "todo", "machine");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects review by user", () => {
-    const err = validateTransition("review", "in_progress", "user");
+  it("rejects claim by agent:leader", () => {
+    const err = validateTransition("claim", "todo", "agent:leader");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
@@ -218,28 +205,48 @@ describe("validateTransition", () => {
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects complete by agent", () => {
-    const err = validateTransition("complete", "in_review", "agent");
+  it("rejects review by agent:leader", () => {
+    const err = validateTransition("review", "in_progress", "agent:leader");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects cancel by agent", () => {
-    const err = validateTransition("cancel", "in_progress", "agent");
+  it("rejects complete by machine", () => {
+    const err = validateTransition("complete", "in_review", "machine");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects reject by agent", () => {
-    const err = validateTransition("reject", "in_review", "agent");
+  it("rejects complete by agent:worker", () => {
+    const err = validateTransition("complete", "in_review", "agent:worker");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects release by user", () => {
-    const err = validateTransition("release", "in_progress", "user");
+  it("rejects cancel by machine", () => {
+    const err = validateTransition("cancel", "in_progress", "machine");
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects release by agent", () => {
-    const err = validateTransition("release", "in_progress", "agent");
+  it("rejects cancel by agent:worker", () => {
+    const err = validateTransition("cancel", "in_progress", "agent:worker");
+    expect(err?.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects reject by machine", () => {
+    const err = validateTransition("reject", "in_review", "machine");
+    expect(err?.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects reject by agent:worker", () => {
+    const err = validateTransition("reject", "in_review", "agent:worker");
+    expect(err?.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects release by agent:worker", () => {
+    const err = validateTransition("release", "in_progress", "agent:worker");
+    expect(err?.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects release by agent:leader", () => {
+    const err = validateTransition("release", "in_progress", "agent:leader");
     expect(err?.code).toBe("FORBIDDEN");
   });
 });
@@ -274,11 +281,11 @@ describe("task lifecycle repo functions", () => {
   });
 
   describe("claim", () => {
-    it("succeeds: todo → in_progress (agent)", async () => {
+    it("succeeds: todo → in_progress (agent:worker)", async () => {
       const { claimTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId);
-      const result = await claimTask(env.DB, task.id, testAgentId, "agent");
+      const result = await claimTask(env.DB, task.id, testAgentId, "agent:worker");
       expect(result!.status).toBe("in_progress");
     });
 
@@ -287,46 +294,46 @@ describe("task lifecycle repo functions", () => {
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId);
       await forceStatus(task.id, "in_progress");
-      await expect(claimTask(env.DB, task.id, testAgentId, "agent")).rejects.toThrow();
+      await expect(claimTask(env.DB, task.id, testAgentId, "agent:worker")).rejects.toThrow();
     });
 
     it("rejects claim by wrong agent", async () => {
       const { claimTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId);
-      await expect(claimTask(env.DB, task.id, otherAgentId, "agent")).rejects.toThrow("not assigned");
+      await expect(claimTask(env.DB, task.id, otherAgentId, "agent:worker")).rejects.toThrow("not assigned");
     });
   });
 
   describe("review", () => {
-    it("succeeds: in_progress → in_review (agent)", async () => {
+    it("succeeds: in_progress → in_review (agent:worker)", async () => {
       const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      const result = await reviewTask(env.DB, task.id, testAgentId, null, "agent");
+      const result = await reviewTask(env.DB, task.id, testAgentId, null, "agent:worker");
       expect(result!.status).toBe("in_review");
     });
 
     it("rejects review from todo", async () => {
       const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
-      await expect(reviewTask(env.DB, task.id, testAgentId, null, "agent")).rejects.toThrow();
+      await expect(reviewTask(env.DB, task.id, testAgentId, null, "agent:worker")).rejects.toThrow();
     });
 
-    it("rejects review by user", async () => {
+    it("rejects review by machine", async () => {
       const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(reviewTask(env.DB, task.id, null, null, "user")).rejects.toThrow();
+      await expect(reviewTask(env.DB, task.id, null, null, "machine")).rejects.toThrow();
     });
   });
 
   describe("reject", () => {
-    it("succeeds: in_review → in_progress (user)", async () => {
+    it("succeeds: in_review → in_progress (agent:leader)", async () => {
       const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      const result = await rejectTask(env.DB, task.id, null, "user");
+      const result = await rejectTask(env.DB, task.id, null, "agent:leader");
       expect(result!.status).toBe("in_progress");
     });
 
@@ -334,89 +341,89 @@ describe("task lifecycle repo functions", () => {
       const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(rejectTask(env.DB, task.id, null, "user")).rejects.toThrow();
+      await expect(rejectTask(env.DB, task.id, null, "agent:leader")).rejects.toThrow();
     });
 
-    it("rejects reject by agent", async () => {
+    it("rejects reject by agent:worker", async () => {
       const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      await expect(rejectTask(env.DB, task.id, null, "agent")).rejects.toThrow();
+      await expect(rejectTask(env.DB, task.id, null, "agent:worker")).rejects.toThrow();
     });
   });
 
   describe("complete", () => {
-    it("succeeds: in_review → done (user)", async () => {
+    it("succeeds: in_review → done (agent:leader)", async () => {
       const { completeTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      const result = await completeTask(env.DB, task.id, null, "done", null, "user");
+      const result = await completeTask(env.DB, task.id, null, "done", null, "agent:leader");
       expect(result!.status).toBe("done");
     });
 
     it("rejects complete from todo", async () => {
       const { completeTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
-      await expect(completeTask(env.DB, task.id, null, null, null, "user")).rejects.toThrow();
+      await expect(completeTask(env.DB, task.id, null, null, null, "agent:leader")).rejects.toThrow();
     });
 
     it("rejects complete from in_progress", async () => {
       const { completeTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(completeTask(env.DB, task.id, null, null, null, "user")).rejects.toThrow();
+      await expect(completeTask(env.DB, task.id, null, null, null, "agent:leader")).rejects.toThrow();
     });
 
-    it("rejects complete by agent", async () => {
+    it("rejects complete by agent:worker", async () => {
       const { completeTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      await expect(completeTask(env.DB, task.id, null, null, null, "agent")).rejects.toThrow();
+      await expect(completeTask(env.DB, task.id, null, null, null, "agent:worker")).rejects.toThrow();
     });
   });
 
   describe("cancel", () => {
-    it("succeeds: in_progress → cancelled (user)", async () => {
+    it("succeeds: in_progress → cancelled (agent:leader)", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      const result = await cancelTask(env.DB, task.id, null, "user");
+      const result = await cancelTask(env.DB, task.id, null, "agent:leader");
       expect(result!.status).toBe("cancelled");
     });
 
-    it("succeeds: in_review → cancelled (user)", async () => {
+    it("succeeds: in_review → cancelled (agent:leader)", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      const result = await cancelTask(env.DB, task.id, null, "user");
+      const result = await cancelTask(env.DB, task.id, null, "agent:leader");
       expect(result!.status).toBe("cancelled");
     });
 
     it("rejects cancel from todo", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
-      await expect(cancelTask(env.DB, task.id, null, "user")).rejects.toThrow();
+      await expect(cancelTask(env.DB, task.id, null, "agent:leader")).rejects.toThrow();
     });
 
     it("rejects cancel from done", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "done");
-      await expect(cancelTask(env.DB, task.id, null, "user")).rejects.toThrow();
+      await expect(cancelTask(env.DB, task.id, null, "agent:leader")).rejects.toThrow();
     });
 
     it("rejects cancel from cancelled", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "cancelled");
-      await expect(cancelTask(env.DB, task.id, null, "user")).rejects.toThrow();
+      await expect(cancelTask(env.DB, task.id, null, "agent:leader")).rejects.toThrow();
     });
 
-    it("rejects cancel by agent", async () => {
+    it("rejects cancel by agent:worker", async () => {
       const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(cancelTask(env.DB, task.id, null, "agent")).rejects.toThrow();
+      await expect(cancelTask(env.DB, task.id, null, "agent:worker")).rejects.toThrow();
     });
   });
 
@@ -443,18 +450,18 @@ describe("task lifecycle repo functions", () => {
       await expect(releaseTask(env.DB, task.id, null, "machine")).rejects.toThrow();
     });
 
-    it("rejects release by user", async () => {
+    it("rejects release by agent:worker", async () => {
       const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(releaseTask(env.DB, task.id, null, "user")).rejects.toThrow();
+      await expect(releaseTask(env.DB, task.id, null, "agent:worker")).rejects.toThrow();
     });
 
-    it("rejects release by agent", async () => {
+    it("rejects release by agent:leader", async () => {
       const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(releaseTask(env.DB, task.id, null, "agent")).rejects.toThrow();
+      await expect(releaseTask(env.DB, task.id, null, "agent:leader")).rejects.toThrow();
     });
   });
 

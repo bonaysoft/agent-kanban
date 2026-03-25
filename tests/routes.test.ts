@@ -30,10 +30,14 @@ afterAll(async () => {
 describe("routes", () => {
   const userId = "routes-test-user";
   let apiKey: string;
+  let userToken: string;
   let machineId: string;
   let agentId: string;
   let sessionId: string;
   let sessionPrivateKey: CryptoKey;
+  let leaderAgentId: string;
+  let leaderSessionId: string;
+  let leaderSessionPrivateKey: CryptoKey;
   let boardId: string;
 
   async function createApiKeyForUser(userId: string): Promise<string> {
@@ -41,6 +45,16 @@ describe("routes", () => {
     const auth = createAuth(env);
     const result = await auth.api.createApiKey({ body: { userId } });
     return result.key;
+  }
+
+  async function createUserSessionToken(): Promise<string> {
+    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const auth = createAuth(env);
+    const result = await auth.api.signUpEmail({
+      body: { name: "Routes Test User", email: "routes-session@test.com", password: "test-password-123" },
+    });
+    if (!result.token) throw new Error("signUpEmail did not return a session token");
+    return result.token;
   }
 
   async function signSessionJWT(): Promise<string> {
@@ -51,9 +65,18 @@ describe("routes", () => {
       .sign(sessionPrivateKey);
   }
 
+  async function signLeaderSessionJWT(): Promise<string> {
+    return new SignJWT({ sub: leaderSessionId, aid: leaderAgentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(leaderSessionPrivateKey);
+  }
+
   beforeAll(async () => {
     await seedUser(env.DB, userId, "routes@test.com");
     apiKey = await createApiKeyForUser(userId);
+    userToken = await createUserSessionToken();
 
     const machineRes = await apiRequest(
       "POST",
@@ -83,6 +106,24 @@ describe("routes", () => {
       {
         session_id: sessionId,
         session_public_key: pubJwk.x!,
+      },
+      apiKey,
+    );
+
+    // Create a leader agent and session for complete/cancel/reject tests
+    const leaderAgent = await createAgent(env.DB, userId, { name: "Routes Leader Agent", runtime: "Claude Code", kind: "leader" });
+    leaderAgentId = leaderAgent.id;
+
+    leaderSessionId = randomUUID();
+    const leaderKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    leaderSessionPrivateKey = (leaderKeypair as any).privateKey;
+    const leaderPubJwk = await crypto.subtle.exportKey("jwk", (leaderKeypair as any).publicKey);
+    await apiRequest(
+      "POST",
+      `/api/agents/${leaderAgentId}/sessions`,
+      {
+        session_id: leaderSessionId,
+        session_public_key: leaderPubJwk.x!,
       },
       apiKey,
     );
@@ -352,20 +393,23 @@ describe("routes", () => {
 
   // ─── Task Lifecycle ───
 
-  it("POST /api/tasks/:id/assign assigns a task", async () => {
+  it("POST /api/tasks/:id/assign assigns a task to the calling leader agent", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, {}, leaderJwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    expect(body.assigned_to).toBe(agentId);
+    // Route assigns to the calling agent (leader), not a body-provided agent_id
+    expect(body.assigned_to).toBe(leaderAgentId);
   });
 
   it("POST /api/tasks/:id/complete completes a task", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Complete Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/complete`, { result: "done" }, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/complete`, { result: "done" }, leaderJwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.status).toBe("done");
@@ -384,7 +428,8 @@ describe("routes", () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Cancel Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").bind(task.id).run();
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/cancel`, {}, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/cancel`, {}, leaderJwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.status).toBe("cancelled");
@@ -394,7 +439,8 @@ describe("routes", () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Reject Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/reject`, {}, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/reject`, {}, leaderJwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.status).toBe("in_progress");
@@ -581,16 +627,20 @@ describe("routes", () => {
     expect(res.status).toBe(200);
   });
 
-  // ─── Agent PATCH/DELETE forbidden for machine identity ───
+  // ─── Agent PATCH/DELETE ───
 
-  it("PATCH /api/agents/:id returns 403 for machine identity", async () => {
-    const res = await apiRequest("PATCH", "/api/agents/nonexistent", { name: "X" }, apiKey);
-    expect(res.status).toBe(403);
+  it("PATCH /api/agents/:id returns 404 for nonexistent agent", async () => {
+    const res = await apiRequest("PATCH", "/api/agents/nonexistent", { name: "X" }, userToken);
+    expect(res.status).toBe(404);
   });
 
-  it("DELETE /api/agents/:id returns 403 for machine identity", async () => {
-    const res = await apiRequest("DELETE", `/api/agents/${agentId}`, undefined, apiKey);
-    expect(res.status).toBe(403);
+  it("DELETE /api/agents/:id deletes the agent", async () => {
+    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
+    const tempAgent = await createAgent(env.DB, userId, { name: "Temp Agent For Delete" });
+    const res = await apiRequest("DELETE", `/api/agents/${tempAgent.id}`, undefined, userToken);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.ok).toBe(true);
   });
 
   // ─── Task claim forbidden for machine identity ───
@@ -633,7 +683,8 @@ describe("routes", () => {
   it("POST /api/tasks/:id/assign triggers stale detection", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Stale Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);
     expect(res.status).toBe(200);
   });
 });

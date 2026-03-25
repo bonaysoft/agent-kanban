@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +25,7 @@ const testEnv = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -86,6 +87,9 @@ describe("CLI ApiClient agent JWT passthrough", () => {
   let boardId: string;
   let taskId: string;
   let sessionPrivKeyJwk: JsonWebKey;
+  let leaderAgentId: string;
+  let leaderSessionId: string;
+  let leaderSessionPrivateKey: CryptoKey;
 
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -146,16 +150,42 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     );
     expect(sessionRes.status).toBe(201);
 
-    // Create board + task + assign
+    // Create leader agent + session for assign
+    const leaderAgent = await createAgent(testEnv.DB, userId, { name: "JWT Leader Agent", runtime: "claude", kind: "leader" });
+    leaderAgentId = leaderAgent.id;
+    leaderSessionId = randomUUID();
+    const leaderKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    leaderSessionPrivateKey = (leaderKeypair as any).privateKey;
+    const leaderPubJwk = await crypto.subtle.exportKey("jwk", (leaderKeypair as any).publicKey);
+    const leaderSessionRes = await honoRequest(
+      "POST",
+      `/api/agents/${leaderAgentId}/sessions`,
+      { session_id: leaderSessionId, session_public_key: leaderPubJwk.x! },
+      apiKey,
+    );
+    expect(leaderSessionRes.status).toBe(201);
+
+    // Create board + task
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
     const board = await createBoard(testEnv.DB, userId, "jwt-test-board");
     boardId = board.id;
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
     taskId = task.id;
 
-    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, { agent_id: agentId }, apiKey);
+    // Verify leader agent can call the assign route (assigns task to itself)
+    const leaderJwt = await new SignJWT({ sub: leaderSessionId, aid: leaderAgentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
+      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(leaderSessionPrivateKey);
+    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, {}, leaderJwt);
     expect(assignRes.status).toBe(200);
+    expect(((await assignRes.json()) as any).assigned_to).toBe(leaderAgentId);
+
+    // Re-assign to the worker agent via repo so the worker can claim it in subsequent tests
+    await testEnv.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
+    await assignTask(testEnv.DB, taskId, agentId);
   });
 
   it("ApiClient constructs valid session JWT that server accepts for claim", async () => {

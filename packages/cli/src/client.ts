@@ -134,6 +134,7 @@ export abstract class ApiClient {
     bio?: string;
     soul?: string;
     role?: string;
+    kind?: "worker" | "leader";
     handoff_to?: string[];
     runtime?: string;
     model?: string;

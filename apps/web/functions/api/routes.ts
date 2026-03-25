@@ -155,6 +155,7 @@ api.post("/api/agents", async (c) => {
     bio?: string;
     soul?: string;
     role?: string;
+    kind?: "worker" | "leader";
     handoff_to?: string[];
     runtime?: string;
     model?: string;
@@ -268,8 +269,7 @@ api.delete("/api/tasks/:id", async (c) => {
 // ─── Task Lifecycle ───
 
 api.post("/api/tasks/:id/claim", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string };
-  const agentId = c.get("agentId") || body.agent_id;
+  const agentId = c.get("agentId");
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
   const task = await claimTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
@@ -277,10 +277,10 @@ api.post("/api/tasks/:id/claim", async (c) => {
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { result?: string; pr_url?: string; agent_id?: string };
-  const agentId = c.get("agentId") || body.agent_id;
+  const body = (await c.req.json().catch(() => ({}))) as { result?: string; pr_url?: string };
+  const agentId = c.get("agentId") || null;
 
-  const task = await completeTask(c.env.DB, c.req.param("id"), agentId || null, body.result || null, body.pr_url || null, c.get("identityType"));
+  const task = await completeTask(c.env.DB, c.req.param("id"), agentId, body.result || null, body.pr_url || null, c.get("identityType"));
   return c.json(task);
 });
 
@@ -305,22 +305,17 @@ api.post("/api/tasks/:id/assign", async (c) => {
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string };
-  const agentId = c.get("agentId") || body.agent_id;
+  const agentId = c.get("agentId") || null;
 
-  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId || null, c.get("identityType"));
+  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { agent_id?: string; pr_url?: string };
-  const agentId = c.get("agentId") || body.agent_id;
+  const body = (await c.req.json().catch(() => ({}))) as { pr_url?: string };
+  const agentId = c.get("agentId");
 
-  const existing = await c.env.DB.prepare("SELECT assigned_to FROM tasks WHERE id = ?")
-    .bind(c.req.param("id"))
-    .first<{ assigned_to: string | null }>();
-
-  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId || existing?.assigned_to || null, body.pr_url || null, c.get("identityType"));
+  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId ?? null, body.pr_url || null, c.get("identityType"));
   return c.json(task);
 });
 

@@ -5,22 +5,22 @@ import type { Env } from "./types";
 
 const logger = createLogger("api");
 
-type IdentityType = "user" | "machine" | "agent";
+type IdentityType = "user" | "machine" | "agent:worker" | "agent:leader";
 
 interface RouteRule {
   allow: IdentityType[];
-  capability?: string; // required agent capability (only checked for "agent")
+  capability?: string; // required agent capability (only checked for agent identities)
 }
 
 // Route permission rules: method + path pattern → allowed identity types + required capability
 // Routes not listed here are open to any authenticated identity.
 const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
-  // Machines — machine-only
+  // Machines — machine-only (user can delete)
   { method: "POST", pattern: /^\/api\/machines$/, rule: { allow: ["machine"] } },
   { method: "POST", pattern: /^\/api\/machines\/[^/]+\/heartbeat$/, rule: { allow: ["machine"] } },
   { method: "DELETE", pattern: /^\/api\/machines\/[^/]+$/, rule: { allow: ["user"] } },
 
-  // Agents — user manages persistent agents
+  // Agents — machine/user creates, user manages
   { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user", "machine"] } },
   { method: "PATCH", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
   { method: "DELETE", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user"] } },
@@ -28,16 +28,20 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Agent Sessions — machine creates/closes, agent reports usage
   { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions$/, rule: { allow: ["machine"] } },
   { method: "DELETE", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+$/, rule: { allow: ["machine"] } },
-  { method: "PATCH", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/, rule: { allow: ["agent"], capability: "agent:usage" } },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/,
+    rule: { allow: ["agent:worker", "agent:leader"], capability: "agent:usage" },
+  },
 
-  // Task lifecycle
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent"], capability: "task:claim" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent"], capability: "task:review" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["user", "machine"] } },
+  // Task lifecycle — agents operate, machine manages
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent:worker"], capability: "task:claim" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent:worker"], capability: "task:review" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["agent:leader"] } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/complete$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/cancel$/, rule: { allow: ["user", "machine"] } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/reject$/, rule: { allow: ["user", "machine"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/complete$/, rule: { allow: ["user", "agent:leader"], capability: "task:complete" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/cancel$/, rule: { allow: ["user", "agent:leader"], capability: "task:cancel" } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/reject$/, rule: { allow: ["user", "agent:leader"], capability: "task:reject" } },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {
@@ -136,14 +140,27 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   return enforceRouteRule(c, next);
 }
 
-function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, persistentAgentId: string | null, next: Next) {
+async function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any, persistentAgentId: string | null, next: Next) {
+  const sessionId = identity.agent.id;
+
+  // Single query: verify session→agent binding + resolve agent kind
+  const row = await c.env.DB.prepare("SELECT s.agent_id, a.kind FROM agent_sessions s JOIN agents a ON s.agent_id = a.id WHERE s.id = ?")
+    .bind(sessionId)
+    .first<{ agent_id: string; kind: string }>();
+
+  if (persistentAgentId && row && row.agent_id !== persistentAgentId) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Agent ID mismatch" } }, 403);
+  }
+
+  const agentId = persistentAgentId || sessionId;
   c.set("ownerId", identity.host?.userId || identity.user?.id);
-  c.set("identityType", "agent");
-  c.set("sessionId", identity.agent.id);
-  c.set("agentId", persistentAgentId || identity.agent.id);
+  c.set("sessionId", sessionId);
+  c.set("agentId", agentId);
   c.set("machineId", identity.agent.hostId);
   const caps = (identity.agent.capabilityGrants || []).map((g: any) => g.capability as string);
   c.set("agentCapabilities", caps);
+  c.set("identityType", row?.kind === "leader" ? "agent:leader" : "agent:worker");
+
   return enforceRouteRule(c, next);
 }
 
@@ -167,7 +184,7 @@ function enforceRouteRule(c: Context<{ Bindings: Env }>, next: Next) {
     return c.json({ error: { code: "FORBIDDEN", message: `${rule.allow.join(" or ")} required` } }, 403);
   }
 
-  if (rule.capability && identity === "agent") {
+  if (rule.capability && identity.startsWith("agent:")) {
     const caps: string[] = c.get("agentCapabilities") || [];
     if (!caps.includes(rule.capability)) {
       return c.json({ error: { code: "FORBIDDEN", message: `Missing capability: ${rule.capability}` } }, 403);

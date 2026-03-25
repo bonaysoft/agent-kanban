@@ -115,6 +115,7 @@ export interface MachineWithAgents extends Machine {
 // ─── Agent ───
 
 export type AgentStatus = "online" | "offline";
+export type AgentKind = "worker" | "leader";
 
 export interface Agent {
   id: string;
@@ -123,6 +124,7 @@ export interface Agent {
   bio: string | null;
   soul: string | null;
   role: string | null;
+  kind: AgentKind;
   handoff_to: string[] | null;
   runtime: string | null;
   model: string | null;
@@ -230,6 +232,7 @@ export interface CreateAgentInput {
   bio?: string;
   soul?: string;
   role?: string;
+  kind?: AgentKind;
   handoff_to?: string[];
   runtime?: string;
   model?: string;

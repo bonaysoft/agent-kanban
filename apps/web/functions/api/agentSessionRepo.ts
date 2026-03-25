@@ -68,7 +68,14 @@ export async function createSession(
     forceAllowId: true,
   });
 
-  const capabilities = ["task:claim", "task:review", "task:log", "task:message", "agent:usage"];
+  // Grant capabilities based on agent kind
+  const agentRow = await db.prepare("SELECT kind FROM agents WHERE id = ?").bind(agentId).first<{ kind: string }>();
+  if (!agentRow) throw new Error("Agent not found");
+  const kind = agentRow.kind;
+  const capabilities =
+    kind === "leader"
+      ? ["task:complete", "task:reject", "task:cancel", "task:log", "task:message", "agent:usage"]
+      : ["task:claim", "task:review", "task:log", "task:message", "agent:usage"];
   for (const cap of capabilities) {
     await authCtx.adapter.create({
       model: "agentCapabilityGrant",
