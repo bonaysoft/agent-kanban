@@ -225,6 +225,7 @@ api.patch("/api/agents/:agentId/sessions/:sessionId/usage", async (c) => {
 api.post("/api/tasks", async (c) => {
   const body = await c.req.json();
   if (!body.title) throw new HTTPException(400, { message: "title is required" });
+  if (!body.assigned_to) throw new HTTPException(400, { message: "assigned_to is required" });
 
   if (body.input !== undefined && body.input !== null && typeof body.input !== "object") {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });

@@ -241,7 +241,7 @@ export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
     .first<{ status: string; assigned_to: string | null }>();
   if (!task) return false;
 
-  const canDelete = (task.status === "todo" && !task.assigned_to) || task.status === "cancelled";
+  const canDelete = task.status === "todo" || task.status === "cancelled";
   if (!canDelete) {
     throw new HTTPException(409, { message: `Cannot delete task in ${task.status}${task.assigned_to ? " (assigned)" : ""} status` });
   }
@@ -274,9 +274,6 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   if (!task) return null;
   if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
   if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
-
-  const blockedSet = await computeBlocked(db, [taskId]);
-  if (blockedSet.has(taskId)) throw new HTTPException(409, { message: "Task is blocked by unfinished dependencies" });
 
   const now = new Date().toISOString();
   const logId = newLongId();
