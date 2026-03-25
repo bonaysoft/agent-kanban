@@ -4,10 +4,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeF
 import { arch, hostname, platform, release } from "node:os";
 import { join } from "node:path";
 import { AgentClient, ApiError, MachineClient } from "./client.js";
-import { getConfigValue, PID_FILE, setConfigValue } from "./config.js";
+import { getConfigValue, setConfigValue } from "./config.js";
 import { findPathForRepository, getLinks, setLink } from "./links.js";
 import { createLogger } from "./logger.js";
-import { REPOS_DIR, SESSION_PIDS_FILE, STATE_DIR, WORKTREES_DIR } from "./paths.js";
+import { PID_FILE, REPOS_DIR, SESSION_PIDS_FILE, STATE_DIR, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
 import { getAvailableProviders, getProvider } from "./providers/registry.js";
@@ -37,19 +37,7 @@ function normalizeRuntime(runtime: string): string {
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<void> {
-  // PID lock
-  if (existsSync(PID_FILE)) {
-    const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
-    try {
-      process.kill(pid, 0);
-      logger.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
-      process.exit(1);
-    } catch {
-      unlinkSync(PID_FILE);
-    }
-  }
   mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(PID_FILE, String(process.pid));
 
   // Preflight: gh must be installed and authenticated
   try {

@@ -1,9 +1,14 @@
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
-import { startDaemon } from "../daemon.js";
 import { clearLinks } from "../links.js";
+import { LOGS_DIR, PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
+
+const MAX_LOG_ARCHIVES = 5;
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -13,6 +18,27 @@ function confirm(question: string): Promise<boolean> {
       resolve(answer.toLowerCase() === "y");
     });
   });
+}
+
+function rotateLogs(): void {
+  mkdirSync(LOGS_DIR, { recursive: true });
+  const logFile = join(LOGS_DIR, "daemon.log");
+  if (!existsSync(logFile)) return;
+
+  const now = new Date();
+  const timestamp = now
+    .toISOString()
+    .replace(/:/g, "-")
+    .replace(/\.\d+Z$/, "");
+  renameSync(logFile, join(LOGS_DIR, `daemon-${timestamp}.log`));
+
+  const archives = readdirSync(LOGS_DIR)
+    .filter((f) => f.startsWith("daemon-") && f.endsWith(".log"))
+    .sort();
+
+  while (archives.length > MAX_LOG_ARCHIVES) {
+    unlinkSync(join(LOGS_DIR, archives.shift()!));
+  }
 }
 
 export function registerStartCommand(program: Command) {
@@ -50,7 +76,7 @@ export function registerStartCommand(program: Command) {
         process.exit(1);
       }
 
-      // Resolve default provider: --provider flag > --agent-cli (deprecated) > auto-detect
+      // Resolve default provider
       let defaultProvider = opts.provider;
       if (!defaultProvider && opts.agentCli) {
         console.warn("Warning: --agent-cli is deprecated, use --provider instead");
@@ -66,11 +92,49 @@ export function registerStartCommand(program: Command) {
         defaultProvider = available[0].name;
       }
 
-      await startDaemon({
-        maxConcurrent: parseInt(opts.maxConcurrent, 10),
-        defaultProvider,
-        pollInterval: parseInt(opts.pollInterval, 10),
-        taskTimeout: parseInt(opts.taskTimeout, 10),
-      });
+      // Check if already running
+      if (existsSync(PID_FILE)) {
+        const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
+        try {
+          process.kill(pid, 0);
+          console.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
+          process.exit(1);
+        } catch {
+          unlinkSync(PID_FILE);
+        }
+      }
+
+      // Rotate logs
+      rotateLogs();
+
+      // Open daemon.log for child stdout/stderr
+      const logFile = join(LOGS_DIR, "daemon.log");
+      const logFd = openSync(logFile, "a");
+
+      // Spawn daemon as detached child
+      const child = spawn(
+        process.execPath,
+        [
+          process.argv[1],
+          "__daemon",
+          "--max-concurrent",
+          String(opts.maxConcurrent),
+          "--default-provider",
+          defaultProvider,
+          "--poll-interval",
+          String(opts.pollInterval),
+          "--task-timeout",
+          String(opts.taskTimeout),
+        ],
+        { detached: true, stdio: ["ignore", logFd, logFd] },
+      );
+
+      // Write child PID and detach
+      mkdirSync(STATE_DIR, { recursive: true });
+      writeFileSync(PID_FILE, String(child.pid));
+      child.unref();
+
+      console.log(`Daemon started (PID ${child.pid})`);
+      process.exit(0);
     });
 }
