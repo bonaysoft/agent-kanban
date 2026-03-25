@@ -65,6 +65,11 @@ export async function listRepositories(db: D1, ownerId: string, filters?: { url?
   return result.results.map(withFullName);
 }
 
+export async function getRepository(db: D1, id: string, ownerId: string): Promise<Repository | null> {
+  const row = await db.prepare("SELECT * FROM repositories WHERE id = ? AND owner_id = ?").bind(id, ownerId).first<Repository>();
+  return row ? withFullName(row) : null;
+}
+
 export async function deleteRepository(db: D1, id: string): Promise<boolean> {
   const result = await db.prepare("DELETE FROM repositories WHERE id = ?").bind(id).run();
   return result.meta.changes > 0;
