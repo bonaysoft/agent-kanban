@@ -141,18 +141,20 @@ export function MachineDetailPage() {
               <span className="font-mono text-xs text-content-primary">{formatRelative(machine.created_at)}</span>
             </div>
           </div>
-          {runtimes.length > 0 && (
-            <div>
-              <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
-              <div className="flex gap-1.5">
+          <div>
+            <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
+            {runtimes.length > 0 ? (
+              <div className="flex gap-1.5 flex-wrap">
                 {runtimes.map((r: string) => (
                   <span key={r} className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded">
                     {r}
                   </span>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <span className="text-[11px] font-mono text-content-tertiary">No runtimes detected</span>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
