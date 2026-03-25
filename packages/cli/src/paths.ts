@@ -1,3 +1,4 @@
+// TODO: reject-resume verification test v2
 import { homedir } from "node:os";
 import { join } from "node:path";
 
