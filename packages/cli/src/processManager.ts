@@ -198,7 +198,10 @@ export class ProcessManager {
       this.agents.delete(taskId);
       await this.closeSession(agentClient);
 
-      if (agent.resultReceived || code === 0) {
+      if (agent.resultReceived) {
+        // handleEvent already updated session status — nothing to do
+      } else if (code === 0) {
+        // No result event but clean exit — check task status as fallback
         const task = (await this.client.getTask(taskId)) as any;
         if (task?.status === "in_review") {
           updateSessionStatus(taskId, "in_review");

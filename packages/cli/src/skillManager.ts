@@ -102,12 +102,18 @@ export async function ensureLefthookTask(client: MachineClient, task: any, repoD
   logger.info(`Created lefthook setup task ${setupTask.id}`);
 
   const repoTasks = allTasks.filter((t: any) => t.repository_id === task.repository_id);
+  let blocked = 0;
   for (const t of repoTasks) {
-    await client.updateTask(t.id, {
-      depends_on: [...(t.depends_on || []), setupTask.id],
-    });
+    try {
+      await client.updateTask(t.id, {
+        depends_on: [...(t.depends_on || []), setupTask.id],
+      });
+      blocked++;
+    } catch (err: any) {
+      logger.warn(`Failed to add lefthook dependency on task ${t.id}: ${err.message}`);
+    }
   }
 
-  logger.info(`Blocked ${repoTasks.length} tasks on lefthook setup task ${setupTask.id}`);
+  logger.info(`Blocked ${blocked}/${repoTasks.length} tasks on lefthook setup task ${setupTask.id}`);
   return true;
 }
