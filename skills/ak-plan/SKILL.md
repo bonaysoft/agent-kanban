@@ -92,7 +92,7 @@ Present the analysis to the user and confirm scope before creating tasks.
 Use the existing board for the project. One project = one board.
 
 ```bash
-ak board list --format json    # find the project board
+ak board list                  # find the project board
 # Only create a new board if this is a new product with no board yet
 ```
 
@@ -158,7 +158,7 @@ After assigning tasks, enter a monitoring loop until all tasks are done.
 
 ### Poll task status
 ```bash
-ak task list --format json | jq '.[] | select(.labels != null and (.labels | index("<version>"))) | {id, title: .title[0:50], status, pr_url}'
+ak task list --label <version>
 ```
 
 Poll every 30-60 seconds. Track progress and report status changes to the user.
@@ -181,6 +181,7 @@ When all tasks are done, report the final summary to the user.
 
 ## Rules
 
+- **Prefer text output** — only use `--format json | jq` when extracting fields into variables (e.g. task IDs for `--depends-on`). For display, use default text output or `--format text`.
 - **Always get repo URL from `git remote -v`** — never guess
 - **Discuss the plan with the user before creating tasks** — don't just start creating
 - **Set depends-on at creation time** — don't leave deps for later

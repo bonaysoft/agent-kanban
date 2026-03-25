@@ -1,9 +1,6 @@
-const isTTY = process.stdout.isTTY;
-
 export function getFormat(explicit?: string): "json" | "text" {
   if (explicit === "json") return "json";
-  if (explicit === "text") return "text";
-  return isTTY ? "text" : "json";
+  return "text";
 }
 
 export function output(data: unknown, format: "json" | "text", textFormatter?: (data: any) => string): void {
@@ -20,10 +17,13 @@ export function formatTaskList(tasks: any[]): string {
   if (tasks.length === 0) return "No tasks found.";
 
   const lines = tasks.map((t) => {
+    const status = `[${t.status}]`.padEnd(14);
     const priority = t.priority ? `[${t.priority}]` : "";
+    const blocked = t.blocked ? " BLOCKED" : "";
     const repo = t.repository_name ? `(${t.repository_name})` : "";
-    const agent = t.assigned_to ? `→ ${t.assigned_to}` : "";
-    return `  ${t.id}  ${priority.padEnd(8)} ${t.title} ${repo} ${agent}`;
+    const agent = t.assigned_to ? `→ ${t.assigned_to.slice(0, 8)}` : "";
+    const pr = t.pr_url ? `PR: ${t.pr_url}` : "";
+    return `  ${t.id}  ${status} ${priority.padEnd(8)} ${t.title} ${blocked} ${repo} ${agent} ${pr}`.trimEnd();
   });
 
   return lines.join("\n");
