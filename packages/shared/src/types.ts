@@ -55,6 +55,7 @@ export interface TaskNote {
   id: string;
   task_id: string;
   agent_id: string | null;
+  agent_name: string | null;
   session_id: string | null;
   action: TaskAction;
   detail: string | null;

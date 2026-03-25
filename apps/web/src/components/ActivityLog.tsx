@@ -1,3 +1,4 @@
+import { Bot, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
@@ -19,25 +20,71 @@ const actionStyles: Record<string, string> = {
   review_requested: "text-accent",
 };
 
-const actionLabels: Record<string, string> = {
-  claimed: "Claimed",
-  assigned: "Assigned",
-  completed: "Completed",
-  created: "Created",
-  released: "Released",
-  timed_out: "Timed out",
-  moved: "Moved",
-  cancelled: "Cancelled",
-  rejected: "Rejected",
-  review_requested: "Moved to review",
+const dotColors: Record<string, string> = {
+  claimed: "bg-accent border-accent/30",
+  assigned: "bg-accent border-accent/30",
+  completed: "bg-success border-success/30",
+  released: "bg-warning border-warning/30",
+  timed_out: "bg-error border-error/30",
+  cancelled: "bg-error border-error/30",
+  rejected: "bg-warning border-warning/30",
+  review_requested: "bg-accent border-accent/30",
+  commented: "bg-zinc-500 border-zinc-500/30",
+  created: "bg-zinc-500 border-zinc-500/30",
+  moved: "bg-zinc-500 border-zinc-500/30",
 };
+
+function buildSentence(log: any): { prefix: string; actionText: string; suffix: string } {
+  const name = log.agent_name || null;
+
+  switch (log.action) {
+    case "claimed":
+      return { prefix: name ?? "Agent", actionText: "claimed this task", suffix: "" };
+    case "assigned":
+      return { prefix: "System", actionText: "assigned to", suffix: name ?? log.detail ?? "agent" };
+    case "completed":
+      return { prefix: name ?? "Agent", actionText: "completed this task", suffix: log.detail ? `— ${log.detail}` : "" };
+    case "released":
+      return { prefix: name ?? "Agent", actionText: "released this task", suffix: "" };
+    case "timed_out":
+      return { prefix: name ?? "Agent", actionText: "timed out", suffix: "" };
+    case "cancelled":
+      return { prefix: name ?? "System", actionText: "cancelled this task", suffix: log.detail ? `— ${log.detail}` : "" };
+    case "rejected":
+      return { prefix: "Reviewer", actionText: "rejected — sent back to agent", suffix: log.detail ? `(${log.detail})` : "" };
+    case "review_requested":
+      return { prefix: name ?? "Agent", actionText: "submitted for review", suffix: "" };
+    case "created":
+      return { prefix: "System", actionText: "created this task", suffix: "" };
+    case "moved":
+      return { prefix: "System", actionText: "moved", suffix: log.detail ?? "" };
+    case "commented":
+      return { prefix: name ?? "Agent", actionText: "commented", suffix: "" };
+    default:
+      return { prefix: name ?? "System", actionText: log.action, suffix: log.detail ?? "" };
+  }
+}
+
+function AgentAvatar({ hasAgent }: { hasAgent: boolean }) {
+  if (hasAgent) {
+    return (
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
+        <Bot className="w-3 h-3 text-accent" />
+      </span>
+    );
+  }
+  return (
+    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center">
+      <User className="w-3 h-3 text-content-tertiary" />
+    </span>
+  );
+}
 
 export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
-  // Merge initial notes with SSE notes (dedup by ID)
   const allNotes = (() => {
     const seen = new Set<string>();
     const merged: any[] = [];
@@ -52,7 +99,6 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
 
   const displayed = allNotes.slice().reverse();
 
-  // Auto-scroll when new notes arrive
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = 0;
@@ -88,28 +134,53 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
         </Button>
       )}
 
-      <div ref={containerRef} onScroll={handleScroll} className="space-y-0 mt-2 max-h-80 overflow-y-auto" aria-live="polite">
-        {displayed.map((log: any) => (
-          <div key={log.id} className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${log.agent_id ? "border-accent" : "border-border"}`}>
-            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(log.created_at)}</span>
-            <span
-              className={`text-[13px] ${
-                log.action === "commented"
-                  ? "font-mono text-xs text-content-secondary bg-surface-primary px-1.5 py-0.5 rounded"
-                  : "text-content-secondary"
-              }`}
-            >
-              {log.action === "commented" ? (
-                log.detail
-              ) : (
-                <span className={actionStyles[log.action] || ""}>
-                  {actionLabels[log.action] || log.action}
-                  {log.detail ? `: ${log.detail}` : ""}
-                </span>
-              )}
-            </span>
-          </div>
-        ))}
+      <div ref={containerRef} onScroll={handleScroll} className="mt-2 max-h-80 overflow-y-auto" aria-live="polite">
+        {/* Timeline container */}
+        <div className="relative ml-2.5">
+          {/* Vertical line */}
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+
+          {displayed.map((log: any) => {
+            const { prefix, actionText, suffix } = buildSentence(log);
+            const isAgent = !!log.agent_id;
+            const dot = dotColors[log.action] || "bg-zinc-500 border-zinc-500/30";
+            const actionColor = actionStyles[log.action] || "text-content-secondary";
+            const isComment = log.action === "commented";
+
+            return (
+              <div key={log.id} className="relative pl-5 pb-3">
+                {/* Timeline dot */}
+                <span className={`absolute left-0 -translate-x-1/2 mt-[3px] w-2 h-2 rounded-full border ${dot}`} style={{ top: "4px" }} />
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <AgentAvatar hasAgent={isAgent} />
+
+                  {/* Sentence: prefix (agent name) + action + suffix */}
+                  <span className="text-[12px] leading-snug">
+                    <span className={isAgent ? "font-mono text-accent" : "text-content-tertiary"}>{prefix}</span>{" "}
+                    <span className={isComment ? "text-content-tertiary" : actionColor}>{actionText}</span>
+                    {suffix && (
+                      <>
+                        {" "}
+                        <span className="text-content-tertiary">{suffix}</span>
+                      </>
+                    )}
+                  </span>
+
+                  {/* Relative time */}
+                  <span className="ml-auto font-mono text-[10px] text-content-tertiary whitespace-nowrap">{formatRelative(log.created_at)}</span>
+                </div>
+
+                {/* Comment body */}
+                {isComment && log.detail && (
+                  <div className="mt-1.5 ml-6 bg-surface-primary border border-border rounded px-2.5 py-1.5 font-mono text-[11px] text-content-secondary leading-relaxed">
+                    {log.detail}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
