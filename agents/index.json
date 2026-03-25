@@ -1,8 +1,8 @@
 [
-  { "slug": "backend-developer", "name": "Backend Developer" },
-  { "slug": "designer", "name": "Designer" },
-  { "slug": "enduser", "name": "Enduser" },
-  { "slug": "feature-planner", "name": "Feature Planner" },
-  { "slug": "frontend-developer", "name": "Frontend Developer" },
-  { "slug": "fullstack-developer", "name": "Fullstack Developer" }
+  {"slug":"backend-developer","name":"Backend Developer"},
+  {"slug":"designer","name":"Designer"},
+  {"slug":"enduser","name":"Enduser"},
+  {"slug":"feature-planner","name":"Feature Planner"},
+  {"slug":"frontend-developer","name":"Frontend Developer"},
+  {"slug":"fullstack-developer","name":"Fullstack Developer"}
 ]
