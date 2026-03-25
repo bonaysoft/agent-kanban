@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { claudeProvider } from "../src/providers/claude.js";
+import { geminiProvider } from "../src/providers/gemini.js";
 import { getAvailableProviders, getProvider, registerProvider } from "../src/providers/registry.js";
 import type { AgentProvider } from "../src/providers/types.js";
 
@@ -442,5 +443,271 @@ describe("registry.getAvailableProviders", () => {
     registerProvider(ghost);
     const available = getAvailableProviders();
     expect(available.find((p) => p.name === "ghost-cmd-provider")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider identity fields
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider identity", () => {
+  it("name is gemini", () => {
+    expect(geminiProvider.name).toBe("gemini");
+  });
+
+  it("label is Gemini CLI", () => {
+    expect(geminiProvider.label).toBe("Gemini CLI");
+  });
+
+  it("command is gemini", () => {
+    expect(geminiProvider.command).toBe("gemini");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.buildArgs
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.buildArgs", () => {
+  it("includes --output-format stream-json", () => {
+    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    const idx = args.indexOf("--output-format");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("stream-json");
+  });
+
+  it("includes --yolo flag", () => {
+    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    expect(args).toContain("--yolo");
+  });
+
+  it("includes --prompt flag", () => {
+    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    expect(args).toContain("--prompt");
+  });
+
+  it("returns an array", () => {
+    expect(Array.isArray(geminiProvider.buildArgs({ sessionId: "s1" }))).toBe(true);
+  });
+
+  it("does not include --session-id flag (Gemini has no session concept)", () => {
+    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    expect(args).not.toContain("--session-id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.buildResumeArgs
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.buildResumeArgs", () => {
+  it("returns an array", () => {
+    expect(Array.isArray(geminiProvider.buildResumeArgs("sess-99"))).toBe(true);
+  });
+
+  it("includes --output-format stream-json (falls back to fresh session)", () => {
+    const args = geminiProvider.buildResumeArgs("sess-99");
+    const idx = args.indexOf("--output-format");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("stream-json");
+  });
+
+  it("includes --yolo flag (fresh session fallback)", () => {
+    const args = geminiProvider.buildResumeArgs("sess-99");
+    expect(args).toContain("--yolo");
+  });
+
+  it("includes --resume latest (Gemini resumes the latest session rather than by ID)", () => {
+    const args = geminiProvider.buildResumeArgs("sess-99");
+    const idx = args.indexOf("--resume");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("latest");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.parseEvent — invalid / unrecognised input
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.parseEvent — invalid input", () => {
+  it("returns null for non-JSON string", () => {
+    expect(geminiProvider.parseEvent("not json")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(geminiProvider.parseEvent("")).toBeNull();
+  });
+
+  it("returns null for unrecognised event type", () => {
+    expect(geminiProvider.parseEvent(JSON.stringify({ type: "unknown_event" }))).toBeNull();
+  });
+
+  it("returns null for init event", () => {
+    const raw = JSON.stringify({ type: "init", timestamp: "2024-01-01T00:00:00Z", session_id: "s1", model: "gemini-pro" });
+    expect(geminiProvider.parseEvent(raw)).toBeNull();
+  });
+
+  it("returns null for user message event", () => {
+    const raw = JSON.stringify({ type: "message", role: "user", content: "hello" });
+    expect(geminiProvider.parseEvent(raw)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.parseEvent — assistant message
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.parseEvent — assistant message", () => {
+  it("returns a message event for assistant role with content", () => {
+    const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("message");
+  });
+
+  it("includes the content as text", () => {
+    const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "message") {
+      expect(event.text).toBe("Hello world");
+    }
+  });
+
+  it("handles delta assistant message with content", () => {
+    const raw = JSON.stringify({ type: "message", role: "assistant", content: "partial text", delta: true });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("message");
+    if (event?.type === "message") {
+      expect(event.text).toBe("partial text");
+    }
+  });
+
+  it("returns null for assistant message without content", () => {
+    const raw = JSON.stringify({ type: "message", role: "assistant" });
+    expect(geminiProvider.parseEvent(raw)).toBeNull();
+  });
+
+  it("returns null for assistant message with empty content string", () => {
+    const raw = JSON.stringify({ type: "message", role: "assistant", content: "" });
+    expect(geminiProvider.parseEvent(raw)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.parseEvent — result
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.parseEvent — result", () => {
+  it("returns a result event", () => {
+    const raw = JSON.stringify({ type: "result", status: "success", stats: { total_tokens: 100, input_tokens: 60, output_tokens: 40 } });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("result");
+  });
+
+  it("includes stats as usage", () => {
+    const stats = { total_tokens: 100, input_tokens: 60, output_tokens: 40 };
+    const raw = JSON.stringify({ type: "result", status: "success", stats });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "result") {
+      expect(event.usage).toEqual(stats);
+    }
+  });
+
+  it("includes usage as undefined when stats is absent", () => {
+    const raw = JSON.stringify({ type: "result", status: "success" });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "result") {
+      expect(event.usage).toBeUndefined();
+    }
+  });
+
+  it("does not include a cost field (Gemini does not report cost)", () => {
+    const raw = JSON.stringify({ type: "result", status: "success", stats: {} });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "result") {
+      expect(event.cost).toBeUndefined();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.parseEvent — error variants
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.parseEvent — error variants", () => {
+  it("returns error event when event.type is error", () => {
+    const raw = JSON.stringify({ type: "error", message: "Something went wrong" });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("error");
+  });
+
+  it("includes detail from event.message when type is error", () => {
+    const raw = JSON.stringify({ type: "error", message: "Boom" });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "error") {
+      expect(event.detail).toContain("Boom");
+    }
+  });
+
+  it("returns error event when event.status is error and type is not result", () => {
+    const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("error");
+  });
+
+  it("includes detail from event.error when status is error and error field is present", () => {
+    const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "error") {
+      expect(event.detail).toContain("Generation failed");
+    }
+  });
+
+  it("result event with status error still returns result (type check takes precedence over status)", () => {
+    const raw = JSON.stringify({ type: "result", status: "error", stats: {} });
+    const event = geminiProvider.parseEvent(raw);
+    expect(event?.type).toBe("result");
+  });
+
+  it("falls back to JSON stringified event as detail when message and error are absent", () => {
+    const raw = JSON.stringify({ type: "error" });
+    const event = geminiProvider.parseEvent(raw);
+    if (event?.type === "error") {
+      expect(typeof event.detail).toBe("string");
+      expect(event.detail.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.buildInput
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.buildInput", () => {
+  it("returns the task context string unchanged", () => {
+    expect(geminiProvider.buildInput("do the task")).toBe("do the task");
+  });
+
+  it("handles empty string context", () => {
+    expect(geminiProvider.buildInput("")).toBe("");
+  });
+
+  it("handles multiline context", () => {
+    const ctx = "line one\nline two\nline three";
+    expect(geminiProvider.buildInput(ctx)).toBe(ctx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registry: geminiProvider is registered by default
+// ---------------------------------------------------------------------------
+
+describe("registry.getProvider — gemini", () => {
+  it("returns geminiProvider which is registered by default", () => {
+    const provider = getProvider("gemini");
+    expect(provider.name).toBe("gemini");
+  });
+
+  it("returned provider label is Gemini CLI", () => {
+    expect(getProvider("gemini").label).toBe("Gemini CLI");
   });
 });
