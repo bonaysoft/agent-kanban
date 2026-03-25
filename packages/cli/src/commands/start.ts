@@ -3,8 +3,7 @@ import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
 import { startDaemon } from "../daemon.js";
 import { clearLinks } from "../links.js";
-import { getAvailableProviders, getProvider } from "../providers/registry.js";
-import type { AgentProvider } from "../providers/types.js";
+import { getAvailableProviders } from "../providers/registry.js";
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -51,28 +50,25 @@ export function registerStartCommand(program: Command) {
         process.exit(1);
       }
 
-      // Resolve provider: --provider flag > --agent-cli (deprecated) > auto-detect
-      let providerName = opts.provider;
-      if (!providerName && opts.agentCli) {
+      // Resolve default provider: --provider flag > --agent-cli (deprecated) > auto-detect
+      let defaultProvider = opts.provider;
+      if (!defaultProvider && opts.agentCli) {
         console.warn("Warning: --agent-cli is deprecated, use --provider instead");
-        providerName = opts.agentCli;
+        defaultProvider = opts.agentCli;
       }
 
-      let provider: AgentProvider;
-      if (providerName) {
-        provider = getProvider(providerName);
-      } else {
+      if (!defaultProvider) {
         const available = getAvailableProviders();
         if (available.length === 0) {
           console.error("No agent providers found. Install claude, codex, or gemini CLI.");
           process.exit(1);
         }
-        provider = available[0];
+        defaultProvider = available[0].name;
       }
 
       await startDaemon({
         maxConcurrent: parseInt(opts.maxConcurrent, 10),
-        provider,
+        defaultProvider,
         pollInterval: parseInt(opts.pollInterval, 10),
         taskTimeout: parseInt(opts.taskTimeout, 10),
       });

@@ -8,6 +8,8 @@ export interface AgentInfo {
   soul: string | null;
   handoff_to: string[] | null;
   skills: string[] | null;
+  runtime: string | null;
+  model: string | null;
 }
 
 export function generateSystemPrompt(agent: AgentInfo): string {

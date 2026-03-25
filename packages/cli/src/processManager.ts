@@ -24,6 +24,8 @@ export interface SuspendedSession {
   agentId: string;
   privateKey: CryptoKey;
   privateKeyJwk: JsonWebKey;
+  provider: AgentProvider;
+  model?: string;
 }
 
 export interface AgentProcess {
@@ -33,6 +35,7 @@ export interface AgentProcess {
   repoDir: string;
   branchName: string;
   process: ChildProcess;
+  provider: AgentProvider;
   agentClient: AgentClient;
   privateKey: CryptoKey;
   privateKeyJwk: JsonWebKey;
@@ -52,7 +55,6 @@ export interface ProcessManagerCallbacks {
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
   private suspended: SuspendedSession[] = [];
-  private provider: AgentProvider;
   private client: ApiClient;
   private onSlotFreed: () => void;
   private onRateLimited: (resetAt: string) => void;
@@ -60,8 +62,7 @@ export class ProcessManager {
   private onProcessExited?: (sessionId: string) => void;
   private taskTimeoutMs: number;
 
-  constructor(provider: AgentProvider, client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
-    this.provider = provider;
+  constructor(client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
     this.client = client;
     this.onSlotFreed = callbacks.onSlotFreed;
     this.onRateLimited = callbacks.onRateLimited;
@@ -79,6 +80,7 @@ export class ProcessManager {
   }
 
   async spawnAgent(
+    provider: AgentProvider,
     taskId: string,
     sessionId: string,
     cwd: string,
@@ -92,24 +94,25 @@ export class ProcessManager {
     systemPromptFile?: string,
     resume?: boolean,
     onCleanup?: () => void,
+    model?: string,
   ): Promise<void> {
-    const args = resume ? this.provider.buildResumeArgs(sessionId) : this.provider.buildArgs({ sessionId, systemPromptFile });
+    const args = resume ? provider.buildResumeArgs(sessionId, model) : provider.buildArgs({ sessionId, systemPromptFile, model });
 
     let proc: ChildProcess;
     try {
-      proc = spawn(this.provider.command, args, {
+      proc = spawn(provider.command, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...agentEnv },
       });
     } catch (err: any) {
-      logger.error(`Failed to spawn ${this.provider.command}: ${err.message}`);
+      logger.error(`Failed to spawn ${provider.command}: ${err.message}`);
       await this.releaseTask(taskId);
       return;
     }
 
     if (!proc.pid) {
-      logger.error(`${this.provider.command} not found or failed to start`);
+      logger.error(`${provider.command} not found or failed to start`);
       await this.releaseTask(taskId);
       return;
     }
@@ -121,6 +124,7 @@ export class ProcessManager {
       repoDir,
       branchName,
       process: proc,
+      provider,
       agentClient,
       privateKey,
       privateKeyJwk,
@@ -138,7 +142,7 @@ export class ProcessManager {
 
     proc.on("spawn", () => {
       if (taskContext) {
-        proc.stdin?.write(`${this.provider.buildInput(taskContext)}\n`);
+        proc.stdin?.write(`${provider.buildInput(taskContext)}\n`);
       }
       proc.stdin?.end();
     });
@@ -150,7 +154,7 @@ export class ProcessManager {
       stdoutBuffer = lines.pop() || "";
       for (const line of lines) {
         if (!line.trim()) continue;
-        const event = this.provider.parseEvent(line);
+        const event = provider.parseEvent(line);
         if (event) this.handleEvent(taskId, sessionId, event, agentClient);
       }
     });
@@ -170,7 +174,7 @@ export class ProcessManager {
       if (!this.agents.has(taskId)) return;
 
       if (stdoutBuffer.trim()) {
-        const event = this.provider.parseEvent(stdoutBuffer);
+        const event = agent.provider.parseEvent(stdoutBuffer);
         if (event) this.handleEvent(taskId, sessionId, event, agentClient);
       }
 
@@ -210,6 +214,7 @@ export class ProcessManager {
           agentId: agentClient.getAgentId(),
           privateKey: agent.privateKey,
           privateKeyJwk: agent.privateKeyJwk,
+          provider: agent.provider,
         });
       } else {
         logger.warn(`Agent crashed on task ${taskId} (exit ${code})`);
@@ -235,7 +240,7 @@ export class ProcessManager {
       this.onSlotFreed();
     });
 
-    logger.info(`Spawned ${this.provider.command} (session=${sessionId}) for task ${taskId} in ${cwd}`);
+    logger.info(`Spawned ${provider.command} (session=${sessionId}) for task ${taskId} in ${cwd}`);
   }
 
   async killTask(taskId: string): Promise<void> {
