@@ -74,7 +74,6 @@ export function registerGetCommand(program: Command) {
           }
           break;
         case "note": {
-          const taskId = id ? undefined : opts.task;
           const noteTaskId = id ?? opts.task;
           if (!noteTaskId) {
             console.error("Usage: ak get note --task <task-id> or ak get note <task-id>");
