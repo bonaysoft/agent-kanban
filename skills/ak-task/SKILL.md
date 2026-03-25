@@ -29,9 +29,9 @@ Parse the user's input:
 ## Step 1: Context
 
 ```bash
-ak board list --format json    # pick the right board
-ak agent list --format json    # available agents
-ak repo list --format json     # registered repos
+ak board list                  # pick the right board
+ak agent list                  # available agents
+ak repo list                   # registered repos
 ```
 
 If there's only one board, use it. Otherwise ask which board.
@@ -41,7 +41,7 @@ If there's only one board, use it. Otherwise ask which board.
 Before creating the task, understand what's involved:
 - Read relevant source files to understand current implementation
 - Identify which files need to change
-- Check for existing related tasks: `ak task list --format json`
+- Check for existing related tasks: `ak task list`
 
 ## Step 3: Create Task
 

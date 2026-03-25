@@ -27,8 +27,7 @@ You are a worker agent. Use the `ak` CLI to work on your assigned task.
 
 ## Output Format
 
-- JSON when piped (not a TTY), text in interactive terminals
-- Force with `--format json`
+- Text by default, use `--format json` only when you need to extract fields programmatically
 
 ## Rules
 
