@@ -95,7 +95,17 @@ export class ProcessManager {
     onCleanup?: () => void,
   ): Promise<void> {
     const args = resume
-      ? ["--resume", sessionId, "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions"]
+      ? [
+          "--resume",
+          sessionId,
+          "--print",
+          "--verbose",
+          "--input-format",
+          "stream-json",
+          "--output-format",
+          "stream-json",
+          "--dangerously-skip-permissions",
+        ]
       : [
           "--print",
           "--verbose",
@@ -153,7 +163,16 @@ export class ProcessManager {
     }
 
     if (resume) {
-      proc.on("spawn", () => proc.stdin?.end());
+      proc.on("spawn", () => {
+        if (taskContext) {
+          const payload = JSON.stringify({
+            type: "user",
+            message: { role: "user", content: taskContext },
+          });
+          proc.stdin?.write(`${payload}\n`);
+        }
+        proc.stdin?.end();
+      });
     } else {
       proc.on("spawn", () => {
         const payload = JSON.stringify({
@@ -208,16 +227,26 @@ export class ProcessManager {
 
       await this.closeSession(agentClient);
 
-      if (agent.resultReceived) {
-        // Result event already handled save/cleanup — just clean up if not in review
-        if (!agent.onCleanup) {
-          logger.info(`Agent finished task ${taskId}`);
-        } else {
-          const task = (await this.client.getTask(taskId)) as any;
-          if (task?.status !== "in_review") {
-            logger.info(`Agent finished task ${taskId}`);
-            agent.onCleanup();
+      if (agent.resultReceived || code === 0) {
+        // Agent finished normally — check if worktree should be preserved
+        const task = (await this.client.getTask(taskId)) as any;
+        if (task?.status === "in_review") {
+          // Already saved by result event handler, or save now as fallback
+          if (!agent.resultReceived) {
+            saveReviewSession({
+              taskId,
+              sessionId,
+              cwd: agent.cwd,
+              repoDir: agent.repoDir,
+              branchName: agent.branchName,
+              agentId: agentClient.getAgentId(),
+              privateKeyJwk: agent.privateKeyJwk,
+            });
+            logger.info(`Task ${taskId} in review, preserving worktree`);
           }
+        } else {
+          logger.info(`Agent finished task ${taskId}`);
+          agent.onCleanup?.();
         }
       } else if (agent.rateLimited) {
         logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);

@@ -3,7 +3,7 @@ pre-commit:
   jobs:
     - name: biome
       glob: '*.{js,ts,jsx,tsx,json}'
-      run: npx biome check --no-errors-on-unmatched {staged_files}
+      run: pnpm biome check --no-errors-on-unmatched {staged_files}
 
     - name: typecheck
       run: pnpm -r --parallel run lint

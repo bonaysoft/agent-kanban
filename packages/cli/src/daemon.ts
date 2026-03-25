@@ -251,13 +251,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         const rejectReason = rejectLog?.detail || "No reason provided";
 
         try {
+          const rejectMessage = `Task rejected. Reason: ${rejectReason}\n\nPlease fix the issues and submit for review again.`;
           await pm.spawnAgent(
             rs.taskId,
             rs.sessionId,
             rs.cwd,
             rs.repoDir,
             rs.branchName,
-            "",
+            rejectMessage,
             agentClient,
             agentEnv,
             privateKey,
@@ -266,12 +267,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
             true,
             () => removeWorktree(rs.repoDir, rs.cwd, rs.branchName),
           );
-
-          await agentClient.sendMessage(rs.taskId, {
-            sender_type: "user",
-            sender_id: "system",
-            content: `Task rejected. Reason: ${rejectReason}\n\nPlease fix the issues and submit for review again.`,
-          });
         } catch {
           logger.warn(`Failed to resume rejected task ${rs.taskId}, releasing`);
           removeWorktree(rs.repoDir, rs.cwd, rs.branchName);
