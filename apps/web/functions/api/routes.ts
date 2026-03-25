@@ -63,6 +63,9 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
   }
 });
 
+// Ping — unauthenticated health check
+api.get("/api/ping", (c) => c.json({ pong: true }));
+
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
