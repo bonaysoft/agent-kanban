@@ -139,15 +139,17 @@ export function MachinesPage() {
                       {machine.last_heartbeat_at ? formatRelative(machine.last_heartbeat_at) : "—"}
                     </span>
                   </div>
-                  {machine.runtimes && (
-                    <div className="flex gap-1 ml-auto">
-                      {machine.runtimes.map((r: string) => (
+                  <div className="flex gap-1 ml-auto">
+                    {machine.runtimes?.length > 0 ? (
+                      machine.runtimes.map((r: string) => (
                         <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">
                           {r}
                         </span>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    ) : (
+                      <span className="text-[10px] font-mono text-content-tertiary">No runtimes</span>
+                    )}
+                  </div>
                 </div>
               </Link>
             ))}
