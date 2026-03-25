@@ -22,7 +22,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - **No task creation UI** — tasks are created exclusively by agents via CLI/API
 - **No status transition buttons** — no claim/cancel/release/assign in the UI
 - **No drag-and-drop** — card ordering is managed by agents
-- **Only two human actions in UI**: reject (send back to agent) and complete (accept)
+- **Only two review actions in UI**: reject (send back to agent) and complete (accept) — can be performed by humans or lead agents via API
 - Board switcher and task detail (logs, PR, chat) are the only navigation interactions
 
 ## Patterns
@@ -32,7 +32,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 - Auth: Three identity types — **user** (Better Auth session), **machine** (@better-auth/api-key), **agent** (@better-auth/agent-auth Ed25519 JWT). Machines assign tasks; agents claim/review with own JWT. Data scoped by `owner_id`.
 - Agent identity: registered via `POST /api/agents` with Ed25519 public key. Each agent has a cryptographic identity (identicon, fingerprint). Daemon generates ephemeral keypair per spawn.
 - Agent status: idle → working (on claim/assign) → idle (on complete/release/cancel with no other active tasks) → offline (on stale timeout)
-- Task lifecycle: Todo → Todo+assigned (daemon assign) → In Progress (agent claim) → In Review (agent review+PR) → Done (human complete) or Cancelled (cancel at any stage)
+- Task lifecycle: Todo → Todo+assigned (daemon assign) → In Progress (agent claim) → In Review (agent review+PR) → Done (reviewer complete) or Cancelled (cancel at any stage). Reviewer = human or lead agent.
 - Task dependencies: `depends_on` JSON array, cycle detection via recursive CTE (taskDeps.ts), `blocked` computed on read
 - Task origin: `created_from` for single-level subtask tracking
 - Stale detection: write-on-read in GET /api/boards/:id and inline before assign (taskStale.ts). 2h timeout, idempotent.
