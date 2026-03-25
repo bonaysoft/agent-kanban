@@ -31,9 +31,9 @@ Parse the user's input:
 ### Step 1: Context
 
 ```bash
-ak board list                  # pick the right board
-ak agent list                  # available agents
-ak repo list                   # registered repos
+ak get board                   # pick the right board
+ak get agent                   # available agents
+ak get repo                    # registered repos
 ```
 
 If there's only one board, use it. Otherwise ask which board.
@@ -43,7 +43,7 @@ If there's only one board, use it. Otherwise ask which board.
 Before creating the task, understand what's involved:
 - Read relevant source files to understand current implementation
 - Identify which files need to change
-- Check for existing related tasks: `ak task list`
+- Check for existing related tasks: `ak get task`
 
 ### Step 3: Create Task
 
@@ -54,7 +54,7 @@ Write a detailed description with:
 - Patterns to follow
 
 ```bash
-ak task create \
+ak create task \
   --board <board-id> \
   --repo <repo-id> \
   --assign-to <agent-id> \
@@ -76,7 +76,7 @@ Report to user: task ID, title, assigned agent.
 
 Poll until the task reaches `in_review`:
 ```bash
-ak task list --format json | jq '.[] | select(.id == "<task-id>") | {status, pr_url}'
+ak get task --format json | jq '.[] | select(.id == "<task-id>") | {status, pr_url}'
 ```
 
 Use `--format json` here because you need to extract fields programmatically.
@@ -84,7 +84,7 @@ Use `--format json` here because you need to extract fields programmatically.
 Poll every 30 seconds. When status becomes `in_review` and `pr_url` is set, proceed to Step 6.
 
 **If status stays `in_progress` for over 3 minutes, investigate immediately — don't just keep polling:**
-1. Check daemon logs: `tail -20 /tmp/ak-daemon.log`
+1. Check daemon logs: `ak logs --no-follow --lines 20`
 2. Check if agent process is alive: `ps aux | grep "claude.*session"`
 3. Check agent session log for what it's doing or where it's stuck
 4. Check child processes: the agent may be stuck on a hook, install, or network call

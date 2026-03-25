@@ -22,8 +22,6 @@ You are a worker agent. Use the `ak` CLI to work on your assigned task.
 |---------|-------------|
 | `ak task claim <id>` | Claim your assigned task (in_progress) |
 | `ak task review <id> --pr-url <url>` | Submit task for review with PR link |
-| `ak task cancel <id>` | Cancel a task |
-| `ak task reject <id> --reason "..."` | Reject task from review back to in_progress |
 
 ### Resource CRUD (kubectl-style)
 

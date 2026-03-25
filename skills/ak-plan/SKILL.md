@@ -34,7 +34,7 @@ Check if this is an **existing project** or a **new product**:
 
 ```bash
 git remote -v 2>/dev/null    # has a repo? → existing project
-ak repo list                 # registered repos
+ak get repo                  # registered repos
 ```
 
 - **Existing project**: has git remote → skip to Phase 1
@@ -57,7 +57,7 @@ git add -A && git commit -m "feat: project scaffold" && git push -u origin main
 
 Register with agent-kanban:
 ```bash
-ak repo add --name <name> --url <url>
+ak create repo --name <name> --url <url>
 ```
 
 The scaffold must contain enough structure for agents to start writing code immediately.
@@ -65,9 +65,9 @@ The scaffold must contain enough structure for agents to start writing code imme
 ## Phase 1: Understand Current State
 
 ```bash
-ak board list                  # existing boards
-ak agent list                  # available agents
-ak repo list                   # registered repos
+ak get board                   # existing boards
+ak get agent                   # available agents
+ak get repo                    # registered repos
 git remote -v                  # repo URL (use this, never guess)
 ```
 
@@ -92,7 +92,7 @@ Present the analysis to the user and confirm scope before creating tasks.
 Use the existing board for the project. One project = one board.
 
 ```bash
-ak board list                  # find the project board
+ak get board                   # find the project board
 # Only create a new board if this is a new product with no board yet
 ```
 
@@ -110,8 +110,8 @@ Create tasks with full specs. For each task:
 
 Create tasks in dependency order so earlier task IDs can be referenced:
 ```bash
-T1=$(ak task create --board $BOARD --title "..." --repo $REPO --priority high --format json | jq -r .id)
-T2=$(ak task create --board $BOARD --title "..." --repo $REPO --depends-on $T1 --format json | jq -r .id)
+T1=$(ak create task --board $BOARD --title "..." --repo $REPO --priority high --format json | jq -r .id)
+T2=$(ak create task --board $BOARD --title "..." --repo $REPO --depends-on $T1 --format json | jq -r .id)
 ```
 
 ### Task Description Quality
@@ -139,17 +139,14 @@ Vague descriptions produce vague code. Be specific.
 
 ## Phase 4: Assign
 
-Match tasks to agents by role/capability:
-```bash
-ak task assign <task-id> --agent <agent-id>
-```
+Tasks should already be assigned via `--assign-to` on create. If not, use `ak update task <id>` or recreate.
 
 Check existing agents. For a typical project you need:
 - **fullstack-developer** or backend + frontend split
 
 Create missing agents if needed:
 ```bash
-ak agent create --template <template> --name "<Name>"
+ak create agent --template <template> --name "<Name>"
 ```
 
 ## Phase 5: Monitor & Merge
@@ -158,7 +155,7 @@ After assigning tasks, enter a monitoring loop until all tasks are done.
 
 ### Poll task status
 ```bash
-ak task list --label <version>
+ak get task --label <version>
 ```
 
 Poll every 30-60 seconds. Track progress and report status changes to the user.

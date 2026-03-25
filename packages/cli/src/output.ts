@@ -116,29 +116,34 @@ export function formatAgent(agent: any): string {
 }
 
 export function formatBoard(board: any): string {
-  const cols = board.columns || [];
-  const maxWidth = 30;
+  const columnOrder = ["todo", "in_progress", "in_review", "done", "cancelled"];
+  const columnLabels: Record<string, string> = {
+    todo: "Todo",
+    in_progress: "In Progress",
+    in_review: "In Review",
+    done: "Done",
+    cancelled: "Cancelled",
+  };
 
-  const header = `${cols.map((c: any) => `│ ${(`${c.name} (${c.tasks.length})`).padEnd(maxWidth)} `).join("")}│`;
-
-  const sep = `${cols.map(() => `├${"─".repeat(maxWidth + 2)}`).join("")}┤`;
-  const topSep = `${cols.map(() => `┌${"─".repeat(maxWidth + 2)}`).join("")}┐`;
-  const botSep = `${cols.map(() => `└${"─".repeat(maxWidth + 2)}`).join("")}┘`;
-
-  const maxRows = Math.max(...cols.map((c: any) => c.tasks.length), 0);
-  const rows: string[] = [];
-
-  for (let i = 0; i < maxRows; i++) {
-    const row = `${cols
-      .map((c: any) => {
-        const task = c.tasks[i];
-        if (!task) return `│ ${"".padEnd(maxWidth)} `;
-        const title = task.title.length > maxWidth - 2 ? `${task.title.slice(0, maxWidth - 5)}...` : task.title;
-        return `│ ${title.padEnd(maxWidth)} `;
-      })
-      .join("")}│`;
-    rows.push(row);
+  const tasks: any[] = board.tasks || [];
+  const grouped: Record<string, any[]> = {};
+  for (const col of columnOrder) grouped[col] = [];
+  for (const t of tasks) {
+    if (grouped[t.status]) grouped[t.status].push(t);
   }
 
-  return [`Board: ${board.name}`, topSep, header, sep, ...rows, botSep].join("\n");
+  const lines: string[] = [`Board: ${board.name} (${tasks.length} tasks)`];
+  for (const key of columnOrder) {
+    const col = grouped[key];
+    if (col.length === 0) continue;
+    lines.push(`\n${columnLabels[key]} (${col.length}):`);
+    for (const t of col) {
+      const agent = t.assigned_to ? ` → ${t.assigned_to.slice(0, 8)}` : "";
+      const blocked = t.blocked ? " BLOCKED" : "";
+      const pr = t.pr_url ? ` PR: ${t.pr_url}` : "";
+      lines.push(`  ${t.id}  ${t.title}${blocked}${agent}${pr}`);
+    }
+  }
+
+  return lines.join("\n");
 }
