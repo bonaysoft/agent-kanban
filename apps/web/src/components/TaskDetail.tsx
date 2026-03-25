@@ -1,10 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth-client";
 import { ActivityLog } from "./ActivityLog";
+import { AgentIdenticon } from "./AgentIdenticon";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
 import { EditableText, Field, FieldLabel } from "./TaskDetailFields";
@@ -13,7 +15,6 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 const TASK_STATUS_LABELS: Record<string, string> = {
   todo: "Todo",
@@ -42,9 +43,10 @@ const PRIORITY_CLASSES: Record<string, string> = {
   low: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
 };
 
-export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
+export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const [chatOpen, setChatOpen] = useState(false);
   const { notes: sseNotes, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
 
   const { data: task, isLoading: loading } = useQuery({
@@ -123,8 +125,16 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     );
   }
 
-  const hasAgent = !!task.assigned_to;
   const repo = repositories.find((r: any) => r.id === task.repository_id);
+
+  const agentDisplay = task.agent_name ? (
+    <button className="flex items-center gap-1.5 cursor-pointer group" onClick={() => setChatOpen(true)} type="button">
+      {task.agent_public_key && <AgentIdenticon publicKey={task.agent_public_key} size={20} />}
+      <span className="font-mono text-[13px] text-accent group-hover:underline">{task.agent_name}</span>
+    </button>
+  ) : (
+    <span className="text-content-tertiary">—</span>
+  );
 
   const detailsContent = (
     <div className="p-5 space-y-4">
@@ -133,12 +143,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
           <FieldLabel>Status</FieldLabel>
           <span className="text-sm font-medium text-accent">{TASK_STATUS_LABELS[task.status] || task.status}</span>
         </div>
-        <Field
-          label="Assigned to"
-          value={
-            task.agent_name ? <span className="font-mono text-[13px]">{task.agent_name}</span> : <span className="text-content-tertiary">—</span>
-          }
-        />
+        <Field label="Assigned to" value={agentDisplay} />
         <Field
           label="Duration"
           value={
@@ -238,70 +243,79 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     </div>
   );
 
-  const chatContent = (
-    <div className="flex flex-col h-[calc(100%-8rem)] p-5">
-      <ChatPanel
-        taskId={taskId}
-        agentId={task.assigned_to}
-        userId={session?.user?.id || null}
-        taskDone={task.status === "done" || task.status === "cancelled"}
-        initialMessages={initialMessages}
-        sseMessages={sseMessages}
-      />
-    </div>
-  );
-
   return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <SheetContent showCloseButton={false} className="overflow-y-auto p-0 gap-0">
-        <SheetTitle className="sr-only">{task.title}</SheetTitle>
-        <SheetDescription className="sr-only">Task detail panel</SheetDescription>
+    <>
+      <Sheet
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        <SheetContent showCloseButton={false} className="overflow-y-auto p-0 gap-0">
+          <SheetTitle className="sr-only">{task.title}</SheetTitle>
+          <SheetDescription className="sr-only">Task detail panel</SheetDescription>
 
-        {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-border">
-          <div className="flex-1 min-w-0 mr-4">
-            <div className="flex items-center gap-2">
-              <EditableText value={task.title} onSave={(v) => handleUpdate("title", v)} className="text-lg font-semibold text-content-primary" />
-              {task.blocked && (
-                <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
-                  Blocked
-                </Badge>
-              )}
+          {/* Header */}
+          <div className="flex items-start justify-between p-5 border-b border-border">
+            <div className="flex-1 min-w-0 mr-4">
+              <div className="flex items-center gap-2">
+                <EditableText value={task.title} onSave={(v) => handleUpdate("title", v)} className="text-lg font-semibold text-content-primary" />
+                {task.blocked && (
+                  <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
+                    Blocked
+                  </Badge>
+                )}
+              </div>
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {repo && (
+                  <Badge variant="secondary" className="text-[11px] font-mono">
+                    {repo.name}
+                  </Badge>
+                )}
+                {task.priority && PRIORITY_CLASSES[task.priority] && (
+                  <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
+                )}
+              </div>
             </div>
-            <div className="flex gap-1.5 mt-2 flex-wrap">
-              {repo && (
-                <Badge variant="secondary" className="text-[11px] font-mono">
-                  {repo.name}
-                </Badge>
-              )}
-              {task.priority && PRIORITY_CLASSES[task.priority] && (
-                <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
-              )}
-            </div>
+            <Button variant="ghost" size="icon-sm" onClick={onClose}>
+              ✕
+            </Button>
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
 
-        {hasAgent ? (
-          <Tabs defaultValue="details">
-            <TabsList variant="line" className="w-full justify-start border-b border-border px-5">
-              <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="chat">Chat</TabsTrigger>
-            </TabsList>
-            <TabsContent value="details">{detailsContent}</TabsContent>
-            <TabsContent value="chat">{chatContent}</TabsContent>
-          </Tabs>
-        ) : (
-          detailsContent
-        )}
-      </SheetContent>
-    </Sheet>
+          {detailsContent}
+        </SheetContent>
+      </Sheet>
+
+      {/* Nested chat drawer — overlays on top of task detail */}
+      {task.assigned_to && (
+        <Sheet open={chatOpen} onOpenChange={(open) => setChatOpen(open)}>
+          <SheetContent showCloseButton={false} className="flex flex-col p-0 gap-0 z-[60]">
+            <SheetTitle className="sr-only">Chat with {task.agent_name}</SheetTitle>
+            <SheetDescription className="sr-only">Chat panel</SheetDescription>
+
+            {/* Chat drawer header */}
+            <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
+              {task.agent_public_key && <AgentIdenticon publicKey={task.agent_public_key} size={28} />}
+              <span className="font-mono text-[13px] text-accent flex-1">{task.agent_name}</span>
+              <Button variant="ghost" size="icon-sm" onClick={() => setChatOpen(false)}>
+                ✕
+              </Button>
+            </div>
+
+            {/* Chat panel body */}
+            <div className="flex flex-col flex-1 min-h-0 p-4">
+              <ChatPanel
+                taskId={taskId}
+                agentId={task.assigned_to}
+                userId={session?.user?.id || null}
+                taskDone={task.status === "done" || task.status === "cancelled"}
+                initialMessages={initialMessages}
+                sseMessages={sseMessages}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+    </>
   );
 }
