@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
-import { formatAgent, formatBoard, formatTask, getFormat, output } from "../output.js";
+import { getFormat, output } from "../output.js";
 import { normalizeResource } from "./resources.js";
 
 async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string> {
