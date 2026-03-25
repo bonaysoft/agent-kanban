@@ -1,3 +1,4 @@
+// Registry updated: 2026-03-25
 import { execSync } from "node:child_process";
 import { claudeProvider } from "./claude.js";
 import { geminiProvider } from "./gemini.js";
