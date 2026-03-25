@@ -57,26 +57,16 @@ Write a detailed description with:
 ak task create \
   --board <board-id> \
   --repo <repo-id> \
+  --assign-to <agent-id> \
   --title "<concise action phrase>" \
   --description "<detailed spec>" \
   --priority <priority> \
   --labels "<comma-separated>"
 ```
 
-**Dependencies**: If this task touches files that overlap with other in-flight tasks, use `--depends-on <task-id>` to serialize execution. Think about conflicts proactively. When creating multiple related tasks, create them all upfront with DAG dependencies — don't wait for one to finish before creating the next.
+**`--assign-to` is mandatory.** Always include it on create. `ak task assign` as a separate command rejects blocked tasks, so never rely on it.
 
-### Step 4: Assign
-
-**Prefer `--assign-to` on create** — this works even for blocked tasks:
-```bash
-ak task create ... --assign-to <agent-id>
-```
-
-If the task was already created without `--assign-to`, use:
-```bash
-ak task assign <task-id> --agent <agent-id>
-```
-Note: `ak task assign` rejects blocked tasks (409). If that happens, use `--assign-to` on create next time, or PATCH the API directly.
+**Dependencies**: If this task touches files that overlap with other in-flight tasks, add `--depends-on <task-id>`. Create all related tasks upfront with DAG dependencies — don't wait for one to finish before creating the next.
 
 Report to user: task ID, title, assigned agent.
 
@@ -91,7 +81,13 @@ ak task list --format json | jq '.[] | select(.id == "<task-id>") | {status, pr_
 
 Use `--format json` here because you need to extract fields programmatically.
 
-Poll every 60–120 seconds. When status becomes `in_review` and `pr_url` is set, proceed to Step 6.
+Poll every 30 seconds. When status becomes `in_review` and `pr_url` is set, proceed to Step 6.
+
+**If status stays `in_progress` for over 3 minutes, investigate immediately — don't just keep polling:**
+1. Check daemon logs: `tail -20 /tmp/ak-daemon.log`
+2. Check if agent process is alive: `ps aux | grep "claude.*session"`
+3. Check agent session log for what it's doing or where it's stuck
+4. Check child processes: the agent may be stuck on a hook, install, or network call
 
 ### Step 6: Review PR
 
@@ -131,11 +127,18 @@ git push --force-with-lease origin <branch>
 
 ## Phase 3: Exception Handling
 
+### Canceling a task
+**Always close the PR first**, then cancel the task. Closing the PR without canceling is fine — PR Monitor will auto-cancel. But canceling without closing the PR leaves orphaned PRs.
+```bash
+gh pr close <pr-number> --repo <owner>/<repo> --delete-branch
+ak task cancel <task-id>
+```
+
 ### Stuck rejected task
-If a rejected task stays `in_progress` without being picked up (daemon may not support reject-resume yet):
-1. Cancel: `ak task cancel <task-id>`
-2. Recreate with original spec + review feedback + reference the existing PR branch so the agent continues, not restarts
-3. Assign to the same agent
+If a rejected task stays `in_progress` without being picked up:
+1. Check daemon logs — is it detecting the rejection?
+2. If daemon is down or not tracking, close the PR, cancel, recreate with original spec + review feedback + reference the existing PR branch
+3. Always use `--assign-to` on recreate
 
 ### CI failure
 Investigate the failure. If it's a source bug, reject with details. If it's flaky CI, re-trigger.
@@ -148,3 +151,6 @@ Investigate the failure. If it's a source bug, reject with details. If it's flak
 - **Check for duplicates** — look at existing tasks before creating
 - **Review = act** — reject or merge based on your review, don't ask the user for permission
 - **Think about dependencies** — tasks touching shared files must use `--depends-on`
+- **Always `--assign-to` on create** — never create a task without assigning an agent
+- **Close PR before cancel** — never cancel a task without closing its PR first
+- **Don't sleep-poll blindly** — if monitoring takes too long, investigate daemon logs and agent processes immediately
