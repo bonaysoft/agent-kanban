@@ -2,7 +2,7 @@ import { ApiError, type MachineClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { ProcessManager } from "./processManager.js";
-import { ensureCloned, prepareRepo, repoDir } from "./repoOps.js";
+import { ensureCloned, prepareRepo, removeWorktree, repoDir } from "./repoOps.js";
 import { loadSessions, removeSession } from "./savedSessions.js";
 import { ensureLefthookTask } from "./skillManager.js";
 import type { TaskRunner } from "./taskRunner.js";
@@ -95,6 +95,23 @@ export class Scheduler {
   }
 
   private async resumeSavedSessions(): Promise<void> {
+    // Clean up orphaned active sessions (crash recovery)
+    for (const s of loadSessions("active")) {
+      if (this.pm.hasTask(s.taskId)) continue;
+      // Session marked active but no process running — stale from crash
+      const task = (await this.client.getTask(s.taskId)) as any;
+      if (!task || task.status === "done" || task.status === "cancelled") {
+        removeWorktree(s.repoDir, s.cwd, s.branchName);
+        removeSession(s.taskId);
+      } else {
+        // Task still viable — release and let it be re-dispatched
+        await this.client.releaseTask(s.taskId).catch(() => {});
+        removeWorktree(s.repoDir, s.cwd, s.branchName);
+        removeSession(s.taskId);
+        logger.info(`Cleaned up orphaned session for task ${s.taskId}`);
+      }
+    }
+
     // Resume rate-limited sessions (only when not paused)
     if (!this.paused) {
       for (const s of loadSessions("rate_limited")) {
