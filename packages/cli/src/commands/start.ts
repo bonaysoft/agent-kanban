@@ -3,9 +3,6 @@ import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
 import { startDaemon } from "../daemon.js";
 import { clearLinks } from "../links.js";
-import { createLogger } from "../logger.js";
-
-const logger = createLogger("start");
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -37,7 +34,7 @@ export function registerStartCommand(program: Command) {
             `This machine is already registered (${machineId}) with a different API key.\nSwitch to the new key and re-register? [y/N] `,
           );
           if (!yes) {
-            logger.info("Aborted.");
+            console.log("Aborted.");
             process.exit(0);
           }
           deleteConfigValue("machine-id");
@@ -47,7 +44,7 @@ export function registerStartCommand(program: Command) {
       }
 
       if (!getConfigValue("api-url") || !getConfigValue("api-key")) {
-        logger.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
+        console.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
         process.exit(1);
       }
 

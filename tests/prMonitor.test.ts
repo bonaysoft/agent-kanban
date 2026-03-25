@@ -6,6 +6,17 @@ vi.mock("child_process", () => ({
   execSync: vi.fn(),
 }));
 
+// Mock pino logger so output goes through console with [LEVEL] prefixes
+vi.mock("../packages/cli/src/logger.js", () => ({
+  createLogger: () => ({
+    info: (msg: string) => console.log(`[INFO] ${msg}`),
+    warn: (msg: string) => console.log(`[WARN] ${msg}`),
+    error: (msg: string) => console.error(`[ERROR] ${msg}`),
+    debug: (msg: string) => console.log(`[DEBUG] ${msg}`),
+    fatal: (msg: string) => console.error(`[FATAL] ${msg}`),
+  }),
+}));
+
 // Mock fs so saveTrackedTasks/loadTrackedTasks never touches disk
 vi.mock("fs", () => ({
   readFileSync: vi.fn().mockImplementation(() => {
@@ -83,7 +94,7 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
 
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCheck(monitor);
 
     expect(spy).toHaveBeenCalledWith(expect.stringContaining("[WARN]"));

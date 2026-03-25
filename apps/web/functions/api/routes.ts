@@ -48,7 +48,7 @@ api.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: { code: err.message, message: err.message } }, err.status);
   }
-  logger.error(`${c.req.method} ${c.req.path} 500 ${err.message}`);
+  logger.error(`${c.req.method} ${c.req.path} 500 ${err.message} ${err.stack}`);
   return c.json({ error: { code: "INTERNAL_ERROR", message: err.message || "Internal server error" } }, 500);
 });
 
@@ -58,7 +58,7 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
     const auth = createAuth(c.env);
     return await auth.handler(c.req.raw);
   } catch (err: any) {
-    logger.error(`better-auth error: ${err.message}`);
+    logger.error(`better-auth error: ${err.message} ${err.stack}`);
     return c.json({ error: { code: "AUTH_ERROR", message: err.message } }, 500);
   }
 });
