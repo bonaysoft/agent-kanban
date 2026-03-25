@@ -37,6 +37,7 @@ export interface AgentProcess {
   privateKeyJwk: JsonWebKey;
   timeoutTimer?: ReturnType<typeof setTimeout>;
   rateLimited?: boolean;
+  resultReceived?: boolean;
   onCleanup?: () => void;
 }
 
@@ -94,7 +95,7 @@ export class ProcessManager {
     onCleanup?: () => void,
   ): Promise<void> {
     const args = resume
-      ? ["--resume", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions", "--session-id", sessionId]
+      ? ["--resume", sessionId, "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions"]
       : [
           "--print",
           "--verbose",
@@ -207,22 +208,16 @@ export class ProcessManager {
 
       await this.closeSession(agentClient);
 
-      if (code === 0) {
-        const task = (await this.client.getTask(taskId)) as any;
-        if (task?.status === "in_review") {
-          saveReviewSession({
-            taskId,
-            sessionId,
-            cwd: agent.cwd,
-            repoDir: agent.repoDir,
-            branchName: agent.branchName,
-            agentId: agentClient.getAgentId(),
-            privateKeyJwk: agent.privateKeyJwk,
-          });
-          logger.info(`Agent submitted task ${taskId} for review, preserving worktree`);
-        } else {
+      if (agent.resultReceived) {
+        // Result event already handled save/cleanup — just clean up if not in review
+        if (!agent.onCleanup) {
           logger.info(`Agent finished task ${taskId}`);
-          agent.onCleanup?.();
+        } else {
+          const task = (await this.client.getTask(taskId)) as any;
+          if (task?.status !== "in_review") {
+            logger.info(`Agent finished task ${taskId}`);
+            agent.onCleanup();
+          }
         }
       } else if (agent.rateLimited) {
         logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
@@ -327,7 +322,7 @@ export class ProcessManager {
     return { code, detail: String(detail) };
   }
 
-  private handleEvent(taskId: string, _sessionId: string, event: any, agentClient: AgentClient): void {
+  private async handleEvent(taskId: string, sessionId: string, event: any, agentClient: AgentClient): Promise<void> {
     // rate_limit_event — structured rate limit info from Claude CLI
     if (event.type === "rate_limit_event") {
       const info = event.rate_limit_info;
@@ -382,6 +377,27 @@ export class ProcessManager {
           cost_micro_usd: Math.round(cost * 1_000_000),
         })
         .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
+
+      // Agent is done — save review session if needed, then kill process
+      // (claude CLI hangs after completion due to MCP server child processes)
+      const agent = this.agents.get(taskId);
+      if (agent) {
+        agent.resultReceived = true;
+        const task = (await this.client.getTask(taskId)) as any;
+        if (task?.status === "in_review") {
+          saveReviewSession({
+            taskId,
+            sessionId,
+            cwd: agent.cwd,
+            repoDir: agent.repoDir,
+            branchName: agent.branchName,
+            agentId: agentClient.getAgentId(),
+            privateKeyJwk: agent.privateKeyJwk,
+          });
+          logger.info(`Task ${taskId} in review, preserving worktree`);
+        }
+        this.terminateProcess(agent.process);
+      }
     }
   }
 
