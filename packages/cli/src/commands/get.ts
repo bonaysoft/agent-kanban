@@ -11,7 +11,7 @@ import {
   getFormat,
   output,
 } from "../output.js";
-import { normalizeResource, SUPPORTED_RESOURCES } from "./resources.js";
+import { normalizeResource } from "./resources.js";
 
 export function registerGetCommand(program: Command) {
   program
