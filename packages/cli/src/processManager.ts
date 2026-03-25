@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { AgentClient, ApiClient } from "./client.js";
 import { createLogger } from "./logger.js";
+import { saveReviewSession } from "./reviewSessions.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
 
 const logger = createLogger("process");
@@ -207,8 +208,22 @@ export class ProcessManager {
       await this.closeSession(agentClient);
 
       if (code === 0) {
-        logger.info(`Agent finished task ${taskId}`);
-        agent.onCleanup?.();
+        const task = (await this.client.getTask(taskId)) as any;
+        if (task?.status === "in_review") {
+          saveReviewSession({
+            taskId,
+            sessionId,
+            cwd: agent.cwd,
+            repoDir: agent.repoDir,
+            branchName: agent.branchName,
+            agentId: agentClient.getAgentId(),
+            privateKeyJwk: agent.privateKeyJwk,
+          });
+          logger.info(`Agent submitted task ${taskId} for review, preserving worktree`);
+        } else {
+          logger.info(`Agent finished task ${taskId}`);
+          agent.onCleanup?.();
+        }
       } else if (agent.rateLimited) {
         logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
         this.suspended.push({
