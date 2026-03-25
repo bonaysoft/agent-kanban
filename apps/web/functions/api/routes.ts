@@ -52,6 +52,9 @@ api.onError((err, c) => {
   return c.json({ error: { code: "INTERNAL_ERROR", message: err.message || "Internal server error" } }, 500);
 });
 
+// Health check — no auth required
+api.get("/api/ping", (c) => c.json({ pong: true }));
+
 // Better Auth handler — must be before auth middleware
 api.on(["GET", "POST"], "/api/auth/**", async (c) => {
   try {
