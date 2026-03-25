@@ -64,7 +64,7 @@ ak task create \
   --labels "<comma-separated>"
 ```
 
-**`--assign-to` is mandatory.** Always include it on create. `ak task assign` as a separate command rejects blocked tasks, so never rely on it.
+**`--assign-to` is mandatory.** Always include it on create.
 
 **Dependencies**: If this task touches files that overlap with other in-flight tasks, add `--depends-on <task-id>`. Create all related tasks upfront with DAG dependencies — don't wait for one to finish before creating the next.
 
