@@ -473,10 +473,16 @@ function installSkill(repoDir: string, source: string, skill: string): boolean {
   const skillFile = join(repoDir, `.claude/skills/${skill}/SKILL.md`);
   if (!existsSync(skillFile)) {
     logger.info(`Installing skill "${skill}" from ${source} in ${repoDir}`);
-    execSync(`npx skills add ${source} --skill ${skill} --agent claude-code --agent universal -y`, {
-      cwd: repoDir,
-      stdio: "pipe",
-    });
+    try {
+      execSync(`npx skills add ${source} --skill ${skill} --agent claude-code --agent universal -y`, {
+        cwd: repoDir,
+        stdio: "pipe",
+      });
+    } catch (err: any) {
+      const stderr = err.stderr?.toString() || err.message;
+      logger.warn(`Failed to install skill "${skill}" from ${source}: ${stderr}`);
+      return false;
+    }
     return true;
   }
   return false;
@@ -497,7 +503,8 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
       }
       const source = entry.slice(0, atIdx);
       const skill = entry.slice(atIdx + 1);
-      if (installSkill(worktreeDir, source, skill)) changed = true;
+      const installed = installSkill(worktreeDir, source, skill);
+      if (installed) changed = true;
     }
 
     if (!changed) {

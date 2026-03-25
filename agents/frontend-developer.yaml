@@ -22,6 +22,6 @@ model: claude-sonnet-4-6
 skills:
   - obra/superpowers@finishing-a-development-branch
   - obra/superpowers@verification-before-completion
-  - vercel-labs/agent-skills@react-best-practices
-  - vercel-labs/agent-skills@composition-patterns
+  - vercel-labs/agent-skills@vercel-react-best-practices
+  - vercel-labs/agent-skills@vercel-composition-patterns
   - wshobson/agents@accessibility-compliance
