@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
@@ -38,6 +38,17 @@ function rotateLogs(): void {
 
   while (archives.length > MAX_LOG_ARCHIVES) {
     unlinkSync(join(LOGS_DIR, archives.shift()!));
+  }
+}
+
+function readDaemonPid(): number | null {
+  if (!existsSync(PID_FILE)) return null;
+  const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
+  try {
+    process.kill(pid, 0);
+    return pid;
+  } catch {
+    return null;
   }
 }
 
@@ -93,16 +104,12 @@ export function registerStartCommand(program: Command) {
       }
 
       // Check if already running
-      if (existsSync(PID_FILE)) {
-        const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
-        try {
-          process.kill(pid, 0);
-          console.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
-          process.exit(1);
-        } catch {
-          unlinkSync(PID_FILE);
-        }
+      const existingPid = readDaemonPid();
+      if (existingPid) {
+        console.error(`Daemon already running (PID ${existingPid}). Stop it first or remove ${PID_FILE}`);
+        process.exit(1);
       }
+      if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
 
       // Rotate logs
       rotateLogs();
@@ -136,5 +143,71 @@ export function registerStartCommand(program: Command) {
 
       console.log(`Daemon started (PID ${child.pid})`);
       process.exit(0);
+    });
+}
+
+export function registerStopCommand(program: Command) {
+  program
+    .command("stop")
+    .description("Stop the Machine daemon")
+    .action(() => {
+      const pid = readDaemonPid();
+      if (!pid) {
+        console.log("Daemon is not running");
+        return;
+      }
+      process.kill(pid, "SIGTERM");
+      console.log(`Daemon stopped (PID ${pid})`);
+    });
+}
+
+export function registerStatusCommand(program: Command) {
+  program
+    .command("status")
+    .description("Show Machine daemon status")
+    .action(() => {
+      const pid = readDaemonPid();
+      if (!pid) {
+        console.log("Daemon is not running");
+        return;
+      }
+
+      let uptime = "";
+      try {
+        const stat = statSync(PID_FILE);
+        const seconds = Math.floor((Date.now() - stat.mtimeMs) / 1000);
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        const parts: string[] = [];
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        parts.push(`${secs}s`);
+        uptime = ` — uptime ${parts.join(" ")}`;
+      } catch {
+        // PID file stat unavailable, skip uptime
+      }
+
+      console.log(`Daemon is running (PID ${pid})${uptime}`);
+    });
+}
+
+export function registerLogsCommand(program: Command) {
+  program
+    .command("logs")
+    .description("Show Machine daemon logs")
+    .option("--lines <n>", "Number of lines to show", "50")
+    .option("--no-follow", "Print and exit without streaming")
+    .action((opts) => {
+      const logFile = join(LOGS_DIR, "daemon.log");
+      if (!existsSync(logFile)) {
+        console.log("No daemon logs found");
+        return;
+      }
+
+      const args = opts.follow ? ["-n", String(opts.lines), "-f", logFile] : ["-n", String(opts.lines), logFile];
+
+      const tail = spawn("tail", args, { stdio: "inherit" });
+      tail.on("exit", (code) => process.exit(code ?? 0));
     });
 }
