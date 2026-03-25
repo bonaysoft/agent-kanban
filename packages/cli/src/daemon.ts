@@ -7,7 +7,7 @@ import { AgentClient, ApiError, MachineClient } from "./client.js";
 import { getConfigValue, PID_FILE, setConfigValue } from "./config.js";
 import { findPathForRepository, getLinks, setLink } from "./links.js";
 import { createLogger } from "./logger.js";
-import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
+import { REPOS_DIR, SESSION_PIDS_FILE, STATE_DIR, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
 import { getAvailableProviders, getProvider } from "./providers/registry.js";
@@ -48,6 +48,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       unlinkSync(PID_FILE);
     }
   }
+  mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(PID_FILE, String(process.pid));
 
   // Preflight: gh must be installed and authenticated
