@@ -8,7 +8,6 @@ import { SubtaskList } from "./SubtaskList";
 import { EditableText, EditableTextarea, Field, FieldLabel } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Separator } from "./ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
@@ -34,7 +33,12 @@ interface TaskDetailProps {
   onAgentClick?: (agentId: string) => void;
 }
 
-const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
+const PRIORITY_CLASSES: Record<string, string> = {
+  urgent: "bg-red-500/10 text-red-400 border-red-500/20",
+  high: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  medium: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  low: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+};
 
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
@@ -118,6 +122,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
   }
 
   const hasAgent = !!task.assigned_to;
+  const repo = repositories.find((r: any) => r.id === task.repository_id);
 
   const detailsContent = (
     <div className="p-5 space-y-4">
@@ -261,32 +266,14 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
               )}
             </div>
             <div className="flex gap-1.5 mt-2 flex-wrap">
-              <Select value={task.repository_id || "__none__"} onValueChange={(v) => handleUpdate("repository_id", v === "__none__" ? null : v)}>
-                <SelectTrigger size="sm" className="text-[11px] font-mono h-6">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">no repo</SelectItem>
-                  {repositories.map((r: any) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={task.priority || "__none__"} onValueChange={(v) => handleUpdate("priority", v === "__none__" ? null : v)}>
-                <SelectTrigger size="sm" className="text-[11px] font-mono h-6">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">no priority</SelectItem>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {repo && (
+                <Badge variant="secondary" className="text-[11px] font-mono">
+                  {repo.name}
+                </Badge>
+              )}
+              {task.priority && PRIORITY_CLASSES[task.priority] && (
+                <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
+              )}
             </div>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose}>
