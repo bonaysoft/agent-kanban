@@ -94,29 +94,12 @@ export class ProcessManager {
     resume?: boolean,
     onCleanup?: () => void,
   ): Promise<void> {
-    const args = resume
-      ? [
-          "--resume",
-          sessionId,
-          "--print",
-          "--verbose",
-          "--input-format",
-          "stream-json",
-          "--output-format",
-          "stream-json",
-          "--dangerously-skip-permissions",
-        ]
-      : [
-          "--print",
-          "--verbose",
-          "--input-format",
-          "stream-json",
-          "--output-format",
-          "stream-json",
-          "--dangerously-skip-permissions",
-          "--session-id",
-          sessionId,
-        ];
+    const args = ["--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--dangerously-skip-permissions"];
+    if (resume) {
+      args.unshift("--resume", sessionId);
+    } else {
+      args.push("--session-id", sessionId);
+    }
     if (!resume && systemPromptFile) {
       args.push("--system-prompt-file", systemPromptFile);
     }
@@ -162,27 +145,16 @@ export class ProcessManager {
       }, this.taskTimeoutMs);
     }
 
-    if (resume) {
-      proc.on("spawn", () => {
-        if (taskContext) {
-          const payload = JSON.stringify({
-            type: "user",
-            message: { role: "user", content: taskContext },
-          });
-          proc.stdin?.write(`${payload}\n`);
-        }
-        proc.stdin?.end();
-      });
-    } else {
-      proc.on("spawn", () => {
+    proc.on("spawn", () => {
+      if (taskContext) {
         const payload = JSON.stringify({
           type: "user",
           message: { role: "user", content: taskContext },
         });
         proc.stdin?.write(`${payload}\n`);
-        proc.stdin?.end();
-      });
-    }
+      }
+      proc.stdin?.end();
+    });
 
     let stdoutBuffer = "";
     proc.stdout?.on("data", (chunk: Buffer) => {
