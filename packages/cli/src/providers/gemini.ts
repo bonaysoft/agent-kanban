@@ -4,6 +4,16 @@ import type { AgentEvent, AgentProvider, SpawnOpts } from "./types.js";
 
 const logger = createLogger("gemini");
 
+/** Per 1M tokens, paid tier pricing */
+const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
+  "gemini-2.5-flash": { input: 0.3, output: 2.5 },
+  "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
+  "gemini-2.5-pro": { input: 1.25, output: 10.0 },
+  "gemini-3-flash-preview": { input: 0.5, output: 3.0 },
+  "gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
+  "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.5 },
+};
+
 function readSystemPrompt(filePath?: string): string {
   if (!filePath) return "";
   try {
@@ -49,10 +59,17 @@ export const geminiProvider: AgentProvider = {
     }
 
     if (event.type === "result") {
-      return {
-        type: "result",
-        usage: event.stats,
-      };
+      let cost = 0;
+      if (event.stats?.models) {
+        for (const [model, usage] of Object.entries(event.stats.models)) {
+          const pricing = GEMINI_PRICING[model];
+          if (pricing) {
+            const u = usage as { input_tokens: number; output_tokens: number };
+            cost += (u.input_tokens * pricing.input + u.output_tokens * pricing.output) / 1_000_000;
+          }
+        }
+      }
+      return { type: "result", cost, usage: event.stats };
     }
 
     if (event.type === "error" || event.status === "error") {

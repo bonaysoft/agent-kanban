@@ -620,11 +620,49 @@ describe("geminiProvider.parseEvent — result", () => {
     }
   });
 
-  it("does not include a cost field (Gemini does not report cost)", () => {
+  it("returns zero cost when no model breakdown is present", () => {
     const raw = JSON.stringify({ type: "result", status: "success", stats: {} });
     const event = geminiProvider.parseEvent(raw);
     if (event?.type === "result") {
-      expect(event.cost).toBeUndefined();
+      expect(event.cost).toBe(0);
+    }
+  });
+
+  it("calculates cost from per-model token breakdown", () => {
+    const raw = JSON.stringify({
+      type: "result",
+      stats: {
+        models: {
+          "gemini-2.5-flash-lite": { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+          "gemini-2.5-pro": { input_tokens: 500_000, output_tokens: 200_000 },
+        },
+      },
+    });
+    const event = geminiProvider.parseEvent(raw);
+    // flash-lite: 1M * 0.10/1M + 1M * 0.40/1M = 0.50
+    // pro: 500K * 1.25/1M + 200K * 10.00/1M = 0.625 + 2.00 = 2.625
+    // total: 3.125
+    expect(event?.type).toBe("result");
+    if (event?.type === "result") {
+      expect(event.cost).toBeCloseTo(3.125, 6);
+    }
+  });
+
+  it("skips unknown models in cost calculation", () => {
+    const raw = JSON.stringify({
+      type: "result",
+      stats: {
+        models: {
+          "gemini-unknown-model": { input_tokens: 1000, output_tokens: 1000 },
+          "gemini-2.5-flash": { input_tokens: 1_000_000, output_tokens: 0 },
+        },
+      },
+    });
+    const event = geminiProvider.parseEvent(raw);
+    // only flash counted: 1M * 0.30/1M = 0.30
+    expect(event?.type).toBe("result");
+    if (event?.type === "result") {
+      expect(event.cost).toBeCloseTo(0.3, 6);
     }
   });
 });
