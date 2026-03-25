@@ -1,7 +1,7 @@
 import { fetchTemplate } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
-import { formatAgent, formatBoard, getFormat, output } from "../output.js";
+import { getFormat, output } from "../output.js";
 import { normalizeResource } from "./resources.js";
 
 function isUrl(value: string): boolean {
@@ -126,7 +126,7 @@ async function createNote(taskId: string, message: string) {
 }
 
 export function registerCreateCommand(program: Command) {
-  const cmd = program
+  program
     .command("create <resource> [message]")
     .description("Create a resource (board, task, agent, repo, note)")
     .option("--name <name>", "Resource name (board, agent, repo)")
