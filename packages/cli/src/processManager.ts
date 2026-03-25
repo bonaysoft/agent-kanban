@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { AgentClient, ApiClient } from "./client.js";
 import { createLogger } from "./logger.js";
+import type { AgentEvent, AgentProvider } from "./providers/types.js";
 import { saveReviewSession } from "./reviewSessions.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
 
@@ -41,8 +42,6 @@ export interface AgentProcess {
   onCleanup?: () => void;
 }
 
-const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
-
 export interface ProcessManagerCallbacks {
   onSlotFreed: () => void;
   onRateLimited: (resetAt: string) => void;
@@ -53,17 +52,17 @@ export interface ProcessManagerCallbacks {
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
   private suspended: SuspendedSession[] = [];
+  private provider: AgentProvider;
   private client: ApiClient;
-  private agentCli: string;
   private onSlotFreed: () => void;
   private onRateLimited: (resetAt: string) => void;
   private onProcessStarted?: (sessionId: string, pid: number) => void;
   private onProcessExited?: (sessionId: string) => void;
   private taskTimeoutMs: number;
 
-  constructor(client: ApiClient, agentCli: string, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
+  constructor(provider: AgentProvider, client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
+    this.provider = provider;
     this.client = client;
-    this.agentCli = agentCli;
     this.onSlotFreed = callbacks.onSlotFreed;
     this.onRateLimited = callbacks.onRateLimited;
     this.onProcessStarted = callbacks.onProcessStarted;
@@ -94,31 +93,23 @@ export class ProcessManager {
     resume?: boolean,
     onCleanup?: () => void,
   ): Promise<void> {
-    const args = ["--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--dangerously-skip-permissions"];
-    if (resume) {
-      args.unshift("--resume", sessionId);
-    } else {
-      args.push("--session-id", sessionId);
-    }
-    if (!resume && systemPromptFile) {
-      args.push("--system-prompt-file", systemPromptFile);
-    }
+    const args = resume ? this.provider.buildResumeArgs(sessionId) : this.provider.buildArgs({ sessionId, systemPromptFile });
 
     let proc: ChildProcess;
     try {
-      proc = spawn(this.agentCli, args, {
+      proc = spawn(this.provider.command, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...agentEnv },
       });
     } catch (err: any) {
-      logger.error(`Failed to spawn ${this.agentCli}: ${err.message}`);
+      logger.error(`Failed to spawn ${this.provider.command}: ${err.message}`);
       await this.releaseTask(taskId);
       return;
     }
 
     if (!proc.pid) {
-      logger.error(`${this.agentCli} not found or failed to start`);
+      logger.error(`${this.provider.command} not found or failed to start`);
       await this.releaseTask(taskId);
       return;
     }
@@ -147,11 +138,7 @@ export class ProcessManager {
 
     proc.on("spawn", () => {
       if (taskContext) {
-        const payload = JSON.stringify({
-          type: "user",
-          message: { role: "user", content: taskContext },
-        });
-        proc.stdin?.write(`${payload}\n`);
+        proc.stdin?.write(`${this.provider.buildInput(taskContext)}\n`);
       }
       proc.stdin?.end();
     });
@@ -163,12 +150,8 @@ export class ProcessManager {
       stdoutBuffer = lines.pop() || "";
       for (const line of lines) {
         if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          this.handleEvent(taskId, sessionId, event, agentClient);
-        } catch {
-          /* non-JSON line, skip */
-        }
+        const event = this.provider.parseEvent(line);
+        if (event) this.handleEvent(taskId, sessionId, event, agentClient);
       }
     });
 
@@ -187,12 +170,8 @@ export class ProcessManager {
       if (!this.agents.has(taskId)) return;
 
       if (stdoutBuffer.trim()) {
-        try {
-          const event = JSON.parse(stdoutBuffer);
-          this.handleEvent(taskId, sessionId, event, agentClient);
-        } catch {
-          /* skip */
-        }
+        const event = this.provider.parseEvent(stdoutBuffer);
+        if (event) this.handleEvent(taskId, sessionId, event, agentClient);
       }
 
       this.agents.delete(taskId);
@@ -256,7 +235,7 @@ export class ProcessManager {
       this.onSlotFreed();
     });
 
-    logger.info(`Spawned ${this.agentCli} (session=${sessionId}) for task ${taskId} in ${cwd}`);
+    logger.info(`Spawned ${this.provider.command} (session=${sessionId}) for task ${taskId} in ${cwd}`);
   }
 
   async killTask(taskId: string): Promise<void> {
@@ -298,106 +277,66 @@ export class ProcessManager {
     }
   }
 
-  /** Detect error events — CLI has multiple shapes:
-   *  1. { type: "error", error: { type: "rate_limit_error", message: "..." } }
-   *  2. { type: "assistant", error: "unknown", message: { content: [{ type: "text", text: "..." }] } }
-   *  3. { error: "some string" }  (top-level error without type)
-   */
-  private detectError(event: any): { code?: string; detail: string } | null {
-    if (event.type !== "error" && !event.error) return null;
-
-    let code: string | undefined;
-    if (event.error && typeof event.error === "object") {
-      code = event.error.type;
-    }
-
-    let detail: string | undefined;
-    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
-      const textBlock = event.message.content.find((e: any) => e.type === "text" && e.text);
-      if (textBlock?.text) detail = textBlock.text;
-    }
-    if (!detail) {
-      detail = event.error?.message || (event.error !== "unknown" ? event.error : undefined) || event.message || JSON.stringify(event);
-    }
-
-    return { code, detail: String(detail) };
-  }
-
-  private async handleEvent(taskId: string, sessionId: string, event: any, agentClient: AgentClient): Promise<void> {
-    // rate_limit_event — structured rate limit info from Claude CLI
-    if (event.type === "rate_limit_event") {
-      const info = event.rate_limit_info;
-      if (info && info.status !== "allowed") {
-        const resetAt = new Date(info.resetsAt * 1000).toISOString();
-        logger.warn(`Claude rate limited (${info.rateLimitType}, status=${info.status}) on task ${taskId}, resets at ${resetAt}`);
+  private async handleEvent(taskId: string, sessionId: string, event: AgentEvent, agentClient: AgentClient): Promise<void> {
+    switch (event.type) {
+      case "rate_limit": {
+        logger.warn(`Rate limited on task ${taskId}, resets at ${event.resetAt}`);
         const agent = this.agents.get(taskId);
         if (agent) agent.rateLimited = true;
-        this.onRateLimited(resetAt);
+        this.onRateLimited(event.resetAt);
+        break;
       }
-      return;
-    }
 
-    // Error detection (covers all CLI error shapes)
-    const err = this.detectError(event);
-    if (err) {
-      if (err.code && RATE_LIMIT_CODES.has(err.code)) {
-        logger.warn(`Claude error rate limited (${err.code}) on task ${taskId}`);
+      case "error": {
+        logger.warn(`Agent error on task ${taskId}: ${event.detail}`);
+        break;
+      }
+
+      case "message": {
+        agentClient
+          .sendMessage(taskId, {
+            sender_type: "agent",
+            sender_id: agentClient.getAgentId(),
+            content: event.text,
+          })
+          .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
+        break;
+      }
+
+      case "result": {
+        const cost = event.cost || 0;
+        const usage = event.usage || {};
+        logger.info(`Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
+        agentClient
+          .updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
+            input_tokens: usage.input_tokens || 0,
+            output_tokens: usage.output_tokens || 0,
+            cache_read_tokens: usage.cache_read_input_tokens || 0,
+            cache_creation_tokens: usage.cache_creation_input_tokens || 0,
+            cost_micro_usd: Math.round(cost * 1_000_000),
+          })
+          .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
+
+        // Agent is done — save review session if needed, then kill process
         const agent = this.agents.get(taskId);
-        if (agent) agent.rateLimited = true;
-        // resetAt already captured from preceding rate_limit_event; fire again as fallback
-        this.onRateLimited(new Date(Date.now() + 60 * 60 * 1000).toISOString());
-      } else {
-        logger.warn(`Claude error on task ${taskId}: ${err.detail}`);
-      }
-      return;
-    }
-
-    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
-      for (const block of event.message.content) {
-        if (block.type === "text" && block.text) {
-          agentClient
-            .sendMessage(taskId, {
-              sender_type: "agent",
-              sender_id: agentClient.getAgentId(),
-              content: block.text,
-            })
-            .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
+        if (agent) {
+          agent.resultReceived = true;
+          const task = (await this.client.getTask(taskId)) as any;
+          if (task?.status === "in_review") {
+            saveReviewSession({
+              taskId,
+              sessionId,
+              cwd: agent.cwd,
+              repoDir: agent.repoDir,
+              branchName: agent.branchName,
+              agentId: agentClient.getAgentId(),
+              privateKeyJwk: agent.privateKeyJwk,
+            });
+            logger.info(`Task ${taskId} in review, preserving worktree`);
+          }
+          this.terminateProcess(agent.process);
         }
-      }
-    }
-    if (event.type === "result") {
-      const cost = event.total_cost_usd || 0;
-      const usage = event.usage || {};
-      logger.info(`Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
-      agentClient
-        .updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
-          input_tokens: usage.input_tokens || 0,
-          output_tokens: usage.output_tokens || 0,
-          cache_read_tokens: usage.cache_read_input_tokens || 0,
-          cache_creation_tokens: usage.cache_creation_input_tokens || 0,
-          cost_micro_usd: Math.round(cost * 1_000_000),
-        })
-        .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
-
-      // Agent is done — save review session if needed, then kill process
-      // (claude CLI hangs after completion due to MCP server child processes)
-      const agent = this.agents.get(taskId);
-      if (agent) {
-        agent.resultReceived = true;
-        const task = (await this.client.getTask(taskId)) as any;
-        if (task?.status === "in_review") {
-          saveReviewSession({
-            taskId,
-            sessionId,
-            cwd: agent.cwd,
-            repoDir: agent.repoDir,
-            branchName: agent.branchName,
-            agentId: agentClient.getAgentId(),
-            privateKeyJwk: agent.privateKeyJwk,
-          });
-          logger.info(`Task ${taskId} in review, preserving worktree`);
-        }
-        this.terminateProcess(agent.process);
+        break;
       }
     }
   }

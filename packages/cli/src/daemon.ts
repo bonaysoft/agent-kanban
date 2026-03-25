@@ -10,9 +10,10 @@ import { createLogger } from "./logger.js";
 import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
+import { getAvailableProviders, getProvider } from "./providers/registry.js";
+import type { AgentProvider } from "./providers/types.js";
 import { loadReviewSessions, removeReviewSession } from "./reviewSessions.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
-import { getUsage } from "./usage.js";
 
 const logger = createLogger("daemon");
 
@@ -25,7 +26,9 @@ const logger = createLogger("daemon");
 
 export interface DaemonOptions {
   maxConcurrent: number;
-  agentCli: string;
+  provider?: string;
+  /** @deprecated Use --provider instead. Maps to provider resolution. */
+  agentCli?: string;
   pollInterval?: number;
   taskTimeout?: number; // ms, default 2h
 }
@@ -53,6 +56,26 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     process.exit(1);
   }
 
+  // Resolve provider
+  let provider: AgentProvider;
+  if (opts.provider) {
+    provider = getProvider(opts.provider);
+  } else if (opts.agentCli) {
+    logger.warn("--agent-cli is deprecated, use --provider instead");
+    // Best-effort: match by command name
+    const available = getAvailableProviders();
+    const match = available.find((p) => p.command === opts.agentCli);
+    provider = match ?? getProvider("claude");
+  } else {
+    const available = getAvailableProviders();
+    if (available.length === 0) {
+      removePidFile();
+      logger.fatal("No agent providers found. Install claude, codex, or gemini CLI.");
+      process.exit(1);
+    }
+    provider = available[0];
+  }
+
   const client = new MachineClient();
   const links = getLinks();
   const linkedRepoCount = Object.keys(links).length;
@@ -68,8 +91,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   let resumeTargetMs = 0;
 
   const pm = new ProcessManager(
+    provider,
     client,
-    opts.agentCli,
     {
       onSlotFreed: () => schedulePoll(baseInterval),
       onRateLimited: pauseForRateLimit,
@@ -105,7 +128,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
+  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, provider=${provider.label})`);
 
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
@@ -126,12 +149,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
-    const usageInfo = await getUsage();
+    const usageInfo = provider.getUsage ? await provider.getUsage() : null;
     client
       .heartbeat(machineId!, {
         version: machineInfo.version,
         runtimes: machineInfo.runtimes,
-        usage_info: usageInfo,
+        ...(usageInfo && { usage_info: usageInfo }),
       })
       .catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
@@ -648,24 +671,6 @@ function removePidFile() {
   }
 }
 
-function detectRuntimes(): string[] {
-  const commands: [string, string][] = [
-    ["claude", "Claude Code"],
-    ["codex", "Codex"],
-    ["gemini", "Gemini CLI"],
-  ];
-  const found: string[] = [];
-  for (const [cmd, label] of commands) {
-    try {
-      execSync(`which ${cmd}`, { stdio: "ignore" });
-      found.push(label);
-    } catch {
-      /* not installed */
-    }
-  }
-  return found;
-}
-
 function loadSessionPids(): Map<string, number> {
   try {
     const data = JSON.parse(readFileSync(SESSION_PIDS_FILE, "utf-8"));
@@ -736,7 +741,7 @@ async function cleanupStaleSessions(client: MachineClient, machineId: string): P
 
 function getMachineInfo() {
   const os = `${platform()} ${arch()} ${release()}`;
-  const runtimes = detectRuntimes();
+  const runtimes = getAvailableProviders().map((p) => p.label);
   let version = "unknown";
   try {
     const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));

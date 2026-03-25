@@ -21,7 +21,8 @@ export function registerStartCommand(program: Command) {
     .option("--api-url <url>", "API server URL")
     .option("--api-key <key>", "Machine API key")
     .option("--max-concurrent <n>", "Max concurrent agents", "3")
-    .option("--agent-cli <cmd>", "Agent CLI command to spawn", "claude")
+    .option("--provider <name>", "Agent provider to use (auto-detect if omitted)")
+    .option("--agent-cli <cmd>", "(deprecated) Agent CLI command — use --provider instead")
     .option("--poll-interval <ms>", "Poll interval in ms", "10000")
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
@@ -50,6 +51,7 @@ export function registerStartCommand(program: Command) {
 
       await startDaemon({
         maxConcurrent: parseInt(opts.maxConcurrent, 10),
+        provider: opts.provider,
         agentCli: opts.agentCli,
         pollInterval: parseInt(opts.pollInterval, 10),
         taskTimeout: parseInt(opts.taskTimeout, 10),
