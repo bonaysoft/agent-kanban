@@ -5,7 +5,7 @@ import { createClient } from "./client.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
 import { registerGetCommand } from "./commands/get.js";
-import { registerStartCommand } from "./commands/start.js";
+import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { getConfigValue, setConfigValue } from "./config.js";
 import { getFormat, output } from "./output.js";
@@ -130,6 +130,9 @@ registerDeleteCommand(program);
 // ─── Daemon ───
 
 registerStartCommand(program);
+registerStopCommand(program);
+registerStatusCommand(program);
+registerLogsCommand(program);
 
 program
   .command("__daemon", { hidden: true })
