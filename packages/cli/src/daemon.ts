@@ -10,6 +10,7 @@ import { createLogger } from "./logger.js";
 import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
+import { loadReviewSessions, removeReviewSession } from "./reviewSessions.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
 import { getUsage } from "./usage.js";
 
@@ -205,6 +206,83 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     }
   }
 
+  async function checkReviewSessions() {
+    const apiUrl = getConfigValue("api-url")!;
+    const reviewSessions = loadReviewSessions();
+    for (const rs of reviewSessions) {
+      const task = (await client.getTask(rs.taskId)) as any;
+      if (!task) {
+        removeReviewSession(rs.taskId);
+        continue;
+      }
+
+      if (task.status === "done" || task.status === "cancelled") {
+        removeWorktree(rs.repoDir, rs.cwd, rs.branchName);
+        removeReviewSession(rs.taskId);
+        continue;
+      }
+
+      if (task.status === "in_progress" && !pm.hasTask(rs.taskId)) {
+        logger.info(`Task ${rs.taskId} was rejected, resuming agent in existing worktree`);
+
+        const privateKey = (await crypto.subtle.importKey("jwk", rs.privateKeyJwk, { name: "Ed25519" } as any, true, ["sign"])) as CryptoKey;
+
+        try {
+          await client.reopenSession(rs.agentId, rs.sessionId);
+        } catch {
+          logger.warn(`Failed to reopen session ${rs.sessionId}, releasing task ${rs.taskId}`);
+          removeWorktree(rs.repoDir, rs.cwd, rs.branchName);
+          removeReviewSession(rs.taskId);
+          await client.releaseTask(rs.taskId).catch(() => {});
+          continue;
+        }
+
+        const agentClient = new AgentClient(apiUrl, rs.agentId, rs.sessionId, privateKey);
+
+        const agentEnv = {
+          AK_AGENT_ID: rs.agentId,
+          AK_SESSION_ID: rs.sessionId,
+          AK_AGENT_KEY: JSON.stringify(rs.privateKeyJwk),
+          AK_API_URL: apiUrl,
+        };
+
+        const logs = (await client.getTaskLogs(rs.taskId)) as any[];
+        const rejectLog = [...logs].reverse().find((l: any) => l.action === "rejected");
+        const rejectReason = rejectLog?.detail || "No reason provided";
+
+        try {
+          await pm.spawnAgent(
+            rs.taskId,
+            rs.sessionId,
+            rs.cwd,
+            rs.repoDir,
+            rs.branchName,
+            "",
+            agentClient,
+            agentEnv,
+            privateKey,
+            rs.privateKeyJwk,
+            undefined,
+            true,
+            () => removeWorktree(rs.repoDir, rs.cwd, rs.branchName),
+          );
+
+          await agentClient.sendMessage(rs.taskId, {
+            sender_type: "user",
+            sender_id: "system",
+            content: `Task rejected. Reason: ${rejectReason}\n\nPlease fix the issues and submit for review again.`,
+          });
+        } catch {
+          logger.warn(`Failed to resume rejected task ${rs.taskId}, releasing`);
+          removeWorktree(rs.repoDir, rs.cwd, rs.branchName);
+          await client.releaseTask(rs.taskId).catch(() => {});
+        }
+
+        removeReviewSession(rs.taskId);
+      }
+    }
+  }
+
   function schedulePoll(delayMs: number) {
     if (!running) return;
     if (pollTimer) clearTimeout(pollTimer);
@@ -223,6 +301,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
           await pm.killTask(taskId);
         }
       }
+
+      // Check review sessions for rejected/completed tasks
+      await checkReviewSessions();
 
       if (pm.activeCount >= opts.maxConcurrent) {
         schedulePoll(baseInterval);
