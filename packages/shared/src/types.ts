@@ -47,11 +47,11 @@ export interface TaskWithMeta extends Task {
   depends_on: string[];
 }
 
-export interface TaskWithLogs extends TaskWithMeta {
-  logs: TaskLog[];
+export interface TaskWithNotes extends TaskWithMeta {
+  notes: TaskNote[];
 }
 
-export interface TaskLog {
+export interface TaskNote {
   id: string;
   task_id: string;
   agent_id: string | null;

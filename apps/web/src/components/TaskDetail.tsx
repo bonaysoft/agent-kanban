@@ -39,7 +39,7 @@ const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
-  const { logs: sseLogs, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
+  const { notes: sseNotes, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
 
   const { data: task, isLoading: loading } = useQuery({
     queryKey: ["task", taskId],
@@ -218,7 +218,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
 
       <div>
         <FieldLabel>Activity</FieldLabel>
-        <ActivityLog initialLogs={task.logs || []} sseLogs={sseLogs} reconnecting={reconnecting} />
+        <ActivityLog initialNotes={task.notes || []} sseNotes={sseNotes} reconnecting={reconnecting} />
       </div>
 
       <Separator />

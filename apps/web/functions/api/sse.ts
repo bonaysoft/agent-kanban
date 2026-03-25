@@ -1,23 +1,23 @@
 import { listMessages } from "./messageRepo";
-import { getTaskLogs } from "./taskRepo";
+import { getTaskNotes } from "./taskRepo";
 import type { Env } from "./types";
 
 interface SSEEvent {
   id: string;
-  type: "log" | "message";
+  type: "note" | "message";
   data: string;
   created_at: string;
 }
 
-function mergeByTime(logs: SSEEvent[], messages: SSEEvent[]): SSEEvent[] {
+function mergeByTime(notes: SSEEvent[], messages: SSEEvent[]): SSEEvent[] {
   const merged: SSEEvent[] = [];
   let i = 0,
     j = 0;
-  while (i < logs.length && j < messages.length) {
-    if (logs[i].created_at <= messages[j].created_at) merged.push(logs[i++]);
+  while (i < notes.length && j < messages.length) {
+    if (notes[i].created_at <= messages[j].created_at) merged.push(notes[i++]);
     else merged.push(messages[j++]);
   }
-  while (i < logs.length) merged.push(logs[i++]);
+  while (i < notes.length) merged.push(notes[i++]);
   while (j < messages.length) merged.push(messages[j++]);
   return merged;
 }
@@ -29,7 +29,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
   let since: string | undefined;
   if (lastEventId) {
     const ref = await db
-      .prepare("SELECT created_at FROM task_logs WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?")
+      .prepare("SELECT created_at FROM task_notes WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?")
       .bind(lastEventId, lastEventId)
       .first<{ created_at: string }>();
     if (!ref) {
@@ -58,11 +58,11 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
   };
 
   const run = async () => {
-    const [initialLogs, initialMessages] = await Promise.all([getTaskLogs(db, taskId, since), listMessages(db, taskId, since)]);
+    const [initialNotes, initialMessages] = await Promise.all([getTaskNotes(db, taskId, since), listMessages(db, taskId, since)]);
 
-    const logEvents: SSEEvent[] = (since ? initialLogs : initialLogs.slice(-50)).map((l) => ({
+    const noteEvents: SSEEvent[] = (since ? initialNotes : initialNotes.slice(-50)).map((l) => ({
       id: l.id,
-      type: "log" as const,
+      type: "note" as const,
       data: JSON.stringify(l),
       created_at: l.created_at,
     }));
@@ -73,7 +73,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
       created_at: m.created_at,
     }));
 
-    const batch = mergeByTime(logEvents, msgEvents);
+    const batch = mergeByTime(noteEvents, msgEvents);
     for (const event of batch) {
       await write(event);
     }
@@ -85,11 +85,11 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const [newLogs, newMessages] = await Promise.all([getTaskLogs(db, taskId, lastSeen), listMessages(db, taskId, lastSeen)]);
+      const [newNotes, newMessages] = await Promise.all([getTaskNotes(db, taskId, lastSeen), listMessages(db, taskId, lastSeen)]);
 
-      const newLogEvents = newLogs.map((l) => ({
+      const newNoteEvents = newNotes.map((l) => ({
         id: l.id,
-        type: "log" as const,
+        type: "note" as const,
         data: JSON.stringify(l),
         created_at: l.created_at,
       }));
@@ -99,7 +99,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
         data: JSON.stringify(m),
         created_at: m.created_at,
       }));
-      const merged = mergeByTime(newLogEvents, newMsgEvents);
+      const merged = mergeByTime(newNoteEvents, newMsgEvents);
 
       for (const event of merged) {
         await write(event);

@@ -121,7 +121,7 @@ async function createNote(taskId: string, message: string) {
     process.exit(1);
   }
   const client = await createClient();
-  await client.addLog(taskId, message);
+  await client.addNote(taskId, message);
   console.log("Log entry added.");
 }
 

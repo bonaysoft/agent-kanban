@@ -25,7 +25,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -188,9 +188,9 @@ describe("machine → agent session flow", () => {
     expect(task.status).toBe("in_progress");
   });
 
-  it("agent adds a task log", async () => {
+  it("agent adds a task note", async () => {
     const jwt = await signSessionJWT();
-    const res = await apiRequest("POST", `/api/tasks/${taskId}/logs`, { detail: "Working on it" }, jwt);
+    const res = await apiRequest("POST", `/api/tasks/${taskId}/notes`, { detail: "Working on it" }, jwt);
     expect(res.status).toBe(201);
   });
 
@@ -250,7 +250,7 @@ describe("machine → agent session flow", () => {
     expect(task.status).toBe("in_review");
     expect(task.assigned_to).toBe(agentId);
 
-    const logs = await env.DB.prepare("SELECT action FROM task_logs WHERE task_id = ? ORDER BY created_at").bind(taskId).all();
+    const logs = await env.DB.prepare("SELECT action FROM task_notes WHERE task_id = ? ORDER BY created_at").bind(taskId).all();
     const actions = logs.results.map((r: any) => r.action);
     expect(actions).toContain("created");
     expect(actions).toContain("assigned");

@@ -12,7 +12,7 @@ import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
 import {
-  addTaskLog,
+  addTaskNote,
   assignTask,
   cancelTask,
   claimTask,
@@ -20,7 +20,7 @@ import {
   createTask,
   deleteTask,
   getTask,
-  getTaskLogs,
+  getTaskNotes,
   listTasks,
   rejectTask,
   releaseTask,
@@ -331,9 +331,9 @@ api.post("/api/tasks/:id/reject", async (c) => {
   return c.json(task);
 });
 
-// ─── Task Logs ───
+// ─── Task Notes ───
 
-api.post("/api/tasks/:id/logs", async (c) => {
+api.post("/api/tasks/:id/notes", async (c) => {
   const body = await c.req.json<{ detail: string; agent_id?: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
@@ -341,17 +341,17 @@ api.post("/api/tasks/:id/logs", async (c) => {
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const agentId = c.get("agentId") || body.agent_id;
-  const log = await addTaskLog(c.env.DB, c.req.param("id"), agentId || null, "commented", body.detail);
-  return c.json(log, 201);
+  const note = await addTaskNote(c.env.DB, c.req.param("id"), agentId || null, "commented", body.detail);
+  return c.json(note, 201);
 });
 
-api.get("/api/tasks/:id/logs", async (c) => {
+api.get("/api/tasks/:id/notes", async (c) => {
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const since = c.req.query("since");
-  const logs = await getTaskLogs(c.env.DB, c.req.param("id"), since || undefined);
-  return c.json(logs);
+  const notes = await getTaskNotes(c.env.DB, c.req.param("id"), since || undefined);
+  return c.json(notes);
 });
 
 // ─── Messages ───

@@ -8,7 +8,7 @@ import {
   formatRepositoryList,
   formatTask,
   formatTaskList,
-  formatTaskLogs,
+  formatTaskNotes,
   getFormat,
   output,
 } from "../packages/cli/src/output";
@@ -156,14 +156,14 @@ describe("formatTask", () => {
   });
 });
 
-describe("formatTaskLogs", () => {
-  it("returns 'No logs.' for empty array", () => {
-    expect(formatTaskLogs([])).toBe("No logs.");
+describe("formatTaskNotes", () => {
+  it("returns 'No notes.' for empty array", () => {
+    expect(formatTaskNotes([])).toBe("No notes.");
   });
 
   it("includes the action for each log entry", () => {
     const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     expect(result).toContain("created");
   });
 
@@ -171,19 +171,19 @@ describe("formatTaskLogs", () => {
     const logs = [
       { id: "l1", task_id: "t1", actor_id: null, action: "commented", detail: "This is the detail", created_at: "2024-01-01T00:00:00.000Z" },
     ];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     expect(result).toContain("This is the detail");
   });
 
   it("includes actor_id when present", () => {
     const logs = [{ id: "l1", task_id: "t1", actor_id: "agent-5", action: "claimed", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     expect(result).toContain("agent-5");
   });
 
   it("omits actor bracket when actor_id is absent", () => {
     const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" }];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     expect(result).not.toContain("[null]");
     expect(result).not.toContain("[undefined]");
   });
@@ -193,14 +193,14 @@ describe("formatTaskLogs", () => {
       { id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-01-01T00:00:00.000Z" },
       { id: "l2", task_id: "t1", actor_id: "ag1", action: "claimed", detail: null, created_at: "2024-01-02T00:00:00.000Z" },
     ];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     const lines = result.split("\n");
     expect(lines.length).toBe(2);
   });
 
   it("formats the created_at timestamp", () => {
     const logs = [{ id: "l1", task_id: "t1", actor_id: null, action: "created", detail: null, created_at: "2024-06-15T10:30:00.000Z" }];
-    const result = formatTaskLogs(logs);
+    const result = formatTaskNotes(logs);
     // The timestamp should be a recognisable date string (locale-formatted)
     expect(result.trim().length).toBeGreaterThan(0);
   });

@@ -9,7 +9,7 @@ import {
   formatRepositoryList,
   formatTask,
   formatTaskList,
-  formatTaskLogs,
+  formatTaskNotes,
   getFormat,
   output,
 } from "../output.js";
@@ -79,8 +79,8 @@ export function registerGetCommand(program: Command) {
             console.error("Usage: ak get note --task <task-id> or ak get note <task-id>");
             process.exit(1);
           }
-          const logs = await client.getTaskLogs(noteTaskId, opts.since);
-          output(logs, fmt, formatTaskLogs);
+          const notes = await client.getTaskNotes(noteTaskId, opts.since);
+          output(notes, fmt, formatTaskNotes);
           break;
         }
       }

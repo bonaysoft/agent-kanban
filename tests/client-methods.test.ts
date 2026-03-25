@@ -28,14 +28,14 @@ describe("ApiClient new methods — public contract", () => {
     expect((ApiClient.prototype as any).rejectTask.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("getTaskLogs is a function on ApiClient", async () => {
+  it("getTaskNotes is a function on ApiClient", async () => {
     const { ApiClient } = await import("../packages/cli/src/client");
-    expect(typeof (ApiClient.prototype as any).getTaskLogs).toBe("function");
+    expect(typeof (ApiClient.prototype as any).getTaskNotes).toBe("function");
   });
 
-  it("getTaskLogs accepts taskId as first parameter", async () => {
+  it("getTaskNotes accepts taskId as first parameter", async () => {
     const { ApiClient } = await import("../packages/cli/src/client");
-    expect((ApiClient.prototype as any).getTaskLogs.length).toBeGreaterThanOrEqual(1);
+    expect((ApiClient.prototype as any).getTaskNotes.length).toBeGreaterThanOrEqual(1);
   });
 
   it("deleteAgent is a function on ApiClient", async () => {

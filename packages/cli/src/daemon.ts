@@ -259,8 +259,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         const providerName = normalizeRuntime(agentDetails?.runtime ?? opts.defaultProvider ?? "claude");
         const reviewProvider = getProvider(providerName);
 
-        const logs = (await client.getTaskLogs(rs.taskId)) as any[];
-        const rejectLog = [...logs].reverse().find((l: any) => l.action === "rejected");
+        const notes = (await client.getTaskNotes(rs.taskId)) as any[];
+        const rejectLog = [...notes].reverse().find((l: any) => l.action === "rejected");
         const rejectReason = rejectLog?.detail || "No reason provided";
 
         try {
