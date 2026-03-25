@@ -9,7 +9,7 @@ import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateB
 import { createLogger } from "./logger";
 import { createMachine, deleteMachine, getMachine, listMachines, updateMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
-import { createRepository, deleteRepository, listRepositories } from "./repositoryRepo";
+import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
 import {
   addTaskLog,
@@ -447,6 +447,12 @@ api.get("/api/repositories", async (c) => {
   const { url } = c.req.query();
   const repositories = await listRepositories(c.env.DB, c.get("ownerId"), { url });
   return c.json(repositories);
+});
+
+api.get("/api/repositories/:id", async (c) => {
+  const repo = await getRepository(c.env.DB, c.req.param("id"), c.get("ownerId"));
+  if (!repo) throw new HTTPException(404, { message: "Repository not found" });
+  return c.json(repo);
 });
 
 api.delete("/api/repositories/:id", async (c) => {
