@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import type { AgentClient, ApiClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { AgentEvent, AgentProvider } from "./providers/types.js";
-import { saveReviewSession } from "./reviewSessions.js";
+import { removeSession, updateSessionStatus } from "./savedSessions.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
 
 const logger = createLogger("process");
@@ -15,30 +15,28 @@ const logger = createLogger("process");
 //   EXIT(N) → POST /release (crash recovery) → cleanup
 //   KILL (shutdown) → POST /release → cleanup
 
-export interface SuspendedSession {
+export interface SpawnRequest {
+  provider: AgentProvider;
   taskId: string;
   sessionId: string;
   cwd: string;
   repoDir: string;
   branchName: string;
-  agentId: string;
-  privateKey: CryptoKey;
-  privateKeyJwk: JsonWebKey;
-  provider: AgentProvider;
+  taskContext: string;
+  agentClient: AgentClient;
+  agentEnv: Record<string, string>;
+  systemPromptFile?: string;
+  resume?: boolean;
+  onCleanup?: () => void;
   model?: string;
 }
 
-export interface AgentProcess {
+interface AgentProcess {
   taskId: string;
   sessionId: string;
-  cwd: string;
-  repoDir: string;
-  branchName: string;
   process: ChildProcess;
   provider: AgentProvider;
   agentClient: AgentClient;
-  privateKey: CryptoKey;
-  privateKeyJwk: JsonWebKey;
   timeoutTimer?: ReturnType<typeof setTimeout>;
   rateLimited?: boolean;
   resultReceived?: boolean;
@@ -54,20 +52,13 @@ export interface ProcessManagerCallbacks {
 
 export class ProcessManager {
   private agents = new Map<string, AgentProcess>();
-  private suspended: SuspendedSession[] = [];
   private client: ApiClient;
-  private onSlotFreed: () => void;
-  private onRateLimited: (resetAt: string) => void;
-  private onProcessStarted?: (sessionId: string, pid: number) => void;
-  private onProcessExited?: (sessionId: string) => void;
+  private callbacks: ProcessManagerCallbacks;
   private taskTimeoutMs: number;
 
   constructor(client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
     this.client = client;
-    this.onSlotFreed = callbacks.onSlotFreed;
-    this.onRateLimited = callbacks.onRateLimited;
-    this.onProcessStarted = callbacks.onProcessStarted;
-    this.onProcessExited = callbacks.onProcessExited;
+    this.callbacks = callbacks;
     this.taskTimeoutMs = taskTimeoutMs;
   }
 
@@ -79,29 +70,20 @@ export class ProcessManager {
     return this.agents.has(taskId);
   }
 
-  async spawnAgent(
-    provider: AgentProvider,
-    taskId: string,
-    sessionId: string,
-    cwd: string,
-    repoDir: string,
-    branchName: string,
-    taskContext: string,
-    agentClient: AgentClient,
-    agentEnv: Record<string, string>,
-    privateKey: CryptoKey,
-    privateKeyJwk: JsonWebKey,
-    systemPromptFile?: string,
-    resume?: boolean,
-    onCleanup?: () => void,
-    model?: string,
-  ): Promise<void> {
-    const args = resume ? provider.buildResumeArgs(sessionId, model) : provider.buildArgs({ sessionId, systemPromptFile, model });
+  getActiveTaskIds(): string[] {
+    return [...this.agents.keys()];
+  }
+
+  async spawnAgent(req: SpawnRequest): Promise<void> {
+    const { provider, taskId, sessionId, taskContext, agentClient, agentEnv } = req;
+    const args = req.resume
+      ? provider.buildResumeArgs(sessionId, req.model)
+      : provider.buildArgs({ sessionId, systemPromptFile: req.systemPromptFile, model: req.model });
 
     let proc: ChildProcess;
     try {
       proc = spawn(provider.command, args, {
-        cwd,
+        cwd: req.cwd,
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...agentEnv },
       });
@@ -120,18 +102,13 @@ export class ProcessManager {
     const agent: AgentProcess = {
       taskId,
       sessionId,
-      cwd,
-      repoDir,
-      branchName,
       process: proc,
       provider,
       agentClient,
-      privateKey,
-      privateKeyJwk,
-      onCleanup,
+      onCleanup: req.onCleanup,
     };
     this.agents.set(taskId, agent);
-    this.onProcessStarted?.(sessionId, proc.pid);
+    this.callbacks.onProcessStarted?.(sessionId, proc.pid);
 
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
@@ -141,9 +118,7 @@ export class ProcessManager {
     }
 
     proc.on("spawn", () => {
-      if (taskContext) {
-        proc.stdin?.write(`${provider.buildInput(taskContext)}\n`);
-      }
+      if (taskContext) proc.stdin?.write(`${provider.buildInput(taskContext)}\n`);
       proc.stdin?.end();
     });
 
@@ -155,7 +130,7 @@ export class ProcessManager {
       for (const line of lines) {
         if (!line.trim()) continue;
         const event = provider.parseEvent(line);
-        if (event) this.handleEvent(taskId, sessionId, event, agentClient);
+        if (event) this.handleEvent(taskId, event, agentClient).catch((e) => logger.error(`Event error/${taskId}: ${e.message}`));
       }
     });
 
@@ -165,82 +140,15 @@ export class ProcessManager {
       if (stderrBuffer.length > 50000) stderrBuffer = stderrBuffer.slice(-25000);
     });
 
-    proc.on("close", async (code) => {
-      if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
-      cleanupPromptFile(sessionId);
-      this.onProcessExited?.(sessionId);
-
-      // Already removed by killTask() — process was intentionally terminated
-      if (!this.agents.has(taskId)) return;
-
-      if (stdoutBuffer.trim()) {
-        const event = agent.provider.parseEvent(stdoutBuffer);
-        if (event) this.handleEvent(taskId, sessionId, event, agentClient);
-      }
-
-      this.agents.delete(taskId);
-
-      await this.closeSession(agentClient);
-
-      if (agent.resultReceived || code === 0) {
-        // Agent finished normally — check if worktree should be preserved
-        const task = (await this.client.getTask(taskId)) as any;
-        if (task?.status === "in_review") {
-          // Already saved by result event handler, or save now as fallback
-          if (!agent.resultReceived) {
-            saveReviewSession({
-              taskId,
-              sessionId,
-              cwd: agent.cwd,
-              repoDir: agent.repoDir,
-              branchName: agent.branchName,
-              agentId: agentClient.getAgentId(),
-              privateKeyJwk: agent.privateKeyJwk,
-            });
-            logger.info(`Task ${taskId} in review, preserving worktree`);
-          }
-        } else {
-          logger.info(`Agent finished task ${taskId}`);
-          agent.onCleanup?.();
-        }
-      } else if (agent.rateLimited) {
-        logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
-        this.suspended.push({
-          taskId,
-          sessionId,
-          cwd: agent.cwd,
-          repoDir: agent.repoDir,
-          branchName: agent.branchName,
-          agentId: agentClient.getAgentId(),
-          privateKey: agent.privateKey,
-          privateKeyJwk: agent.privateKeyJwk,
-          provider: agent.provider,
-        });
-      } else {
-        logger.warn(`Agent crashed on task ${taskId} (exit ${code})`);
-        if (stderrBuffer.trim()) {
-          const lastLines = stderrBuffer.trim().split("\n").slice(-10).join("\n");
-          logger.warn(`stderr: ${lastLines}`);
-        }
-        await this.releaseTask(taskId);
-        agent.onCleanup?.();
-      }
-
-      this.onSlotFreed();
+    proc.on("close", (code) => {
+      this.onClose(agent, code, stdoutBuffer, stderrBuffer).catch((e) => logger.error(`Close error/${taskId}: ${e.message}`));
     });
 
-    proc.on("error", async (err) => {
-      if (!this.agents.has(taskId)) return;
-      logger.error(`Agent process error for task ${taskId}: ${err.message}`);
-      if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
-      this.agents.delete(taskId);
-      agent.onCleanup?.();
-      await this.closeSession(agentClient);
-      await this.releaseTask(taskId);
-      this.onSlotFreed();
+    proc.on("error", (err) => {
+      this.onError(agent, err).catch((e) => logger.error(`Error handler/${taskId}: ${e.message}`));
     });
 
-    logger.info(`Spawned ${provider.command} (session=${sessionId}) for task ${taskId} in ${cwd}`);
+    logger.info(`Spawned ${provider.command} (session=${sessionId}) for task ${taskId} in ${req.cwd}`);
   }
 
   async killTask(taskId: string): Promise<void> {
@@ -250,23 +158,12 @@ export class ProcessManager {
     if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
     this.agents.delete(taskId);
     await this.terminateProcess(agent.process);
-    agent.onCleanup?.();
+    this.safeCleanup(agent);
+    removeSession(taskId);
     await this.client
       .closeSession(agent.agentClient.getAgentId(), agent.sessionId)
       .catch((err: any) => logger.warn(`Failed to close session for cancelled task ${taskId}: ${err.message}`));
-    this.onSlotFreed();
-  }
-
-  getActiveTaskIds(): string[] {
-    return [...this.agents.keys()];
-  }
-
-  getSuspended(): SuspendedSession[] {
-    return this.suspended;
-  }
-
-  clearSuspended(): void {
-    this.suspended = [];
+    this.callbacks.onSlotFreed();
   }
 
   async killAll(): Promise<void> {
@@ -276,19 +173,80 @@ export class ProcessManager {
       if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
       this.agents.delete(taskId);
       await this.terminateProcess(agent.process);
-      agent.onCleanup?.();
+      this.safeCleanup(agent);
+      removeSession(taskId);
       await this.closeSession(agent.agentClient);
       await this.releaseTask(taskId);
     }
   }
 
-  private async handleEvent(taskId: string, sessionId: string, event: AgentEvent, agentClient: AgentClient): Promise<void> {
+  private async onClose(agent: AgentProcess, code: number | null, stdoutBuffer: string, stderrBuffer: string): Promise<void> {
+    const { taskId, sessionId, agentClient } = agent;
+    if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+    cleanupPromptFile(sessionId);
+    this.callbacks.onProcessExited?.(sessionId);
+
+    // Already removed by killTask() — process was intentionally terminated
+    if (!this.agents.has(taskId)) return;
+
+    try {
+      if (stdoutBuffer.trim()) {
+        const event = agent.provider.parseEvent(stdoutBuffer);
+        if (event) await this.handleEvent(taskId, event, agentClient);
+      }
+
+      this.agents.delete(taskId);
+      await this.closeSession(agentClient);
+
+      if (agent.resultReceived || code === 0) {
+        const task = (await this.client.getTask(taskId)) as any;
+        if (task?.status === "in_review") {
+          updateSessionStatus(taskId, "in_review");
+          logger.info(`Task ${taskId} in review, preserving worktree`);
+        } else {
+          logger.info(`Agent finished task ${taskId}`);
+          this.safeCleanup(agent);
+          removeSession(taskId);
+        }
+      } else if (agent.rateLimited) {
+        logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
+        updateSessionStatus(taskId, "rate_limited");
+      } else {
+        logger.warn(`Agent crashed on task ${taskId} (exit ${code})`);
+        if (stderrBuffer.trim()) {
+          const lastLines = stderrBuffer.trim().split("\n").slice(-10).join("\n");
+          logger.warn(`stderr: ${lastLines}`);
+        }
+        await this.releaseTask(taskId);
+        this.safeCleanup(agent);
+        removeSession(taskId);
+      }
+    } finally {
+      this.agents.delete(taskId); // idempotent — ensure removed even on error
+      this.callbacks.onSlotFreed();
+    }
+  }
+
+  private async onError(agent: AgentProcess, err: Error): Promise<void> {
+    const { taskId, agentClient } = agent;
+    if (!this.agents.has(taskId)) return;
+    logger.error(`Agent process error for task ${taskId}: ${err.message}`);
+    if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+    this.agents.delete(taskId);
+    this.safeCleanup(agent);
+    removeSession(taskId);
+    await this.closeSession(agentClient);
+    await this.releaseTask(taskId);
+    this.callbacks.onSlotFreed();
+  }
+
+  private async handleEvent(taskId: string, event: AgentEvent, agentClient: AgentClient): Promise<void> {
     switch (event.type) {
       case "rate_limit": {
         logger.warn(`Rate limited on task ${taskId}, resets at ${event.resetAt}`);
         const agent = this.agents.get(taskId);
         if (agent) agent.rateLimited = true;
-        this.onRateLimited(event.resetAt);
+        this.callbacks.onRateLimited(event.resetAt);
         break;
       }
 
@@ -322,27 +280,26 @@ export class ProcessManager {
           })
           .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
 
-        // Agent is done — save review session if needed, then kill process
         const agent = this.agents.get(taskId);
         if (agent) {
           agent.resultReceived = true;
           const task = (await this.client.getTask(taskId)) as any;
           if (task?.status === "in_review") {
-            saveReviewSession({
-              taskId,
-              sessionId,
-              cwd: agent.cwd,
-              repoDir: agent.repoDir,
-              branchName: agent.branchName,
-              agentId: agentClient.getAgentId(),
-              privateKeyJwk: agent.privateKeyJwk,
-            });
+            updateSessionStatus(taskId, "in_review");
             logger.info(`Task ${taskId} in review, preserving worktree`);
           }
           this.terminateProcess(agent.process);
         }
         break;
       }
+    }
+  }
+
+  private safeCleanup(agent: AgentProcess): void {
+    try {
+      agent.onCleanup?.();
+    } catch (err: any) {
+      logger.warn(`Cleanup failed for task ${agent.taskId}: ${err.message}`);
     }
   }
 
@@ -364,14 +321,11 @@ export class ProcessManager {
         resolve();
       };
       proc.once("close", onExit);
-
       proc.kill("SIGTERM");
 
       const killTimer = setTimeout(() => {
         proc.removeListener("close", onExit);
-        if (!proc.killed) {
-          proc.kill("SIGKILL");
-        }
+        if (!proc.killed) proc.kill("SIGKILL");
         resolve();
       }, 5000);
     });

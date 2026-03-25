@@ -15,9 +15,8 @@ export const LOGS_DIR = join(STATE_DIR, "logs");
 
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 export const PID_FILE = join(STATE_DIR, "daemon.pid");
-export const LINKS_FILE = join(DATA_DIR, "links.json");
 export const REPOS_DIR = join(DATA_DIR, "repos");
 export const WORKTREES_DIR = join(DATA_DIR, "worktrees");
 export const TRACKED_TASKS_FILE = join(DATA_DIR, "tracked-tasks.json");
 export const SESSION_PIDS_FILE = join(DATA_DIR, "session-pids.json");
-export const REVIEW_SESSIONS_FILE = join(DATA_DIR, "review-sessions.json");
+export const SAVED_SESSIONS_FILE = join(DATA_DIR, "saved-sessions.json");

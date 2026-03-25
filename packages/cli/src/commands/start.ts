@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
-import { clearLinks } from "../links.js";
 import { LOGS_DIR, PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 
@@ -77,7 +76,6 @@ export function registerStartCommand(program: Command) {
             process.exit(0);
           }
           deleteConfigValue("machine-id");
-          clearLinks();
         }
         setConfigValue("api-key", opts.apiKey);
       }

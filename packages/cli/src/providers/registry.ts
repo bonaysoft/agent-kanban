@@ -9,6 +9,11 @@ export function registerProvider(provider: AgentProvider): void {
   providers.set(provider.name, provider);
 }
 
+export function normalizeRuntime(runtime: string): string {
+  if (runtime === "claude-code") return "claude";
+  return runtime;
+}
+
 export function getProvider(name: string): AgentProvider {
   const provider = providers.get(name);
   if (!provider) {
