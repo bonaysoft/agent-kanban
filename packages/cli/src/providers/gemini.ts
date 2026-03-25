@@ -73,8 +73,9 @@ export const geminiProvider: AgentProvider = {
     }
 
     if (event.type === "error" || event.status === "error") {
-      const detail = event.message || event.error || JSON.stringify(event);
-      return { type: "error", detail: String(detail) };
+      const raw = event.message || event.error;
+      const detail = typeof raw === "object" ? JSON.stringify(raw) : String(raw || JSON.stringify(event));
+      return { type: "error", detail };
     }
 
     return null;
