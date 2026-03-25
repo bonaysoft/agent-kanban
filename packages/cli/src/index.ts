@@ -3,8 +3,12 @@ import { join } from "node:path";
 import { fetchTemplate } from "@agent-kanban/shared";
 import { Command } from "commander";
 import { type ApiClient, createClient } from "./client.js";
+import { registerCreateCommand } from "./commands/create.js";
+import { registerDeleteCommand } from "./commands/delete.js";
+import { registerGetCommand } from "./commands/get.js";
 import { registerLinkCommand, registerUnlinkCommand } from "./commands/link.js";
 import { registerStartCommand } from "./commands/start.js";
+import { registerUpdateCommand } from "./commands/update.js";
 import { getConfigValue, setConfigValue } from "./config.js";
 import {
   formatAgent,
@@ -521,6 +525,13 @@ repoCmd
     const fmt = getFormat(opts.format);
     output({ deleted: id }, fmt, () => `Deleted repository ${id}`);
   });
+
+// ─── Top-level CRUD ───
+
+registerGetCommand(program);
+registerCreateCommand(program);
+registerUpdateCommand(program);
+registerDeleteCommand(program);
 
 // ─── Link & Start ───
 
