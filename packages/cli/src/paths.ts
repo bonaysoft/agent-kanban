@@ -7,8 +7,14 @@ export const CONFIG_DIR = process.env.XDG_CONFIG_HOME ? join(process.env.XDG_CON
 
 export const DATA_DIR = process.env.XDG_DATA_HOME ? join(process.env.XDG_DATA_HOME, "agent-kanban") : join(home, ".local", "share", "agent-kanban");
 
+export const STATE_DIR = process.env.XDG_STATE_HOME
+  ? join(process.env.XDG_STATE_HOME, "agent-kanban")
+  : join(home, ".local", "state", "agent-kanban");
+
+export const LOGS_DIR = join(STATE_DIR, "logs");
+
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
-export const PID_FILE = join(CONFIG_DIR, "daemon.pid");
+export const PID_FILE = join(STATE_DIR, "daemon.pid");
 export const LINKS_FILE = join(DATA_DIR, "links.json");
 export const REPOS_DIR = join(DATA_DIR, "repos");
 export const WORKTREES_DIR = join(DATA_DIR, "worktrees");
