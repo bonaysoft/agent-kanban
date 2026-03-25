@@ -63,6 +63,9 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
   }
 });
 
+// Health check — no auth required
+api.get("/api/health", (c) => c.json({ status: "ok" }));
+
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
