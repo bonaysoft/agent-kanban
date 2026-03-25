@@ -70,7 +70,27 @@ Pick the best-fit agent based on the task's domain:
 ak task assign <task-id> --agent <agent-id>
 ```
 
-Report to user: task ID, title, assigned agent, and the daemon will pick it up automatically.
+Report to user: task ID, title, assigned agent.
+
+## Step 5: Monitor & Merge
+
+After assigning, monitor the task until completion.
+
+```bash
+ak task list --label <label>    # poll status
+```
+
+Poll every 30-60 seconds. When the task reaches `in_review` with a PR:
+1. Check CI: `gh pr checks <pr-number> --repo <owner>/<repo>`
+2. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
+3. Complete: `ak task complete <task-id> --result "PR #<n> merged: <summary>"`
+4. If CI fails → investigate, reject if needed: `ak task reject <task-id>`
+
+If a PR has merge conflicts, rebase it:
+```bash
+git fetch origin && git checkout <branch> && git rebase origin/master
+git push --force-with-lease origin <branch>
+```
 
 ## Rules
 
