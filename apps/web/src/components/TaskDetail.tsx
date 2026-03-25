@@ -1,7 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import dayjs from "dayjs";
+import duration from "dayjs/plugin/duration";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import "highlight.js/styles/github-dark-dimmed.min.css";
+
+dayjs.extend(duration);
+
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth-client";
@@ -34,6 +41,37 @@ interface TaskDetailProps {
   onClose: () => void;
   onRefresh: () => void;
   onAgentClick?: (agentId: string) => void;
+}
+
+function formatElapsed(ms: number): string {
+  const d = dayjs.duration(ms);
+  const h = Math.floor(d.asHours());
+  const m = d.minutes();
+  const s = d.seconds();
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function LiveDuration({ startedAt, finishedMinutes }: { startedAt: string | null; finishedMinutes: number | null }) {
+  const [now, setNow] = useState(Date.now());
+
+  const active = startedAt != null && finishedMinutes == null;
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+
+  if (!startedAt) return <span className="text-content-tertiary">—</span>;
+
+  if (active) {
+    const elapsed = now - dayjs(startedAt).valueOf();
+    return <span className="font-mono text-[13px] tabular-nums">{formatElapsed(elapsed)}</span>;
+  }
+
+  return <span className="font-mono text-[13px]">{formatElapsed(finishedMinutes! * 60_000)}</span>;
 }
 
 const PRIORITY_CLASSES: Record<string, string> = {
@@ -147,11 +185,10 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
         <Field
           label="Duration"
           value={
-            task.duration_minutes != null ? (
-              <span className="font-mono text-[13px]">{task.duration_minutes} min</span>
-            ) : (
-              <span className="text-content-tertiary">—</span>
-            )
+            <LiveDuration
+              startedAt={task.notes?.find((n: any) => n.action === "claimed")?.created_at ?? null}
+              finishedMinutes={task.duration_minutes}
+            />
           }
         />
       </div>
@@ -185,7 +222,9 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
         <FieldLabel>Description</FieldLabel>
         {task.description ? (
           <div className="overflow-x-auto prose-sm text-[13px] text-content-secondary [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-content-primary [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-content-primary [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-content-primary [&_h3]:mt-2 [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:mb-2 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:mb-0.5 [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 [&_pre]:bg-surface-primary [&_pre]:border [&_pre]:border-border [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:overflow-x-auto [&_pre]:font-mono [&_pre]:text-[12px] [&_code]:font-mono [&_code]:text-accent [&_code]:bg-surface-primary [&_code]:px-1 [&_code]:rounded [&_code]:text-[12px] [&_pre_code]:bg-transparent [&_pre_code]:text-content-secondary [&_pre_code]:p-0 [&_table]:w-full [&_table]:border-collapse [&_th]:text-left [&_th]:text-[11px] [&_th]:font-medium [&_th]:text-content-tertiary [&_th]:uppercase [&_th]:tracking-wide [&_th]:border-b [&_th]:border-border [&_th]:pb-1 [&_td]:border-b [&_td]:border-border [&_td]:py-1 [&_td]:pr-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-content-tertiary [&_hr]:border-border">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+              {task.description}
+            </ReactMarkdown>
           </div>
         ) : (
           <p className="text-[13px] text-content-tertiary">No description.</p>
@@ -251,45 +290,58 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
           if (!open) onClose();
         }}
       >
-        <SheetContent showCloseButton={false} className="overflow-y-auto p-0 gap-0">
+        <SheetContent
+          showCloseButton={false}
+          className={`overflow-hidden p-0 gap-0 transition-all duration-200 ${chatOpen ? "!w-[calc(50%+3rem)]" : ""}`}
+        >
           <SheetTitle className="sr-only">{task.title}</SheetTitle>
           <SheetDescription className="sr-only">Task detail panel</SheetDescription>
 
-          {/* Header */}
-          <div className="flex items-start justify-between p-5 border-b border-border">
-            <div className="flex-1 min-w-0 mr-4">
-              <div className="flex items-center gap-2">
-                <EditableText value={task.title} onSave={(v) => handleUpdate("title", v)} className="text-lg font-semibold text-content-primary" />
-                {task.blocked && (
-                  <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
-                    Blocked
-                  </Badge>
-                )}
+          <div className="overflow-y-auto overscroll-contain h-full">
+            {/* Header */}
+            <div className="flex items-start justify-between p-5 border-b border-border">
+              <div className="flex-1 min-w-0 mr-4">
+                <div className="flex items-center gap-2">
+                  <EditableText value={task.title} onSave={(v) => handleUpdate("title", v)} className="text-lg font-semibold text-content-primary" />
+                  {task.blocked && (
+                    <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
+                      Blocked
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {repo && (
+                    <Badge variant="secondary" className="text-[11px] font-mono">
+                      {repo.name}
+                    </Badge>
+                  )}
+                  {task.priority && PRIORITY_CLASSES[task.priority] && (
+                    <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex gap-1.5 mt-2 flex-wrap">
-                {repo && (
-                  <Badge variant="secondary" className="text-[11px] font-mono">
-                    {repo.name}
-                  </Badge>
-                )}
-                {task.priority && PRIORITY_CLASSES[task.priority] && (
-                  <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
-                )}
-              </div>
+              <Button variant="ghost" size="icon-sm" onClick={onClose}>
+                ✕
+              </Button>
             </div>
-            <Button variant="ghost" size="icon-sm" onClick={onClose}>
-              ✕
-            </Button>
+
+            {detailsContent}
           </div>
 
-          {detailsContent}
+          {/* Dim mask when chat drawer is open */}
+          {chatOpen && (
+            <div
+              className="absolute inset-0 bg-black/10 backdrop-blur-xs z-10 transition-opacity duration-200 cursor-pointer"
+              onClick={() => setChatOpen(false)}
+            />
+          )}
         </SheetContent>
       </Sheet>
 
       {/* Nested chat drawer — overlays on top of task detail */}
       {task.assigned_to && (
         <Sheet open={chatOpen} onOpenChange={(open) => setChatOpen(open)}>
-          <SheetContent showCloseButton={false} className="flex flex-col p-0 gap-0 z-[60]">
+          <SheetContent showCloseButton={false} showOverlay={false} className="flex flex-col p-0 gap-0 z-[60] !w-[45%] shadow-2xl">
             <SheetTitle className="sr-only">Chat with {task.agent_name}</SheetTitle>
             <SheetDescription className="sr-only">Chat panel</SheetDescription>
 

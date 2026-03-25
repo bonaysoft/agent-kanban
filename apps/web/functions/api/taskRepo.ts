@@ -432,16 +432,8 @@ export async function getTaskNotes(db: D1, taskId: string, since?: string): Prom
 
 function computeDuration(notes: TaskNote[]): number | null {
   const claimed = notes.find((l) => l.action === "claimed");
-  const completed = notes.find((l) => l.action === "completed");
-  if (!completed) return null;
-
-  const end = new Date(completed.created_at);
-
-  if (claimed) {
-    return Math.round((end.getTime() - new Date(claimed.created_at).getTime()) / 60000);
-  }
-
-  const created = notes.find((l) => l.action === "created");
-  if (!created) return null;
-  return Math.round((end.getTime() - new Date(created.created_at).getTime()) / 60000);
+  if (!claimed) return null;
+  const end = notes.find((l) => l.action === "completed" || l.action === "cancelled");
+  if (!end) return null;
+  return Math.round((new Date(end.created_at).getTime() - new Date(claimed.created_at).getTime()) / 60000);
 }
