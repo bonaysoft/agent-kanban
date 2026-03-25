@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { CONFIG_FILE, PID_FILE } from "./paths.js";
+import { CONFIG_FILE } from "./paths.js";
 
 interface Config {
   "api-url"?: string;
@@ -36,5 +36,3 @@ export function deleteConfigValue(key: string): void {
   delete (config as Record<string, string>)[key];
   writeConfig(config);
 }
-
-export { PID_FILE };
