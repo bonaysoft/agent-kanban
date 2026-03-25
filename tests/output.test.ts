@@ -429,72 +429,60 @@ describe("formatRepositoryList", () => {
 
 describe("formatBoard", () => {
   it("includes board name in header line", () => {
-    const board = { name: "Sprint 1", columns: [] };
+    const board = { name: "Sprint 1", tasks: [] };
     const result = formatBoard(board);
     expect(result).toContain("Sprint 1");
   });
 
-  it("renders column names in header row", () => {
+  it("groups tasks by status", () => {
     const board = {
       name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [] },
-        { name: "Done", tasks: [] },
+      tasks: [
+        { id: "t1", title: "Task A", status: "todo" },
+        { id: "t2", title: "Task B", status: "done" },
       ],
     };
     const result = formatBoard(board);
-    expect(result).toContain("Todo");
-    expect(result).toContain("Done");
-  });
-
-  it("renders task titles inside column cells", () => {
-    const board = {
-      name: "My Board",
-      columns: [{ name: "Todo", tasks: [{ title: "Build feature" }] }],
-    };
-    const result = formatBoard(board);
-    expect(result).toContain("Build feature");
-  });
-
-  it("truncates long task titles with ellipsis", () => {
-    const longTitle = "A".repeat(40);
-    const board = {
-      name: "My Board",
-      columns: [{ name: "Todo", tasks: [{ title: longTitle }] }],
-    };
-    const result = formatBoard(board);
-    expect(result).toContain("...");
-  });
-
-  it("renders empty cell placeholder when column has fewer tasks than max rows", () => {
-    const board = {
-      name: "My Board",
-      columns: [
-        { name: "Todo", tasks: [{ title: "Task A" }, { title: "Task B" }] },
-        { name: "Done", tasks: [{ title: "Task C" }] },
-      ],
-    };
-    const result = formatBoard(board);
+    expect(result).toContain("Todo (1):");
+    expect(result).toContain("Done (1):");
     expect(result).toContain("Task A");
     expect(result).toContain("Task B");
-    expect(result).toContain("Task C");
   });
 
-  it("renders board structure with separator lines", () => {
+  it("shows task count in header", () => {
     const board = {
       name: "My Board",
-      columns: [{ name: "Todo", tasks: [] }],
+      tasks: [{ id: "t1", title: "Build feature", status: "todo" }],
     };
     const result = formatBoard(board);
-    expect(result).toContain("┌");
-    expect(result).toContain("┘");
-    expect(result).toContain("├");
+    expect(result).toContain("My Board (1 tasks)");
   });
 
-  it("handles board with no columns gracefully", () => {
-    const board = { name: "Empty Board", columns: [] };
+  it("shows agent and PR info", () => {
+    const board = {
+      name: "My Board",
+      tasks: [{ id: "t1", title: "Task A", status: "in_review", assigned_to: "abcdef1234567890", pr_url: "https://github.com/org/repo/pull/1" }],
+    };
+    const result = formatBoard(board);
+    expect(result).toContain("→ abcdef12");
+    expect(result).toContain("PR: https://github.com/org/repo/pull/1");
+  });
+
+  it("skips empty status groups", () => {
+    const board = {
+      name: "My Board",
+      tasks: [{ id: "t1", title: "Done task", status: "done" }],
+    };
+    const result = formatBoard(board);
+    expect(result).not.toContain("Todo");
+    expect(result).toContain("Done (1):");
+  });
+
+  it("handles board with no tasks", () => {
+    const board = { name: "Empty Board", tasks: [] };
     const result = formatBoard(board);
     expect(result).toContain("Empty Board");
+    expect(result).toContain("(0 tasks)");
   });
 });
 
