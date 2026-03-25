@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { api } from "../lib/api";
 
 const LAST_BOARD_KEY = "ak-last-board";
@@ -14,65 +15,38 @@ export function setLastBoardId(id: string) {
 
 /** Fetch a single board by ID (from URL params) */
 export function useBoard(boardId: string | undefined) {
-  const [board, setBoard] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const failCount = useRef(0);
-
-  const fetchBoard = useCallback(async () => {
-    if (!boardId) {
-      setBoard(null);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const full = await api.boards.get(boardId);
-      setBoard(full);
-      setLastBoardId(boardId);
-      failCount.current = 0;
-      setError(null);
-    } catch (e: any) {
-      failCount.current++;
-      if (e.status === 401 || e.message === "NOT_AUTHENTICATED") {
-        setError("NOT_AUTHENTICATED");
-      } else if (failCount.current >= 3) {
-        setError("Can't reach server");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [boardId]);
+  const {
+    data: board = null,
+    isLoading: loading,
+    error: rawError,
+    refetch,
+  } = useQuery({
+    queryKey: ["board", boardId],
+    queryFn: () => api.boards.get(boardId!),
+    enabled: !!boardId,
+    refetchInterval: 30_000,
+    retry: 2,
+  });
 
   useEffect(() => {
-    setLoading(true);
-    fetchBoard();
-    const interval = setInterval(fetchBoard, 30000);
-    return () => clearInterval(interval);
-  }, [fetchBoard]);
+    if (boardId && board) setLastBoardId(boardId);
+  }, [boardId, board]);
 
-  return { board, loading, error, refresh: fetchBoard };
+  const error = rawError ? ((rawError as any).message === "NOT_AUTHENTICATED" ? "NOT_AUTHENTICATED" : "Can't reach server") : null;
+
+  return { board, loading, error, refresh: refetch };
 }
 
 /** Fetch the list of all boards (for switcher, redirect) */
 export function useBoards() {
-  const [boards, setBoards] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: boards = [],
+    isLoading: loading,
+    refetch,
+  } = useQuery({
+    queryKey: ["boards"],
+    queryFn: () => api.boards.list(),
+  });
 
-  const fetchBoards = useCallback(async () => {
-    try {
-      const list = await api.boards.list();
-      setBoards(list);
-    } catch {
-      // silent — boards list is non-critical
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchBoards();
-  }, [fetchBoards]);
-
-  return { boards, loading, refresh: fetchBoards };
+  return { boards, loading, refresh: refetch };
 }

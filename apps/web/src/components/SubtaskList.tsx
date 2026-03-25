@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 
 interface SubtaskListProps {
@@ -7,20 +7,16 @@ interface SubtaskListProps {
 }
 
 export function SubtaskList({ parentId, onTaskClick }: SubtaskListProps) {
-  const [subtasks, setSubtasks] = useState<any[]>([]);
-
-  useEffect(() => {
-    api.tasks
-      .list({ parent: parentId })
-      .then(setSubtasks)
-      .catch(() => {});
-  }, [parentId]);
+  const { data: subtasks = [] } = useQuery({
+    queryKey: ["subtasks", parentId],
+    queryFn: () => api.tasks.list({ parent: parentId }),
+  });
 
   if (subtasks.length === 0) return null;
 
   return (
     <div className="space-y-1 pl-6 md:pl-4">
-      {subtasks.map((task) => (
+      {subtasks.map((task: any) => (
         <button
           key={task.id}
           onClick={() => onTaskClick(task.id)}

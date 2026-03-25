@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth-client";
@@ -38,37 +38,39 @@ const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDetailProps) {
   const { data: session } = useSession();
-  const [task, setTask] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [repositories, setRepositories] = useState<{ id: string; name: string }[]>([]);
-  const [depTitles, setDepTitles] = useState<Record<string, string>>({});
-  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const { logs: sseLogs, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
 
-  const reload = useCallback(() => api.tasks.get(taskId).then(setTask), [taskId]);
+  const { data: task, isLoading: loading } = useQuery({
+    queryKey: ["task", taskId],
+    queryFn: () => api.tasks.get(taskId),
+  });
 
-  useEffect(() => {
-    reload().finally(() => setLoading(false));
-    api.messages
-      .list(taskId)
-      .then(setInitialMessages)
-      .catch(() => {});
-  }, [taskId, reload]);
+  const { data: initialMessages = [] } = useQuery({
+    queryKey: ["task-messages", taskId],
+    queryFn: () => api.messages.list(taskId),
+  });
 
-  useEffect(() => {
-    api.repositories
-      .list()
-      .then(setRepositories)
-      .catch(() => {});
-  }, []);
+  const { data: repositories = [] } = useQuery({
+    queryKey: ["repositories"],
+    queryFn: () => api.repositories.list(),
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    if (!task?.depends_on || task.depends_on.length === 0) return;
-    const depIds: string[] = task.depends_on;
-    Promise.all(depIds.map((id) => api.tasks.get(id).then((t: any) => [id, t.title] as const))).then((entries) =>
-      setDepTitles(Object.fromEntries(entries)),
-    );
-  }, [task?.depends_on]);
+  const dependsOn: string[] = task?.depends_on || [];
+
+  const { data: depTitles = {} } = useQuery({
+    queryKey: ["dep-titles", dependsOn],
+    queryFn: async () => {
+      const entries = await Promise.all(dependsOn.map((id) => api.tasks.get(id).then((t: any) => [id, t.title] as const)));
+      return Object.fromEntries(entries);
+    },
+    enabled: dependsOn.length > 0,
+  });
+
+  async function reload() {
+    await queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+  }
 
   async function handleUpdate(field: string, value: string | null) {
     await api.tasks.update(taskId, { [field]: value });
@@ -115,7 +117,6 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
     );
   }
 
-  const dependsOn: string[] = task.depends_on || [];
   const hasAgent = !!task.assigned_to;
 
   const detailsContent = (
@@ -266,7 +267,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick }: TaskDet
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">no repo</SelectItem>
-                  {repositories.map((r) => (
+                  {repositories.map((r: any) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.name}
                     </SelectItem>

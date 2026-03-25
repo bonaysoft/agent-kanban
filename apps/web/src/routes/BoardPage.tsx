@@ -97,7 +97,7 @@ export function BoardPage() {
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">
           {error}
-          <button onClick={refresh} className="ml-2 underline">
+          <button onClick={() => refresh()} className="ml-2 underline">
             Retry
           </button>
         </div>
