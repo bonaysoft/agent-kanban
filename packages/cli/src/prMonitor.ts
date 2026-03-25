@@ -2,7 +2,10 @@ import { execSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ApiClient } from "./client.js";
+import { createLogger } from "./logger.js";
 import { TRACKED_TASKS_FILE } from "./paths.js";
+
+const logger = createLogger("pr-monitor");
 
 // PR Monitor: watches in_review tasks spawned by this machine.
 //   PR merged  → task done
@@ -31,7 +34,7 @@ export class PrMonitor {
 
   start(): void {
     this.timer = setInterval(() => this.check(), PR_CHECK_INTERVAL);
-    console.log(`[INFO] PR monitor started (tracking=${this.trackedTasks.size}, interval=30s)`);
+    logger.info(`PR monitor started (tracking=${this.trackedTasks.size}, interval=30s)`);
   }
 
   stop(): void {
@@ -67,7 +70,7 @@ export class PrMonitor {
           const count = (this.taskFailures.get(task.id) ?? 0) + 1;
           this.taskFailures.set(task.id, count);
           if (count === 20) {
-            console.log(`[WARN] Cannot check PR status for task ${task.id} (${task.pr_url}), gh may need re-auth`);
+            logger.warn(`Cannot check PR status for task ${task.id} (${task.pr_url}), gh may need re-auth`);
           }
           continue;
         }
@@ -75,11 +78,11 @@ export class PrMonitor {
         this.taskFailures.delete(task.id);
 
         if (state === "MERGED") {
-          console.log(`[INFO] PR merged for task ${task.id}, marking done`);
+          logger.info(`PR merged for task ${task.id}, marking done`);
           await this.client.completeTask(task.id, { result: "PR merged" });
           this.untrack(task.id);
         } else if (state === "CLOSED") {
-          console.log(`[INFO] PR closed for task ${task.id}, marking cancelled`);
+          logger.info(`PR closed for task ${task.id}, marking cancelled`);
           await this.client.cancelTask(task.id);
           this.untrack(task.id);
         }
@@ -88,7 +91,7 @@ export class PrMonitor {
       // Untrack tasks no longer in_review (completed/cancelled externally)
       for (const taskId of [...this.trackedTasks]) {
         if (!inReviewIds.has(taskId)) {
-          console.log(`[INFO] Task ${taskId} no longer in_review, untracking`);
+          logger.info(`Task ${taskId} no longer in_review, untracking`);
           this.untrack(taskId);
         }
       }
@@ -97,9 +100,9 @@ export class PrMonitor {
     } catch (err: any) {
       this.failureCount++;
       if (this.failureCount === 10 || (this.failureCount > 10 && this.failureCount % 10 === 0)) {
-        console.error(`[ERROR] PR monitor has failed ${this.failureCount} consecutive checks: ${err.message}. Check gh auth status.`);
+        logger.error(`PR monitor has failed ${this.failureCount} consecutive checks: ${err.message}. Check gh auth status.`);
       } else if (this.failureCount < 10) {
-        console.error(`[WARN] PR monitor error: ${err.message}`);
+        logger.warn(`PR monitor error: ${err.message}`);
       }
     } finally {
       this.checking = false;

@@ -6,6 +6,7 @@ import { closeSession, createSession, listSessions, reopenSession, updateSession
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateBoard } from "./boardRepo";
+import { createLogger } from "./logger";
 import { createMachine, deleteMachine, getMachine, listMachines, updateMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, listRepositories } from "./repositoryRepo";
@@ -30,6 +31,7 @@ import { detectAndReleaseStale } from "./taskStale";
 import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
+const logger = createLogger("api");
 
 // Access log
 api.use("*", async (c, next) => {
@@ -37,7 +39,7 @@ api.use("*", async (c, next) => {
   await next();
   const status = c.res.status;
   if (status >= 400) {
-    console.log(`${c.req.method} ${c.req.path} ${status} ${Date.now() - start}ms`);
+    logger.warn(`${c.req.method} ${c.req.path} ${status} ${Date.now() - start}ms`);
   }
 });
 
@@ -46,7 +48,7 @@ api.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: { code: err.message, message: err.message } }, err.status);
   }
-  console.error(`${c.req.method} ${c.req.path} 500 ${err.message}`);
+  logger.error(`${c.req.method} ${c.req.path} 500 ${err.message} ${err.stack}`);
   return c.json({ error: { code: "INTERNAL_ERROR", message: err.message || "Internal server error" } }, 500);
 });
 
@@ -56,7 +58,7 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
     const auth = createAuth(c.env);
     return await auth.handler(c.req.raw);
   } catch (err: any) {
-    console.error("better-auth error:", err.message, err.stack);
+    logger.error(`better-auth error: ${err.message} ${err.stack}`);
     return c.json({ error: { code: "AUTH_ERROR", message: err.message } }, 500);
   }
 });

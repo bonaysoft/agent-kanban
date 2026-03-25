@@ -2,7 +2,10 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { createLogger } from "./logger.js";
 import type { UsageInfo } from "./types.js";
+
+const logger = createLogger("usage");
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
@@ -52,7 +55,7 @@ export async function getUsage(): Promise<UsageInfo | null> {
     });
 
     if (!res.ok) {
-      console.error(`[WARN] Usage API returned ${res.status}`);
+      logger.warn(`Usage API returned ${res.status}`);
       return cachedUsage;
     }
 
@@ -67,7 +70,7 @@ export async function getUsage(): Promise<UsageInfo | null> {
     cachedAt = Date.now();
     return cachedUsage;
   } catch (err: any) {
-    console.error(`[WARN] Failed to fetch usage: ${err.message}`);
+    logger.warn(`Failed to fetch usage: ${err.message}`);
     return cachedUsage;
   }
 }

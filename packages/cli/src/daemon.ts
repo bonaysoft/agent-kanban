@@ -6,11 +6,14 @@ import { join } from "node:path";
 import { AgentClient, ApiError, MachineClient } from "./client.js";
 import { getConfigValue, PID_FILE, setConfigValue } from "./config.js";
 import { findPathForRepository, getLinks, setLink } from "./links.js";
+import { createLogger } from "./logger.js";
 import { REPOS_DIR, SESSION_PIDS_FILE, WORKTREES_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
 import { getUsage } from "./usage.js";
+
+const logger = createLogger("daemon");
 
 // Daemon Lifecycle:
 //   STARTING → check PID lock → load config → load links
@@ -32,7 +35,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
     try {
       process.kill(pid, 0);
-      console.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
+      logger.error(`Daemon already running (PID ${pid}). Stop it first or remove ${PID_FILE}`);
       process.exit(1);
     } catch {
       unlinkSync(PID_FILE);
@@ -45,7 +48,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     execSync("gh auth status", { stdio: "pipe" });
   } catch {
     removePidFile();
-    console.error("[FATAL] `gh` is not installed or not authenticated. Run `gh auth login` first.");
+    logger.fatal("`gh` is not installed or not authenticated. Run `gh auth login` first.");
     process.exit(1);
   }
 
@@ -54,9 +57,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const linkedRepoCount = Object.keys(links).length;
 
   if (linkedRepoCount === 0) {
-    console.warn("[WARN] No linked repositories. Run `ak link` in your repo directories.");
+    logger.warn("No linked repositories. Run `ak link` in your repo directories.");
   } else {
-    console.log(`[INFO] Linked repositories: ${linkedRepoCount}`);
+    logger.info(`Linked repositories: ${linkedRepoCount}`);
   }
 
   let paused = false;
@@ -87,7 +90,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const shutdown = async () => {
     if (!running) return;
     running = false;
-    console.log("\n[INFO] Shutting down daemon...");
+    logger.info("Shutting down daemon...");
     prMonitor.stop();
     clearInterval(heartbeatInterval);
     if (pollTimer) clearTimeout(pollTimer);
@@ -95,13 +98,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     await pm.killAll();
     clearSessionPids();
     removePidFile();
-    console.log("[INFO] Daemon stopped.");
+    logger.info("Daemon stopped.");
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  console.log(`[INFO] Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
+  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, agent=${opts.agentCli})`);
 
   // Register machine (first run) or reuse existing
   const machineInfo = getMachineInfo();
@@ -111,7 +114,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     const machine = await client.registerMachine(machineInfo);
     machineId = machine.id;
     setConfigValue("machine-id", machineId);
-    console.log(`[INFO] Machine registered: ${machineId}`);
+    logger.info(`Machine registered: ${machineId}`);
   }
 
   await client.heartbeat(machineId, {
@@ -119,7 +122,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     runtimes: machineInfo.runtimes,
   });
   await cleanupStaleSessions(client, machineId);
-  console.log(`[INFO] Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
+  logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const heartbeatInterval = setInterval(async () => {
     const usageInfo = await getUsage();
@@ -129,7 +132,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         runtimes: machineInfo.runtimes,
         usage_info: usageInfo,
       })
-      .catch((err: any) => console.error(`[WARN] Heartbeat failed: ${err.message}`));
+      .catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
 
   function pauseForRateLimit(resetAt: string) {
@@ -139,14 +142,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     paused = true;
     resumeTargetMs = resetTime;
     const waitMs = Math.max(resetTime - Date.now(), 60_000);
-    console.warn(`[WARN] Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
+    logger.warn(`Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
     if (resumeTimer) clearTimeout(resumeTimer);
     resumeTimer = setTimeout(resume, waitMs);
   }
 
   async function resume() {
     if (!running || !paused) return;
-    console.log("[INFO] Rate limit window reset, resuming");
+    logger.info("Rate limit window reset, resuming");
     paused = false;
     resumeTargetMs = 0;
     await resumeSuspended();
@@ -163,7 +166,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       try {
         await client.reopenSession(s.agentId, s.sessionId);
       } catch {
-        console.warn(`[WARN] Failed to reopen session ${s.sessionId}, releasing task ${s.taskId}`);
+        logger.warn(`Failed to reopen session ${s.sessionId}, releasing task ${s.taskId}`);
         await client.releaseTask(s.taskId).catch(() => {});
         continue;
       }
@@ -177,7 +180,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         AK_API_URL: getConfigValue("api-url")!,
       };
 
-      console.log(`[INFO] Resuming task ${s.taskId} (session=${s.sessionId.slice(0, 8)})`);
+      logger.info(`Resuming task ${s.taskId} (session=${s.sessionId.slice(0, 8)})`);
       try {
         const resumeCleanup = () => removeWorktree(s.repoDir, s.cwd, s.branchName);
         await pm.spawnAgent(
@@ -196,7 +199,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
           resumeCleanup,
         );
       } catch {
-        console.warn(`[WARN] Failed to resume task ${s.taskId}, releasing`);
+        logger.warn(`Failed to resume task ${s.taskId}, releasing`);
         await client.releaseTask(s.taskId).catch(() => {});
       }
     }
@@ -260,7 +263,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       const repoDir = findPathForRepository(task.repository_id)!;
 
       if (!prepareRepo(repoDir)) {
-        console.error(`[ERROR] Repo not ready at ${repoDir}, skipping task ${task.id}`);
+        logger.error(`Repo not ready at ${repoDir}, skipping task ${task.id}`);
         schedulePoll(baseInterval);
         return;
       }
@@ -294,12 +297,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
         throw err;
       }
 
-      console.log(`[INFO] Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`);
+      logger.info(`Session ${sessionId.slice(0, 8)} for agent ${agentId} on task ${task.id}: ${task.title}`);
 
       // Fetch agent details early — needed for both skill install and system prompt
       const agentDetails = (await client.getAgent(agentId)) as AgentInfo | null;
       if (!agentDetails) {
-        console.error(`[ERROR] Agent ${agentId} not found, releasing task ${task.id}`);
+        logger.error(`Agent ${agentId} not found, releasing task ${task.id}`);
         await client.releaseTask(task.id).catch(() => {});
         await client.closeSession(agentId, sessionId).catch(() => {});
         schedulePoll(baseInterval);
@@ -311,7 +314,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       try {
         ({ worktreeDir, branchName } = createWorktree(repoDir, sessionId));
       } catch (err: any) {
-        console.error(`[ERROR] Failed to create worktree in ${repoDir}: ${err.message}`);
+        logger.error(`Failed to create worktree in ${repoDir}: ${err.message}`);
         await client.releaseTask(task.id).catch(() => {});
         await client.closeSession(agentId, sessionId).catch(() => {});
         schedulePoll(baseInterval);
@@ -320,11 +323,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
       const agentSkills = agentDetails.skills ?? [];
       if (!ensureSkills(worktreeDir, agentSkills)) {
-        console.error(`[ERROR] Skill install failed for task ${task.id}, releasing task`);
+        logger.error(`Skill install failed for task ${task.id}, releasing task`);
         removeWorktree(repoDir, worktreeDir, branchName);
-        await client
-          .releaseTask(task.id)
-          .catch((err: any) => console.error(`[ERROR] Failed to release task ${task.id} after skill failure: ${err.message}`));
+        await client.releaseTask(task.id).catch((err: any) => logger.error(`Failed to release task ${task.id} after skill failure: ${err.message}`));
         await client.closeSession(agentId, sessionId).catch(() => {});
         schedulePoll(baseInterval);
         return;
@@ -376,10 +377,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       schedulePoll(baseInterval);
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 429) {
-        console.warn(`[WARN] Rate limited, backing off`);
+        logger.warn("Rate limited, backing off");
         backoffMs = Math.min(Math.max(backoffMs * 2, 30000), 60000);
       } else {
-        console.error(`[WARN] Poll error: ${err.message}`);
+        logger.warn(`Poll error: ${err.message}`);
         backoffMs = Math.min(backoffMs * 2, 60000);
       }
       schedulePoll(backoffMs);
@@ -395,7 +396,7 @@ const SKILL_NAME = "agent-kanban";
 function installSkill(repoDir: string, source: string, skill: string): boolean {
   const skillFile = join(repoDir, `.claude/skills/${skill}/SKILL.md`);
   if (!existsSync(skillFile)) {
-    console.log(`[INFO] Installing skill "${skill}" from ${source} in ${repoDir}`);
+    logger.info(`Installing skill "${skill}" from ${source} in ${repoDir}`);
     execSync(`npx skills add ${source} --skill ${skill} --agent claude-code --agent universal -y`, {
       cwd: repoDir,
       stdio: "pipe",
@@ -415,7 +416,7 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
       // format: "source@skill-name"
       const atIdx = entry.indexOf("@");
       if (atIdx === -1) {
-        console.warn(`[WARN] Skipping invalid skill entry (missing @): ${entry}`);
+        logger.warn(`Skipping invalid skill entry (missing @): ${entry}`);
         continue;
       }
       const source = entry.slice(0, atIdx);
@@ -426,7 +427,7 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
     if (!changed) {
       const result = execSync("npx skills update", { cwd: worktreeDir, stdio: "pipe" }).toString();
       if (result.includes("up to date")) return true;
-      console.log(`[INFO] Skills updated in ${worktreeDir}`);
+      logger.info(`Skills updated in ${worktreeDir}`);
     }
 
     // Ensure skill paths are gitignored so agents don't commit them
@@ -439,7 +440,7 @@ function ensureSkills(worktreeDir: string, agentSkills: string[]): boolean {
 
     return true;
   } catch (err: any) {
-    console.error(`[ERROR] Failed to ensure skills: ${err.message}`);
+    logger.error(`Failed to ensure skills: ${err.message}`);
     return false;
   }
 }
@@ -468,12 +469,12 @@ async function ensureLefthookTask(client: MachineClient, task: any, repoDir: str
   const existingLefthook = allTasks.find((t) => t.repository_id === task.repository_id && t.labels?.includes(LEFTHOOK_LABEL));
   if (existingLefthook) return !existingLefthook.blocked;
 
-  console.log(`[INFO] No lefthook config in ${repoDir}, creating setup task`);
+  logger.info(`No lefthook config in ${repoDir}, creating setup task`);
 
   const agents = (await client.listAgents()) as any[];
   const qualityAgent = agents.find((a: any) => a.builtin && a.role === "quality-goalkeeper");
   if (!qualityAgent) {
-    console.log("[WARN] No builtin quality-goalkeeper agent found, skipping lefthook setup");
+    logger.warn("No builtin quality-goalkeeper agent found, skipping lefthook setup");
     return false;
   }
 
@@ -487,7 +488,7 @@ async function ensureLefthookTask(client: MachineClient, task: any, repoDir: str
     assigned_to: qualityAgent.id,
   })) as any;
 
-  console.log(`[INFO] Created lefthook setup task ${setupTask.id}`);
+  logger.info(`Created lefthook setup task ${setupTask.id}`);
 
   // Block all todo tasks in this repo on the setup task
   const repoTasks = allTasks.filter((t: any) => t.repository_id === task.repository_id);
@@ -497,7 +498,7 @@ async function ensureLefthookTask(client: MachineClient, task: any, repoDir: str
     });
   }
 
-  console.log(`[INFO] Blocked ${repoTasks.length} tasks on lefthook setup task ${setupTask.id}`);
+  logger.info(`Blocked ${repoTasks.length} tasks on lefthook setup task ${setupTask.id}`);
   return true;
 }
 
@@ -506,17 +507,17 @@ function cloneAndLink(repo: any): void {
     const repoPath = repo.url.replace(/^https?:\/\//, "");
     const repoDir = join(REPOS_DIR, repoPath);
     if (existsSync(repoDir)) {
-      console.log(`[INFO] Directory exists, linking repository ${repo.name} → ${repoDir}`);
+      logger.info(`Directory exists, linking repository ${repo.name} → ${repoDir}`);
       setLink(repo.id, repoDir);
       return;
     }
 
-    console.log(`[INFO] Cloning ${repo.full_name} → ${repoDir}`);
+    logger.info(`Cloning ${repo.full_name} → ${repoDir}`);
     execSync(`gh repo clone ${repo.full_name} ${repoDir}`, { stdio: "pipe" });
     setLink(repo.id, repoDir);
-    console.log(`[INFO] Linked repository ${repo.name} → ${repoDir}`);
+    logger.info(`Linked repository ${repo.name} → ${repoDir}`);
   } catch (err: any) {
-    console.error(`[ERROR] Auto-clone failed for repository ${repo.id}: ${err.message}`);
+    logger.error(`Auto-clone failed for repository ${repo.id}: ${err.message}`);
   }
 }
 
@@ -524,15 +525,15 @@ function prepareRepo(repoDir: string): boolean {
   try {
     const status = execSync("git status --porcelain", { cwd: repoDir, stdio: "pipe" }).toString().trim();
     if (status) {
-      console.log(`[INFO] Stashing dirty working tree in ${repoDir}`);
+      logger.info(`Stashing dirty working tree in ${repoDir}`);
       execSync("git stash --include-untracked", { cwd: repoDir, stdio: "pipe" });
     }
 
-    console.log(`[INFO] Pulling latest code in ${repoDir}`);
+    logger.info(`Pulling latest code in ${repoDir}`);
     execSync("git pull --ff-only", { cwd: repoDir, stdio: "pipe" });
     return true;
   } catch (err: any) {
-    console.error(`[ERROR] Failed to prepare repo ${repoDir}: ${err.message}`);
+    logger.error(`Failed to prepare repo ${repoDir}: ${err.message}`);
     return false;
   }
 }
@@ -542,7 +543,7 @@ function createWorktree(repoDir: string, sessionId: string): { worktreeDir: stri
   mkdirSync(WORKTREES_DIR, { recursive: true });
   const worktreeDir = join(WORKTREES_DIR, sessionId.slice(0, 8));
   execSync(`git worktree add "${worktreeDir}" -b "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
-  console.log(`[INFO] Created worktree ${worktreeDir} (branch ${branchName})`);
+  logger.info(`Created worktree ${worktreeDir} (branch ${branchName})`);
   return { worktreeDir, branchName };
 }
 
@@ -550,9 +551,9 @@ function removeWorktree(repoDir: string, worktreeDir: string, branchName: string
   try {
     execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: repoDir, stdio: "pipe" });
     execSync(`git branch -D "${branchName}"`, { cwd: repoDir, stdio: "pipe" });
-    console.log(`[INFO] Removed worktree ${worktreeDir}`);
+    logger.info(`Removed worktree ${worktreeDir}`);
   } catch (err: any) {
-    console.error(`[WARN] Failed to remove worktree ${worktreeDir}: ${err.message}`);
+    logger.warn(`Failed to remove worktree ${worktreeDir}: ${err.message}`);
   }
 }
 
@@ -643,10 +644,10 @@ async function cleanupStaleSessions(client: MachineClient, machineId: string): P
       const pids = loadSessionPids();
       for (const id of closedSessionIds) pids.delete(id);
       writeSessionPids(pids);
-      console.log(`[INFO] Cleaned up ${closedSessionIds.length} stale session(s) from previous run`);
+      logger.info(`Cleaned up ${closedSessionIds.length} stale session(s) from previous run`);
     }
   } catch (err: any) {
-    console.warn(`[WARN] Session cleanup failed: ${err.message}`);
+    logger.warn(`Session cleanup failed: ${err.message}`);
   }
 }
 
