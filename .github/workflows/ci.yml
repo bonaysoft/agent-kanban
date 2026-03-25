@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -43,7 +43,7 @@ jobs:
           json-summary-path: coverage/coverage-summary.json
 
       - name: Generate badge JSON
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/main'
         run: |
           pct=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.lines.pct)")
           if [ "$(echo "$pct >= 80" | bc)" -eq 1 ]; then color="brightgreen"
@@ -53,13 +53,13 @@ jobs:
           echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${pct}%\",\"color\":\"${color}\"}" > badge/coverage.json
 
       - name: Upload badge to Pages
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: badge
 
   deploy-badge:
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     environment:

@@ -2,7 +2,7 @@ name: Update Agent Templates Index
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "agents/*.yaml"
 

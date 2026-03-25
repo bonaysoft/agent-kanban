@@ -52,7 +52,7 @@ cd <repo-dir>
 
 # Create config files, entry point, DB schema, .gitignore
 # Commit and push
-git add -A && git commit -m "feat: project scaffold" && git push -u origin master
+git add -A && git commit -m "feat: project scaffold" && git push -u origin main
 ```
 
 Register with agent-kanban:
@@ -171,7 +171,7 @@ Poll every 30-60 seconds. Track progress and report status changes to the user.
 
 ### Handle merge conflicts:
 If a PR can't merge cleanly (conflicts with previously merged PRs):
-1. Checkout the branch: `git fetch origin && git checkout <branch> && git rebase origin/master`
+1. Checkout the branch: `git fetch origin && git checkout <branch> && git rebase origin/main`
 2. Resolve conflicts manually
 3. Force-push: `git push --force-with-lease origin <branch>`
 4. Wait for CI to re-run, then merge

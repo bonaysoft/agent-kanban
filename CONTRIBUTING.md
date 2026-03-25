@@ -13,7 +13,7 @@ Thanks for your interest in Agent Kanban! Here's how to get involved.
 
 ## Making Changes
 
-- Create a feature branch from `master`
+- Create a feature branch from `main`
 - Keep changes focused — one concern per PR
 - Add tests for new API endpoints or business logic
 - Run `pnpm test` and `pnpm lint` before submitting

@@ -121,7 +121,7 @@ The daemon's PR Monitor will mark the task done — do NOT manually `ak task com
 
 If a PR has merge conflicts, rebase it:
 ```bash
-git fetch origin && git checkout <branch> && git rebase origin/master
+git fetch origin && git checkout <branch> && git rebase origin/main
 git push --force-with-lease origin <branch>
 ```
 
