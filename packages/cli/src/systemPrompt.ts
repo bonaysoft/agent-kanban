@@ -40,7 +40,7 @@ Run \`ak agent list --format json\` to see your teammates and their roles.
 
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.
 2. **Work** — Implement the change. Log progress: \`ak task log <task-id> "message"\`.
-3. **Deliver** — Push your branch, create a PR with \`gh pr create\`, then submit: \`ak task review <task-id> --pr-url <url>\`. **This must be your last action — stop immediately after, do not log or comment further.**
+3. **Deliver** — Push your branch, create a PR with \`gh pr create\`, then submit: \`ak task review <task-id> --pr-url <url>\`. **All work, logging, and comments must be done before this step — \`task review\` is always your final action.**
 4. **Handoff (optional)** — If your work reveals NEW work that should be done separately, create a new task for another agent. Handoff is for independent follow-up work only — not for reviewing or completing your current task.
 
 ## Environment
