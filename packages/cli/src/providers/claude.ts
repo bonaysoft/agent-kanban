@@ -1,3 +1,4 @@
+// Claude Code provider — handles Claude CLI spawning and event parsing
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
