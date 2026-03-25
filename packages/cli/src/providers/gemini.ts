@@ -21,12 +21,19 @@ export const geminiProvider: AgentProvider = {
   buildArgs(opts: SpawnOpts): string[] {
     const systemPrompt = readSystemPrompt(opts.systemPromptFile);
     const args = ["--prompt", systemPrompt, "--output-format", "stream-json", "--yolo"];
+    if (opts.model) {
+      args.push("--model", opts.model);
+    }
     return args;
   },
 
-  buildResumeArgs(_sessionId: string): string[] {
+  buildResumeArgs(_sessionId: string, model?: string): string[] {
     logger.warn("Gemini CLI does not support resume by session ID — resuming latest session");
-    return ["--resume", "latest", "--prompt", "", "--output-format", "stream-json", "--yolo"];
+    const args = ["--resume", "latest", "--prompt", "", "--output-format", "stream-json", "--yolo"];
+    if (model) {
+      args.push("--model", model);
+    }
+    return args;
   },
 
   parseEvent(raw: string): AgentEvent | null {

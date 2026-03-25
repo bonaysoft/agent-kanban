@@ -14,6 +14,7 @@ export interface UsageInfo {
 export interface SpawnOpts {
   sessionId: string;
   systemPromptFile?: string;
+  model?: string;
 }
 
 export type AgentEvent =
@@ -28,7 +29,7 @@ export interface AgentProvider {
   readonly command: string;
 
   buildArgs(opts: SpawnOpts): string[];
-  buildResumeArgs(sessionId: string): string[];
+  buildResumeArgs(sessionId: string, model?: string): string[];
   parseEvent(raw: string): AgentEvent | null;
   buildInput(taskContext: string): string;
   getUsage?(): Promise<UsageInfo | null>;
