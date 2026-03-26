@@ -111,7 +111,18 @@ export class Scheduler {
     for (const s of loadSessions("active")) {
       if (this.pm.hasTask(s.taskId)) continue;
       // Session marked active but no process running — stale from crash
-      const task = (await this.client.getTask(s.taskId)) as any;
+      let task: any;
+      try {
+        task = await this.client.getTask(s.taskId);
+      } catch (err: any) {
+        if (err instanceof ApiError && err.status === 404) {
+          logger.warn(`Task ${s.taskId} not found (deleted), cleaning up orphaned session`);
+          removeWorktree(s.repoDir, s.cwd, s.branchName);
+          removeSession(s.taskId);
+          continue;
+        }
+        throw err;
+      }
       if (!task || task.status === "done" || task.status === "cancelled") {
         removeWorktree(s.repoDir, s.cwd, s.branchName);
         removeSession(s.taskId);
@@ -137,7 +148,18 @@ export class Scheduler {
     for (const s of loadSessions("in_review")) {
       if (this.pm.activeCount >= this.opts.maxConcurrent) return;
       if (this.pm.hasTask(s.taskId)) continue;
-      const task = (await this.client.getTask(s.taskId)) as any;
+      let task: any;
+      try {
+        task = await this.client.getTask(s.taskId);
+      } catch (err: any) {
+        if (err instanceof ApiError && err.status === 404) {
+          logger.warn(`Task ${s.taskId} not found (deleted), cleaning up review session`);
+          removeWorktree(s.repoDir, s.cwd, s.branchName);
+          removeSession(s.taskId);
+          continue;
+        }
+        throw err;
+      }
 
       if (!task || task.status === "done" || task.status === "cancelled") {
         removeSession(s.taskId);
