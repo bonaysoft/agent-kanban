@@ -50,19 +50,6 @@ export function RepositoriesPage() {
         ) : repos.length === 0 ? (
           <div className="text-center py-16 space-y-3">
             <p className="text-content-secondary text-sm">No repositories registered.</p>
-            <p className="text-content-tertiary text-xs">
-              Repositories are added when you run <code className="font-mono text-accent">ak link</code> in a project directory.
-            </p>
-            <pre className="inline-block bg-surface-secondary border border-border rounded-lg px-4 py-2 text-xs font-mono text-content-secondary mt-2">
-              npx agent-kanban link
-            </pre>
-            <p className="text-content-tertiary text-xs mt-3">
-              Or{" "}
-              <button onClick={() => setShowDialog(true)} className="text-accent hover:underline">
-                add manually
-              </button>
-              .
-            </p>
           </div>
         ) : (
           <div className="space-y-3">

@@ -131,27 +131,6 @@ CREATE TABLE messages (
 
 **Idle agents:** When a task completes, the agent CLI process may exit. The `agent_id` (session ID) is preserved in the messages table. If the user wants to review what the agent did, they can `claude --resume <agent_id>` on the Machine to see the full session history. If the user wants to chat with a completed task's agent, the Machine can resume the session.
 
-### Project-Repo Linking (`ak link`)
-
-Each local repo must be linked to a project before the daemon can spawn agents in it. Linking is done from the repo directory:
-
-```
-$ cd ~/projects/agent-kanban
-$ ak link --project agent-kanban
-  → local: stores mapping in ~/.agent-kanban/links.yaml
-      ~/projects/agent-kanban → project "agent-kanban"
-  → platform: auto-adds git_repo resource (from git remote URL)
-```
-
-Multiple repos can link to the same project:
-```
-$ cd ~/projects/agent-kanban-docs
-$ ak link --project agent-kanban
-# now project "agent-kanban" has two linked repos
-```
-
-Repos can also be added to projects from the platform side (Web UI or API).
-
 **When the daemon claims a task:**
 - `task.project_id` → look up local links → if found, use the local repo directory
 - If no local link exists, query `project_resources` for `git_repo` entries → auto-clone to `~/.agent-kanban/workspaces/` → spawn agent there

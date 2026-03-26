@@ -21,12 +21,5 @@ test.describe("Repositories Page", () => {
 
     // expect: The empty state shows 'No repositories registered.'
     await expect(page.getByText("No repositories registered.")).toBeVisible();
-
-    // expect: Instructions mention the 'ak link' CLI command with a code block
-    await expect(page.getByText("ak link")).toBeVisible();
-    await expect(page.getByText("npx agent-kanban link")).toBeVisible();
-
-    // expect: An 'add manually' link is shown for manual addition
-    await expect(page.getByRole("button", { name: "add manually" })).toBeVisible();
   });
 });
