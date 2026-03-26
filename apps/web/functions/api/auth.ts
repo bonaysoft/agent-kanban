@@ -31,7 +31,7 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   {
     method: "PATCH",
     pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/usage$/,
-    rule: { allow: ["agent:worker", "agent:leader"], capability: "agent:usage" },
+    rule: { allow: ["machine", "agent:worker", "agent:leader"], capability: "agent:usage" },
   },
 
   // Task lifecycle — agents operate, machine manages

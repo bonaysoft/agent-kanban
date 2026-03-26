@@ -4,13 +4,24 @@ import { type Agent, generateKeypair } from "@agent-kanban/shared";
 import { MachineClient } from "./client.js";
 import { getConfigValue } from "./config.js";
 import { loadIdentity, type StoredIdentity, saveIdentity } from "./identity.js";
+import { collectUsage } from "./usageCollector.js";
 
 async function ensureIdentity(runtimeName: string, client: MachineClient): Promise<StoredIdentity> {
   const existing = loadIdentity(runtimeName);
   if (existing) return existing;
 
+  // Check server for an existing leader agent with this runtime
+  const agents = (await client.listAgents()) as Agent[];
+  const match = agents.find((a) => a.runtime === runtimeName && a.kind === "leader");
+  if (match) {
+    const identity: StoredIdentity = { agent_id: match.id, name: match.name, fingerprint: match.fingerprint };
+    saveIdentity(runtimeName, identity);
+    console.log(`Restored identity for ${runtimeName}: ${match.id}`);
+    return identity;
+  }
+
   console.log(`Creating leader identity for ${runtimeName}...`);
-  const agent = (await client.createAgent({ name: `${runtimeName}-leader`, runtime: runtimeName, kind: "leader" })) as Agent;
+  const agent = (await client.createAgent({ name: runtimeName, runtime: runtimeName, kind: "leader" })) as Agent;
   const identity: StoredIdentity = { agent_id: agent.id, name: agent.name, fingerprint: agent.fingerprint };
   saveIdentity(runtimeName, identity);
   console.log(`  Agent ID:    ${agent.id}`);
@@ -32,6 +43,7 @@ export async function wrapRuntime(runtimeName: string, binary: string, args: str
   const sessionId = randomUUID();
   await client.createSession(identity.agent_id, sessionId, publicKeyBase64);
 
+  const startedAt = Date.now();
   const child = spawn(binary, args, {
     stdio: "inherit",
     env: {
@@ -44,6 +56,12 @@ export async function wrapRuntime(runtimeName: string, binary: string, args: str
   });
 
   child.on("exit", async (code) => {
+    try {
+      const usage = await collectUsage(runtimeName, startedAt);
+      if (usage) await client.updateSessionUsage(identity.agent_id, sessionId, usage);
+    } catch (err) {
+      console.error(`Failed to report usage for session ${sessionId}:`, err);
+    }
     await client.closeSession(identity.agent_id, sessionId).catch((err: unknown) => {
       console.error(`Failed to close session ${sessionId}:`, err);
     });
