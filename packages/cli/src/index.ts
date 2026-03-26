@@ -16,7 +16,66 @@ import { wrapRuntime } from "./runtimeWrapper.js";
 const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
 
 const program = new Command();
-program.name("agent-kanban").description("Agent-first kanban board").version(pkg.version);
+program.name("ak").description("Agent-first kanban board").version(pkg.version);
+
+const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - s.length));
+const helpSections: [string, [string, string][]][] = [
+  [
+    "Resources",
+    [
+      ["get <resource> [id]", "Get a resource or list resources"],
+      ["create <resource>", "Create a resource (board, task, agent, repo, note)"],
+      ["update <resource> <id>", "Update a resource (board, task, agent)"],
+      ["delete <resource> <id>", "Delete a resource (board, task, agent, repo)"],
+    ],
+  ],
+  [
+    "Task Lifecycle",
+    [
+      ["task claim <id>", "Claim an assigned task"],
+      ["task review <id>", "Submit task for review"],
+      ["task complete <id>", "Complete a task"],
+      ["task reject <id>", "Reject a task back to in-progress"],
+      ["task cancel <id>", "Cancel a task"],
+      ["task release <id>", "Release a task back to todo"],
+    ],
+  ],
+  [
+    "Runtime Wrappers",
+    [
+      ["claude [args...]", "Launch Claude Code with leader identity"],
+      ["codex [args...]", "Launch Codex CLI with leader identity"],
+      ["gemini [args...]", "Launch Gemini CLI with leader identity"],
+      ["whoami", "Show agent identity for current runtime"],
+    ],
+  ],
+  [
+    "Daemon",
+    [
+      ["start", "Start the Machine daemon"],
+      ["stop", "Stop the Machine daemon"],
+      ["status", "Show daemon status"],
+      ["logs", "Show daemon logs"],
+    ],
+  ],
+  [
+    "Config",
+    [
+      ["config set <key> <value>", "Set a config value"],
+      ["config get <key>", "Get a config value"],
+    ],
+  ],
+];
+
+program.helpInformation = () => {
+  const lines = [`Usage: ak [command]\n`, `Agent-first kanban board (v${pkg.version})\n`];
+  for (const [title, cmds] of helpSections) {
+    lines.push(`  ${title}:`);
+    for (const [cmd, desc] of cmds) lines.push(`    ${pad(cmd, 28)} ${desc}`);
+    lines.push("");
+  }
+  return lines.join("\n");
+};
 
 // ─── Config ───
 
