@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -89,7 +88,6 @@ describe("CLI ApiClient agent JWT passthrough", () => {
   let sessionPrivKeyJwk: JsonWebKey;
   let leaderAgentId: string;
   let leaderSessionId: string;
-  let leaderSessionPrivateKey: CryptoKey;
 
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -155,7 +153,6 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     leaderAgentId = leaderAgent.id;
     leaderSessionId = randomUUID();
     const leaderKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
-    leaderSessionPrivateKey = (leaderKeypair as any).privateKey;
     const leaderPubJwk = await crypto.subtle.exportKey("jwk", (leaderKeypair as any).publicKey);
     const leaderSessionRes = await honoRequest(
       "POST",
