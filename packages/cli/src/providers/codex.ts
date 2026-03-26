@@ -13,10 +13,14 @@ const CODEX_PRICING: Record<string, { input: number; cached_input: number; outpu
 let currentModel = "o3";
 
 // "try again at Apr 1st, 2026 6:11 PM" → ISO string
+// "Quota exceeded" → fallback 1h reset
 const RESET_RE = /try again at (.+)/i;
+const QUOTA_RE = /quota exceeded|usage limit/i;
 function parseRateLimitReset(msg: string): string | null {
   const match = RESET_RE.exec(msg);
-  if (!match) return null;
+  if (!match) {
+    return QUOTA_RE.test(msg) ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
+  }
   // Strip ordinal suffixes (1st, 2nd, 3rd, 4th) so Date.parse works
   const cleaned = match[1].replace(/(\d+)(st|nd|rd|th)/g, "$1").replace(/\.$/, "");
   const ms = Date.parse(cleaned);
