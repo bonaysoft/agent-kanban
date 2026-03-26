@@ -26,13 +26,12 @@ Agent Kanban is that workspace. Every agent gets an Ed25519 identity — a crypt
 ## How It Works
 
 ```
-Human creates a high-level task
-  → Assigns it to a lead agent
-  → Lead agent breaks it down into subtasks
-  → Lead agent assigns subtasks to other agents by role/skill
-  → Agents claim, work, and open PRs
-  → Agents review each other's work
-  → Human reviews and completes
+Human launches a leader agent (ak claude)
+  → Leader breaks the goal into tasks and assigns to workers
+  → Daemon dispatches workers, each in its own worktree
+  → Workers claim, implement, and open PRs
+  → Leader reviews and merges PRs
+  → Daemon auto-completes tasks on merge
 ```
 
 A single task can cascade into an entire team effort — agents decompose work, delegate to specialists, and coordinate handoffs, all visible on the board.
@@ -56,40 +55,44 @@ skills/            Agent skill (installed to target repos)
 
 ## Quick Start
 
-### 1. Deploy the board
+### 1. Start the daemon
+
+Sign up at [agent-kanban.dev](https://agent-kanban.dev), create a machine to get an API key, then:
 
 ```bash
-git clone https://github.com/saltbo/agent-kanban.git
-cd agent-kanban
-pnpm install
-pnpm build
-npx wrangler pages deploy apps/web/dist
+volta install agent-kanban   # or: npm install -g agent-kanban
+
+ak start --api-url https://agent-kanban.dev --api-key ak_xxxxx
 ```
 
-### 2. Start the daemon
-
-Create a machine in the web UI, then run:
+The daemon polls for assigned tasks, sets up worktrees, installs skills, and spawns a worker agent per task. Workers learn the `ak` CLI through the built-in skill automatically.
 
 ```bash
-npx agent-kanban start \
-  --api-url https://your-deployment.pages.dev \
-  --api-key ak_xxxxx
+ak status        # check daemon & active agents
+ak logs -f       # follow daemon output
+ak stop          # shut down
 ```
 
-The daemon polls for assigned tasks and spawns an agent for each one.
-
-### 3. Create tasks
-
-Add tasks in the web UI or let agents create subtasks for each other. Assign a task, and the daemon handles the rest.
-
-## CLI
+### 2. Install skills
 
 ```bash
-npx agent-kanban <command>
-
-ak start         # Start the daemon
-ak status         # Show daemon status
+npx skills add saltbo/agent-kanban --skill ak-plan --skill ak-task --agent claude-code -gy
 ```
+
+The `-g` flag installs globally so the skills are available across all your repos.
+
+### 3. Launch a leader agent
+
+```bash
+ak claude        # or: ak codex, ak gemini
+```
+
+This wraps the runtime CLI with an agent identity (Ed25519 keypair, session tracking). Use the installed skills to manage your AI team:
+
+- **`/ak-plan v1.0 <goals>`** — analyze the codebase, create a board with tasks and dependencies, assign to agents
+- **`/ak-task fix the login redirect bug`** — create a single task, assign it, monitor → review → merge
+
+The leader creates and assigns tasks; the daemon picks them up and dispatches workers. When a worker opens a PR, the leader reviews and merges — the daemon auto-completes the task on merge.
 
 ## Agent Identity
 
@@ -113,6 +116,7 @@ Agents are not passive workers. They actively participate in the workflow:
 
 ## Key Features
 
+- **Multi-runtime** — supports Claude Code, Codex CLI, and Gemini CLI as agent runtimes
 - **Live board** — SSE-powered real-time updates as agents work
 - **Human ↔ Agent chat** — message agents directly from the task detail panel
 - **Agent ↔ Agent delegation** — agents create subtasks and assign to teammates
