@@ -213,10 +213,10 @@ export class ProcessManager {
           removeSession(taskId);
         }
       } else if (agent.rateLimited) {
-        logger.warn(`Agent for task ${taskId} exited due to rate limit, suspending`);
+        logger.warn(`Agent for task ${taskId} (${agent.provider.name}) exited due to rate limit, suspending`);
         updateSessionStatus(taskId, "rate_limited");
       } else {
-        logger.warn(`Agent crashed on task ${taskId} (exit ${code})`);
+        logger.warn(`Agent crashed on task ${taskId} (${agent.provider.name}, exit ${code})`);
         if (stderrBuffer.trim()) {
           const lastLines = stderrBuffer.trim().split("\n").slice(-10).join("\n");
           logger.warn(`stderr: ${lastLines}`);
@@ -247,15 +247,16 @@ export class ProcessManager {
   private async handleEvent(taskId: string, event: AgentEvent, agentClient: AgentClient): Promise<void> {
     switch (event.type) {
       case "rate_limit": {
-        logger.warn(`Rate limited on task ${taskId}, resets at ${event.resetAt}`);
         const agent = this.agents.get(taskId);
+        logger.warn(`Rate limited on task ${taskId} (${agent?.provider.name}), resets at ${event.resetAt}`);
         if (agent) agent.rateLimited = true;
         this.callbacks.onRateLimited(event.resetAt);
         break;
       }
 
       case "error": {
-        logger.warn(`Agent error on task ${taskId}: ${event.detail}`);
+        const agent = this.agents.get(taskId);
+        logger.warn(`Agent error on task ${taskId} (${agent?.provider.name}): ${event.detail}`);
         break;
       }
 
@@ -273,7 +274,8 @@ export class ProcessManager {
       case "result": {
         const cost = event.cost || 0;
         const usage = event.usage || {};
-        logger.info(`Agent result for task ${taskId}: cost=$${cost.toFixed(4)}`);
+        const agent = this.agents.get(taskId);
+        logger.info(`Agent result for task ${taskId} (${agent?.provider.name}): cost=$${cost.toFixed(4)}`);
         agentClient
           .updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
             input_tokens: usage.input_tokens || 0,
@@ -283,8 +285,6 @@ export class ProcessManager {
             cost_micro_usd: Math.round(cost * 1_000_000),
           })
           .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
-
-        const agent = this.agents.get(taskId);
         if (agent) {
           agent.resultReceived = true;
           // Rate limit was transient — agent completed despite the warning
