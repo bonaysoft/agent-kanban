@@ -8,6 +8,7 @@ import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { AuthPage } from "./routes/AuthPage";
 import { BoardPage } from "./routes/BoardPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
+import { LandingPage } from "./routes/LandingPage";
 import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { MachinesPage } from "./routes/MachinesPage";
 import { NewBoardPage } from "./routes/NewBoardPage";
@@ -22,20 +23,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RootRoute() {
+  const { data: session, isPending } = useSession();
+
+  if (isPending) return null;
+  if (!session) return <LandingPage />;
+  return <BoardRedirect />;
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <BoardRedirect />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/" element={<RootRoute />} />
         <Route
           path="/onboarding"
           element={
