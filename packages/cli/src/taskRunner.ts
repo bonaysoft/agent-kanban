@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AgentClient, type MachineClient } from "./client.js";
+import { ApiError, AgentClient, type MachineClient } from "./client.js";
 import { getConfigValue } from "./config.js";
 import { createLogger } from "./logger.js";
 import type { ProcessManager } from "./processManager.js";
@@ -119,7 +119,18 @@ export class TaskRunner {
 
   /** Resume a saved session (rate-limited or rejected). */
   async resumeSession(session: SavedSession, message: string): Promise<boolean> {
-    const task = (await this.client.getTask(session.taskId)) as any;
+    let task: any;
+    try {
+      task = await this.client.getTask(session.taskId);
+    } catch (err: any) {
+      if (err instanceof ApiError && err.status === 404) {
+        logger.warn(`Task ${session.taskId} not found (deleted), cleaning up session`);
+        removeWorktree(session.repoDir, session.cwd, session.branchName);
+        removeSession(session.taskId);
+        return false;
+      }
+      throw err;
+    }
     if (!task || task.status === "cancelled" || task.status === "done") {
       removeWorktree(session.repoDir, session.cwd, session.branchName);
       removeSession(session.taskId);
