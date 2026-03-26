@@ -162,7 +162,7 @@ describe("routes", () => {
   // ─── Boards ───
 
   it("POST /api/boards creates a board", async () => {
-    const res = await apiRequest("POST", "/api/boards", { name: "Route Board", description: "Test" }, apiKey);
+    const res = await apiRequest("POST", "/api/boards", { name: "Route Board", description: "Test" }, userToken);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.name).toBe("Route Board");
@@ -170,7 +170,7 @@ describe("routes", () => {
   });
 
   it("POST /api/boards requires name", async () => {
-    const res = await apiRequest("POST", "/api/boards", { description: "No name" }, apiKey);
+    const res = await apiRequest("POST", "/api/boards", { description: "No name" }, userToken);
     expect(res.status).toBe(400);
   });
 
@@ -183,7 +183,7 @@ describe("routes", () => {
   });
 
   it("GET /api/boards?name= finds board by name", async () => {
-    const res = await apiRequest("GET", "/api/boards?name=Route Board", undefined, apiKey);
+    const res = await apiRequest("GET", "/api/boards?name=Route Board", undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.name).toBe("Route Board");
@@ -208,35 +208,35 @@ describe("routes", () => {
   });
 
   it("PATCH /api/boards/:id updates board", async () => {
-    const res = await apiRequest("PATCH", `/api/boards/${boardId}`, { name: "Updated Board" }, apiKey);
+    const res = await apiRequest("PATCH", `/api/boards/${boardId}`, { name: "Updated Board" }, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.name).toBe("Updated Board");
   });
 
   it("PATCH /api/boards/:id returns 404 for unknown board", async () => {
-    const res = await apiRequest("PATCH", "/api/boards/nonexistent", { name: "X" }, apiKey);
+    const res = await apiRequest("PATCH", "/api/boards/nonexistent", { name: "X" }, userToken);
     expect(res.status).toBe(404);
   });
 
   it("DELETE /api/boards/:id deletes board", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const board = await createBoard(env.DB, userId, "Delete Route Board");
-    const res = await apiRequest("DELETE", `/api/boards/${board.id}`, undefined, apiKey);
+    const res = await apiRequest("DELETE", `/api/boards/${board.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
   it("DELETE /api/boards/:id returns 404 for unknown board", async () => {
-    const res = await apiRequest("DELETE", "/api/boards/nonexistent", undefined, apiKey);
+    const res = await apiRequest("DELETE", "/api/boards/nonexistent", undefined, userToken);
     expect(res.status).toBe(404);
   });
 
   // ─── Repositories ───
 
   it("POST /api/repositories creates a repository", async () => {
-    const res = await apiRequest("POST", "/api/repositories", { name: "test-repo", url: "https://github.com/org/test-repo" }, apiKey);
+    const res = await apiRequest("POST", "/api/repositories", { name: "test-repo", url: "https://github.com/org/test-repo" }, userToken);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.name).toBe("test-repo");
@@ -244,12 +244,12 @@ describe("routes", () => {
   });
 
   it("POST /api/repositories requires name and url", async () => {
-    const res = await apiRequest("POST", "/api/repositories", { name: "no-url" }, apiKey);
+    const res = await apiRequest("POST", "/api/repositories", { name: "no-url" }, userToken);
     expect(res.status).toBe(400);
   });
 
   it("GET /api/repositories lists repositories", async () => {
-    const res = await apiRequest("GET", "/api/repositories", undefined, apiKey);
+    const res = await apiRequest("GET", "/api/repositories", undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(Array.isArray(body)).toBe(true);
@@ -257,23 +257,23 @@ describe("routes", () => {
   });
 
   it("GET /api/repositories?url= filters by URL", async () => {
-    const res = await apiRequest("GET", "/api/repositories?url=https://github.com/org/test-repo", undefined, apiKey);
+    const res = await apiRequest("GET", "/api/repositories?url=https://github.com/org/test-repo", undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
 
   it("DELETE /api/repositories/:id deletes a repository", async () => {
-    const { createRepository } = await import("../apps/web/functions/api/repositoryRepo");
-    const repo = await createRepository(env.DB, userId, { name: "del-repo", url: "https://github.com/org/del-repo" });
-    const res = await apiRequest("DELETE", `/api/repositories/${repo.id}`, undefined, apiKey);
+    const createRes = await apiRequest("POST", "/api/repositories", { name: "del-repo", url: "https://github.com/org/del-repo" }, userToken);
+    const repo = (await createRes.json()) as any;
+    const res = await apiRequest("DELETE", `/api/repositories/${repo.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
   it("DELETE /api/repositories/:id returns 404 for unknown repo", async () => {
-    const res = await apiRequest("DELETE", "/api/repositories/nonexistent", undefined, apiKey);
+    const res = await apiRequest("DELETE", "/api/repositories/nonexistent", undefined, userToken);
     expect(res.status).toBe(404);
   });
 
@@ -319,19 +319,19 @@ describe("routes", () => {
   // ─── Tasks ───
 
   it("POST /api/tasks creates a task", async () => {
-    const res = await apiRequest("POST", "/api/tasks", { title: "Route Task", board_id: boardId, assigned_to: agentId }, apiKey);
+    const res = await apiRequest("POST", "/api/tasks", { title: "Route Task", board_id: boardId, assigned_to: agentId }, await signSessionJWT());
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.title).toBe("Route Task");
   });
 
   it("POST /api/tasks requires title", async () => {
-    const res = await apiRequest("POST", "/api/tasks", { board_id: boardId }, apiKey);
+    const res = await apiRequest("POST", "/api/tasks", { board_id: boardId }, await signSessionJWT());
     expect(res.status).toBe(400);
   });
 
   it("POST /api/tasks rejects non-object input", async () => {
-    const res = await apiRequest("POST", "/api/tasks", { title: "Bad Input", board_id: boardId, input: "string" }, apiKey);
+    const res = await apiRequest("POST", "/api/tasks", { title: "Bad Input", board_id: boardId, input: "string" }, await signSessionJWT());
     expect(res.status).toBe(400);
   });
 
@@ -359,35 +359,35 @@ describe("routes", () => {
   it("PATCH /api/tasks/:id updates a task", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Patch Task", board_id: boardId });
-    const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { title: "Patched" }, apiKey);
+    const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { title: "Patched" }, await signLeaderSessionJWT());
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.title).toBe("Patched");
   });
 
   it("PATCH /api/tasks/:id returns 404 for unknown task", async () => {
-    const res = await apiRequest("PATCH", "/api/tasks/nonexistent", { title: "X" }, apiKey);
+    const res = await apiRequest("PATCH", "/api/tasks/nonexistent", { title: "X" }, await signSessionJWT());
     expect(res.status).toBe(404);
   });
 
   it("PATCH /api/tasks/:id rejects non-object input", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Bad Patch", board_id: boardId });
-    const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { input: 42 }, apiKey);
+    const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { input: 42 }, await signSessionJWT());
     expect(res.status).toBe(400);
   });
 
   it("DELETE /api/tasks/:id deletes a task", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Delete Task", board_id: boardId });
-    const res = await apiRequest("DELETE", `/api/tasks/${task.id}`, undefined, apiKey);
+    const res = await apiRequest("DELETE", `/api/tasks/${task.id}`, undefined, await signLeaderSessionJWT());
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
   });
 
   it("DELETE /api/tasks/:id returns 404 for unknown task", async () => {
-    const res = await apiRequest("DELETE", "/api/tasks/nonexistent", undefined, apiKey);
+    const res = await apiRequest("DELETE", "/api/tasks/nonexistent", undefined, await signSessionJWT());
     expect(res.status).toBe(404);
   });
 
@@ -457,7 +457,7 @@ describe("routes", () => {
   it("POST /api/tasks/:id/notes creates a note", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Note Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, { detail: "A note entry" }, apiKey);
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, { detail: "A note entry" }, await signSessionJWT());
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.detail).toBe("A note entry");
@@ -466,12 +466,12 @@ describe("routes", () => {
   it("POST /api/tasks/:id/notes requires detail", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Note Task 2", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, {}, apiKey);
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, {}, await signSessionJWT());
     expect(res.status).toBe(400);
   });
 
   it("POST /api/tasks/:id/notes returns 404 for unknown task", async () => {
-    const res = await apiRequest("POST", "/api/tasks/nonexistent/notes", { detail: "X" }, apiKey);
+    const res = await apiRequest("POST", "/api/tasks/nonexistent/notes", { detail: "X" }, await signSessionJWT());
     expect(res.status).toBe(404);
   });
 
@@ -503,7 +503,7 @@ describe("routes", () => {
         sender_type: "user",
         content: "Hello",
       },
-      apiKey,
+      userToken,
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
@@ -514,7 +514,7 @@ describe("routes", () => {
   it("POST /api/tasks/:id/messages requires sender_type and content", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Msg Task 2", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, { content: "No sender" }, apiKey);
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, { content: "No sender" }, userToken);
     expect(res.status).toBe(400);
   });
 
@@ -528,7 +528,7 @@ describe("routes", () => {
         sender_type: "bot",
         content: "Bad type",
       },
-      apiKey,
+      userToken,
     );
     expect(res.status).toBe(400);
   });
@@ -541,7 +541,7 @@ describe("routes", () => {
         sender_type: "user",
         content: "X",
       },
-      apiKey,
+      userToken,
     );
     expect(res.status).toBe(404);
   });
