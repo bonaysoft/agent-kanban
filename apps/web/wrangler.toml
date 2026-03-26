@@ -4,7 +4,7 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-ALLOWED_HOSTS = "ak.tftt.cc,agent-kanban-6zd.pages.dev"
+ALLOWED_HOSTS = "agent-kanban.dev,agent-kanban-6zd.pages.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
 
 # Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET) are set via `wrangler pages secret put`
