@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ApiError, AgentClient, type MachineClient } from "./client.js";
+import { AgentClient, ApiError, type MachineClient } from "./client.js";
 import { getConfigValue } from "./config.js";
 import { createLogger } from "./logger.js";
 import type { ProcessManager } from "./processManager.js";
