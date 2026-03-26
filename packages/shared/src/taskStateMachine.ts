@@ -20,8 +20,8 @@ const TRANSITIONS: Record<TaskTransition, TransitionDef> = {
   claim: { from: ["todo"], to: "in_progress", allow: ["agent:worker"] },
   review: { from: ["in_progress"], to: "in_review", allow: ["agent:worker"] },
   reject: { from: ["in_review"], to: "in_progress", allow: ["user", "agent:leader"] },
-  complete: { from: ["in_review"], to: "done", allow: ["user", "agent:leader"] },
-  cancel: { from: ["in_progress", "in_review"], to: "cancelled", allow: ["user", "agent:leader"] },
+  complete: { from: ["in_review"], to: "done", allow: ["user", "machine", "agent:leader"] },
+  cancel: { from: ["in_progress", "in_review"], to: "cancelled", allow: ["user", "machine", "agent:leader"] },
   release: { from: ["in_progress", "in_review"], to: "todo", allow: ["machine"] },
 };
 

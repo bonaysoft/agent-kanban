@@ -210,9 +210,8 @@ describe("validateTransition", () => {
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects complete by machine", () => {
-    const err = validateTransition("complete", "in_review", "machine");
-    expect(err?.code).toBe("FORBIDDEN");
+  it("allows complete by machine", () => {
+    expect(validateTransition("complete", "in_review", "machine")).toBeNull();
   });
 
   it("rejects complete by agent:worker", () => {
@@ -220,9 +219,8 @@ describe("validateTransition", () => {
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects cancel by machine", () => {
-    const err = validateTransition("cancel", "in_progress", "machine");
-    expect(err?.code).toBe("FORBIDDEN");
+  it("allows cancel by machine", () => {
+    expect(validateTransition("cancel", "in_progress", "machine")).toBeNull();
   });
 
   it("rejects cancel by agent:worker", () => {
