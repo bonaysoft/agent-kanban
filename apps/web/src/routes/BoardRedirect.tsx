@@ -13,6 +13,5 @@ export function BoardRedirect() {
     return <Navigate to={`/boards/${target}`} replace />;
   }
 
-  // No boards exist — redirect to first board route with empty state
-  return <Navigate to="/boards/_new" replace />;
+  return <Navigate to="/onboarding" replace />;
 }

@@ -10,6 +10,8 @@ import { BoardPage } from "./routes/BoardPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
 import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { MachinesPage } from "./routes/MachinesPage";
+import { NewBoardPage } from "./routes/NewBoardPage";
+import { OnboardingPage } from "./routes/OnboardingPage";
 import { RepositoriesPage } from "./routes/RepositoriesPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -31,6 +33,22 @@ export function App() {
           element={
             <ProtectedRoute>
               <BoardRedirect />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/onboarding"
+          element={
+            <ProtectedRoute>
+              <OnboardingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/boards/new"
+          element={
+            <ProtectedRoute>
+              <NewBoardPage />
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,4 @@
-import type { CreateTaskInput, IdentityType, Task, TaskNote, TaskStatus, TaskTransition, TaskWithNotes } from "@agent-kanban/shared";
+import type { BoardNote, CreateTaskInput, IdentityType, Task, TaskNote, TaskStatus, TaskTransition, TaskWithNotes } from "@agent-kanban/shared";
 import { validateTransition } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
 import { getDefaultBoard } from "./boardRepo";
@@ -438,6 +438,23 @@ export async function getTaskNotes(db: D1, taskId: string, since?: string): Prom
     .prepare(query)
     .bind(...binds)
     .all<TaskNote>();
+  return result.results;
+}
+
+export async function getBoardNotes(db: D1, boardId: string, ownerId: string, since: string): Promise<BoardNote[]> {
+  const result = await db
+    .prepare(`
+      SELECT n.*, a.name as agent_name, a.public_key as agent_public_key, a.kind as agent_kind
+      FROM task_notes n
+      JOIN tasks t ON n.task_id = t.id
+      JOIN boards b ON t.board_id = b.id
+      LEFT JOIN agents a ON n.agent_id = a.id
+      WHERE t.board_id = ? AND b.owner_id = ? AND n.created_at > ?
+      ORDER BY n.created_at ASC
+      LIMIT 100
+    `)
+    .bind(boardId, ownerId, since)
+    .all<BoardNote>();
   return result.results;
 }
 

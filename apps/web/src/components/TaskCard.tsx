@@ -17,23 +17,25 @@ const priorityColors: Record<string, string> = {
 };
 
 export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) {
-  const isAgentActive = !!task.assigned_to && !task.result;
+  const isAssigned = !!task.assigned_to && !!task.agent_public_key;
+  const isWorking = isAssigned && task.status === "in_progress" && !task.glow_suppressed;
 
   return (
     <button
+      data-task-id={task.id}
       onClick={onClick}
       className={`
         w-full text-left bg-surface-card border rounded-lg p-3
-        transition-all duration-150 cursor-pointer
+        transition-[border-color,box-shadow,filter,color] duration-150 cursor-pointer
         ${
-          isAgentActive
+          isWorking
             ? "border-accent/30 shadow-[0_0_20px_var(--accent-glow),0_0_40px_rgba(34,211,238,0.05)]"
             : "border-border hover:border-content-tertiary"
         }
         ${isNew ? "animate-card-highlight" : ""}
       `}
       style={
-        isAgentActive && task.agent_public_key
+        isWorking && task.agent_public_key
           ? {
               borderColor: `color-mix(in srgb, ${agentColor(task.agent_public_key)} 30%, transparent)`,
               boxShadow: `0 0 20px color-mix(in srgb, ${agentColor(task.agent_public_key)} 12%, transparent)`,
@@ -63,10 +65,15 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
         )}
       </div>
 
-      {isAgentActive && (
-        <div className="flex items-center gap-1.5 mt-2 text-accent">
-          {task.agent_public_key && <AgentIdenticon publicKey={task.agent_public_key} size={12} />}
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />
+      {isAssigned && (
+        <div
+          data-agent-section
+          className={`flex items-center gap-1.5 mt-2 transition-colors duration-500 ${isWorking ? "text-accent" : "text-content-tertiary"}`}
+        >
+          <div className="transition-[filter] duration-500" style={{ filter: isWorking ? "none" : "grayscale(1) opacity(0.5)" }}>
+            <AgentIdenticon publicKey={task.agent_public_key} size={12} />
+          </div>
+          {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />}
           <span
             className="font-mono text-[11px] hover:underline"
             onClick={(e) => {
@@ -81,9 +88,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
         </div>
       )}
 
-      {task.result && (
-        <div className="font-mono text-[11px] text-success mt-1.5">Completed{task.duration_minutes ? ` in ${task.duration_minutes} min` : ""}</div>
-      )}
+      {task.result && task.duration_minutes && <div className="font-mono text-[11px] text-success mt-1.5">{task.duration_minutes} min</div>}
     </button>
   );
 }

@@ -6,6 +6,7 @@ import { closeSession, createSession, listSessions, reopenSession, updateSession
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateBoard } from "./boardRepo";
+import { createBoardSSEResponse } from "./boardSSE";
 import { createLogger } from "./logger";
 import { createMachine, deleteMachine, getMachine, listMachines, updateMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -384,6 +385,10 @@ api.get("/api/tasks/:id/messages", async (c) => {
 api.get("/api/tasks/:id/stream", async (c) => {
   const lastEventId = c.req.header("Last-Event-ID") || null;
   return createSSEResponse(c.env, c.req.param("id"), lastEventId);
+});
+
+api.get("/api/boards/:id/stream", async (c) => {
+  return createBoardSSEResponse(c.env, c.req.param("id"), c.get("ownerId"));
 });
 
 // ─── Boards ───

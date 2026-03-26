@@ -63,6 +63,10 @@ export interface TaskNote {
   created_at: string;
 }
 
+export interface BoardNote extends TaskNote {
+  agent_kind: AgentKind | null;
+}
+
 export type Priority = "low" | "medium" | "high" | "urgent";
 
 export type TaskAction =

@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { AgentProfile } from "../components/AgentProfile";
 import { FilterBar } from "../components/FilterBar";
+import { AgentAvatarOverlay } from "../components/FloatingAvatar";
 import { Header } from "../components/Header";
 import { KanbanColumn } from "../components/KanbanColumn";
-import { Onboarding } from "../components/Onboarding";
 import { TaskDetail } from "../components/TaskDetail";
+import { useAgentPresence } from "../hooks/useAgentPresence";
 import { useBoard } from "../hooks/useBoard";
-import { api } from "../lib/api";
 
 const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -21,8 +21,8 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 
 export function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
-  const navigate = useNavigate();
   const { board, loading, error, refresh } = useBoard(boardId);
+  const avatars = useAgentPresence(boardId, board?.tasks ?? []);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
@@ -74,17 +74,11 @@ export function BoardPage() {
     );
   }
 
-  // _new is a sentinel for "no boards exist yet"
-  if (!board || boardId === "_new") {
+  if (!board) {
     return (
       <div className="min-h-screen bg-surface-primary">
         <Header />
-        <Onboarding
-          onComplete={async () => {
-            const boards = await api.boards.list();
-            if (boards.length > 0) navigate(`/boards/${boards[0].id}`, { replace: true });
-          }}
-        />
+        <div className="flex items-center justify-center min-h-[60vh] text-content-tertiary">Board not found</div>
       </div>
     );
   }
@@ -133,6 +127,8 @@ export function BoardPage() {
             <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
           ))}
       </div>
+
+      <AgentAvatarOverlay avatars={avatars} />
 
       {selectedTask && (
         <TaskDetail

@@ -1,3 +1,4 @@
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { TaskCard } from "./TaskCard";
 
 interface KanbanColumnProps {
@@ -13,7 +14,7 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
   });
 
   return (
-    <div className="min-w-0 border-r border-border last:border-r-0 p-4">
+    <div data-column-status={column.status} className="min-w-0 border-r border-border last:border-r-0 p-4">
       <div className="flex items-center justify-between mb-3">
         <span className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}>
           {column.name}
@@ -21,11 +22,23 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
         <span className="font-mono text-[11px] text-content-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">{column.tasks.length}</span>
       </div>
 
-      <div className="space-y-2">
-        {column.tasks.map((task: any) => (
-          <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} onAgentClick={onAgentClick} />
-        ))}
-      </div>
+      <LayoutGroup>
+        <AnimatePresence initial={false} mode="popLayout">
+          {column.tasks.map((task: any) => (
+            <motion.div
+              key={task.id}
+              layout
+              initial={{ opacity: 0, scale: 0.95, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25, layout: { duration: 0.3 } }}
+              className="mb-2"
+            >
+              <TaskCard task={task} onClick={() => onTaskClick(task.id)} onAgentClick={onAgentClick} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </LayoutGroup>
     </div>
   );
 }

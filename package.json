@@ -40,6 +40,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@agent-kanban/shared": "workspace:*"
+    "@agent-kanban/shared": "workspace:*",
+    "framer-motion": "^12.38.0"
   }
 }
