@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { formatRelative } from "./TaskDetailFields";
@@ -17,10 +18,17 @@ interface ChatPanelProps {
 
 export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, sseMessages }: ChatPanelProps) {
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+
+  const sendMessage = useMutation({
+    mutationFn: (content: string) =>
+      api.messages.create(taskId, {
+        sender_type: "user",
+        sender_id: userId || "",
+        content,
+      }),
+  });
 
   // Merge initial + SSE messages, dedup by ID
   const allMessages = (() => {
@@ -52,21 +60,9 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
 
   async function handleSend() {
     if (!input.trim() || !agentId) return;
-
-    setSending(true);
-    setSendError(null);
-    try {
-      await api.messages.create(taskId, {
-        sender_type: "user",
-        sender_id: userId || "",
-        content: input.trim(),
-      });
-      setInput("");
-    } catch (_err: any) {
-      setSendError("Failed to send. Try again.");
-    } finally {
-      setSending(false);
-    }
+    const content = input.trim();
+    setInput("");
+    await sendMessage.mutateAsync(content);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -133,7 +129,7 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
       </div>
 
       {/* Send error */}
-      {sendError && <p className="text-xs text-error shrink-0">{sendError}</p>}
+      {sendMessage.isError && <p className="text-xs text-error shrink-0">Failed to send. Try again.</p>}
 
       {/* Input — pinned at bottom, hidden when task is done */}
       {!taskDone && (
@@ -144,10 +140,10 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Message the agent..."
-            disabled={sending}
+            disabled={sendMessage.isPending}
           />
-          <Button onClick={handleSend} disabled={!input.trim() || sending}>
-            {sending ? "..." : "Send"}
+          <Button onClick={handleSend} disabled={!input.trim() || sendMessage.isPending}>
+            {sendMessage.isPending ? "..." : "Send"}
           </Button>
         </div>
       )}

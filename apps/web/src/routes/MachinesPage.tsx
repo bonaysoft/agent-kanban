@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { AddMachineSteps } from "../components/AddMachineSteps";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { api } from "../lib/api";
+import { useMachines } from "../hooks/useMachines";
 import { authClient } from "../lib/auth-client";
 
 const statusDotColors: Record<string, string> = {
@@ -22,24 +22,12 @@ function randomName() {
 }
 
 export function MachinesPage() {
-  const [machines, setMachines] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { machines, loading, refresh } = useMachines();
   const [showDialog, setShowDialog] = useState(false);
   const [dialogStep, setDialogStep] = useState<DialogStep>("choose");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [createdKeyId, setCreatedKeyId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    api.machines
-      .list()
-      .then(setMachines)
-      .finally(() => setLoading(false));
-    const interval = setInterval(() => {
-      api.machines.list().then(setMachines);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
 
   async function handleChooseLocal() {
     const name = randomName();
@@ -52,9 +40,8 @@ export function MachinesPage() {
 
   const handleConnected = useCallback(async () => {
     setConnected(true);
-    const updated = await api.machines.list();
-    setMachines(updated);
-  }, []);
+    refresh();
+  }, [refresh]);
 
   async function closeDialog() {
     if (createdKeyId && !connected) {

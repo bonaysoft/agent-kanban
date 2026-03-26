@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
+import { useAgents } from "../hooks/useAgents";
 import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
-import { api } from "../lib/api";
 
 function formatTokens(n: number): string {
   if (!n) return "0";
@@ -19,17 +18,7 @@ function formatCost(microUsd: number): string {
 }
 
 export function AgentsPage() {
-  const [agents, setAgents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = () => api.agents.list().then(setAgents);
-
-  useEffect(() => {
-    refresh().finally(() => setLoading(false));
-    const interval = setInterval(refresh, 15000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
+  const { agents, loading } = useAgents();
   const online = agents.filter((a) => a.status === "online").length;
 
   return (

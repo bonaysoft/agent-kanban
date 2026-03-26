@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { useCreateBoard } from "../hooks/useBoard";
 import { authClient } from "../lib/auth-client";
 import { AddMachineSteps } from "./AddMachineSteps";
 import { Button } from "./ui/button";
@@ -14,24 +14,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [boardName, setBoardName] = useState("My Board");
   const [apiKeyDisplay, setApiKeyDisplay] = useState("");
   const [apiKeyId, setApiKeyId] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const createBoard = useCreateBoard();
 
   async function handleCreateBoard() {
-    setLoading(true);
     setError("");
-    await api.boards.create({ name: boardName });
+    await createBoard.mutateAsync({ name: boardName });
 
     const { data, error: keyError } = await authClient.apiKey.create({ name: "onboarding" });
     if (keyError || !data?.key) {
       setError("Failed to create API key. You can create one later from Machines page.");
-      setLoading(false);
       return;
     }
     setApiKeyDisplay(data.key);
     setApiKeyId(data.id);
-
-    setLoading(false);
     setStep(1);
   }
 
@@ -57,8 +53,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <label className="block text-xs font-medium text-content-tertiary uppercase tracking-wide">Board name</label>
             <Input value={boardName} onChange={(e) => setBoardName(e.target.value)} />
             {error && <p className="text-xs text-red-400">{error}</p>}
-            <Button onClick={handleCreateBoard} disabled={loading || !boardName.trim()} className="w-full">
-              {loading ? "Creating..." : "Create Board"}
+            <Button onClick={handleCreateBoard} disabled={createBoard.isPending || !boardName.trim()} className="w-full">
+              {createBoard.isPending ? "Creating..." : "Create Board"}
             </Button>
           </div>
         )}
