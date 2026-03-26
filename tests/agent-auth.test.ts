@@ -89,7 +89,7 @@ describe("agent-auth bridge", () => {
 
   it("creates a persistent agent with keypair", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(db, userId, { name: "Test Agent" });
+    const agent = await createAgent(db, userId, { name: "Test Agent", runtime: "claude" });
     agentId = agent.id;
 
     expect(agent.public_key).toBeTruthy();

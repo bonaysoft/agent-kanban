@@ -45,6 +45,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const agent = await createAgent(db, ownerId, {
       name: "Test Agent",
+      runtime: "claude",
       skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
       handoff_to: ["quality-goalkeeper", "enduser"],
     });
@@ -58,7 +59,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
 
   it("createAgent with null skills/handoff_to returns null", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(db, ownerId, { name: "Bare Agent" });
+    const agent = await createAgent(db, ownerId, { name: "Bare Agent", runtime: "claude" });
 
     expect(agent.skills).toBeNull();
     expect(agent.handoff_to).toBeNull();

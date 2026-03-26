@@ -133,7 +133,7 @@ describe("task JSON field parsing (labels, input)", () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { assignTask, claimTask, reviewTask } = await import("../apps/web/functions/api/taskRepo");
 
-    const agent = await createAgent(db, ownerId, { name: "worker" });
+    const agent = await createAgent(db, ownerId, { name: "worker", runtime: "claude" });
     const assigned = await assignTask(db, taskId, agent.id, "machine", "system");
     expect(Array.isArray(assigned!.labels)).toBe(true);
 

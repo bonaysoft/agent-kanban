@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import type { AgentRuntime } from "@agent-kanban/shared";
 import { SAVED_SESSIONS_FILE } from "./paths.js";
 
 export type SessionStatus = "active" | "rate_limited" | "in_review";
@@ -11,7 +12,7 @@ export interface SavedSession {
   branchName: string;
   agentId: string;
   privateKeyJwk: JsonWebKey;
-  runtime: string;
+  runtime: AgentRuntime;
   model?: string;
   status: SessionStatus;
 }

@@ -15,7 +15,6 @@ export class TaskRunner {
   constructor(
     private client: MachineClient,
     private pm: ProcessManager,
-    private defaultProvider: string | null,
   ) {}
 
   /** Full pipeline: session → keys → worktree → skills → spawn. Returns true on success. */
@@ -55,7 +54,7 @@ export class TaskRunner {
       return false;
     }
 
-    const providerName = normalizeRuntime(agentDetails.runtime ?? this.defaultProvider ?? "claude");
+    const providerName = normalizeRuntime(agentDetails.runtime);
     const provider = getProvider(providerName);
 
     const agentSkills = agentDetails.skills ?? [];

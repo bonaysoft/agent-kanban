@@ -245,14 +245,12 @@ registerLogsCommand(program);
 program
   .command("__daemon", { hidden: true })
   .option("--max-concurrent <n>", "", "3")
-  .option("--default-provider <name>", "", "claude")
   .option("--poll-interval <ms>", "", "10000")
   .option("--task-timeout <ms>", "", "7200000")
   .action(async (opts) => {
     const { startDaemon } = await import("./daemon.js");
     await startDaemon({
       maxConcurrent: parseInt(opts.maxConcurrent, 10),
-      defaultProvider: opts.defaultProvider,
       pollInterval: parseInt(opts.pollInterval, 10),
       taskTimeout: parseInt(opts.taskTimeout, 10),
     });

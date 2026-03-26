@@ -4,10 +4,19 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
 import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
-import { LOGS_DIR, PID_FILE, STATE_DIR } from "../paths.js";
+import { DAEMON_STATE_FILE, LOGS_DIR, PID_FILE, SESSION_PIDS_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 
 const MAX_LOG_ARCHIVES = 5;
+
+interface DaemonState {
+  providers: string[];
+  maxConcurrent: number;
+  pollInterval: number;
+  taskTimeout: number;
+  apiUrl: string;
+  startedAt: string;
+}
 
 function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -51,6 +60,58 @@ function readDaemonPid(): number | null {
   }
 }
 
+function readDaemonState(): DaemonState | null {
+  try {
+    return JSON.parse(readFileSync(DAEMON_STATE_FILE, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function formatUptime(startMs: number): string {
+  const seconds = Math.floor((Date.now() - startMs) / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${secs}s`);
+  return parts.join(" ");
+}
+
+function countActiveSessions(): number {
+  try {
+    const data = JSON.parse(readFileSync(SESSION_PIDS_FILE, "utf-8"));
+    let alive = 0;
+    for (const pid of Object.values(data)) {
+      try {
+        process.kill(pid as number, 0);
+        alive++;
+      } catch {
+        /* dead */
+      }
+    }
+    return alive;
+  } catch {
+    return 0;
+  }
+}
+
+function formatProviders(all: string[]): string {
+  if (all.length === 0) return "none";
+  return all.join(", ");
+}
+
+function maskApiUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.host;
+  } catch {
+    return url;
+  }
+}
+
 export function registerStartCommand(program: Command) {
   program
     .command("start")
@@ -58,8 +119,6 @@ export function registerStartCommand(program: Command) {
     .option("--api-url <url>", "API server URL")
     .option("--api-key <key>", "Machine API key")
     .option("--max-concurrent <n>", "Max concurrent agents", "3")
-    .option("--provider <name>", "Agent provider to use (auto-detect if omitted)")
-    .option("--agent-cli <cmd>", "(deprecated) Use --provider instead")
     .option("--poll-interval <ms>", "Poll interval in ms", "10000")
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
@@ -80,25 +139,10 @@ export function registerStartCommand(program: Command) {
         setConfigValue("api-key", opts.apiKey);
       }
 
-      if (!getConfigValue("api-url") || !getConfigValue("api-key")) {
+      const apiUrl = getConfigValue("api-url");
+      if (!apiUrl || !getConfigValue("api-key")) {
         console.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
         process.exit(1);
-      }
-
-      // Resolve default provider
-      let defaultProvider = opts.provider;
-      if (!defaultProvider && opts.agentCli) {
-        console.warn("Warning: --agent-cli is deprecated, use --provider instead");
-        defaultProvider = opts.agentCli;
-      }
-
-      if (!defaultProvider) {
-        const available = getAvailableProviders();
-        if (available.length === 0) {
-          console.error("No agent providers found. Install claude, codex, or gemini CLI.");
-          process.exit(1);
-        }
-        defaultProvider = available[0].name;
       }
 
       // Check if already running
@@ -116,6 +160,9 @@ export function registerStartCommand(program: Command) {
       const logFile = join(LOGS_DIR, "daemon.log");
       const logFd = openSync(logFile, "a");
 
+      // Detect available providers
+      const available = getAvailableProviders();
+
       // Spawn daemon as detached child
       const child = spawn(
         process.execPath,
@@ -124,8 +171,6 @@ export function registerStartCommand(program: Command) {
           "__daemon",
           "--max-concurrent",
           String(opts.maxConcurrent),
-          "--default-provider",
-          defaultProvider,
           "--poll-interval",
           String(opts.pollInterval),
           "--task-timeout",
@@ -134,12 +179,31 @@ export function registerStartCommand(program: Command) {
         { detached: true, stdio: ["ignore", logFd, logFd] },
       );
 
-      // Write child PID and detach
+      // Write child PID and daemon state
       mkdirSync(STATE_DIR, { recursive: true });
       writeFileSync(PID_FILE, String(child.pid));
+
+      const state: DaemonState = {
+        providers: available.map((p) => p.name),
+        maxConcurrent: parseInt(String(opts.maxConcurrent), 10),
+        pollInterval: parseInt(String(opts.pollInterval), 10),
+        taskTimeout: parseInt(String(opts.taskTimeout), 10),
+        apiUrl,
+        startedAt: new Date().toISOString(),
+      };
+      writeFileSync(DAEMON_STATE_FILE, JSON.stringify(state, null, 2));
+
       child.unref();
 
-      console.log(`Daemon started (PID ${child.pid})`);
+      const timeoutLabel = state.taskTimeout === 0 ? "none" : `${state.taskTimeout / 1000}s`;
+      const providersLabel = formatProviders(state.providers);
+      console.log(`● Daemon started (PID ${child.pid})`);
+      console.log(`  Providers:   ${providersLabel}`);
+      console.log(`  Concurrency: ${state.maxConcurrent}`);
+      console.log(`  Poll:        ${state.pollInterval / 1000}s`);
+      console.log(`  Timeout:     ${timeoutLabel}`);
+      console.log(`  API:         ${maskApiUrl(state.apiUrl)}`);
+      console.log(`  Logs:        ak logs -f`);
       process.exit(0);
     });
 }
@@ -151,11 +215,20 @@ export function registerStopCommand(program: Command) {
     .action(() => {
       const pid = readDaemonPid();
       if (!pid) {
-        console.log("Daemon is not running");
+        console.log("○ Daemon is not running");
         return;
       }
+
+      let uptimeStr = "";
+      const state = readDaemonState();
+      if (state?.startedAt) {
+        uptimeStr = formatUptime(new Date(state.startedAt).getTime());
+      }
+
       process.kill(pid, "SIGTERM");
-      console.log(`Daemon stopped (PID ${pid})`);
+
+      console.log(`● Daemon stopped (PID ${pid})`);
+      if (uptimeStr) console.log(`  Uptime: ${uptimeStr}`);
     });
 }
 
@@ -166,27 +239,34 @@ export function registerStatusCommand(program: Command) {
     .action(() => {
       const pid = readDaemonPid();
       if (!pid) {
-        console.log("Daemon is not running");
+        console.log("○ Daemon is not running");
         return;
       }
 
-      let uptime = "";
-      try {
-        const stat = statSync(PID_FILE);
-        const seconds = Math.floor((Date.now() - stat.mtimeMs) / 1000);
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-        const parts: string[] = [];
-        if (hours > 0) parts.push(`${hours}h`);
-        if (minutes > 0) parts.push(`${minutes}m`);
-        parts.push(`${secs}s`);
-        uptime = ` — uptime ${parts.join(" ")}`;
-      } catch {
-        // PID file stat unavailable, skip uptime
+      const state = readDaemonState();
+
+      let uptimeStr = "";
+      if (state?.startedAt) {
+        uptimeStr = formatUptime(new Date(state.startedAt).getTime());
+      } else {
+        try {
+          uptimeStr = formatUptime(statSync(PID_FILE).mtimeMs);
+        } catch {
+          /* skip */
+        }
       }
 
-      console.log(`Daemon is running (PID ${pid})${uptime}`);
+      const sessions = countActiveSessions();
+
+      console.log(`● Daemon running (PID ${pid})`);
+      if (uptimeStr) console.log(`  Uptime:      ${uptimeStr}`);
+      if (state) {
+        const providersLabel = formatProviders(state.providers ?? []);
+        console.log(`  Providers:   ${providersLabel}`);
+        console.log(`  Concurrency: ${state.maxConcurrent}`);
+        console.log(`  API:         ${maskApiUrl(state.apiUrl)}`);
+      }
+      console.log(`  Sessions:    ${sessions} active`);
     });
 }
 

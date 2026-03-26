@@ -1,5 +1,5 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
-import { BUILTIN_TEMPLATES, computeFingerprint, computeKeyId, generateKeypair } from "@agent-kanban/shared";
+import { type AgentRuntime, BUILTIN_TEMPLATES, computeFingerprint, computeKeyId, generateKeypair } from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
@@ -26,7 +26,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
       input.role ?? null,
       input.kind ?? "worker",
       handoffJson,
-      input.runtime ?? null,
+      input.runtime,
       input.model ?? null,
       skillsJson,
       publicKeyBase64,
@@ -47,7 +47,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     role: input.role ?? null,
     kind: input.kind ?? "worker",
     handoff_to: input.handoff_to ?? null,
-    runtime: input.runtime ?? null,
+    runtime: input.runtime,
     model: input.model ?? null,
     skills: input.skills ?? null,
     public_key: publicKeyBase64,
@@ -64,7 +64,7 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
 
   for (const tpl of BUILTIN_TEMPLATES) {
     if (tpl.role && existingRoles.has(tpl.role)) continue;
-    await createAgent(db, ownerId, tpl, true);
+    await createAgent(db, ownerId, { ...tpl, runtime: tpl.runtime as AgentRuntime }, true);
   }
 }
 

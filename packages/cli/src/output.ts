@@ -107,7 +107,7 @@ export function formatAgent(agent: any): string {
   lines.push(`  Status:   ${agent.status}`);
   if (agent.role) lines.push(`  Role:     ${agent.role}`);
   if (agent.bio) lines.push(`  Bio:      ${agent.bio}`);
-  if (agent.runtime) lines.push(`  Runtime:  ${agent.runtime}`);
+  lines.push(`  Runtime:  ${agent.runtime}`);
   if (agent.model) lines.push(`  Model:    ${agent.model}`);
   if (agent.skills?.length) lines.push(`  Skills:   ${agent.skills.join(", ")}`);
   if (agent.handoff_to?.length) lines.push(`  Handoff:  ${agent.handoff_to.join(", ")}`);

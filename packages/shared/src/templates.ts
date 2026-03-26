@@ -1,4 +1,5 @@
 import { parse } from "yaml";
+import type { AgentRuntime } from "./types.js";
 
 const TEMPLATES_BASE = "https://raw.githubusercontent.com/saltbo/agent-kanban/main/agents";
 
@@ -8,7 +9,7 @@ export interface AgentTemplate {
   soul?: string;
   role?: string;
   handoff_to?: string[];
-  runtime?: string;
+  runtime?: AgentRuntime;
   model?: string;
   skills?: string[];
 }
@@ -47,7 +48,7 @@ export const BUILTIN_TEMPLATES: AgentTemplate[] = [
     ].join("\n"),
     role: "quality-goalkeeper",
     handoff_to: ["enduser"],
-    runtime: "claude-code",
+    runtime: "claude",
     model: "claude-opus-4-6",
     skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
   },

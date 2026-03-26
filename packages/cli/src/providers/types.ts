@@ -23,8 +23,10 @@ export type AgentEvent =
   | { type: "rate_limit"; resetAt: string }
   | { type: "error"; code?: string; detail: string };
 
+import type { AgentRuntime } from "@agent-kanban/shared";
+
 export interface AgentProvider {
-  readonly name: string;
+  readonly name: AgentRuntime;
   readonly label: string;
   readonly command: string;
 

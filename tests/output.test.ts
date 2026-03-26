@@ -249,16 +249,10 @@ describe("formatAgent", () => {
     expect(result).not.toContain("Bio:");
   });
 
-  it("includes runtime when present", () => {
-    const agent = { id: "a1", name: "Claude", status: "idle", runtime: "Claude Code" };
+  it("always shows Runtime line", () => {
+    const agent = { id: "a1", name: "Claude", status: "idle", runtime: "claude" };
     const result = formatAgent(agent);
-    expect(result).toContain("Claude Code");
-  });
-
-  it("omits Runtime line when runtime is absent", () => {
-    const agent = { id: "a1", name: "Claude", status: "idle", runtime: null };
-    const result = formatAgent(agent);
-    expect(result).not.toContain("Runtime:");
+    expect(result).toContain("Runtime:  claude");
   });
 
   it("includes model when present", () => {

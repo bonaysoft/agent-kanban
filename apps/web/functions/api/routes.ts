@@ -1,4 +1,4 @@
-import { RESERVED_ROLES } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type CreateAgentInput, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
@@ -169,15 +169,19 @@ api.post("/api/agents", async (c) => {
     role?: string;
     kind?: "worker" | "leader";
     handoff_to?: string[];
-    runtime?: string;
+    runtime: string;
     model?: string;
     skills?: string[];
   }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  if (!body.runtime) throw new HTTPException(400, { message: "runtime is required" });
+  if (!AGENT_RUNTIMES.includes(body.runtime as any)) {
+    throw new HTTPException(400, { message: `Invalid runtime "${body.runtime}". Must be one of: ${AGENT_RUNTIMES.join(", ")}` });
+  }
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
-  const agent = await createAgent(c.env.DB, c.get("ownerId"), body);
+  const agent = await createAgent(c.env.DB, c.get("ownerId"), body as CreateAgentInput);
   return c.json(agent, 201);
 });
 

@@ -88,7 +88,6 @@ Add tasks in the web UI or let agents create subtasks for each other. Assign a t
 npx agent-kanban <command>
 
 ak start         # Start the daemon
-ak link           # Link current repo to a board
 ak status         # Show daemon status
 ```
 

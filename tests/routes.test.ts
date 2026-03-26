@@ -93,7 +93,7 @@ describe("routes", () => {
     machineId = ((await machineRes.json()) as { id: string }).id;
 
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "Routes Agent", runtime: "Claude Code" });
+    const agent = await createAgent(env.DB, userId, { name: "Routes Agent", runtime: "claude" });
     agentId = agent.id;
 
     sessionId = randomUUID();
@@ -111,7 +111,7 @@ describe("routes", () => {
     );
 
     // Create a leader agent and session for complete/cancel/reject tests
-    const leaderAgent = await createAgent(env.DB, userId, { name: "Routes Leader Agent", runtime: "Claude Code", kind: "leader" });
+    const leaderAgent = await createAgent(env.DB, userId, { name: "Routes Leader Agent", runtime: "claude", kind: "leader" });
     leaderAgentId = leaderAgent.id;
 
     leaderSessionId = randomUUID();
@@ -302,19 +302,25 @@ describe("routes", () => {
   });
 
   it("POST /api/agents creates an agent", async () => {
-    const res = await apiRequest("POST", "/api/agents", { name: "New Route Agent" }, apiKey);
+    const res = await apiRequest("POST", "/api/agents", { name: "New Route Agent", runtime: "claude" }, apiKey);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.name).toBe("New Route Agent");
+    expect(body.runtime).toBe("claude");
   });
 
   it("POST /api/agents requires name", async () => {
-    const res = await apiRequest("POST", "/api/agents", {}, apiKey);
+    const res = await apiRequest("POST", "/api/agents", { runtime: "claude" }, apiKey);
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/agents requires runtime", async () => {
+    const res = await apiRequest("POST", "/api/agents", { name: "No Runtime Agent" }, apiKey);
     expect(res.status).toBe(400);
   });
 
   it("POST /api/agents rejects reserved role", async () => {
-    const res = await apiRequest("POST", "/api/agents", { name: "Bad Role", role: "quality-goalkeeper" }, apiKey);
+    const res = await apiRequest("POST", "/api/agents", { name: "Bad Role", runtime: "claude", role: "quality-goalkeeper" }, apiKey);
     expect(res.status).toBe(403);
   });
 
@@ -655,7 +661,7 @@ describe("routes", () => {
 
   it("DELETE /api/agents/:id deletes the agent", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const tempAgent = await createAgent(env.DB, userId, { name: "Temp Agent For Delete" });
+    const tempAgent = await createAgent(env.DB, userId, { name: "Temp Agent For Delete", runtime: "claude" });
     const res = await apiRequest("DELETE", `/api/agents/${tempAgent.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;

@@ -123,6 +123,15 @@ export interface MachineWithAgents extends Machine {
 
 export type AgentStatus = "online" | "offline";
 export type AgentKind = "worker" | "leader";
+export type AgentRuntime = "claude" | "codex" | "gemini";
+
+export const AGENT_RUNTIMES: readonly AgentRuntime[] = ["claude", "codex", "gemini"] as const;
+
+export const RUNTIME_LABELS: Record<AgentRuntime, string> = {
+  claude: "Claude Code",
+  codex: "Codex CLI",
+  gemini: "Gemini CLI",
+};
 
 export interface Agent {
   id: string;
@@ -133,7 +142,7 @@ export interface Agent {
   role: string | null;
   kind: AgentKind;
   handoff_to: string[] | null;
-  runtime: string | null;
+  runtime: AgentRuntime;
   model: string | null;
   skills: string[] | null;
   public_key: string;
@@ -241,7 +250,7 @@ export interface CreateAgentInput {
   role?: string;
   kind?: AgentKind;
   handoff_to?: string[];
-  runtime?: string;
+  runtime: AgentRuntime;
   model?: string;
   skills?: string[];
 }

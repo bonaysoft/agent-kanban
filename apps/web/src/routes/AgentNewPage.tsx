@@ -1,4 +1,12 @@
-import { type AgentTemplate, fetchTemplate, fetchTemplateIndex, type TemplateIndex } from "@agent-kanban/shared";
+import {
+  AGENT_RUNTIMES,
+  type AgentRuntime,
+  type AgentTemplate,
+  fetchTemplate,
+  fetchTemplateIndex,
+  RUNTIME_LABELS,
+  type TemplateIndex,
+} from "@agent-kanban/shared";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
@@ -25,7 +33,7 @@ export function AgentNewPage() {
   const [soul, setSoul] = useState("");
   const [role, setRole] = useState("");
   const [handoffTo, setHandoffTo] = useState<string[]>([]);
-  const [runtime, setRuntime] = useState("claude-code");
+  const [runtime, setRuntime] = useState<AgentRuntime>("claude");
   const [model, setModel] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +47,7 @@ export function AgentNewPage() {
     setSoul(t.soul || "");
     setRole(t.role || "");
     setHandoffTo(t.handoff_to || []);
-    setRuntime(t.runtime || "claude-code");
+    setRuntime(t.runtime || "claude");
     setModel(t.model || "");
     setSkills(t.skills || []);
     setStep("form");
@@ -52,7 +60,7 @@ export function AgentNewPage() {
     setSoul("");
     setRole("");
     setHandoffTo([]);
-    setRuntime("claude-code");
+    setRuntime("claude");
     setModel("");
     setSkills([]);
     setStep("form");
@@ -68,7 +76,7 @@ export function AgentNewPage() {
         soul: soul.trim() || undefined,
         role: role.trim() || undefined,
         handoff_to: handoffTo.length ? handoffTo : undefined,
-        runtime: runtime || undefined,
+        runtime,
         model: model.trim() || undefined,
         skills: skills.length ? skills : undefined,
       });
@@ -291,8 +299,8 @@ interface FormStepProps {
   setRole: (v: string) => void;
   handoffTo: string[];
   setHandoffTo: (v: string[]) => void;
-  runtime: string;
-  setRuntime: (v: string) => void;
+  runtime: AgentRuntime;
+  setRuntime: (v: AgentRuntime) => void;
   model: string;
   setModel: (v: string) => void;
   skills: string[];
@@ -404,16 +412,18 @@ function FormStep(props: FormStepProps) {
                 <Select
                   value={runtime}
                   onValueChange={(v) => {
-                    if (v) setRuntime(v);
+                    if (v) setRuntime(v as AgentRuntime);
                   }}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="claude-code">Claude Code</SelectItem>
-                    <SelectItem value="codex">Codex</SelectItem>
-                    <SelectItem value="gemini">Gemini</SelectItem>
+                    {AGENT_RUNTIMES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {RUNTIME_LABELS[r]}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

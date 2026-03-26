@@ -273,11 +273,11 @@ describe("task lifecycle repo functions", () => {
     const board = await createBoard(env.DB, userId, "sm-board");
     boardId = board.id;
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SM Test Agent" });
+    const agent = await createAgent(env.DB, userId, { name: "SM Test Agent", runtime: "claude" });
     testAgentId = agent.id;
-    const agent2 = await createAgent(env.DB, userId, { name: "SM Agent 2" });
+    const agent2 = await createAgent(env.DB, userId, { name: "SM Agent 2", runtime: "claude" });
     otherAgentId = agent2.id;
-    const leaderAgent = await createAgent(env.DB, userId, { name: "SM Leader Agent", kind: "leader" });
+    const leaderAgent = await createAgent(env.DB, userId, { name: "SM Leader Agent", runtime: "claude", kind: "leader" });
     leaderAgentId = leaderAgent.id;
   });
 
@@ -614,7 +614,7 @@ describe("task lifecycle HTTP permissions", () => {
 
     // Create agent
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SM Agent", runtime: "Claude Code" });
+    const agent = await createAgent(env.DB, userId, { name: "SM Agent", runtime: "claude" });
     agentId = agent.id;
 
     // Create session

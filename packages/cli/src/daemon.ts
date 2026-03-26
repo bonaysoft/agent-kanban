@@ -8,7 +8,7 @@ import { createLogger } from "./logger.js";
 import { PID_FILE, STATE_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
-import { getAvailableProviders, getProvider, normalizeRuntime } from "./providers/registry.js";
+import { getAvailableProviders, getProvider } from "./providers/registry.js";
 import { Scheduler } from "./scheduler.js";
 import { cleanupStale, clearAll as clearSessionPids, removePid, savePid } from "./sessionPids.js";
 import { TaskRunner } from "./taskRunner.js";
@@ -17,7 +17,6 @@ const logger = createLogger("daemon");
 
 export interface DaemonOptions {
   maxConcurrent: number;
-  defaultProvider?: string;
   pollInterval?: number;
   taskTimeout?: number;
 }
@@ -57,8 +56,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const MIN_POLL_INTERVAL = 5000;
   const pollInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
-  const defaultProviderName = opts.defaultProvider ? normalizeRuntime(opts.defaultProvider) : null;
-  const defaultProvider = defaultProviderName ? getProvider(defaultProviderName) : null;
+  const availableProviders = getAvailableProviders();
+  const primaryProvider = availableProviders.length > 0 ? getProvider(availableProviders[0].name) : null;
 
   // Wire up components
   const prMonitor = new PrMonitor(client);
@@ -76,7 +75,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     opts.taskTimeout,
   );
 
-  const runner = new TaskRunner(client, pm, defaultProviderName);
+  const runner = new TaskRunner(client, pm);
 
   scheduler = new Scheduler(client, pm, runner, prMonitor, {
     maxConcurrent: opts.maxConcurrent,
@@ -86,7 +85,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   // Heartbeat
   const heartbeatInterval = setInterval(() => {
     (async () => {
-      const usageInfo = defaultProvider?.getUsage ? await defaultProvider.getUsage() : null;
+      const usageInfo = primaryProvider?.getUsage ? await primaryProvider.getUsage() : null;
       await client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo });
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
@@ -106,7 +105,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, default_provider=${opts.defaultProvider ?? "auto"})`);
+  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, runtimes=${machineInfo.runtimes.join(",") || "none"})`);
 
   prMonitor.start();
   scheduler.start();

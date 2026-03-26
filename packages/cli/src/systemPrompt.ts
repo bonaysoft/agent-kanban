@@ -1,6 +1,7 @@
 import { unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentRuntime } from "@agent-kanban/shared";
 
 export interface AgentInfo {
   name: string;
@@ -8,7 +9,7 @@ export interface AgentInfo {
   soul: string | null;
   handoff_to: string[] | null;
   skills: string[] | null;
-  runtime: string | null;
+  runtime: AgentRuntime;
   model: string | null;
 }
 

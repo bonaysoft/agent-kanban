@@ -2,7 +2,17 @@ import { fetchTemplate } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
+import { getAvailableProviders } from "../providers/registry.js";
 import { normalizeResource } from "./resources.js";
+
+function detectRuntime(): string {
+  const available = getAvailableProviders();
+  if (available.length === 0) {
+    console.error("No agent runtime found. Install claude, codex, or gemini CLI, or pass --runtime explicitly.");
+    process.exit(1);
+  }
+  return available[0].name;
+}
 
 function isUrl(value: string): boolean {
   return value.includes("://") || value.startsWith("git@");
@@ -69,13 +79,18 @@ async function createAgent(opts: Record<string, string>) {
 
   if (opts.template) {
     const template = await fetchTemplate(opts.template);
+    const runtime = opts.runtime || template.runtime;
+    if (!runtime) {
+      console.error("Template has no runtime. Pass --runtime explicitly.");
+      process.exit(1);
+    }
     body = {
       name: opts.name || template.name,
       bio: template.bio,
       soul: template.soul,
       role: template.role,
       handoff_to: template.handoff_to,
-      runtime: opts.runtime || template.runtime,
+      runtime,
       model: opts.model || template.model,
       skills: template.skills,
     };
@@ -84,10 +99,10 @@ async function createAgent(opts: Record<string, string>) {
       console.error("Either --template or --name is required");
       process.exit(1);
     }
-    body = { name: opts.name };
+    const runtime = opts.runtime || detectRuntime();
+    body = { name: opts.name, runtime };
     if (opts.bio) body.bio = opts.bio;
     if (opts.role) body.role = opts.role;
-    if (opts.runtime) body.runtime = opts.runtime;
     if (opts.model) body.model = opts.model;
   }
 

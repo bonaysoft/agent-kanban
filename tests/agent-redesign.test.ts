@@ -119,7 +119,7 @@ describe("agent CRUD", () => {
 
   it("deletes agent", async () => {
     const { createAgent, deleteAgent } = await import("../apps/web/functions/api/agentRepo");
-    const temp = await createAgent(env.DB, userId, { name: "ToDelete" });
+    const temp = await createAgent(env.DB, userId, { name: "ToDelete", runtime: "claude" });
     const deleted = await deleteAgent(env.DB, temp.id);
     expect(deleted).toBe(true);
     const row = await env.DB.prepare("SELECT id FROM agents WHERE id = ?").bind(temp.id).first();
@@ -168,7 +168,7 @@ describe("agent status computation", () => {
       forceAllowId: true,
     });
 
-    const agent = await createAgent(env.DB, userId, { name: "StatusAgent" });
+    const agent = await createAgent(env.DB, userId, { name: "StatusAgent", runtime: "claude" });
     agentId = agent.id;
   });
 
@@ -242,7 +242,7 @@ describe("session lifecycle", () => {
       forceAllowId: true,
     });
 
-    const agent = await createAgent(env.DB, userId, { name: "SessionAgent" });
+    const agent = await createAgent(env.DB, userId, { name: "SessionAgent", runtime: "claude" });
     agentId = agent.id;
   });
 
@@ -315,7 +315,7 @@ describe("message sender model", () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     userId = await seedUser(env.DB, "user-msg", "msg@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "MsgAgent" });
+    const agent = await createAgent(env.DB, userId, { name: "MsgAgent", runtime: "claude" });
     agentId = agent.id;
     const board = await createBoard(env.DB, userId, "msg-board");
     const task = await createTask(env.DB, userId, { title: "Msg task", board_id: board.id });
@@ -400,7 +400,7 @@ describe("user assigns task to agent", () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     userId = await seedUser(env.DB, "user-assign", "assign@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "AssignAgent" });
+    const agent = await createAgent(env.DB, userId, { name: "AssignAgent", runtime: "claude" });
     agentId = agent.id;
     const board = await createBoard(env.DB, userId, "assign-board");
     const task = await createTask(env.DB, userId, { title: "Assign task", board_id: board.id });

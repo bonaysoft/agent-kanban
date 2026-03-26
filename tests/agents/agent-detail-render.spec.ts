@@ -28,7 +28,7 @@ test.describe("Agents Page", () => {
     await expect(page.getByText("Establishes quality standards")).toBeVisible();
 
     // expect: Metadata (runtime, model, created time) is visible
-    await expect(page.getByText("claude-code")).toBeVisible();
+    await expect(page.getByText("claude")).toBeVisible();
     await expect(page.getByText("claude-opus-4-6")).toBeVisible();
     await expect(page.getByText(/Created/)).toBeVisible();
 

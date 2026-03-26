@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AgentRuntime } from "@agent-kanban/shared";
 import { SignJWT } from "jose";
 import { getConfigValue } from "./config.js";
 import type { UsageInfo } from "./types.js";
@@ -136,7 +137,7 @@ export abstract class ApiClient {
     role?: string;
     kind?: "worker" | "leader";
     handoff_to?: string[];
-    runtime?: string;
+    runtime: AgentRuntime;
     model?: string;
     skills?: string[];
   }) {

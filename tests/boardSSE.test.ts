@@ -39,7 +39,7 @@ describe("getBoardActions", () => {
     boardId = board.id;
 
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SSE Unit Agent", runtime: "Claude Code" });
+    const agent = await createAgent(env.DB, userId, { name: "SSE Unit Agent", runtime: "claude" });
     agentId = agent.id;
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
@@ -143,7 +143,7 @@ describe("GET /api/boards/:id/stream", () => {
 
   it("emits board_note events for existing notes in the stream body", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SSE Route Agent", runtime: "Claude Code" });
+    const agent = await createAgent(env.DB, userId, { name: "SSE Route Agent", runtime: "claude" });
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     await createTask(env.DB, userId, { title: "SSE Stream Task", board_id: boardId, actorType: "agent:worker", actorId: agent.id });

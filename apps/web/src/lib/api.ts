@@ -1,3 +1,4 @@
+import type { AgentRuntime } from "@agent-kanban/shared";
 import { getAuthToken } from "./auth-client";
 
 const API_BASE = "/api";
@@ -67,7 +68,7 @@ export const api = {
       soul?: string;
       role?: string;
       handoff_to?: string[];
-      runtime?: string;
+      runtime: AgentRuntime;
       model?: string;
       skills?: string[];
     }) => request<any>("POST", "/agents", input),

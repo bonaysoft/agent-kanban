@@ -15,6 +15,7 @@ export const LOGS_DIR = join(STATE_DIR, "logs");
 
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 export const PID_FILE = join(STATE_DIR, "daemon.pid");
+export const DAEMON_STATE_FILE = join(STATE_DIR, "daemon-state.json");
 export const REPOS_DIR = join(DATA_DIR, "repos");
 export const WORKTREES_DIR = join(DATA_DIR, "worktrees");
 export const TRACKED_TASKS_FILE = join(DATA_DIR, "tracked-tasks.json");

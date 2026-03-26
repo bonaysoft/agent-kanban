@@ -1,3 +1,4 @@
+import { AGENT_RUNTIMES, type AgentRuntime, RUNTIME_LABELS } from "@agent-kanban/shared";
 import React, { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
@@ -210,11 +211,7 @@ export function AgentDetailPage() {
 
                 {/* Meta */}
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {agent.runtime && (
-                    <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">
-                      {agent.runtime}
-                    </span>
-                  )}
+                  <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">{agent.runtime}</span>
                   {agent.model && (
                     <span className="text-[10px] font-mono text-content-tertiary bg-surface-tertiary rounded-full px-2.5 py-0.5">{agent.model}</span>
                   )}
@@ -456,7 +453,7 @@ function EditAgentDialog({
   const [soul, setSoul] = useState(agent.soul ?? "");
   const [role, setRole] = useState(agent.role ?? "");
   const handoffTo = agent.handoff_to ?? [];
-  const [runtime, setRuntime] = useState(agent.runtime ?? "claude-code");
+  const [runtime, setRuntime] = useState(agent.runtime);
   const [model, setModel] = useState(agent.model ?? "");
   const [skills, setSkills] = useState<string[]>(agent.skills ?? []);
   const [error, setError] = useState<string | null>(null);
@@ -471,7 +468,7 @@ function EditAgentDialog({
         soul: soul.trim() || undefined,
         role: role.trim() || undefined,
         handoff_to: handoffTo.length ? handoffTo : undefined,
-        runtime: runtime || undefined,
+        runtime,
         model: model.trim() || undefined,
         skills: skills.length ? skills : undefined,
       });
@@ -534,16 +531,18 @@ function EditAgentDialog({
                 <Select
                   value={runtime}
                   onValueChange={(v) => {
-                    if (v) setRuntime(v);
+                    if (v) setRuntime(v as AgentRuntime);
                   }}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="claude-code">Claude Code</SelectItem>
-                    <SelectItem value="codex">Codex</SelectItem>
-                    <SelectItem value="gemini">Gemini</SelectItem>
+                    {AGENT_RUNTIMES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {RUNTIME_LABELS[r]}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
