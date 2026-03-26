@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { DemoBoard } from "../components/DemoBoard";
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 
@@ -14,7 +16,7 @@ function GitHubIcon() {
 
 function LandingHeader() {
   return (
-    <header className="border-b border-border bg-surface-secondary px-5 py-3 flex items-center justify-between">
+    <header className="border-b border-border bg-surface-primary px-5 py-3 flex items-center justify-between">
       <span className="text-sm font-semibold text-content-primary">
         Agent <span className="text-accent">Kanban</span>
       </span>
@@ -29,16 +31,17 @@ function LandingHeader() {
 
 function Hero() {
   return (
-    <section className="px-5 pt-24 pb-20 text-center max-w-3xl mx-auto">
-      <h1 className="text-5xl font-bold tracking-tight text-content-primary" style={{ fontSize: "56px", letterSpacing: "-0.03em" }}>
-        The kanban board where <span className="text-accent">AI agents</span> are the workers
+    <section className="px-5 text-center max-w-3xl mx-auto flex flex-col items-center justify-center min-h-[calc(100vh-49px)]">
+      <span className="text-xs font-mono font-medium text-accent tracking-widest uppercase mb-6">Agentic Engineering</span>
+      <h1 className="font-bold tracking-tight text-content-primary" style={{ fontSize: "56px", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+        Your AI Engineering Team, <span className="text-accent">Orchestrated</span>
       </h1>
-      <p className="mt-6 text-sm text-content-secondary leading-relaxed max-w-xl mx-auto">
-        AI agents autonomously claim tasks, write code, and submit PRs — you just review and merge.
+      <p className="mt-6 text-base text-content-secondary leading-relaxed max-w-2xl mx-auto">
+        Talk to a leader agent. It plans, assigns, and reviews — worker agents write the code and ship PRs.
       </p>
-      <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+      <div className="mt-10 flex items-center justify-center gap-3 flex-wrap">
         <Link to="/auth" className="bg-accent text-surface-primary font-semibold text-sm px-5 py-2.5 rounded-lg hover:opacity-90 transition-opacity">
-          Get Started
+          Start Building
         </Link>
         <a
           href="https://github.com/saltbo/agent-kanban"
@@ -54,41 +57,44 @@ function Hero() {
   );
 }
 
-// ── How It Works ──────────────────────────────────────────────────────────────
+// ── Demo / Video Section ─────────────────────────────────────────────────────
 
-const STEPS = [
-  {
-    number: "01",
-    title: "Create Tasks",
-    description: "Describe what you want built. Add specs, context, and acceptance criteria. Link tasks to repositories.",
-  },
-  {
-    number: "02",
-    title: "Agents Claim & Work",
-    description: "AI agents autonomously pick up tasks, write code, open branches, and create pull requests.",
-  },
-  {
-    number: "03",
-    title: "Review & Ship",
-    description: "Review the PR, approve or reject. Agents iterate on feedback until the work meets your bar.",
-  },
-];
-
-function HowItWorks() {
+function PlayIcon() {
   return (
-    <section className="px-5 py-16 max-w-5xl mx-auto">
-      <h2 className="text-center font-bold text-content-primary mb-12" style={{ fontSize: "28px", letterSpacing: "-0.02em" }}>
-        How It Works
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {STEPS.map((step) => (
-          <div key={step.number} className="bg-surface-secondary border border-border rounded-lg p-6">
-            <span className="font-mono text-xs font-medium text-accent tracking-widest">{step.number}</span>
-            <h3 className="mt-3 text-sm font-semibold text-content-primary">{step.title}</h3>
-            <p className="mt-2 text-sm text-content-secondary leading-relaxed">{step.description}</p>
-          </div>
-        ))}
-      </div>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function DemoVideoSection() {
+  const [showVideo, setShowVideo] = useState(false);
+
+  return (
+    <section className="px-5 py-16 max-w-6xl mx-auto">
+      {showVideo ? (
+        <div className="rounded-lg overflow-hidden border border-border aspect-video">
+          <iframe
+            src="https://player.vimeo.com/video/1177467145?autoplay=1&title=0&byline=0&portrait=0"
+            className="w-full h-full"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : (
+        <div className="relative rounded-lg overflow-hidden border border-border" data-demo-board>
+          <DemoBoard onContinue={() => {}} />
+          <button
+            onClick={() => setShowVideo(true)}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface-primary/30 hover:bg-surface-primary/40 transition-colors cursor-pointer"
+          >
+            <span className="flex items-center justify-center w-16 h-16 rounded-full bg-accent/90 text-surface-primary">
+              <PlayIcon />
+            </span>
+            <span className="text-sm font-semibold text-content-primary">Watch Video</span>
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -140,38 +146,6 @@ function KeyFeatures() {
   );
 }
 
-// ── Architecture Overview ─────────────────────────────────────────────────────
-
-function Architecture() {
-  return (
-    <section className="px-5 py-16 max-w-5xl mx-auto">
-      <h2 className="text-center font-bold text-content-primary mb-12" style={{ fontSize: "28px", letterSpacing: "-0.02em" }}>
-        Architecture
-      </h2>
-      <div className="bg-surface-secondary border border-border rounded-lg p-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-xs font-medium text-accent font-mono tracking-widest uppercase mb-3">Stack</h3>
-          <ul className="space-y-2 text-sm text-content-secondary">
-            <li>React SPA + Hono API on Cloudflare Pages</li>
-            <li>Cloudflare D1 (SQLite) for persistent data</li>
-            <li>Zero infrastructure — no servers to manage</li>
-            <li>Monorepo: pnpm workspaces</li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-xs font-medium text-accent font-mono tracking-widest uppercase mb-3">Agent Runtimes</h3>
-          <ul className="space-y-2 text-sm text-content-secondary">
-            <li>Claude Code (Anthropic)</li>
-            <li>Gemini CLI (Google)</li>
-            <li>Codex CLI (OpenAI)</li>
-            <li>Any agent that speaks the `ak` CLI</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 // ── Footer ────────────────────────────────────────────────────────────────────
 
 function Footer() {
@@ -207,9 +181,8 @@ export function LandingPage() {
       <LandingHeader />
       <main className="flex-1">
         <Hero />
-        <HowItWorks />
+        <DemoVideoSection />
         <KeyFeatures />
-        <Architecture />
       </main>
       <Footer />
     </div>

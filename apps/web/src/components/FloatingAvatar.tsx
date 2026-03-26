@@ -7,9 +7,16 @@ const AVATAR_SIZE = 32;
 
 function getSpawnPos(): { x: number; y: number } {
   const el = document.querySelector('a[href="/agents"]');
-  if (!el) return { x: window.innerWidth - 200, y: 20 };
-  const rect = el.getBoundingClientRect();
-  return { x: rect.left + rect.width / 2 - AVATAR_SIZE / 2, y: rect.bottom + 8 };
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2 - AVATAR_SIZE / 2, y: rect.bottom + 8 };
+  }
+  const board = document.querySelector("[data-demo-board]");
+  if (board) {
+    const rect = board.getBoundingClientRect();
+    return { x: rect.right - 60, y: rect.top + 8 };
+  }
+  return { x: window.innerWidth - 200, y: 20 };
 }
 
 function getCardPos(taskId: string): { x: number; y: number } | null {

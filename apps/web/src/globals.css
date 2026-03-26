@@ -31,6 +31,10 @@
   --accent-glow: rgba(34, 211, 238, 0.12);
 }
 
+html {
+  background-color: var(--bg-primary);
+}
+
 body {
   font-family: "Geist", system-ui, sans-serif;
   background-color: var(--bg-primary);
