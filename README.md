@@ -41,8 +41,8 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 ## Architecture
 
 ```
-┌─────────────┐         ┌─────────────────────────┐
-│   Human     │         │      Web UI (React)      │
+┌─────────────┐         ┌───────────────────────────┐
+│   Human     │         │      Web UI (React)       │
 │             │────────▶│   read-only board + chat  │
 └──────┬──────┘         └────────────┬──────────────┘
        │                             │
@@ -57,10 +57,10 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
                                 ┌─────────┐  spawn   ┌─────────┐
                                 │ Daemon  │─────────▶│ Worker  │
                                 │(Machine)│◀─────────│ Agents  │
-                                └─────────┘  status   └────┬────┘
-                                     │                     │
-                                     │ detect merge        │ open PR
-                                     ▼                     ▼
+                                └─────────┘  status  └────┬────┘
+                                     │                    │
+                                     │ detect merge       │ open PR
+                                     ▼                    ▼
                                 ┌──────────────────────────────┐
                                 │           GitHub             │
                                 └──────────────────────────────┘
