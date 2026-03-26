@@ -25,7 +25,7 @@ afterAll(async () => {
   await mf.dispose();
 });
 
-describe("getBoardNotes", () => {
+describe("getBoardActions", () => {
   const userId = "board-sse-unit-user";
   let boardId: string;
   let agentId: string;
@@ -43,35 +43,35 @@ describe("getBoardNotes", () => {
     agentId = agent.id;
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "SSE Unit Task", board_id: boardId, agentId });
+    const task = await createTask(env.DB, userId, { title: "SSE Unit Task", board_id: boardId, actorType: "agent:worker", actorId: agentId });
     taskId = task.id;
   });
 
-  it("returns notes for a board with agent_public_key populated", async () => {
+  it("returns notes for a board with actor_public_key populated", async () => {
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardNotes } = await import("../apps/web/functions/api/taskRepo");
-    const notes = await getBoardNotes(env.DB, boardId, userId, since);
+    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const notes = await getBoardActions(env.DB, boardId, userId, since);
 
     expect(notes.length).toBeGreaterThan(0);
     const note = notes[0];
     expect(note.task_id).toBe(taskId);
-    expect(note.agent_public_key).toBeTruthy();
+    expect(note.actor_public_key).toBeTruthy();
   });
 
   it("returns notes with agent_kind populated", async () => {
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardNotes } = await import("../apps/web/functions/api/taskRepo");
-    const notes = await getBoardNotes(env.DB, boardId, userId, since);
+    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const notes = await getBoardActions(env.DB, boardId, userId, since);
 
-    const note = notes.find((n) => n.agent_id === agentId);
+    const note = notes.find((n) => n.actor_id === agentId);
     expect(note).toBeDefined();
     expect(note!.agent_kind).toBe("worker");
   });
 
   it("returns empty array when no notes exist after since timestamp", async () => {
     const future = new Date(Date.now() + 60 * 1000).toISOString();
-    const { getBoardNotes } = await import("../apps/web/functions/api/taskRepo");
-    const notes = await getBoardNotes(env.DB, boardId, userId, future);
+    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const notes = await getBoardActions(env.DB, boardId, userId, future);
 
     expect(notes).toEqual([]);
   });
@@ -84,8 +84,8 @@ describe("getBoardNotes", () => {
     await createTask(env.DB, userId, { title: "Other Board Task", board_id: otherBoard.id });
 
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardNotes } = await import("../apps/web/functions/api/taskRepo");
-    const notes = await getBoardNotes(env.DB, boardId, userId, since);
+    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const notes = await getBoardActions(env.DB, boardId, userId, since);
 
     const ids = notes.map((n) => n.task_id);
     const otherTasks = await env.DB.prepare("SELECT id FROM tasks WHERE board_id = ?").bind(otherBoard.id).all<{ id: string }>();
@@ -94,17 +94,17 @@ describe("getBoardNotes", () => {
     }
   });
 
-  it("returns null agent_public_key for notes without an agent", async () => {
-    const { createTask, getBoardNotes } = await import("../apps/web/functions/api/taskRepo");
+  it("returns null actor_public_key for notes without an agent actor", async () => {
+    const { createTask, getBoardActions } = await import("../apps/web/functions/api/taskRepo");
     const since = new Date(Date.now() - 1).toISOString();
-    // Create a task with no agentId — the created note has no agent_id
+    // Create a task with no agentId — the created action has actor_type 'machine'
     await createTask(env.DB, userId, { title: "No Agent Task", board_id: boardId });
 
-    const notes = await getBoardNotes(env.DB, boardId, userId, since);
-    const noAgentNote = notes.find((n) => n.agent_id === null || n.agent_id === "human");
-    if (noAgentNote) {
-      expect(noAgentNote.agent_public_key).toBeNull();
-      expect(noAgentNote.agent_kind).toBeNull();
+    const notes = await getBoardActions(env.DB, boardId, userId, since);
+    const machineNote = notes.find((n) => n.actor_type === "machine");
+    if (machineNote) {
+      expect(machineNote.actor_public_key).toBeNull();
+      expect(machineNote.agent_kind).toBeNull();
     }
   });
 });
@@ -146,7 +146,7 @@ describe("GET /api/boards/:id/stream", () => {
     const agent = await createAgent(env.DB, userId, { name: "SSE Route Agent", runtime: "Claude Code" });
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    await createTask(env.DB, userId, { title: "SSE Stream Task", board_id: boardId, agentId: agent.id });
+    await createTask(env.DB, userId, { title: "SSE Stream Task", board_id: boardId, actorType: "agent:worker", actorId: agent.id });
 
     const res = await apiRequest("GET", `/api/boards/${boardId}/stream`, undefined, apiKey);
     expect(res.body).not.toBeNull();

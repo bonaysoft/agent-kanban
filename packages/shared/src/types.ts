@@ -48,28 +48,10 @@ export interface TaskWithMeta extends Task {
 }
 
 export interface TaskWithNotes extends TaskWithMeta {
-  notes: TaskNote[];
+  notes: TaskAction[];
 }
 
-export interface TaskNote {
-  id: string;
-  task_id: string;
-  agent_id: string | null;
-  agent_name: string | null;
-  agent_public_key: string | null;
-  session_id: string | null;
-  action: TaskAction;
-  detail: string | null;
-  created_at: string;
-}
-
-export interface BoardNote extends TaskNote {
-  agent_kind: AgentKind | null;
-}
-
-export type Priority = "low" | "medium" | "high" | "urgent";
-
-export type TaskAction =
+export type TaskActionType =
   | "created"
   | "claimed"
   | "moved"
@@ -81,6 +63,26 @@ export type TaskAction =
   | "cancelled"
   | "rejected"
   | "review_requested";
+
+export type ActorType = "user" | "machine" | "agent:worker" | "agent:leader";
+
+export interface TaskAction {
+  id: string;
+  task_id: string;
+  actor_type: ActorType;
+  actor_id: string;
+  actor_name?: string | null;
+  actor_public_key?: string | null;
+  action: TaskActionType;
+  detail: string | null;
+  created_at: string;
+}
+
+export interface BoardAction extends TaskAction {
+  agent_kind?: AgentKind | null;
+}
+
+export type Priority = "low" | "medium" | "high" | "urgent";
 
 // ─── Machine ───
 

@@ -24,7 +24,7 @@ const testEnv = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -171,7 +171,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     taskId = task.id;
 
     // Assign task to the worker agent so the worker can claim it in subsequent tests
-    await assignTask(testEnv.DB, taskId, agentId);
+    await assignTask(testEnv.DB, taskId, agentId, "machine", "system");
   });
 
   it("ApiClient constructs valid session JWT that server accepts for claim", async () => {

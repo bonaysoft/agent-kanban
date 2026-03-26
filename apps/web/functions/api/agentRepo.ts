@@ -74,7 +74,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
-      (SELECT MAX(tl.created_at) FROM task_notes tl WHERE tl.agent_id = a.id) as last_active_at,
+      (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
       COALESCE((SELECT SUM(s.input_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as input_tokens,
       COALESCE((SELECT SUM(s.output_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as output_tokens,
@@ -96,7 +96,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
-      (SELECT MAX(tl.created_at) FROM task_notes tl WHERE tl.agent_id = a.id) as last_active_at,
+      (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
       COALESCE((SELECT SUM(s.input_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as input_tokens,
       COALESCE((SELECT SUM(s.output_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as output_tokens,
@@ -149,7 +149,7 @@ export async function deleteAgent(db: D1, agentId: string): Promise<boolean> {
 export async function getAgentLogs(db: D1, agentId: string): Promise<any[]> {
   const result = await db
     .prepare(
-      "SELECT tl.*, t.title as task_title FROM task_notes tl JOIN tasks t ON tl.task_id = t.id WHERE tl.agent_id = ? ORDER BY tl.created_at DESC LIMIT 100",
+      "SELECT tl.*, t.title as task_title FROM task_actions tl JOIN tasks t ON tl.task_id = t.id WHERE tl.actor_id = ? ORDER BY tl.created_at DESC LIMIT 100",
     )
     .bind(agentId)
     .all();

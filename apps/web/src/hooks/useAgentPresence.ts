@@ -1,4 +1,4 @@
-import type { BoardNote, Task, TaskAction } from "@agent-kanban/shared";
+import type { BoardAction, Task, TaskActionType } from "@agent-kanban/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { liftCard, resetCard, slideCard } from "../lib/cardEffects";
@@ -16,7 +16,7 @@ export interface AgentAvatar {
 
 // ─── Choreography definitions ───
 
-const DRAG_TARGETS: Partial<Record<TaskAction, string>> = {
+const DRAG_TARGETS: Partial<Record<TaskActionType, string>> = {
   claimed: "in_progress",
   review_requested: "in_review",
   completed: "done",
@@ -52,7 +52,7 @@ const MOVE_SEQUENCE: ChoreographyStep[] = [
   { delay: 2100, remove: true },
 ];
 
-function getSequence(action: TaskAction): ChoreographyStep[] | null {
+function getSequence(action: TaskActionType): ChoreographyStep[] | null {
   if (action === "claimed") return CLAIM_SEQUENCE;
   if (action === "review_requested" || action === "completed" || action === "rejected" || action === "cancelled") return MOVE_SEQUENCE;
   return null;
@@ -77,12 +77,12 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
   }, []);
 
   const runChoreography = useCallback(
-    (event: BoardNote, sequence: ChoreographyStep[]) => {
-      const agentId = event.agent_id!;
+    (event: BoardAction, sequence: ChoreographyStep[]) => {
+      const actorId = event.actor_id;
       const taskId = event.task_id;
       const target = DRAG_TARGETS[event.action] || "";
 
-      cancelChoreography(agentId);
+      cancelChoreography(actorId);
       const scheduled: ReturnType<typeof setTimeout>[] = [];
 
       for (const step of sequence) {
@@ -91,16 +91,16 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
             setAvatars((prev) => {
               const next = new Map(prev);
               if (step.phase === "spawning" || step.phase === "emerging") {
-                next.set(agentId, {
-                  agentId,
-                  agentName: event.agent_name,
-                  publicKey: event.agent_public_key!,
+                next.set(actorId, {
+                  agentId: actorId,
+                  agentName: event.actor_name ?? null,
+                  publicKey: event.actor_public_key!,
                   taskId,
                   phase: step.phase!,
                 });
               } else {
-                const a = next.get(agentId);
-                if (a) next.set(agentId, { ...a, phase: step.phase! });
+                const a = next.get(actorId);
+                if (a) next.set(actorId, { ...a, phase: step.phase! });
               }
               return next;
             });
@@ -109,10 +109,10 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
           if (step.remove) {
             setAvatars((prev) => {
               const next = new Map(prev);
-              next.delete(agentId);
+              next.delete(actorId);
               return next;
             });
-            timersRef.current.delete(agentId);
+            timersRef.current.delete(actorId);
           }
           if (step.invalidate) {
             queryClient.invalidateQueries({ queryKey: ["board", boardId] });
@@ -121,7 +121,7 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
         scheduled.push(timer);
       }
 
-      timersRef.current.set(agentId, scheduled);
+      timersRef.current.set(actorId, scheduled);
     },
     [boardId, cancelChoreography, queryClient],
   );
@@ -153,7 +153,7 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
     processedRef.current = events.length;
 
     for (const event of unprocessed) {
-      if (!event.agent_id || !event.agent_public_key) continue;
+      if (!event.actor_type?.startsWith("agent:") || !event.actor_public_key) continue;
       const sequence = getSequence(event.action);
       if (sequence) runChoreography(event, sequence);
     }

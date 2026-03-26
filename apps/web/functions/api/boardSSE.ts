@@ -1,6 +1,6 @@
-import type { BoardNote } from "@agent-kanban/shared";
+import type { BoardAction } from "@agent-kanban/shared";
 import { createLogger } from "./logger";
-import { getBoardNotes } from "./taskRepo";
+import { getBoardActions } from "./taskRepo";
 import type { Env } from "./types";
 
 const INITIAL_LOOKBACK_MS = 5 * 60 * 1000;
@@ -26,7 +26,7 @@ export async function createBoardSSEResponse(env: Env, boardId: string, ownerId:
     return writer.write(encoder.encode(msg));
   };
 
-  const toEvent = (note: BoardNote): BoardSSEEvent => ({
+  const toEvent = (note: BoardAction): BoardSSEEvent => ({
     id: note.id,
     data: JSON.stringify(note),
     created_at: note.created_at,
@@ -35,7 +35,7 @@ export async function createBoardSSEResponse(env: Env, boardId: string, ownerId:
   const run = async () => {
     let lastSeen = new Date(Date.now() - INITIAL_LOOKBACK_MS).toISOString();
 
-    const initial = await getBoardNotes(db, boardId, ownerId, lastSeen);
+    const initial = await getBoardActions(db, boardId, ownerId, lastSeen);
     for (const note of initial) {
       await write(toEvent(note));
     }
@@ -48,7 +48,7 @@ export async function createBoardSSEResponse(env: Env, boardId: string, ownerId:
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const notes = await getBoardNotes(db, boardId, ownerId, lastSeen);
+      const notes = await getBoardActions(db, boardId, ownerId, lastSeen);
       for (const note of notes) {
         await write(toEvent(note));
       }
