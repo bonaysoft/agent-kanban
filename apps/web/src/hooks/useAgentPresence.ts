@@ -1,7 +1,7 @@
 import type { BoardAction, Task, TaskActionType } from "@agent-kanban/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { liftCard, resetCard, slideCard } from "../lib/cardEffects";
+import { clearCardStyles, liftCard, resetCard, slideCard } from "../lib/cardEffects";
 import { useBoardSSE } from "./useBoardSSE";
 
 export type AvatarPhase = "spawning" | "flying" | "absorbing" | "emerging" | "dragging" | "working" | "returning" | "leaving";
@@ -39,6 +39,7 @@ const CLAIM_SEQUENCE: ChoreographyStep[] = [
   { delay: 1100, cardEffect: (tid) => liftCard(tid) },
   { delay: 1300, phase: "dragging", cardEffect: (tid, t) => slideCard(tid, t) },
   { delay: 1900, phase: "absorbing", cardEffect: (tid) => resetCard(tid), invalidate: true },
+  { delay: 2200, cardEffect: (tid) => clearCardStyles(tid) },
   { delay: 2300, remove: true },
 ];
 
@@ -48,6 +49,7 @@ const MOVE_SEQUENCE: ChoreographyStep[] = [
   { delay: 500, cardEffect: (tid) => liftCard(tid) },
   { delay: 700, phase: "dragging", cardEffect: (tid, t) => slideCard(tid, t) },
   { delay: 1300, phase: "returning", cardEffect: (tid) => resetCard(tid), invalidate: true },
+  { delay: 1700, cardEffect: (tid) => clearCardStyles(tid) },
   { delay: 1800, phase: "leaving" },
   { delay: 2100, remove: true },
 ];
@@ -153,9 +155,23 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
     processedRef.current = events.length;
 
     for (const event of unprocessed) {
-      if (!event.actor_type?.startsWith("agent:") || !event.actor_public_key) continue;
       const sequence = getSequence(event.action);
-      if (sequence) runChoreography(event, sequence);
+      if (!sequence) continue;
+
+      // Agent events have identity directly
+      if (event.actor_type?.startsWith("agent:") && event.actor_public_key) {
+        runChoreography(event, sequence);
+        continue;
+      }
+
+      // Non-agent events (machine/user): use the leader who assigned this task as avatar
+      const leader = events.find((e) => e.task_id === event.task_id && e.actor_type === "agent:leader" && e.actor_public_key);
+      if (leader) {
+        runChoreography(
+          { ...event, actor_id: leader.actor_id, actor_name: leader.actor_name ?? null, actor_public_key: leader.actor_public_key! },
+          sequence,
+        );
+      }
     }
   }, [events, runChoreography]);
 

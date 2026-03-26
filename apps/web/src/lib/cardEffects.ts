@@ -26,6 +26,12 @@ export function resetCard(taskId: string) {
   el.style.transition = "none";
 }
 
+/** Clear all inline styles left by lift/slide/reset so re-rendered cards aren't stuck invisible. */
+export function clearCardStyles(taskId: string) {
+  const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
+  if (el) el.style.cssText = "";
+}
+
 export function glowCard(taskId: string) {
   const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
   if (!el) return;
