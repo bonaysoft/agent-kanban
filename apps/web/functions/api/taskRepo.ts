@@ -186,7 +186,7 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | n
   const [notes, deps, blockedSet] = await Promise.all([
     db
       .prepare(
-        "SELECT n.*, a.name as agent_name FROM task_notes n LEFT JOIN agents a ON n.agent_id = a.id WHERE n.task_id = ? ORDER BY n.created_at ASC",
+        "SELECT n.*, a.name as agent_name, a.public_key as agent_public_key FROM task_notes n LEFT JOIN agents a ON n.agent_id = a.id WHERE n.task_id = ? ORDER BY n.created_at ASC",
       )
       .bind(taskId)
       .all<TaskNote>(),
@@ -409,11 +409,22 @@ export async function addTaskNote(db: D1, taskId: string, agentId: string | null
     .bind(noteId, taskId, agentId, null, action, detail, now)
     .run();
 
-  return { id: noteId, task_id: taskId, agent_id: agentId, agent_name: null, session_id: null, action: action as any, detail, created_at: now };
+  return {
+    id: noteId,
+    task_id: taskId,
+    agent_id: agentId,
+    agent_name: null,
+    agent_public_key: null,
+    session_id: null,
+    action: action as any,
+    detail,
+    created_at: now,
+  };
 }
 
 export async function getTaskNotes(db: D1, taskId: string, since?: string): Promise<TaskNote[]> {
-  let query = "SELECT n.*, a.name as agent_name FROM task_notes n LEFT JOIN agents a ON n.agent_id = a.id WHERE n.task_id = ?";
+  let query =
+    "SELECT n.*, a.name as agent_name, a.public_key as agent_public_key FROM task_notes n LEFT JOIN agents a ON n.agent_id = a.id WHERE n.task_id = ?";
   const binds: unknown[] = [taskId];
 
   if (since) {
