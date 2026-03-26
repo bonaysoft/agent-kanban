@@ -45,8 +45,8 @@ interface AgentProcess {
 
 export interface ProcessManagerCallbacks {
   onSlotFreed: () => void;
-  onRateLimited: (resetAt: string) => void;
-  onRateLimitCleared?: () => void;
+  onRateLimited: (runtime: string, resetAt: string) => void;
+  onRateLimitCleared?: (runtime: string) => void;
   onProcessStarted?: (sessionId: string, pid: number) => void;
   onProcessExited?: (sessionId: string) => void;
 }
@@ -248,9 +248,10 @@ export class ProcessManager {
     switch (event.type) {
       case "rate_limit": {
         const agent = this.agents.get(taskId);
-        logger.warn(`Rate limited on task ${taskId} (${agent?.provider.name}), resets at ${event.resetAt}`);
+        const runtime = agent?.provider.name ?? "unknown";
+        logger.warn(`Rate limited on task ${taskId} (${runtime}), resets at ${event.resetAt}`);
         if (agent) agent.rateLimited = true;
-        this.callbacks.onRateLimited(event.resetAt);
+        this.callbacks.onRateLimited(runtime, event.resetAt);
         break;
       }
 
@@ -289,7 +290,7 @@ export class ProcessManager {
           agent.resultReceived = true;
           // Rate limit was transient — agent completed despite the warning
           if (agent.rateLimited) {
-            this.callbacks.onRateLimitCleared?.();
+            this.callbacks.onRateLimitCleared?.(agent.provider.name);
           }
           const task = (await this.client.getTask(taskId)) as any;
           if (task?.status === "in_review") {

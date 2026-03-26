@@ -2,6 +2,7 @@ import { ApiError, type MachineClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { ProcessManager } from "./processManager.js";
+import { normalizeRuntime } from "./providers/registry.js";
 import { ensureCloned, prepareRepo, removeWorktree, repoDir } from "./repoOps.js";
 import { loadSessions, removeSession } from "./savedSessions.js";
 import { ensureLefthookTask } from "./skillManager.js";
@@ -14,12 +15,15 @@ export interface SchedulerOpts {
   pollInterval: number;
 }
 
+interface RuntimePause {
+  resumeMs: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 export class Scheduler {
   private running = false;
-  private paused = false;
-  private resumeTargetMs = 0;
+  private pausedRuntimes = new Map<string, RuntimePause>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs: number;
 
   constructor(
@@ -40,34 +44,36 @@ export class Scheduler {
   stop(): void {
     this.running = false;
     if (this.pollTimer) clearTimeout(this.pollTimer);
-    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    for (const p of this.pausedRuntimes.values()) clearTimeout(p.timer);
+    this.pausedRuntimes.clear();
   }
 
-  pauseForRateLimit(resetAt: string): void {
+  pauseForRateLimit(runtime: string, resetAt: string): void {
     const resetTime = new Date(resetAt).getTime();
-    if (this.paused && resetTime <= this.resumeTargetMs) return;
-    this.paused = true;
-    this.resumeTargetMs = resetTime;
+    const existing = this.pausedRuntimes.get(runtime);
+    if (existing && resetTime <= existing.resumeMs) return;
+    if (existing) clearTimeout(existing.timer);
     const waitMs = Math.max(resetTime - Date.now(), 60_000);
-    logger.warn(`Usage exhausted — pausing dispatch until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
-    if (this.resumeTimer) clearTimeout(this.resumeTimer);
-    this.resumeTimer = setTimeout(() => this.resume().catch((e) => logger.error(`Resume error: ${e.message}`)), waitMs);
+    logger.warn(`Runtime "${runtime}" rate limited — pausing until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
+    const timer = setTimeout(() => this.resumeRuntime(runtime).catch((e) => logger.error(`Resume error: ${e.message}`)), waitMs);
+    this.pausedRuntimes.set(runtime, { resumeMs: resetTime, timer });
   }
 
   onSlotFreed(): void {
     this.schedulePoll(this.opts.pollInterval);
   }
 
-  clearRateLimit(): void {
-    if (!this.paused) return;
-    logger.info("Rate limit cleared — agent completed despite rate limit warning, resuming dispatch");
-    this.paused = false;
-    this.resumeTargetMs = 0;
-    if (this.resumeTimer) {
-      clearTimeout(this.resumeTimer);
-      this.resumeTimer = null;
-    }
+  clearRateLimit(runtime: string): void {
+    const existing = this.pausedRuntimes.get(runtime);
+    if (!existing) return;
+    logger.info(`Rate limit cleared for "${runtime}" — agent completed despite warning, resuming`);
+    clearTimeout(existing.timer);
+    this.pausedRuntimes.delete(runtime);
     this.schedulePoll(0);
+  }
+
+  isRuntimePaused(runtime: string): boolean {
+    return this.pausedRuntimes.has(runtime);
   }
 
   private schedulePoll(delayMs: number): void {
@@ -76,17 +82,16 @@ export class Scheduler {
     this.pollTimer = setTimeout(() => this.tick().catch((e) => this.handleTickError(e)), delayMs);
   }
 
-  private async resume(): Promise<void> {
-    if (!this.running || !this.paused) return;
-    logger.info("Rate limit window reset, resuming");
-    this.paused = false;
-    this.resumeTargetMs = 0;
+  private async resumeRuntime(runtime: string): Promise<void> {
+    if (!this.running) return;
+    logger.info(`Rate limit window reset for "${runtime}", resuming`);
+    this.pausedRuntimes.delete(runtime);
     await this.resumeSavedSessions();
     this.schedulePoll(0);
   }
 
   private async tick(): Promise<void> {
-    if (!this.running || this.paused) return;
+    if (!this.running) return;
 
     await this.killCancelledTasks();
     await this.resumeSavedSessions();
@@ -135,13 +140,12 @@ export class Scheduler {
       }
     }
 
-    // Resume rate-limited sessions (only when not paused)
-    if (!this.paused) {
-      for (const s of loadSessions("rate_limited")) {
-        if (this.pm.activeCount >= this.opts.maxConcurrent) return;
-        if (this.pm.hasTask(s.taskId)) continue;
-        await this.runner.resumeSession(s, "");
-      }
+    // Resume rate-limited sessions whose runtime is no longer paused
+    for (const s of loadSessions("rate_limited")) {
+      if (this.pm.activeCount >= this.opts.maxConcurrent) return;
+      if (this.pm.hasTask(s.taskId)) continue;
+      if (this.isRuntimePaused(s.runtime)) continue;
+      await this.runner.resumeSession(s, "");
     }
 
     // Resume rejected review sessions
@@ -200,7 +204,28 @@ export class Scheduler {
       return;
     }
 
-    const task = available[0];
+    // Resolve agent runtimes and skip tasks whose runtime is paused
+    const agentCache = new Map<string, string>();
+    let task: any = null;
+    for (const t of available) {
+      let runtime = agentCache.get(t.assigned_to);
+      if (runtime === undefined) {
+        const agent = (await this.client.getAgent(t.assigned_to)) as any;
+        runtime = normalizeRuntime(agent?.runtime ?? "claude");
+        agentCache.set(t.assigned_to, runtime);
+      }
+      if (!this.isRuntimePaused(runtime)) {
+        task = t;
+        break;
+      }
+    }
+
+    if (!task) {
+      this.backoffMs = this.opts.pollInterval;
+      this.schedulePoll(this.opts.pollInterval);
+      return;
+    }
+
     const repo = repoById.get(task.repository_id)!;
     const dir = repoDir(repo.url);
 

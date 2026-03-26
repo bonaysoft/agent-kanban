@@ -127,8 +127,14 @@ git push --force-with-lease origin <branch>
 
 ## Phase 3: Exception Handling
 
-### Canceling a task
-**Always close the PR first**, then cancel the task. Closing the PR without canceling is fine — PR Monitor will auto-cancel. But canceling without closing the PR leaves orphaned PRs.
+### Removing a task in todo
+Tasks in `todo` status cannot be cancelled — delete them directly:
+```bash
+ak delete task <task-id>
+```
+
+### Canceling an active task
+For tasks in `in_progress` or `in_review`: **always close the PR first**, then cancel. Closing the PR without canceling is fine — PR Monitor will auto-cancel. But canceling without closing the PR leaves orphaned PRs.
 ```bash
 gh pr close <pr-number> --repo <owner>/<repo> --delete-branch
 ak task cancel <task-id>
