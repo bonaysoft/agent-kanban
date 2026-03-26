@@ -35,8 +35,16 @@ const dotColors: Record<string, string> = {
   moved: "bg-zinc-500 border-zinc-500/30",
 };
 
+function actorLabel(log: any): string {
+  if (log.actor_name) return log.actor_name;
+  if (log.actor_type?.startsWith("agent:")) return "Agent";
+  if (log.actor_type === "user") return "User";
+  return "System";
+}
+
 function buildSentence(log: any): { prefix: string; actionText: string; suffix: string } {
-  const name = log.agent_name || null;
+  const name = log.actor_name || null;
+  const label = actorLabel(log);
 
   switch (log.action) {
     case "claimed":
@@ -44,15 +52,15 @@ function buildSentence(log: any): { prefix: string; actionText: string; suffix: 
     case "assigned":
       return { prefix: "System", actionText: "assigned to", suffix: name ?? log.detail ?? "agent" };
     case "completed":
-      return { prefix: name ?? "Agent", actionText: "completed this task", suffix: log.detail ? `— ${log.detail}` : "" };
+      return { prefix: label, actionText: "completed this task", suffix: log.detail ? `— ${log.detail}` : "" };
     case "released":
-      return { prefix: name ?? "Agent", actionText: "released this task", suffix: "" };
+      return { prefix: label, actionText: "released this task", suffix: "" };
     case "timed_out":
-      return { prefix: name ?? "Agent", actionText: "timed out", suffix: "" };
+      return { prefix: "System", actionText: "timed out", suffix: "" };
     case "cancelled":
-      return { prefix: name ?? "System", actionText: "cancelled this task", suffix: log.detail ? `— ${log.detail}` : "" };
+      return { prefix: label, actionText: "cancelled this task", suffix: log.detail ? `— ${log.detail}` : "" };
     case "rejected":
-      return { prefix: name ?? "Reviewer", actionText: "rejected — sent back to agent", suffix: log.detail ? `(${log.detail})` : "" };
+      return { prefix: label, actionText: "rejected — sent back to agent", suffix: log.detail ? `(${log.detail})` : "" };
     case "review_requested":
       return { prefix: name ?? "Agent", actionText: "submitted for review", suffix: "" };
     case "created":
@@ -60,15 +68,15 @@ function buildSentence(log: any): { prefix: string; actionText: string; suffix: 
     case "moved":
       return { prefix: "System", actionText: "moved", suffix: log.detail ?? "" };
     case "commented":
-      return { prefix: name ?? "Agent", actionText: "commented", suffix: "" };
+      return { prefix: label, actionText: "commented", suffix: "" };
     default:
-      return { prefix: name ?? "System", actionText: log.action, suffix: log.detail ?? "" };
+      return { prefix: label, actionText: log.action, suffix: log.detail ?? "" };
   }
 }
 
-function NoteAvatar({ agentId, agentPublicKey }: { agentId: string | null; agentPublicKey: string | null }) {
-  if (agentId && agentPublicKey) {
-    return <AgentIdenticon publicKey={agentPublicKey} size={20} />;
+function NoteAvatar({ actorType, actorPublicKey }: { actorType: string | null; actorPublicKey: string | null }) {
+  if (actorType?.startsWith("agent:") && actorPublicKey) {
+    return <AgentIdenticon publicKey={actorPublicKey} size={20} />;
   }
   return (
     <span className="flex-shrink-0 w-5 h-5 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center">
@@ -139,7 +147,7 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
 
           {displayed.map((log: any) => {
             const { prefix, actionText, suffix } = buildSentence(log);
-            const isAgent = !!log.agent_id && !!log.agent_public_key;
+            const isAgent = log.actor_type?.startsWith("agent:") && !!log.actor_public_key;
             const dot = dotColors[log.action] || "bg-zinc-500 border-zinc-500/30";
             const actionColor = actionStyles[log.action] || "text-content-secondary";
             const isComment = log.action === "commented";
@@ -150,7 +158,7 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
                 <span className={`absolute left-0 -translate-x-1/2 mt-[3px] w-2 h-2 rounded-full border ${dot}`} style={{ top: "4px" }} />
 
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <NoteAvatar agentId={log.agent_id} agentPublicKey={log.agent_public_key} />
+                  <NoteAvatar actorType={log.actor_type} actorPublicKey={log.actor_public_key} />
 
                   {/* Sentence: prefix (agent name) + action + suffix */}
                   <span className="text-[12px] leading-snug">

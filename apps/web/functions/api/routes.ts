@@ -13,7 +13,7 @@ import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
 import {
-  addTaskNote,
+  addTaskAction,
   assignTask,
   cancelTask,
   claimTask,
@@ -21,7 +21,7 @@ import {
   createTask,
   deleteTask,
   getTask,
-  getTaskNotes,
+  getTaskActions,
   listTasks,
   rejectTask,
   releaseTask,
@@ -33,6 +33,10 @@ import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
+
+function getActorId(c: any): string {
+  return c.get("agentId") || c.get("machineId") || c.get("ownerId") || "system";
+}
 
 // Access log
 api.use("*", async (c, next) => {
@@ -235,7 +239,12 @@ api.post("/api/tasks", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
-  const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, agentId: c.get("agentId") || null });
+  const task = await createTask(c.env.DB, c.get("ownerId"), {
+    ...body,
+    agentId: c.get("agentId") || null,
+    actorType: c.get("identityType"),
+    actorId: getActorId(c),
+  });
   return c.json(task, 201);
 });
 
@@ -289,21 +298,19 @@ api.post("/api/tasks/:id/claim", async (c) => {
   const agentId = c.get("agentId");
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const task = await claimTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
+  const task = await claimTask(c.env.DB, c.req.param("id"), c.get("identityType"), agentId);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { result?: string; pr_url?: string };
-  const agentId = c.get("agentId") || null;
 
-  const task = await completeTask(c.env.DB, c.req.param("id"), agentId, body.result || null, body.pr_url || null, c.get("identityType"));
+  const task = await completeTask(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c), body.result || null, body.pr_url || null);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
-  const agentId = c.get("agentId") || null;
-  const task = await releaseTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
+  const task = await releaseTask(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c));
   return c.json(task);
 });
 
@@ -322,24 +329,20 @@ api.post("/api/tasks/:id/assign", async (c) => {
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
-  const agentId = c.get("agentId") || null;
-
-  const task = await cancelTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
+  const task = await cancelTask(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c));
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { pr_url?: string };
-  const agentId = c.get("agentId");
 
-  const task = await reviewTask(c.env.DB, c.req.param("id"), agentId ?? null, body.pr_url || null, c.get("identityType"));
+  const task = await reviewTask(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c), body.pr_url || null);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/reject", async (c) => {
-  const agentId = c.get("agentId") || null;
   const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
-  const task = await rejectTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"), body.reason);
+  const task = await rejectTask(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c), body.reason);
   return c.json(task);
 });
 
@@ -352,8 +355,7 @@ api.post("/api/tasks/:id/notes", async (c) => {
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const agentId = c.get("agentId") || null;
-  const note = await addTaskNote(c.env.DB, c.req.param("id"), agentId || null, "commented", body.detail);
+  const note = await addTaskAction(c.env.DB, c.req.param("id"), c.get("identityType"), getActorId(c), "commented", body.detail);
   return c.json(note, 201);
 });
 
@@ -362,7 +364,7 @@ api.get("/api/tasks/:id/notes", async (c) => {
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const since = c.req.query("since");
-  const notes = await getTaskNotes(c.env.DB, c.req.param("id"), since || undefined);
+  const notes = await getTaskActions(c.env.DB, c.req.param("id"), since || undefined);
   return c.json(notes);
 });
 

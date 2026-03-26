@@ -1,5 +1,5 @@
 import { listMessages } from "./messageRepo";
-import { getTaskNotes } from "./taskRepo";
+import { getTaskActions } from "./taskRepo";
 import type { Env } from "./types";
 
 interface SSEEvent {
@@ -29,7 +29,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
   let since: string | undefined;
   if (lastEventId) {
     const ref = await db
-      .prepare("SELECT created_at FROM task_notes WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?")
+      .prepare("SELECT created_at FROM task_actions WHERE id = ? UNION SELECT created_at FROM messages WHERE id = ?")
       .bind(lastEventId, lastEventId)
       .first<{ created_at: string }>();
     if (!ref) {
@@ -58,7 +58,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
   };
 
   const run = async () => {
-    const [initialNotes, initialMessages] = await Promise.all([getTaskNotes(db, taskId, since), listMessages(db, taskId, since)]);
+    const [initialNotes, initialMessages] = await Promise.all([getTaskActions(db, taskId, since), listMessages(db, taskId, since)]);
 
     const noteEvents: SSEEvent[] = (since ? initialNotes : initialNotes.slice(-50)).map((l) => ({
       id: l.id,
@@ -85,7 +85,7 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const [newNotes, newMessages] = await Promise.all([getTaskNotes(db, taskId, lastSeen), listMessages(db, taskId, lastSeen)]);
+      const [newNotes, newMessages] = await Promise.all([getTaskActions(db, taskId, lastSeen), listMessages(db, taskId, lastSeen)]);
 
       const newNoteEvents = newNotes.map((l) => ({
         id: l.id,

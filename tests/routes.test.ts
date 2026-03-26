@@ -489,9 +489,9 @@ describe("routes", () => {
   });
 
   it("GET /api/tasks/:id/notes returns notes", async () => {
-    const { createTask, addTaskNote } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, addTaskAction } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Get Notes Task", board_id: boardId });
-    await addTaskNote(env.DB, task.id, null, "commented", "Test note");
+    await addTaskAction(env.DB, task.id, "machine", "system", "commented", "Test note");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/notes`, undefined, apiKey);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
