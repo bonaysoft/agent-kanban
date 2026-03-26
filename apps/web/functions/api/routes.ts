@@ -258,12 +258,26 @@ api.patch("/api/tasks/:id", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
+  // Workers can only update tasks they created
+  if (c.get("identityType") === "agent:worker") {
+    const existing = await c.env.DB.prepare("SELECT created_by FROM tasks WHERE id = ?").bind(c.req.param("id")).first<{ created_by: string }>();
+    if (!existing) throw new HTTPException(404, { message: "Task not found" });
+    if (existing.created_by !== c.get("agentId")) throw new HTTPException(403, { message: "Workers can only update tasks they created" });
+  }
+
   const task = await updateTask(c.env.DB, c.req.param("id"), body);
   if (!task) throw new HTTPException(404, { message: "Task not found" });
   return c.json(task);
 });
 
 api.delete("/api/tasks/:id", async (c) => {
+  // Workers can only delete tasks they created
+  if (c.get("identityType") === "agent:worker") {
+    const existing = await c.env.DB.prepare("SELECT created_by FROM tasks WHERE id = ?").bind(c.req.param("id")).first<{ created_by: string }>();
+    if (!existing) throw new HTTPException(404, { message: "Task not found" });
+    if (existing.created_by !== c.get("agentId")) throw new HTTPException(403, { message: "Workers can only delete tasks they created" });
+  }
+
   const deleted = await deleteTask(c.env.DB, c.req.param("id"));
   if (!deleted) throw new HTTPException(404, { message: "Task not found" });
   return c.json({ ok: true });
