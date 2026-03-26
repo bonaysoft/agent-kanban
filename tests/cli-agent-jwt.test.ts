@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -89,7 +88,6 @@ describe("CLI ApiClient agent JWT passthrough", () => {
   let sessionPrivKeyJwk: JsonWebKey;
   let leaderAgentId: string;
   let leaderSessionId: string;
-  let leaderSessionPrivateKey: CryptoKey;
 
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -155,7 +153,6 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     leaderAgentId = leaderAgent.id;
     leaderSessionId = randomUUID();
     const leaderKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
-    leaderSessionPrivateKey = (leaderKeypair as any).privateKey;
     const leaderPubJwk = await crypto.subtle.exportKey("jwk", (leaderKeypair as any).publicKey);
     const leaderSessionRes = await honoRequest(
       "POST",
@@ -173,18 +170,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
     taskId = task.id;
 
-    // Verify leader agent can call the assign route (assigns task to itself)
-    const leaderJwt = await new SignJWT({ sub: leaderSessionId, aid: leaderAgentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
-      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
-      .setIssuedAt()
-      .setExpirationTime("60s")
-      .sign(leaderSessionPrivateKey);
-    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, {}, leaderJwt);
-    expect(assignRes.status).toBe(200);
-    expect(((await assignRes.json()) as any).assigned_to).toBe(leaderAgentId);
-
-    // Re-assign to the worker agent via repo so the worker can claim it in subsequent tests
-    await testEnv.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
+    // Assign task to the worker agent so the worker can claim it in subsequent tests
     await assignTask(testEnv.DB, taskId, agentId);
   });
 

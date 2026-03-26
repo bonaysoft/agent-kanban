@@ -256,6 +256,7 @@ describe("task lifecycle repo functions", () => {
   let boardId: string;
   let testAgentId: string;
   let otherAgentId: string;
+  let leaderAgentId: string;
 
   async function createTestTask() {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
@@ -276,6 +277,8 @@ describe("task lifecycle repo functions", () => {
     testAgentId = agent.id;
     const agent2 = await createAgent(env.DB, userId, { name: "SM Agent 2" });
     otherAgentId = agent2.id;
+    const leaderAgent = await createAgent(env.DB, userId, { name: "SM Leader Agent", kind: "leader" });
+    leaderAgentId = leaderAgent.id;
   });
 
   describe("claim", () => {
@@ -490,6 +493,19 @@ describe("task lifecycle repo functions", () => {
       const task = await createTestTask();
       await forceStatus(task.id, "done");
       await expect(assignTask(env.DB, task.id, testAgentId)).rejects.toThrow("todo");
+    });
+
+    it("rejects assign to leader agent", async () => {
+      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const task = await createTestTask();
+      await expect(assignTask(env.DB, task.id, leaderAgentId)).rejects.toThrow("Cannot assign tasks to leader agents");
+    });
+
+    it("rejects createTask with assigned_to leader agent", async () => {
+      const { createTask } = await import("../apps/web/functions/api/taskRepo");
+      await expect(createTask(env.DB, userId, { title: "Leader Task", board_id: boardId, assigned_to: leaderAgentId })).rejects.toThrow(
+        "Cannot assign tasks to leader agents",
+      );
     });
   });
 

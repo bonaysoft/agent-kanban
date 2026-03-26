@@ -393,15 +393,21 @@ describe("routes", () => {
 
   // ─── Task Lifecycle ───
 
-  it("POST /api/tasks/:id/assign assigns a task to the calling leader agent", async () => {
+  it("POST /api/tasks/:id/assign assigns a task to a worker agent via machine", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Task", board_id: boardId });
-    const leaderJwt = await signLeaderSessionJWT();
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, {}, leaderJwt);
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    // Route assigns to the calling agent (leader), not a body-provided agent_id
-    expect(body.assigned_to).toBe(leaderAgentId);
+    expect(body.assigned_to).toBe(agentId);
+  });
+
+  it("POST /api/tasks/:id/assign rejects leader agents (400)", async () => {
+    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const task = await createTask(env.DB, userId, { title: "Leader Assign Task", board_id: boardId });
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, {}, leaderJwt);
+    expect(res.status).toBe(400);
   });
 
   it("POST /api/tasks/:id/complete completes a task", async () => {
@@ -683,8 +689,7 @@ describe("routes", () => {
   it("POST /api/tasks/:id/assign triggers stale detection", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Stale Task", board_id: boardId });
-    const leaderJwt = await signLeaderSessionJWT();
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
     expect(res.status).toBe(200);
   });
 });
