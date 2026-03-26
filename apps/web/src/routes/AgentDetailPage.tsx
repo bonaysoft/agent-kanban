@@ -139,6 +139,23 @@ export function AgentDetailPage() {
                   <h1 className="font-mono text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
                     {agent.name}
                   </h1>
+                  {agent.kind === "leader" ? (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#EAB308"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0"
+                    >
+                      <title>Leader agent</title>
+                      <path d="m2 4 3 12h14l3-12-6 5-4-5-4 5-6-5z" />
+                      <path d="M5 20h14" />
+                    </svg>
+                  ) : null}
                   {agent.builtin ? (
                     <svg
                       width="14"
