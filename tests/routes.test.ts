@@ -409,10 +409,11 @@ describe("routes", () => {
 
   // ─── Task Lifecycle ───
 
-  it("POST /api/tasks/:id/assign assigns a task to a worker agent via machine", async () => {
+  it("POST /api/tasks/:id/assign assigns a task to a worker agent via leader", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.assigned_to).toBe(agentId);
@@ -708,7 +709,8 @@ describe("routes", () => {
   it("POST /api/tasks/:id/assign triggers stale detection", async () => {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Stale Task", board_id: boardId });
-    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, apiKey);
+    const leaderJwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);
     expect(res.status).toBe(200);
   });
 });

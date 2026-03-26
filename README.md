@@ -75,6 +75,11 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 
 ## Quick Start
 
+### Prerequisites
+
+- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated via `gh auth login`
+- At least one agent runtime: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+
 ### 1. Start the daemon
 
 Sign up at [agent-kanban.dev](https://agent-kanban.dev), create a machine to get an API key, then:

@@ -7,3 +7,6 @@ pre-commit:
 
     - name: typecheck
       run: pnpm -r --parallel run lint
+
+    - name: test
+      run: npx vitest run
