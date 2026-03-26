@@ -112,6 +112,24 @@ export function AgentDetailPage() {
           <div className="h-1" style={{ background: color }} />
 
           <div className="px-6 py-12 relative overflow-hidden">
+            {/* Edit / Delete — top-right, above fingerprint */}
+            {!agent.builtin && (
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+                <button
+                  onClick={() => setShowEdit(true)}
+                  className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary bg-surface-tertiary hover:bg-surface-tertiary/80 rounded px-2.5 py-1 transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => setShowDelete(true)}
+                  className="text-[11px] font-mono text-red-500/70 hover:text-red-500 bg-red-500/5 hover:bg-red-500/10 rounded px-2.5 py-1 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+
             {/* Fingerprint watermark — right side, clickable */}
             <button
               onClick={() => setShowIdentity(true)}
@@ -149,22 +167,6 @@ export function AgentDetailPage() {
                   <h1 className="font-mono text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
                     {agent.name}
                   </h1>
-                  {!agent.builtin && (
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => setShowEdit(true)}
-                        className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary bg-surface-tertiary hover:bg-surface-tertiary/80 rounded px-2.5 py-1 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setShowDelete(true)}
-                        className="text-[11px] font-mono text-red-500/70 hover:text-red-500 bg-red-500/5 hover:bg-red-500/10 rounded px-2.5 py-1 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
                   {agent.kind === "leader" ? (
                     <svg
                       width="16"
