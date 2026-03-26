@@ -31,6 +31,7 @@ import {
 import { detectAndReleaseStale } from "./taskStale";
 import type { Env } from "./types";
 
+// TODO: add rate limiting
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
 
