@@ -35,7 +35,13 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
     WHERE t.board_id = ?
-    ORDER BY t.position
+    ORDER BY
+      CASE t.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'in_review' THEN 2 WHEN 'done' THEN 3 ELSE 4 END,
+      CASE WHEN t.status = 'todo' THEN
+        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END
+      ELSE 0 END,
+      CASE WHEN t.status = 'todo' THEN t.created_at END DESC,
+      CASE WHEN t.status != 'todo' THEN t.updated_at END DESC
   `)
     .bind(boardId)
     .all<Task>();
