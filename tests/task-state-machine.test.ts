@@ -256,6 +256,7 @@ describe("task lifecycle repo functions", () => {
   let boardId: string;
   let testAgentId: string;
   let otherAgentId: string;
+  let leaderAgentId: string;
 
   async function createTestTask() {
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
@@ -276,6 +277,8 @@ describe("task lifecycle repo functions", () => {
     testAgentId = agent.id;
     const agent2 = await createAgent(env.DB, userId, { name: "SM Agent 2" });
     otherAgentId = agent2.id;
+    const leader = await createAgent(env.DB, userId, { name: "SM Leader Agent", kind: "leader" });
+    leaderAgentId = leader.id;
   });
 
   describe("claim", () => {
@@ -471,6 +474,12 @@ describe("task lifecycle repo functions", () => {
       expect(result!.assigned_to).toBe(testAgentId);
     });
 
+    it("rejects assign to leader agents", async () => {
+      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const task = await createTestTask();
+      await expect(assignTask(env.DB, task.id, leaderAgentId)).rejects.toThrow("Cannot assign tasks to leader agents");
+    });
+
     it("rejects assign when already assigned", async () => {
       const { assignTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
@@ -490,6 +499,19 @@ describe("task lifecycle repo functions", () => {
       const task = await createTestTask();
       await forceStatus(task.id, "done");
       await expect(assignTask(env.DB, task.id, testAgentId)).rejects.toThrow("todo");
+    });
+  });
+
+  describe("create restrictions", () => {
+    it("rejects createTask assigned_to leader agents", async () => {
+      const { createTask } = await import("../apps/web/functions/api/taskRepo");
+      await expect(
+        createTask(env.DB, userId, {
+          title: `Task ${randomUUID().slice(0, 8)}`,
+          board_id: boardId,
+          assigned_to: leaderAgentId,
+        }),
+      ).rejects.toThrow("Cannot assign tasks to leader agents");
     });
   });
 

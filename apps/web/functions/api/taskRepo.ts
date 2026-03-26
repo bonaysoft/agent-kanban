@@ -7,6 +7,16 @@ import { computeBlocked, detectCycle, getDependencies, setDependencies } from ".
 
 const parseTask = <T extends Task>(row: T) => parseJsonFields(row, ["labels", "input"]);
 
+async function assertAssignableWorkerAgent(db: D1, agentId: string, missingStatus: 400 | 404): Promise<void> {
+  const agent = await db.prepare("SELECT kind FROM agents WHERE id = ?").bind(agentId).first<{ kind: string }>();
+  if (!agent) {
+    throw new HTTPException(missingStatus, { message: missingStatus === 404 ? "Agent not found" : "Assigned agent not found" });
+  }
+  if (agent.kind === "leader") {
+    throw new HTTPException(400, { message: "Cannot assign tasks to leader agents" });
+  }
+}
+
 function enforceTransition(action: TaskTransition, currentStatus: TaskStatus, identity: IdentityType): void {
   const error = validateTransition(action, currentStatus, identity);
   if (error) {
@@ -40,6 +50,10 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
   if (input.created_from) {
     const parent = await db.prepare("SELECT id FROM tasks WHERE id = ?").bind(input.created_from).first();
     if (!parent) throw new HTTPException(400, { message: "Parent task not found" });
+  }
+
+  if (input.assigned_to) {
+    await assertAssignableWorkerAgent(db, input.assigned_to, 400);
   }
 
   const stmts = [
@@ -281,6 +295,7 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   if (!task) return null;
   if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
   if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
+  await assertAssignableWorkerAgent(db, agentId, 404);
 
   const now = new Date().toISOString();
   const logId = newLongId();
