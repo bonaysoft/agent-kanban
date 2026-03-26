@@ -61,8 +61,8 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
   async function handleSend() {
     if (!input.trim() || !agentId) return;
     const content = input.trim();
-    setInput("");
     await sendMessage.mutateAsync(content);
+    setInput("");
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
