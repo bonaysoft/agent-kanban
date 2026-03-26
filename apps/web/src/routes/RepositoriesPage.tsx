@@ -1,38 +1,27 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { api } from "../lib/api";
+import { useCreateRepository, useDeleteRepository, useRepositories } from "../hooks/useRepositories";
 
 export function RepositoriesPage() {
-  const [repos, setRepos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { repos, loading } = useRepositories();
+  const createRepo = useCreateRepository();
+  const deleteRepo = useDeleteRepository();
   const [showDialog, setShowDialog] = useState(false);
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    api.repositories
-      .list()
-      .then(setRepos)
-      .finally(() => setLoading(false));
-  }, []);
 
   async function handleAdd() {
     if (!newName.trim() || !newUrl.trim()) return;
-    setSubmitting(true);
-    const repo = await api.repositories.create({ name: newName.trim(), url: newUrl.trim() });
-    setRepos((prev) => [repo, ...prev]);
+    await createRepo.mutateAsync({ name: newName.trim(), url: newUrl.trim() });
     setNewName("");
     setNewUrl("");
     setShowDialog(false);
-    setSubmitting(false);
   }
 
   async function handleDelete(id: string) {
-    await api.repositories.delete(id);
-    setRepos((prev) => prev.filter((r) => r.id !== id));
+    await deleteRepo.mutateAsync(id);
   }
 
   return (
@@ -86,7 +75,8 @@ export function RepositoriesPage() {
                   </div>
                   <button
                     onClick={() => handleDelete(repo.id)}
-                    className="text-xs text-content-tertiary hover:text-error transition-colors shrink-0 ml-3"
+                    disabled={deleteRepo.isPending}
+                    className="text-xs text-content-tertiary hover:text-error transition-colors shrink-0 ml-3 disabled:opacity-50"
                   >
                     Remove
                   </button>
@@ -140,10 +130,10 @@ export function RepositoriesPage() {
             </div>
             <button
               onClick={handleAdd}
-              disabled={!newName.trim() || !newUrl.trim() || submitting}
+              disabled={!newName.trim() || !newUrl.trim() || createRepo.isPending}
               className="w-full bg-accent text-[#09090B] font-medium text-sm py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {submitting ? "Adding..." : "Add Repository"}
+              {createRepo.isPending ? "Adding..." : "Add Repository"}
             </button>
           </div>
         </DialogContent>

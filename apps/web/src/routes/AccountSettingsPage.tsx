@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
-import { useBoards } from "../hooks/useBoard";
-import { api } from "../lib/api";
+import { useBoards, useDeleteBoard, useUpdateBoard } from "../hooks/useBoard";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 
-function BoardItem({ board, onUpdate, onDelete }: { board: any; onUpdate: () => void; onDelete: (id: string) => void }) {
+function BoardItem({ board }: { board: any }) {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(board.name);
   const [editDesc, setEditDesc] = useState(board.description || "");
-  const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const navigate = useNavigate();
+  const updateBoard = useUpdateBoard();
+  const deleteBoard = useDeleteBoard();
 
   useEffect(() => {
     setEditName(board.name);
@@ -24,18 +24,11 @@ function BoardItem({ board, onUpdate, onDelete }: { board: any; onUpdate: () => 
 
   async function handleSave() {
     if (!editName.trim()) return;
-    setSaving(true);
-    await api.boards.update(board.id, {
-      name: editName.trim(),
-      description: editDesc.trim(),
-    });
-    setSaving(false);
-    onUpdate();
+    await updateBoard.mutateAsync({ id: board.id, name: editName.trim(), description: editDesc.trim() });
   }
 
   async function handleDelete() {
-    await api.boards.delete(board.id);
-    onDelete(board.id);
+    await deleteBoard.mutateAsync(board.id);
   }
 
   return (
@@ -110,10 +103,10 @@ function BoardItem({ board, onUpdate, onDelete }: { board: any; onUpdate: () => 
             {hasChanges && (
               <button
                 onClick={handleSave}
-                disabled={saving || !editName.trim()}
+                disabled={updateBoard.isPending || !editName.trim()}
                 className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save"}
+                {updateBoard.isPending ? "Saving..." : "Save"}
               </button>
             )}
           </div>
@@ -125,15 +118,11 @@ function BoardItem({ board, onUpdate, onDelete }: { board: any; onUpdate: () => 
 
 export function AccountSettingsPage() {
   const [currentTheme, setCurrentTheme] = useState<Theme>(getTheme());
-  const { boards, refresh } = useBoards();
+  const { boards } = useBoards();
 
   function handleTheme(theme: Theme) {
     setTheme(theme);
     setCurrentTheme(theme);
-  }
-
-  function handleBoardDelete(_id: string) {
-    refresh();
   }
 
   return (
@@ -170,7 +159,7 @@ export function AccountSettingsPage() {
           ) : (
             <div className="space-y-2">
               {boards.map((board: any) => (
-                <BoardItem key={board.id} board={board} onUpdate={refresh} onDelete={handleBoardDelete} />
+                <BoardItem key={board.id} board={board} />
               ))}
             </div>
           )}

@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useAgent } from "../hooks/useAgents";
 import { agentFingerprint } from "../lib/agentIdentity";
-import { api } from "../lib/api";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
@@ -33,15 +32,7 @@ const actionStyles: Record<string, string> = {
 };
 
 export function AgentProfile({ agentId, onClose, onTaskClick }: AgentProfileProps) {
-  const [agent, setAgent] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.agents
-      .get(agentId)
-      .then(setAgent)
-      .finally(() => setLoading(false));
-  }, [agentId]);
+  const { agent, loading } = useAgent(agentId);
 
   return (
     <Sheet

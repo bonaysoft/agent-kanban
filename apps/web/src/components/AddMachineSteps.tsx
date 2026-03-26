@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { getAuthToken } from "../lib/auth-client";
@@ -14,6 +15,7 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
   const [connected, setConnected] = useState(false);
   const [connectedMachine, setConnectedMachine] = useState<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const queryClient = useQueryClient();
   const apiUrl = window.location.origin;
 
   const stopPolling = useCallback(() => {
@@ -34,6 +36,7 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
       if (!machineId) return;
       const m = await api.machines.get(machineId);
       if (m && m.status === "online") {
+        queryClient.invalidateQueries({ queryKey: ["machines"] });
         setConnected(true);
         setConnectedMachine(m);
         stopPolling();
@@ -41,7 +44,7 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
       }
     }, 3000);
     return stopPolling;
-  }, [apiKeyId, stopPolling, onConnected]);
+  }, [apiKeyId, stopPolling, onConnected, queryClient]);
 
   if (connected && connectedMachine) {
     return (

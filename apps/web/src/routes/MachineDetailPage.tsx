@@ -1,11 +1,11 @@
 import type { UsageWindow } from "@agent-kanban/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { api } from "../lib/api";
+import { useDeleteMachine, useMachine } from "../hooks/useMachines";
 
 const USAGE_LABELS: Record<string, string> = {
   five_hour: "5-Hour",
@@ -43,27 +43,13 @@ const agentStatusDotColors: Record<string, string> = {
 export function MachineDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [machine, setMachine] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { machine, loading } = useMachine(id);
+  const deleteMachine = useDeleteMachine();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    if (!id) return;
-    api.machines
-      .get(id)
-      .then(setMachine)
-      .finally(() => setLoading(false));
-    const interval = setInterval(() => {
-      api.machines.get(id).then(setMachine);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [id]);
 
   async function handleDelete() {
     if (!id) return;
-    setDeleting(true);
-    await api.machines.delete(id);
+    await deleteMachine.mutateAsync(id);
     navigate("/machines");
   }
 
@@ -269,8 +255,8 @@ export function MachineDetailPage() {
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteMachine.isPending}>
+              {deleteMachine.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

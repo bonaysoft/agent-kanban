@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { useAgent, useAgentSessions, useAgentTasks } from "../hooks/useAgents";
 import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
-import { api } from "../lib/api";
 
 const actionStyles: Record<string, string> = {
   claimed: "text-accent",
@@ -40,42 +40,13 @@ type Tab = "mission" | "activity" | "sessions";
 
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [agent, setAgent] = useState<any>(null);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [task, setTask] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { agent, loading } = useAgent(id);
+  const { sessions } = useAgentSessions(id);
+  const { tasks } = useAgentTasks(id);
+  const task = tasks[0] ?? null;
+
   const [tab, setTab] = useState<Tab>("mission");
   const [showIdentity, setShowIdentity] = useState(false);
-
-  useEffect(() => {
-    if (!id) return;
-    api.agents
-      .get(id)
-      .then((a) => {
-        setAgent(a);
-        api.agents
-          .sessions(id)
-          .then(setSessions)
-          .catch(() => {});
-        api.tasks
-          .list({ assigned_to: id })
-          .then((ts) => setTask(ts[0] ?? null))
-          .catch(() => {});
-      })
-      .finally(() => setLoading(false));
-    const interval = setInterval(() => {
-      api.agents.get(id).then(setAgent);
-      api.agents
-        .sessions(id)
-        .then(setSessions)
-        .catch(() => {});
-      api.tasks
-        .list({ assigned_to: id })
-        .then((ts) => setTask(ts[0] ?? null))
-        .catch(() => {});
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [id]);
 
   if (loading) {
     return (

@@ -8,14 +8,15 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
+import { useAgents, useCreateAgent } from "../hooks/useAgents";
 import { agentColor } from "../lib/agentIdentity";
-import { api } from "../lib/api";
 
 type Step = "choose" | "recruit" | "form";
 
 export function AgentNewPage() {
   const navigate = useNavigate();
-  const [agents, setAgents] = useState<any[]>([]);
+  const { agents } = useAgents();
+  const createAgent = useCreateAgent();
   const [step, setStep] = useState<Step>("choose");
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
 
@@ -27,12 +28,7 @@ export function AgentNewPage() {
   const [runtime, setRuntime] = useState("claude-code");
   const [model, setModel] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.agents.list().then(setAgents);
-  }, []);
 
   const existingRoles = [...new Set(agents.map((a) => a.role).filter(Boolean))];
 
@@ -64,10 +60,9 @@ export function AgentNewPage() {
 
   async function handleCreate() {
     if (!name.trim()) return;
-    setCreating(true);
     setError(null);
     try {
-      await api.agents.create({
+      await createAgent.mutateAsync({
         name: name.trim(),
         bio: bio.trim() || undefined,
         soul: soul.trim() || undefined,
@@ -80,7 +75,6 @@ export function AgentNewPage() {
       navigate("/agents");
     } catch (err: any) {
       setError(err.message);
-      setCreating(false);
     }
   }
 
@@ -110,7 +104,7 @@ export function AgentNewPage() {
             setModel={setModel}
             skills={skills}
             setSkills={setSkills}
-            creating={creating}
+            creating={createAgent.isPending}
             error={error}
             onBack={() => setStep(selectedTemplate ? "recruit" : "choose")}
             onCreate={handleCreate}
