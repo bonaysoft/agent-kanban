@@ -110,10 +110,10 @@ export const claudeProvider: AgentProvider = {
       return null;
     }
 
-    // rate_limit_event
+    // rate_limit_event — only "blocked" means actually rate-limited
     if (event.type === "rate_limit_event") {
       const info = event.rate_limit_info;
-      if (info && info.status !== "allowed") {
+      if (info?.status === "blocked") {
         const resetAt = new Date(info.resetsAt * 1000).toISOString();
         return { type: "rate_limit", resetAt };
       }
