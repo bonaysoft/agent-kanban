@@ -173,18 +173,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
     taskId = task.id;
 
-    // Verify leader agent can call the assign route (assigns task to itself)
-    const leaderJwt = await new SignJWT({ sub: leaderSessionId, aid: leaderAgentId, jti: randomUUID(), aud: BETTER_AUTH_URL })
-      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
-      .setIssuedAt()
-      .setExpirationTime("60s")
-      .sign(leaderSessionPrivateKey);
-    const assignRes = await honoRequest("POST", `/api/tasks/${taskId}/assign`, {}, leaderJwt);
-    expect(assignRes.status).toBe(200);
-    expect(((await assignRes.json()) as any).assigned_to).toBe(leaderAgentId);
-
-    // Re-assign to the worker agent via repo so the worker can claim it in subsequent tests
-    await testEnv.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
+    // Assign task to the worker agent so the worker can claim it in subsequent tests
     await assignTask(testEnv.DB, taskId, agentId);
   });
 

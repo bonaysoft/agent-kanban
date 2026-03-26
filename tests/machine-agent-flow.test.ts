@@ -203,13 +203,10 @@ describe("machine → agent session flow", () => {
     taskId = task.id;
   });
 
-  it("leader agent self-assigns task via assign route", async () => {
+  it("leader agent self-assign is rejected (400)", async () => {
     const leaderJwt = await signLeaderSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${taskId}/assign`, {}, leaderJwt);
-    expect(res.status).toBe(200);
-    const task = (await res.json()) as any;
-    // Route assigns to the caller (leader agent), not a body-provided agent
-    expect(task.assigned_to).toBe(leaderAgentId);
+    expect(res.status).toBe(400);
   });
 
   it("agent claims the worker-assigned task via session JWT", async () => {

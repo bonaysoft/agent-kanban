@@ -15,6 +15,12 @@ function enforceTransition(action: TaskTransition, currentStatus: TaskStatus, id
   }
 }
 
+async function assertAssignableWorkerAgent(db: D1, agentId: string, missingStatus: 400 | 404): Promise<void> {
+  const agent = await db.prepare("SELECT kind FROM agents WHERE id = ?").bind(agentId).first<{ kind: string }>();
+  if (!agent) throw new HTTPException(missingStatus, { message: "Agent not found" });
+  if (agent.kind === "leader") throw new HTTPException(400, { message: "Cannot assign tasks to leader agents" });
+}
+
 export async function createTask(db: D1, ownerId: string, input: CreateTaskInput & { agentId?: string; assigned_to?: string }): Promise<Task> {
   const board = input.board_id ? { id: input.board_id } : await getDefaultBoard(db, ownerId);
 
@@ -40,6 +46,10 @@ export async function createTask(db: D1, ownerId: string, input: CreateTaskInput
   if (input.created_from) {
     const parent = await db.prepare("SELECT id FROM tasks WHERE id = ?").bind(input.created_from).first();
     if (!parent) throw new HTTPException(400, { message: "Parent task not found" });
+  }
+
+  if (input.assigned_to) {
+    await assertAssignableWorkerAgent(db, input.assigned_to, 400);
   }
 
   const stmts = [
@@ -281,6 +291,8 @@ export async function assignTask(db: D1, taskId: string, agentId: string): Promi
   if (!task) return null;
   if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
   if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
+
+  await assertAssignableWorkerAgent(db, agentId, 404);
 
   const now = new Date().toISOString();
   const logId = newLongId();
