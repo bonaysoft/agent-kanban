@@ -1,10 +1,15 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { useAgent, useAgentSessions, useAgentTasks } from "../hooks/useAgents";
+import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
+import { useAgent, useAgentSessions, useAgentTasks, useDeleteAgent, useUpdateAgent } from "../hooks/useAgents";
 import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
 
 const actionStyles: Record<string, string> = {
@@ -40,13 +45,18 @@ type Tab = "mission" | "activity" | "sessions";
 
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { agent, loading } = useAgent(id);
   const { sessions } = useAgentSessions(id);
   const { tasks } = useAgentTasks(id);
   const task = tasks[0] ?? null;
+  const updateAgent = useUpdateAgent();
+  const deleteAgent = useDeleteAgent();
 
   const [tab, setTab] = useState<Tab>("mission");
   const [showIdentity, setShowIdentity] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   if (loading) {
     return (
@@ -139,6 +149,22 @@ export function AgentDetailPage() {
                   <h1 className="font-mono text-2xl font-bold text-content-primary" style={{ letterSpacing: "-0.02em" }}>
                     {agent.name}
                   </h1>
+                  {!agent.builtin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setShowEdit(true)}
+                        className="text-[11px] font-mono text-content-tertiary hover:text-content-secondary bg-surface-tertiary hover:bg-surface-tertiary/80 rounded px-2.5 py-1 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setShowDelete(true)}
+                        className="text-[11px] font-mono text-red-500/70 hover:text-red-500 bg-red-500/5 hover:bg-red-500/10 rounded px-2.5 py-1 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                   {agent.kind === "leader" ? (
                     <svg
                       width="16"
@@ -231,6 +257,30 @@ export function AgentDetailPage() {
           publicKey={agent.public_key}
           color={color}
           rgb={rgb}
+        />
+
+        {/* ─── Edit Modal ─── */}
+        <EditAgentDialog
+          open={showEdit}
+          onOpenChange={setShowEdit}
+          agent={agent}
+          onSave={async (body) => {
+            await updateAgent.mutateAsync({ id: agent.id, body });
+            setShowEdit(false);
+          }}
+          saving={updateAgent.isPending}
+        />
+
+        {/* ─── Delete Confirmation ─── */}
+        <DeleteAgentDialog
+          open={showDelete}
+          onOpenChange={setShowDelete}
+          agentName={agent.name}
+          onConfirm={async () => {
+            await deleteAgent.mutateAsync(agent.id);
+            navigate("/agents");
+          }}
+          deleting={deleteAgent.isPending}
         />
 
         {/* ─── Soul ─── */}
@@ -383,6 +433,249 @@ function IdentityModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EditAgentDialog({
+  open,
+  onOpenChange,
+  agent,
+  onSave,
+  saving,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agent: any;
+  onSave: (body: Record<string, unknown>) => Promise<void>;
+  saving: boolean;
+}) {
+  const [name, setName] = useState(agent.name ?? "");
+  const [bio, setBio] = useState(agent.bio ?? "");
+  const [soul, setSoul] = useState(agent.soul ?? "");
+  const [role, setRole] = useState(agent.role ?? "");
+  const handoffTo = agent.handoff_to ?? [];
+  const [runtime, setRuntime] = useState(agent.runtime ?? "claude-code");
+  const [model, setModel] = useState(agent.model ?? "");
+  const [skills, setSkills] = useState<string[]>(agent.skills ?? []);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setError(null);
+    try {
+      await onSave({
+        name: name.trim(),
+        bio: bio.trim() || undefined,
+        soul: soul.trim() || undefined,
+        role: role.trim() || undefined,
+        handoff_to: handoffTo.length ? handoffTo : undefined,
+        runtime: runtime || undefined,
+        model: model.trim() || undefined,
+        skills: skills.length ? skills : undefined,
+      });
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit agent</DialogTitle>
+          <DialogDescription className="sr-only">Edit agent properties</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-2">
+          {/* Identity */}
+          <fieldset className="space-y-4">
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Identity</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-agent-name">Name</Label>
+                <Input id="edit-agent-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bolt" className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-agent-role">Role</Label>
+                <Input
+                  id="edit-agent-role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="e.g. backend-developer"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-agent-bio">Bio</Label>
+              <Input id="edit-agent-bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Short description" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-agent-soul">Soul</Label>
+              <Textarea
+                id="edit-agent-soul"
+                value={soul}
+                onChange={(e) => setSoul(e.target.value)}
+                placeholder="Personality prompt..."
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </fieldset>
+
+          {/* Runtime */}
+          <fieldset className="space-y-4">
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Runtime</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Runtime</Label>
+                <Select
+                  value={runtime}
+                  onValueChange={(v) => {
+                    if (v) setRuntime(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="claude-code">Claude Code</SelectItem>
+                    <SelectItem value="codex">Codex</SelectItem>
+                    <SelectItem value="gemini">Gemini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-agent-model">Model</Label>
+                <Input id="edit-agent-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. claude-sonnet-4-6" />
+              </div>
+            </div>
+          </fieldset>
+
+          {/* Workflow */}
+          <fieldset className="space-y-4">
+            <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Workflow</legend>
+            <div className="space-y-1.5">
+              <Label>Skills</Label>
+              <EditTagInput tags={skills} onChange={setSkills} placeholder="Type a skill and press Enter" />
+            </div>
+          </fieldset>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteAgentDialog({
+  open,
+  onOpenChange,
+  agentName,
+  onConfirm,
+  deleting,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agentName: string;
+  onConfirm: () => Promise<void>;
+  deleting: boolean;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirm() {
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Delete agent</DialogTitle>
+          <DialogDescription>
+            Delete agent <span className="font-mono text-content-primary">{agentName}</span>? This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={deleting} className="bg-red-600 hover:bg-red-700 text-white border-0">
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditTagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (v: string[]) => void; placeholder: string }) {
+  const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function add() {
+    const val = input.trim();
+    if (val && !tags.includes(val)) {
+      onChange([...tags, val]);
+    }
+    setInput("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add();
+    } else if (e.key === "Backspace" && input === "" && tags.length > 0) {
+      onChange(tags.slice(0, -1));
+    }
+  }
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      className="flex flex-wrap items-center gap-1.5 rounded-md border border-input px-3 py-1.5 min-h-9 cursor-text shadow-xs focus-within:ring-1 focus-within:ring-ring"
+    >
+      {tags.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground font-mono text-xs px-2 py-0.5 rounded">
+          {tag}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(tags.filter((t) => t !== tag));
+            }}
+            className="hover:opacity-70"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={add}
+        placeholder={tags.length === 0 ? placeholder : ""}
+        className="flex-1 min-w-[120px] bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground outline-none"
+      />
+    </div>
   );
 }
 
