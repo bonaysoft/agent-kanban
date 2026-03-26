@@ -58,6 +58,18 @@ export class Scheduler {
     this.schedulePoll(this.opts.pollInterval);
   }
 
+  clearRateLimit(): void {
+    if (!this.paused) return;
+    logger.info("Rate limit cleared — agent completed despite rate limit warning, resuming dispatch");
+    this.paused = false;
+    this.resumeTargetMs = 0;
+    if (this.resumeTimer) {
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = null;
+    }
+    this.schedulePoll(0);
+  }
+
   private schedulePoll(delayMs: number): void {
     if (!this.running) return;
     if (this.pollTimer) clearTimeout(this.pollTimer);

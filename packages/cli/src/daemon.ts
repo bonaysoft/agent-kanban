@@ -69,6 +69,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     {
       onSlotFreed: () => scheduler.onSlotFreed(),
       onRateLimited: (resetAt) => scheduler.pauseForRateLimit(resetAt),
+      onRateLimitCleared: () => scheduler.clearRateLimit(),
       onProcessStarted: savePid,
       onProcessExited: removePid,
     },
