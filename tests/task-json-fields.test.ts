@@ -11,7 +11,7 @@ let db: D1Database;
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -134,14 +134,14 @@ describe("task JSON field parsing (labels, input)", () => {
     const { assignTask, claimTask, reviewTask } = await import("../apps/web/functions/api/taskRepo");
 
     const agent = await createAgent(db, ownerId, { name: "worker" });
-    const assigned = await assignTask(db, taskId, agent.id);
+    const assigned = await assignTask(db, taskId, agent.id, "machine", "system");
     expect(Array.isArray(assigned!.labels)).toBe(true);
 
     const claimed = await claimTask(db, taskId, agent.id, "agent:worker");
     expect(Array.isArray(claimed!.labels)).toBe(true);
     expect(typeof claimed!.input).toBe("object");
 
-    const reviewed = await reviewTask(db, taskId, agent.id, "https://github.com/pr/1", "agent:worker");
+    const reviewed = await reviewTask(db, taskId, "agent:worker", agent.id, "https://github.com/pr/1", "agent:worker");
     expect(Array.isArray(reviewed!.labels)).toBe(true);
     expect(typeof reviewed!.input).toBe("object");
   });

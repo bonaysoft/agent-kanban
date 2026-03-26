@@ -434,7 +434,7 @@ describe("routes", () => {
   it("POST /api/tasks/:id/release releases a task", async () => {
     const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Release Task", board_id: boardId });
-    await assignTask(env.DB, task.id, agentId);
+    await assignTask(env.DB, task.id, agentId, "machine", "system");
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").bind(task.id).run();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/release`, {}, apiKey);
     expect(res.status).toBe(200);
@@ -489,9 +489,9 @@ describe("routes", () => {
   });
 
   it("GET /api/tasks/:id/notes returns notes", async () => {
-    const { createTask, addTaskNote } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, addTaskAction } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Get Notes Task", board_id: boardId });
-    await addTaskNote(env.DB, task.id, null, "commented", "Test note");
+    await addTaskAction(env.DB, task.id, "machine", "system", "commented", "Test note");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/notes`, undefined, apiKey);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
@@ -678,7 +678,7 @@ describe("routes", () => {
 
     const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Agent Claim Task", board_id: boardId });
-    await assignTask(env.DB, task.id, agentId);
+    await assignTask(env.DB, task.id, agentId, "machine", "system");
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/claim`, {}, jwt);
     expect(res.status).toBe(200);

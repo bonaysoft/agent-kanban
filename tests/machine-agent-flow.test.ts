@@ -25,7 +25,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -213,7 +213,7 @@ describe("machine → agent session flow", () => {
     // Re-assign the task to the worker agent directly via repo so the worker can claim it
     const { assignTask } = await import("../apps/web/functions/api/taskRepo");
     await env.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
-    await assignTask(env.DB, taskId, agentId);
+    await assignTask(env.DB, taskId, agentId, "machine", "system");
 
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${taskId}/claim`, { agent_id: agentId }, jwt);
@@ -285,7 +285,7 @@ describe("machine → agent session flow", () => {
     expect(task.status).toBe("in_review");
     expect(task.assigned_to).toBe(agentId);
 
-    const logs = await env.DB.prepare("SELECT action FROM task_notes WHERE task_id = ? ORDER BY created_at").bind(taskId).all();
+    const logs = await env.DB.prepare("SELECT action FROM task_actions WHERE task_id = ? ORDER BY created_at").bind(taskId).all();
     const actions = logs.results.map((r: any) => r.action);
     expect(actions).toContain("created");
     expect(actions).toContain("assigned");

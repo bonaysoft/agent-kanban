@@ -30,7 +30,7 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql"];
+  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -409,21 +409,21 @@ describe("user assigns task to agent", () => {
 
   it("assigns task via repo function", async () => {
     const { assignTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await assignTask(env.DB, taskId, agentId);
+    const task = await assignTask(env.DB, taskId, agentId, "machine", "system");
     expect(task!.assigned_to).toBe(agentId);
     expect(task!.status).toBe("todo"); // assign doesn't change status
   });
 
   it("task logs record assignment with persistent agent ID", async () => {
-    const logs = await env.DB.prepare("SELECT * FROM task_notes WHERE task_id = ? AND action = 'assigned'").bind(taskId).all();
+    const logs = await env.DB.prepare("SELECT * FROM task_actions WHERE task_id = ? AND action = 'assigned'").bind(taskId).all();
     expect(logs.results.length).toBe(1);
-    expect((logs.results[0] as any).agent_id).toBe(agentId);
+    expect((logs.results[0] as any).actor_id).toBe("system");
   });
 
   it("release resets status from in_progress to todo", async () => {
     const { claimTask, releaseTask } = await import("../apps/web/functions/api/taskRepo");
     await claimTask(env.DB, taskId, agentId, "agent:worker");
-    const task = await releaseTask(env.DB, taskId, agentId, "machine");
+    const task = await releaseTask(env.DB, taskId, "machine", "system", "machine");
     expect(task!.status).toBe("todo");
   });
 });
