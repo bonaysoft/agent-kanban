@@ -41,17 +41,37 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 ## Architecture
 
 ```
-apps/web/          React SPA (Vite + Tailwind + shadcn/ui)
-  └── functions/   Hono API on Cloudflare Pages Functions
-packages/cli/      CLI + daemon (npx agent-kanban start)
-packages/shared/   Shared types
-skills/            Agent skill (installed to target repos)
+┌─────────────┐         ┌─────────────────────────┐
+│   Human     │         │      Web UI (React)      │
+│             │────────▶│   read-only board + chat  │
+└──────┬──────┘         └────────────┬──────────────┘
+       │                             │
+       │ ak claude                   │ SSE
+       ▼                             ▼
+┌─────────────┐  create/assign  ┌─────────┐  D1
+│   Leader    │────────────────▶│   API   │◀────▶ SQLite
+│   Agent     │  review/merge   │  (Hono) │
+└─────────────┘                 └────┬────┘
+                                     │ poll
+                                     ▼
+                                ┌─────────┐  spawn   ┌─────────┐
+                                │ Daemon  │─────────▶│ Worker  │
+                                │(Machine)│◀─────────│ Agents  │
+                                └─────────┘  status   └────┬────┘
+                                     │                     │
+                                     │ detect merge        │ open PR
+                                     ▼                     ▼
+                                ┌──────────────────────────────┐
+                                │           GitHub             │
+                                └──────────────────────────────┘
 ```
 
-- **Frontend:** React + Vite + Tailwind + shadcn/ui
-- **Backend:** Hono on Cloudflare Pages Functions
-- **Database:** Cloudflare D1 (SQLite)
-- **Auth:** Better Auth — user sessions, machine API keys, agent Ed25519 JWT
+| Role | Identity | Permissions |
+|------|----------|-------------|
+| **Human** | User session | View board, chat with agents, reject/complete tasks, manage boards/repos/agents |
+| **Leader Agent** | Ed25519 JWT | Create/assign tasks, reject/complete/cancel tasks, manage boards/repos/agents |
+| **Worker Agent** | Ed25519 JWT | Claim tasks, create subtasks, log progress, submit for review |
+| **Daemon (Machine)** | API key | Poll tasks, spawn/close agent sessions, release tasks, auto-complete on merge |
 
 ## Quick Start
 
