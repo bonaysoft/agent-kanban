@@ -235,7 +235,7 @@ api.post("/api/tasks", async (c) => {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
 
-  const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, agentId: body.agent_id });
+  const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, agentId: c.get("agentId") || null });
   return c.json(task, 201);
 });
 
@@ -309,15 +309,15 @@ api.post("/api/tasks/:id/release", async (c) => {
 
 api.post("/api/tasks/:id/assign", async (c) => {
   const body = await c.req.json<{ agent_id: string }>();
-  const agentId = c.get("agentId") || body.agent_id;
-  if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
+  const targetAgentId = body.agent_id;
+  if (!targetAgentId) throw new HTTPException(400, { message: "agent_id is required" });
 
   const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?").bind(c.req.param("id")).first<{ board_id: string }>();
   if (existing) {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
 
-  const task = await assignTask(c.env.DB, c.req.param("id"), agentId);
+  const task = await assignTask(c.env.DB, c.req.param("id"), targetAgentId);
   return c.json(task);
 });
 
@@ -346,13 +346,13 @@ api.post("/api/tasks/:id/reject", async (c) => {
 // ─── Task Notes ───
 
 api.post("/api/tasks/:id/notes", async (c) => {
-  const body = await c.req.json<{ detail: string; agent_id?: string }>();
+  const body = await c.req.json<{ detail: string }>();
   if (!body.detail) throw new HTTPException(400, { message: "detail is required" });
 
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const agentId = c.get("agentId") || body.agent_id;
+  const agentId = c.get("agentId") || null;
   const note = await addTaskNote(c.env.DB, c.req.param("id"), agentId || null, "commented", body.detail);
   return c.json(note, 201);
 });
