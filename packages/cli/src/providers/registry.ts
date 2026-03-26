@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { claudeProvider } from "./claude.js";
+import { codexProvider } from "./codex.js";
 import { geminiProvider } from "./gemini.js";
 import type { AgentProvider } from "./types.js";
 
@@ -11,6 +12,7 @@ export function registerProvider(provider: AgentProvider): void {
 
 export function normalizeRuntime(runtime: string): string {
   if (runtime === "claude-code") return "claude";
+  if (runtime === "codex-cli") return "codex";
   return runtime;
 }
 
@@ -36,3 +38,4 @@ export function getAvailableProviders(): AgentProvider[] {
 // Auto-register built-in providers
 registerProvider(claudeProvider);
 registerProvider(geminiProvider);
+registerProvider(codexProvider);
