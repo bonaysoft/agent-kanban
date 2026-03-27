@@ -151,15 +151,26 @@ export const codexProvider: AgentProvider = {
         return cachedUsage;
       }
 
-      type RateLimitWindow = { used_percent: number; reset_at: string };
+      type RateLimitWindow = { used_percent: number; reset_at: number; limit_window_seconds: number };
       const data = (await res.json()) as { rate_limit?: { primary_window?: RateLimitWindow; secondary_window?: RateLimitWindow } };
       const rl = data.rate_limit;
+      const windowLabel = (secs: number) => (secs <= 18000 ? "5-Hour" : "Weekly");
       const windows: UsageWindow[] = [];
       if (rl?.primary_window) {
-        windows.push({ runtime: "codex", label: "5-Hour", utilization: rl.primary_window.used_percent, resets_at: rl.primary_window.reset_at });
+        windows.push({
+          runtime: "codex",
+          label: windowLabel(rl.primary_window.limit_window_seconds),
+          utilization: rl.primary_window.used_percent,
+          resets_at: new Date(rl.primary_window.reset_at * 1000).toISOString(),
+        });
       }
       if (rl?.secondary_window) {
-        windows.push({ runtime: "codex", label: "Weekly", utilization: rl.secondary_window.used_percent, resets_at: rl.secondary_window.reset_at });
+        windows.push({
+          runtime: "codex",
+          label: windowLabel(rl.secondary_window.limit_window_seconds),
+          utilization: rl.secondary_window.used_percent,
+          resets_at: new Date(rl.secondary_window.reset_at * 1000).toISOString(),
+        });
       }
       cachedUsage = { windows, updated_at: new Date().toISOString() };
       cachedAt = Date.now();
