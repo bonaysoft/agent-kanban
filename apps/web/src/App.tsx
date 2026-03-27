@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "./lib/auth-client";
 import { AccountSettingsPage } from "./routes/AccountSettingsPage";
 import { AgentDetailPage } from "./routes/AgentDetailPage";
+import { AgentEditPage } from "./routes/AgentEditPage";
 import { AgentNewPage } from "./routes/AgentNewPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
@@ -100,6 +101,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <AgentDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agents/:id/edit"
+          element={
+            <ProtectedRoute>
+              <AgentEditPage />
             </ProtectedRoute>
           }
         />

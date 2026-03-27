@@ -16,7 +16,7 @@ soul: |
 role: designer
 handoff_to:
   - frontend-developer
-runtime: claude-code
+runtime: claude
 model: claude-opus-4-6
 skills:
   - pbakaus/impeccable@frontend-design

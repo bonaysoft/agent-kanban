@@ -416,7 +416,7 @@ function FormStep(props: FormStepProps) {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>{(v: string) => RUNTIME_LABELS[v as AgentRuntime] ?? v}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {AGENT_RUNTIMES.map((r) => (

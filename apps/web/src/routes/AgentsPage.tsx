@@ -89,27 +89,10 @@ function AgentCard({ agent }: { agent: any }) {
 
       {/* Identity — vertical, centered */}
       <div className="flex flex-col items-center pt-6 pb-4 px-5">
-        <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} />
+        <AgentIdenticon publicKey={agent.public_key} size={64} glow={isOnline} leader={agent.kind === "leader"} />
 
         <div className="mt-3 flex items-center gap-1.5">
           <h2 className="font-mono text-base font-bold tracking-tight text-content-primary">{agent.name}</h2>
-          {agent.kind === "leader" ? (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#EAB308"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
-            >
-              <title>Leader agent</title>
-              <path d="m2 4 3 12h14l3-12-6 5-4-5-4 5-6-5z" />
-              <path d="M5 20h14" />
-            </svg>
-          ) : null}
           {agent.builtin ? (
             <svg
               width="12"

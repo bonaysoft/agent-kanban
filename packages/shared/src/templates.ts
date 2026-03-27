@@ -1,5 +1,6 @@
 import { parse } from "yaml";
 import type { AgentRuntime } from "./types.js";
+import { normalizeRuntime } from "./types.js";
 
 const TEMPLATES_BASE = "https://raw.githubusercontent.com/saltbo/agent-kanban/main/agents";
 
@@ -62,5 +63,9 @@ export async function fetchTemplate(slug: string): Promise<AgentTemplate> {
   if (!res.ok) {
     throw new Error(`Template "${slug}" not found (${res.status})`);
   }
-  return parse(await res.text()) as AgentTemplate;
+  const template = parse(await res.text()) as AgentTemplate;
+  if (template.runtime) {
+    template.runtime = normalizeRuntime(template.runtime);
+  }
+  return template;
 }

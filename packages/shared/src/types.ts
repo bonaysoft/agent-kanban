@@ -133,6 +133,15 @@ export const RUNTIME_LABELS: Record<AgentRuntime, string> = {
   gemini: "Gemini CLI",
 };
 
+const RUNTIME_ALIASES: Record<string, AgentRuntime> = {
+  "claude-code": "claude",
+  "codex-cli": "codex",
+};
+
+export function normalizeRuntime(runtime: string): AgentRuntime {
+  return RUNTIME_ALIASES[runtime] ?? (runtime as AgentRuntime);
+}
+
 export interface Agent {
   id: string;
   owner_id: string;

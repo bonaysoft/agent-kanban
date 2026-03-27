@@ -5,9 +5,10 @@ interface AgentIdenticonProps {
   size?: number;
   glow?: boolean;
   crystallize?: boolean;
+  leader?: boolean;
 }
 
-export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: AgentIdenticonProps) {
+export function AgentIdenticon({ publicKey, size = 40, glow, crystallize, leader }: AgentIdenticonProps) {
   const grid = agentIdenticon(publicKey);
   const color = agentColor(publicKey);
   const cellSize = size / 7;
@@ -37,7 +38,7 @@ export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: Agen
           }
         `}</style>
       )}
-      <rect width={size} height={size} rx={size * 0.18} fill="#18181B" />
+      <rect width={size} height={size} rx={size * 0.18} fill="var(--bg-tertiary)" stroke="var(--border)" strokeWidth="1" />
       <g filter={glow ? `url(#glow-${publicKey.slice(0, 8)})` : undefined}>
         {grid.map((row, y) =>
           row.map((filled, x) => {
@@ -66,6 +67,21 @@ export function AgentIdenticon({ publicKey, size = 40, glow, crystallize }: Agen
           }),
         )}
       </g>
+      {leader &&
+        (() => {
+          const s = size * 0.28;
+          const cx = size - s * 0.35;
+          const cy = s * 0.35;
+          return (
+            <g transform={`translate(${cx - s / 2}, ${cy - s / 2})`}>
+              <circle cx={s / 2} cy={s / 2} r={s / 2 + 1} fill="var(--bg-secondary)" />
+              <svg x={s * 0.15} y={s * 0.15} width={s * 0.7} height={s * 0.7} viewBox="0 0 24 24" fill="#EAB308" stroke="none">
+                <path d="m2 4 3 12h14l3-12-6 5-4-5-4 5-6-5z" />
+                <rect x="5" y="18" width="14" height="2" rx="1" />
+              </svg>
+            </g>
+          );
+        })()}
     </svg>
   );
 }

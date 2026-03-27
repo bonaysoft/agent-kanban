@@ -1,24 +1,16 @@
 import { execSync } from "node:child_process";
-import type { AgentRuntime } from "@agent-kanban/shared";
+import { type AgentRuntime, normalizeRuntime } from "@agent-kanban/shared";
 import { claudeProvider } from "./claude.js";
 import { codexProvider } from "./codex.js";
 import { geminiProvider } from "./gemini.js";
 import type { AgentProvider } from "./types.js";
 
-const providers = new Map<AgentRuntime, AgentProvider>();
+export { normalizeRuntime };
 
-/** Legacy alias map for old runtime names */
-const RUNTIME_ALIASES: Record<string, AgentRuntime> = {
-  "claude-code": "claude",
-  "codex-cli": "codex",
-};
+const providers = new Map<AgentRuntime, AgentProvider>();
 
 export function registerProvider(provider: AgentProvider): void {
   providers.set(provider.name, provider);
-}
-
-export function normalizeRuntime(runtime: string): AgentRuntime {
-  return RUNTIME_ALIASES[runtime] ?? (runtime as AgentRuntime);
 }
 
 export function getProvider(name: AgentRuntime): AgentProvider {

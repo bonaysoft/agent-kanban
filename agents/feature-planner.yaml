@@ -19,7 +19,7 @@ handoff_to:
   - frontend-developer
   - backend-developer
   - designer
-runtime: claude-code
+runtime: claude
 model: claude-opus-4-6
 skills:
   - obra/superpowers@brainstorming

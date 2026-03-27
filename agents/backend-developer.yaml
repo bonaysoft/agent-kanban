@@ -17,7 +17,7 @@ role: backend-developer
 handoff_to:
   - frontend-developer
   - designer
-runtime: claude-code
+runtime: claude
 model: claude-sonnet-4-6
 skills:
   - obra/superpowers@finishing-a-development-branch
