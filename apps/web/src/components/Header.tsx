@@ -72,8 +72,8 @@ export function Header() {
     navigate(`/boards/${id}`);
   }
 
-  async function handleBoardCreate(name: string) {
-    const created = await api.boards.create({ name });
+  async function handleBoardCreate(name: string, type: "dev" | "ops") {
+    const created = await api.boards.create({ name, type });
     refreshBoards();
     if (created?.id) navigate(`/boards/${created.id}`);
   }

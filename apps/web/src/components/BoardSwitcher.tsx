@@ -13,20 +13,22 @@ interface BoardSwitcherProps {
   boards: Board[];
   activeBoardId: string | null;
   onSelect: (boardId: string) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, type: "dev" | "ops") => void;
   onClose: () => void;
 }
 
 export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClose }: BoardSwitcherProps) {
   const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<"dev" | "ops">("dev");
   const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    onCreate(name);
+    onCreate(name, newType);
     setNewName("");
+    setNewType("dev");
     setCreating(false);
   }
 
@@ -79,24 +81,39 @@ export function BoardSwitcher({ boards, activeBoardId, onSelect, onCreate, onClo
         {/* Footer: create */}
         <div className="border-t border-border -mx-4 px-4 pt-3 -mb-4 pb-4">
           {creating ? (
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") {
-                    setCreating(false);
-                    setNewName("");
-                  }
-                }}
-                placeholder="Board name"
-                autoFocus
-              />
-              <Button onClick={handleCreate} disabled={!newName.trim()} size="sm">
-                Create
-              </Button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  ref={inputRef}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreate();
+                    if (e.key === "Escape") {
+                      setCreating(false);
+                      setNewName("");
+                    }
+                  }}
+                  placeholder="Board name"
+                  autoFocus
+                />
+                <Button onClick={handleCreate} disabled={!newName.trim()} size="sm">
+                  Create
+                </Button>
+              </div>
+              <div className="flex gap-1.5">
+                {(["dev", "ops"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setNewType(t)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      newType === t ? "bg-accent text-white" : "bg-surface-tertiary text-content-secondary hover:text-content-primary"
+                    }`}
+                  >
+                    {t === "dev" ? "Dev" : "Ops"}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <Button variant="ghost" size="sm" onClick={() => setCreating(true)} className="w-full justify-start text-content-tertiary">
