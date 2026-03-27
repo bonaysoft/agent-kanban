@@ -46,6 +46,7 @@ export function registerUpdateCommand(program: Command) {
     .option("--repo <repo>", "Repository ID or URL (task)")
     // Agent options
     .option("--bio <bio>", "Agent bio")
+    .option("--soul <soul>", "Agent soul — persistent behavior instructions")
     .option("--role <role>", "Agent role")
     .option("--runtime <runtime>", "Agent runtime")
     .option("--model <model>", "Agent model")
@@ -96,6 +97,7 @@ export function registerUpdateCommand(program: Command) {
           const body: Record<string, unknown> = {};
           if (opts.name) body.name = opts.name;
           if (opts.bio) body.bio = opts.bio;
+          if (opts.soul) body.soul = opts.soul;
           if (opts.role) body.role = opts.role;
           if (opts.runtime) body.runtime = opts.runtime;
           if (opts.model) body.model = opts.model;

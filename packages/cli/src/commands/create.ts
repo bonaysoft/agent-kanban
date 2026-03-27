@@ -119,6 +119,7 @@ async function createAgent(opts: Record<string, string>) {
     const runtime = opts.runtime || detectRuntime();
     body = { name: opts.name, runtime };
     if (opts.bio) body.bio = opts.bio;
+    if (opts.soul) body.soul = opts.soul;
     if (opts.role) body.role = opts.role;
     if (opts.model) body.model = opts.model;
   }
@@ -179,6 +180,7 @@ export function registerCreateCommand(program: Command) {
     // agent flags
     .option("--template <slug>", "Agent template slug (agent)")
     .option("--bio <bio>", "Agent bio (agent)")
+    .option("--soul <soul>", "Agent soul — persistent behavior instructions (agent)")
     .option("--role <role>", "Agent role (agent)")
     .option("--runtime <runtime>", "Agent runtime (agent)")
     .option("--model <model>", "Model to use (agent)")
