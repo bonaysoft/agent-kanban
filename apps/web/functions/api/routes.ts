@@ -84,6 +84,7 @@ api.get("/api/share/:slug", async (c) => {
 
   const publicTasks = board.tasks.map((t) => ({
     id: t.id,
+    seq: t.seq,
     title: t.title,
     status: t.status,
     priority: t.priority,
