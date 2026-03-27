@@ -14,7 +14,7 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
   });
 
   return (
-    <div data-column-status={column.status} className="min-w-0 border-r border-border last:border-r-0 flex flex-col h-full">
+    <div data-column-status={column.status} className="min-w-0 min-h-0 border-r border-border last:border-r-0 flex flex-col h-full">
       <div className="flex items-center justify-between flex-shrink-0 px-4 pt-4 pb-3">
         <span className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}>
           {column.name}

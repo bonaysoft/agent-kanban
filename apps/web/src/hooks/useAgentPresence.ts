@@ -1,4 +1,4 @@
-import type { BoardAction, Task, TaskActionType } from "@agent-kanban/shared";
+import type { BoardAction, TaskActionType } from "@agent-kanban/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearCardStyles, liftCard, resetCard, slideCard } from "../lib/cardEffects";
@@ -62,13 +62,12 @@ function getSequence(action: TaskActionType): ChoreographyStep[] | null {
 
 // ─── Hook ───
 
-export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
+export function useAgentPresence(boardId: string | undefined) {
   const { events } = useBoardSSE(boardId);
   const [avatars, setAvatars] = useState<Map<string, AgentAvatar>>(new Map());
   const processedRef = useRef(0);
   const queryClient = useQueryClient();
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>[]>>(new Map());
-  const initializedRef = useRef(false);
 
   const cancelChoreography = useCallback((agentId: string) => {
     const existing = timersRef.current.get(agentId);
@@ -127,26 +126,6 @@ export function useAgentPresence(boardId: string | undefined, tasks: Task[]) {
     },
     [boardId, cancelChoreography, queryClient],
   );
-
-  // Derive initial presence from board tasks (once)
-  useEffect(() => {
-    if (initializedRef.current || tasks.length === 0) return;
-    initializedRef.current = true;
-
-    const initial = new Map<string, AgentAvatar>();
-    for (const task of tasks) {
-      if (task.assigned_to && (task as any).agent_public_key && task.status === "in_progress") {
-        initial.set(task.assigned_to, {
-          agentId: task.assigned_to,
-          agentName: (task as any).agent_name || null,
-          publicKey: (task as any).agent_public_key,
-          taskId: task.id,
-          phase: "working",
-        });
-      }
-    }
-    setAvatars(initial);
-  }, [tasks]);
 
   // Process SSE events → choreographies
   useEffect(() => {

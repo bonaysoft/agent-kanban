@@ -22,7 +22,7 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 export function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const { board, loading, error, refresh } = useBoard(boardId);
-  const avatars = useAgentPresence(boardId, board?.tasks ?? []);
+  const avatars = useAgentPresence(boardId);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);

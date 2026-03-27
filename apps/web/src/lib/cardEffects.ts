@@ -1,8 +1,15 @@
+function getScrollParent(el: HTMLElement): HTMLElement | null {
+  return el.closest(".scrollbar-column") as HTMLElement | null;
+}
+
 export function liftCard(taskId: string) {
   const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
   if (!el) return;
+  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const scroll = getScrollParent(el);
+  if (scroll) scroll.style.overflow = "visible";
   el.style.position = "relative";
-  el.style.zIndex = "30";
+  el.style.zIndex = "35";
   el.style.transition = "transform 200ms ease-out, box-shadow 200ms ease-out";
   el.style.transform = "scale(1.03)";
   el.style.boxShadow = "0 8px 32px rgba(0,0,0,0.25)";
@@ -20,16 +27,16 @@ export function slideCard(taskId: string, targetStatus: string) {
 export function resetCard(taskId: string) {
   const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
   if (!el) return;
-  // Hide card — don't clear translateX to prevent flash back to source position.
-  // Framer Motion AnimatePresence handles entry animation in the target column.
   el.style.opacity = "0";
   el.style.transition = "none";
 }
 
-/** Clear all inline styles left by lift/slide/reset so re-rendered cards aren't stuck invisible. */
 export function clearCardStyles(taskId: string) {
   const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
-  if (el) el.style.cssText = "";
+  if (!el) return;
+  const scroll = getScrollParent(el);
+  if (scroll) scroll.style.overflow = "";
+  el.style.cssText = "";
 }
 
 export function glowCard(taskId: string) {
