@@ -16,7 +16,7 @@ let cachedAt = 0;
 function readAccessToken(): string | null {
   try {
     const auth = JSON.parse(readFileSync(AUTH_PATH, "utf-8"));
-    return auth.access_token || null;
+    return auth.tokens?.access_token || auth.access_token || null;
   } catch {
     return null;
   }
@@ -151,13 +151,15 @@ export const codexProvider: AgentProvider = {
         return cachedUsage;
       }
 
-      const data = (await res.json()) as Record<string, { utilization: number; resets_at: string } | undefined>;
+      type RateLimitWindow = { used_percent: number; reset_at: string };
+      const data = (await res.json()) as { rate_limit?: { primary_window?: RateLimitWindow; secondary_window?: RateLimitWindow } };
+      const rl = data.rate_limit;
       const windows: UsageWindow[] = [];
-      if (data.primary_window) {
-        windows.push({ runtime: "codex", label: "Primary", ...data.primary_window });
+      if (rl?.primary_window) {
+        windows.push({ runtime: "codex", label: "5-Hour", utilization: rl.primary_window.used_percent, resets_at: rl.primary_window.reset_at });
       }
-      if (data.secondary_window) {
-        windows.push({ runtime: "codex", label: "Secondary", ...data.secondary_window });
+      if (rl?.secondary_window) {
+        windows.push({ runtime: "codex", label: "Weekly", utilization: rl.secondary_window.used_percent, resets_at: rl.secondary_window.reset_at });
       }
       cachedUsage = { windows, updated_at: new Date().toISOString() };
       cachedAt = Date.now();
