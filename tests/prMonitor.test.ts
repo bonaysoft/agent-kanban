@@ -48,12 +48,14 @@ function makeClient(
     listTasks: () => Promise<unknown>;
     completeTask: () => Promise<unknown>;
     cancelTask: () => Promise<unknown>;
+    getTask: () => Promise<unknown>;
   }> = {},
 ) {
   return {
     listTasks: vi.fn().mockResolvedValue([]),
     completeTask: vi.fn().mockResolvedValue({}),
     cancelTask: vi.fn().mockResolvedValue({}),
+    getTask: vi.fn().mockResolvedValue(null),
     ...overrides,
   } as any;
 }
@@ -396,14 +398,14 @@ describe("PrMonitor — stuck task detection", () => {
   it("untracks multiple stuck tasks in a single check", async () => {
     makeExecSync("OPEN");
 
-    // API returns only task-3 as in_review; task-1 and task-2 are done/unknown
+    // API returns only task-3 as in_review; task-1 and task-2 are done/cancelled
     const task3 = { id: "task-3", pr_url: "https://github.com/org/repo/pull/3", assigned_to: null };
-    const task3WithStatus = { ...task3, status: "in_review" };
-    const listTasks = vi
+    const listTasks = vi.fn().mockResolvedValue([task3]); // only in_review call now
+    const getTask = vi
       .fn()
-      .mockResolvedValueOnce([task3]) // first call: listTasks({ status: "in_review" })
-      .mockResolvedValueOnce([task3WithStatus]); // second call: listTasks({}) for all tasks
-    const client = makeClient({ listTasks });
+      .mockResolvedValueOnce({ status: "done" }) // task-1 is done → untrack
+      .mockResolvedValueOnce({ status: "cancelled" }); // task-2 is cancelled → untrack
+    const client = makeClient({ listTasks, getTask });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
     monitor.track("task-2");
@@ -531,7 +533,7 @@ describe("PrMonitor — check guard conditions", () => {
     const firstCall = new Promise<any[]>((res) => {
       resolveFirst = () => res([task]);
     });
-    // check() now calls listTasks twice: once for in_review, once for all tasks
+    // check() now calls listTasks once per run (only for in_review)
     const listTasks = vi.fn().mockReturnValueOnce(firstCall).mockResolvedValue([task]);
 
     const monitor = new PrMonitor(makeClient({ listTasks }));
@@ -545,7 +547,7 @@ describe("PrMonitor — check guard conditions", () => {
     resolveFirst();
     await Promise.all([first, second]);
 
-    // check() calls listTasks twice per run; second check should be skipped
-    expect(listTasks).toHaveBeenCalledTimes(2);
+    // check() calls listTasks once per run; second check should be skipped entirely
+    expect(listTasks).toHaveBeenCalledTimes(1);
   });
 });

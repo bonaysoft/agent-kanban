@@ -184,16 +184,19 @@ export async function listTasks(
   const taskIds = tasks.map((t) => t.id);
   if (taskIds.length > 0) {
     const blockedSet = await computeBlocked(db, taskIds);
-    const placeholders = taskIds.map(() => "?").join(",");
-    const depsResult = await db
-      .prepare(`SELECT task_id, depends_on FROM task_dependencies WHERE task_id IN (${placeholders})`)
-      .bind(...taskIds)
-      .all<{ task_id: string; depends_on: string }>();
     const depsMap = new Map<string, string[]>();
-    for (const row of depsResult.results) {
-      const arr = depsMap.get(row.task_id) || [];
-      arr.push(row.depends_on);
-      depsMap.set(row.task_id, arr);
+    for (let i = 0; i < taskIds.length; i += 90) {
+      const chunk = taskIds.slice(i, i + 90);
+      const placeholders = chunk.map(() => "?").join(",");
+      const depsResult = await db
+        .prepare(`SELECT task_id, depends_on FROM task_dependencies WHERE task_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<{ task_id: string; depends_on: string }>();
+      for (const row of depsResult.results) {
+        const arr = depsMap.get(row.task_id) || [];
+        arr.push(row.depends_on);
+        depsMap.set(row.task_id, arr);
+      }
     }
     for (const task of tasks) {
       task.blocked = blockedSet.has(task.id);

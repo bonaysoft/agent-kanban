@@ -88,14 +88,18 @@ export class PrMonitor {
         }
       }
 
-      // Untrack tasks that are done/cancelled (not just "not in_review" — in_progress tasks are still working)
-      const allTasks = (await this.client.listTasks({})) as ReviewTask[];
-      const taskStatusById = new Map(allTasks.map((t) => [t.id, (t as any).status]));
+      // Untrack tasks that are done/cancelled by checking individually
       for (const taskId of [...this.trackedTasks]) {
         if (inReviewIds.has(taskId)) continue;
-        const status = taskStatusById.get(taskId);
-        if (status === "done" || status === "cancelled" || !status) {
-          logger.info(`Task ${taskId} is ${status ?? "unknown"}, untracking`);
+        try {
+          const task = (await this.client.getTask(taskId)) as { status: string } | null;
+          const status = task?.status;
+          if (status === "done" || status === "cancelled" || !status) {
+            logger.info(`Task ${taskId} is ${status ?? "unknown"}, untracking`);
+            this.untrack(taskId);
+          }
+        } catch {
+          // Task may have been deleted
           this.untrack(taskId);
         }
       }

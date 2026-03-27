@@ -1,5 +1,7 @@
 import type { D1 } from "./db";
 
+const BATCH_SIZE = 90; // D1 limits: 100 bound params per query
+
 export async function detectCycle(db: D1, taskId: string, dependsOn: string[]): Promise<boolean> {
   if (dependsOn.includes(taskId)) return true;
 
@@ -26,17 +28,21 @@ export async function detectCycle(db: D1, taskId: string, dependsOn: string[]): 
 export async function computeBlocked(db: D1, taskIds: string[]): Promise<Set<string>> {
   if (taskIds.length === 0) return new Set();
 
-  const placeholders = taskIds.map(() => "?").join(",");
-  const result = await db
-    .prepare(`
-    SELECT DISTINCT td.task_id FROM task_dependencies td
-    JOIN tasks dep ON dep.id = td.depends_on
-    WHERE td.task_id IN (${placeholders}) AND dep.status NOT IN ('done', 'cancelled')
-  `)
-    .bind(...taskIds)
-    .all<{ task_id: string }>();
-
-  return new Set(result.results.map((r: { task_id: string }) => r.task_id));
+  const blocked = new Set<string>();
+  for (let i = 0; i < taskIds.length; i += BATCH_SIZE) {
+    const chunk = taskIds.slice(i, i + BATCH_SIZE);
+    const placeholders = chunk.map(() => "?").join(",");
+    const result = await db
+      .prepare(`
+      SELECT DISTINCT td.task_id FROM task_dependencies td
+      JOIN tasks dep ON dep.id = td.depends_on
+      WHERE td.task_id IN (${placeholders}) AND dep.status NOT IN ('done', 'cancelled')
+    `)
+      .bind(...chunk)
+      .all<{ task_id: string }>();
+    for (const r of result.results) blocked.add(r.task_id);
+  }
+  return blocked;
 }
 
 export async function getDependencies(db: D1, taskId: string): Promise<string[]> {
