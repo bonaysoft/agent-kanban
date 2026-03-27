@@ -7,6 +7,8 @@ import { AgentNewPage } from "./routes/AgentNewPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { AuthPage } from "./routes/AuthPage";
+import { AdminDashboardPage } from "./routes/admin/AdminDashboardPage";
+import { AdminLayout } from "./routes/admin/AdminLayout";
 import { BoardPage } from "./routes/BoardPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
 import { LandingPage } from "./routes/LandingPage";
@@ -22,6 +24,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isPending) return null;
   if (!session) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { data: session, isPending } = useSession();
+
+  if (isPending) return null;
+  if (!session) return <Navigate to="/auth" replace />;
+  if ((session.user as any).role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -130,6 +141,17 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<AdminDashboardPage />} />
+          <Route path="users" element={<div className="px-8 py-10 text-zinc-400 text-sm">Users — coming soon</div>} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

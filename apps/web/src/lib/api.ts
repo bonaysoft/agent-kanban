@@ -101,4 +101,7 @@ export const api = {
     create: (input: { name: string; url: string }) => request<any>("POST", "/repositories", input),
     delete: (id: string) => request<void>("DELETE", `/repositories/${id}`),
   },
+  admin: {
+    getStats: () => request<any>("GET", "/admin/stats"),
+  },
 };
