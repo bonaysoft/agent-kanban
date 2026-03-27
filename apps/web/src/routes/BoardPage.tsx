@@ -84,7 +84,7 @@ export function BoardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface-primary">
+    <div className="h-screen overflow-hidden bg-surface-primary flex flex-col">
       <Header />
       <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
 
@@ -113,14 +113,14 @@ export function BoardPage() {
       </div>
 
       {/* Desktop: 5-column grid */}
-      <div className="hidden md:grid min-h-[calc(100vh-100px)]" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
+      <div className="hidden md:grid flex-1 overflow-hidden" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
         {columns.map((col) => (
           <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
         ))}
       </div>
 
       {/* Mobile: single column based on tab */}
-      <div className="md:hidden min-h-[calc(100vh-160px)]">
+      <div className="md:hidden flex-1 overflow-hidden">
         {columns
           .filter((_, i) => i === mobileTab)
           .map((col) => (
