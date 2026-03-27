@@ -50,7 +50,8 @@ function ThemeIcon({ theme }: { theme: Theme }) {
 
 export function Header() {
   const { data: session } = useSession();
-  const user = session?.user as { name?: string; email?: string; image?: string } | undefined;
+  const user = session?.user as { name?: string; email?: string; image?: string; role?: string } | undefined;
+  const isAdmin = user?.role === "admin";
   const { boards, refresh: refreshBoards } = useBoards();
   const { boardId } = useParams<{ boardId: string }>();
 
@@ -171,6 +172,24 @@ export function Header() {
                 </svg>
                 Repositories
               </DropdownMenuItem>
+
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => navigate("/admin")}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                  Admin
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator />
 
