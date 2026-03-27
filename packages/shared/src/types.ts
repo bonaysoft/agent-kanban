@@ -44,6 +44,7 @@ export interface Task {
   pr_url: string | null;
   input: Record<string, unknown> | null;
   created_from: string | null;
+  scheduled_at: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -252,6 +253,7 @@ export interface CreateTaskInput {
   agent_id?: string;
   depends_on?: string[];
   created_from?: string;
+  scheduled_at?: string;
 }
 
 export interface AssignTaskInput {

@@ -28,6 +28,7 @@ async function applyMigrations(db: D1Database) {
     "0006_add_device_id.sql",
     "0007_task_seq.sql",
     "0010_board_type.sql",
+    "0011_task_scheduled_at.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");

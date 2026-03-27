@@ -77,8 +77,8 @@ export async function createTask(
   const stmts = [
     db
       .prepare(`
-      INSERT INTO tasks (id, board_id, seq, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
-      VALUES (?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, board_id, seq, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, scheduled_at, position, created_at, updated_at)
+      VALUES (?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
     `)
       .bind(
         taskId,
@@ -93,6 +93,7 @@ export async function createTask(
         input.assigned_to || null,
         inputJson,
         input.created_from || null,
+        input.scheduled_at || null,
         position,
         now,
         now,
@@ -130,6 +131,7 @@ export async function createTask(
     pr_url: null,
     input: input.input || null,
     created_from: input.created_from || null,
+    scheduled_at: input.scheduled_at || null,
     position,
     created_at: now,
     updated_at: now,
@@ -238,7 +240,9 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | n
 export async function updateTask(
   db: D1,
   taskId: string,
-  updates: Partial<Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input" | "position">> & {
+  updates: Partial<
+    Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input" | "position" | "scheduled_at">
+  > & {
     depends_on?: string[];
   },
 ): Promise<Task | null> {
@@ -258,7 +262,18 @@ export async function updateTask(
   const binds: unknown[] = [now];
 
   const jsonFields = new Set(["labels", "input"]);
-  const allowedFields = ["title", "description", "repository_id", "labels", "priority", "result", "pr_url", "input", "position"] as const;
+  const allowedFields = [
+    "title",
+    "description",
+    "repository_id",
+    "labels",
+    "priority",
+    "result",
+    "pr_url",
+    "input",
+    "position",
+    "scheduled_at",
+  ] as const;
   for (const field of allowedFields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);
@@ -419,7 +434,7 @@ export async function releaseTask(
   const logId = newLongId();
 
   await db.batch([
-    db.prepare("UPDATE tasks SET status = 'todo', updated_at = ? WHERE id = ?").bind(now, taskId),
+    db.prepare("UPDATE tasks SET status = 'todo', scheduled_at = NULL, updated_at = ? WHERE id = ?").bind(now, taskId),
     db
       .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)")
       .bind(logId, taskId, actorType, actorId, action, now),

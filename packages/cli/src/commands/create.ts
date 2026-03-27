@@ -1,4 +1,4 @@
-import { fetchTemplate, isBoardType } from "@agent-kanban/shared";
+import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
@@ -67,6 +67,14 @@ async function createTask(opts: Record<string, string>) {
   if (opts.assignTo) body.assigned_to = opts.assignTo;
   if (opts.parent) body.created_from = opts.parent;
   if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((id: string) => id.trim());
+  if (opts.scheduledAt) {
+    const normalized = parseScheduledAt(opts.scheduledAt);
+    if (!normalized) {
+      console.error("--scheduled-at must be ISO 8601 with timezone (e.g. 2026-03-28T09:00:00Z)");
+      process.exit(1);
+    }
+    body.scheduled_at = normalized;
+  }
   if (opts.input) {
     try {
       body.input = JSON.parse(opts.input);
@@ -167,6 +175,7 @@ export function registerCreateCommand(program: Command) {
     .option("--assign-to <id>", "Agent ID to assign (task)")
     .option("--parent <id>", "Parent task ID (task)")
     .option("--depends-on <ids>", "Comma-separated dependency task IDs (task)")
+    .option("--scheduled-at <time>", "ISO 8601 time to schedule task (task)")
     // agent flags
     .option("--template <slug>", "Agent template slug (agent)")
     .option("--bio <bio>", "Agent bio (agent)")

@@ -1,4 +1,4 @@
-import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, RESERVED_ROLES } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
@@ -350,6 +350,11 @@ api.post("/api/tasks", async (c) => {
   if (body.input !== undefined && body.input !== null && typeof body.input !== "object") {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
   }
+  if (body.scheduled_at !== undefined && body.scheduled_at !== null) {
+    const normalized = parseScheduledAt(body.scheduled_at);
+    if (!normalized) throw new HTTPException(400, { message: "scheduled_at must be ISO 8601 with timezone (e.g. 2026-03-28T09:00:00Z)" });
+    body.scheduled_at = normalized;
+  }
 
   const { actorType, actorId } = resolveActor(c);
   const task = await createTask(c.env.DB, c.get("ownerId"), { ...body, actorType, actorId });
@@ -373,6 +378,11 @@ api.patch("/api/tasks/:id", async (c) => {
 
   if (body.input !== undefined && body.input !== null && typeof body.input !== "object") {
     throw new HTTPException(400, { message: "input must be a JSON object or null" });
+  }
+  if (body.scheduled_at !== undefined && body.scheduled_at !== null) {
+    const normalized = parseScheduledAt(body.scheduled_at);
+    if (!normalized) throw new HTTPException(400, { message: "scheduled_at must be ISO 8601 with timezone (e.g. 2026-03-28T09:00:00Z)" });
+    body.scheduled_at = normalized;
   }
 
   // Workers can only update tasks they created

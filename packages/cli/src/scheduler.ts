@@ -194,8 +194,10 @@ export class Scheduler {
       if (repo) ensureCloned(repo);
     }
 
+    const now = new Date().toISOString();
     const available = tasks.filter((t: any) => {
       if (t.blocked || !t.assigned_to || this.pm.hasTask(t.id)) return false;
+      if (t.scheduled_at && t.scheduled_at > now) return false;
       if (!t.repository_id) {
         if (t.board_type === "dev") {
           logger.warn(`Dev task ${t.id} has no repository_id, skipping`);
