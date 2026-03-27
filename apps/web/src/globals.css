@@ -123,6 +123,34 @@ body {
   }
 }
 
+/* ── Kanban column scrollbar — thin, subtle, auto-hide ── */
+
+.scrollbar-column {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-column:hover {
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+.scrollbar-column::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-column::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-column::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.scrollbar-column:hover::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+}
+
 /* ── shadcn color tokens (mapped to our design system) ── */
 
 @layer base {
