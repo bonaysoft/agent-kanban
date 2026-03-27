@@ -123,6 +123,30 @@ body {
   }
 }
 
+/* ── Column scrollbar — thin and subtle ── */
+
+.scrollbar-column {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+.scrollbar-column::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-column::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-column::-webkit-scrollbar-thumb {
+  background-color: var(--bg-tertiary);
+  border-radius: 9999px;
+}
+
+.scrollbar-column::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
+}
+
 /* ── shadcn color tokens (mapped to our design system) ── */
 
 @layer base {
