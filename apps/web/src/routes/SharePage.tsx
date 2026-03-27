@@ -117,7 +117,7 @@ export function SharePage() {
       {/* Footer */}
       <footer className="flex-shrink-0 py-3 text-center border-t border-border bg-surface-secondary">
         <a
-          href="https://ak.tftt.cc"
+          href="https://agent-kanban.dev"
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-content-tertiary hover:text-accent transition-colors"
