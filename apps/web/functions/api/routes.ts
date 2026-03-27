@@ -1,4 +1,4 @@
-import { AGENT_RUNTIMES, type CreateAgentInput, RESERVED_ROLES } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
@@ -527,9 +527,10 @@ api.get("/api/boards/:id/stream", async (c) => {
 // ─── Boards ───
 
 api.post("/api/boards", async (c) => {
-  const body = await c.req.json<{ name: string; description?: string }>();
+  const body = await c.req.json<{ name: string; description?: string; type: string }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
-  const board = await createBoard(c.env.DB, c.get("ownerId"), body.name, body.description);
+  if (!isBoardType(body.type)) throw new HTTPException(400, { message: "type must be 'dev' or 'ops'" });
+  const board = await createBoard(c.env.DB, c.get("ownerId"), body.name, body.type, body.description);
   return c.json(board, 201);
 });
 

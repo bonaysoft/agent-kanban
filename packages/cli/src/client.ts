@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRuntime } from "@agent-kanban/shared";
+import type { AgentRuntime, BoardType } from "@agent-kanban/shared";
 import { SignJWT } from "jose";
 import { getCredentials } from "./config.js";
 import type { UsageInfo } from "./types.js";
@@ -145,7 +145,7 @@ export abstract class ApiClient {
   }
 
   // Boards
-  createBoard(input: { name: string; description?: string }) {
+  createBoard(input: { name: string; type: BoardType; description?: string }) {
     return this.request("POST", "/api/boards", input);
   }
   listBoards() {

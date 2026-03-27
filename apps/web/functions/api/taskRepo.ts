@@ -28,9 +28,18 @@ export async function createTask(
 ): Promise<Task> {
   const actorType = input.actorType ?? "machine";
   const actorId = input.actorId ?? "system";
-  const board = input.board_id ? { id: input.board_id } : await getDefaultBoard(db, ownerId);
+  const board = input.board_id
+    ? await db.prepare("SELECT id, type FROM boards WHERE id = ?").bind(input.board_id).first<{ id: string; type: string }>()
+    : await getDefaultBoard(db, ownerId);
 
   if (!board) throw new HTTPException(400, { message: "No board exists. Create a board first." });
+
+  if (board.type === "dev" && !input.repository_id) {
+    throw new HTTPException(400, { message: "repository_id is required for dev board tasks" });
+  }
+  if (board.type === "ops" && input.repository_id) {
+    throw new HTTPException(400, { message: "repository_id is not allowed for ops board tasks" });
+  }
 
   const maxPos = await db
     .prepare("SELECT COALESCE(MAX(position), -1) as max_pos FROM tasks WHERE board_id = ? AND status = 'todo'")
@@ -132,8 +141,9 @@ export async function listTasks(
   filters: { repository_id?: string; status?: string; label?: string; board_id?: string; parent?: string; assigned_to?: string },
 ): Promise<Task[]> {
   let query = `
-    SELECT t.*, r.name as repository_name FROM tasks t
+    SELECT t.*, r.name as repository_name, b.type as board_type FROM tasks t
     LEFT JOIN repositories r ON t.repository_id = r.id
+    JOIN boards b ON t.board_id = b.id -- INNER JOIN safe: FK + ON DELETE CASCADE prevents orphaned tasks
     WHERE 1=1
   `;
   const binds: unknown[] = [];

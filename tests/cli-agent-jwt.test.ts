@@ -32,6 +32,7 @@ async function applyMigrations(db: D1Database) {
     "0005_agent_runtime_required.sql",
     "0006_add_device_id.sql",
     "0007_task_seq.sql",
+    "0010_board_type.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -174,7 +175,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     // Create board + task
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
-    const board = await createBoard(testEnv.DB, userId, "jwt-test-board");
+    const board = await createBoard(testEnv.DB, userId, "jwt-test-board", "ops");
     boardId = board.id;
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });
     taskId = task.id;

@@ -1,15 +1,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import type { AgentRuntime } from "@agent-kanban/shared";
 import { SAVED_SESSIONS_FILE } from "./paths.js";
+import type { WorkspaceInfo } from "./workspace.js";
 
 export type SessionStatus = "active" | "rate_limited" | "in_review";
 
 export interface SavedSession {
   taskId: string;
   sessionId: string;
-  cwd: string;
-  repoDir: string;
-  branchName: string;
+  workspace: WorkspaceInfo;
   agentId: string;
   privateKeyJwk: JsonWebKey;
   runtime: AgentRuntime;

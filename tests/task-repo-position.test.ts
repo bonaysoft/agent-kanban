@@ -21,7 +21,7 @@ describe("updateTask position field", () => {
 
   beforeAll(async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "pos-test-user", "Position Test Board");
+    const board = await createBoard(env.DB, "pos-test-user", "Position Test Board", "ops");
     boardId = board.id;
   });
 

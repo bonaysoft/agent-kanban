@@ -25,6 +25,7 @@ export async function applyMigrations(db: D1Database) {
     "0007_task_seq.sql",
     "0008_board_sharing.sql",
     "0009_admin_fields.sql",
+    "0010_board_type.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");

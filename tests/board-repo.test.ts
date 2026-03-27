@@ -20,7 +20,7 @@ afterAll(async () => {
 describe("boardRepo", () => {
   it("createBoard creates a board with default description", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "My Board");
+    const board = await createBoard(env.DB, "board-test-user", "My Board", "dev");
     expect(board.name).toBe("My Board");
     expect(board.owner_id).toBe("board-test-user");
     expect(board.id).toBeDefined();
@@ -28,13 +28,13 @@ describe("boardRepo", () => {
 
   it("createBoard creates a board with custom description", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Described Board", "A description");
+    const board = await createBoard(env.DB, "board-test-user", "Described Board", "dev", "A description");
     expect(board.description).toBe("A description");
   });
 
   it("listBoards returns boards for a specific owner", async () => {
     const { listBoards, createBoard } = await import("../apps/web/functions/api/boardRepo");
-    await createBoard(env.DB, "board-test-user-2", "User2 Board");
+    await createBoard(env.DB, "board-test-user-2", "User2 Board", "dev");
     const boards = await listBoards(env.DB, "board-test-user-2");
     expect(boards.length).toBeGreaterThanOrEqual(1);
     expect(boards.every((b: any) => b.owner_id === "board-test-user-2")).toBe(true);
@@ -55,7 +55,7 @@ describe("boardRepo", () => {
 
   it("getBoard returns board with tasks array", async () => {
     const { createBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
-    const created = await createBoard(env.DB, "board-test-user", "Get Board");
+    const created = await createBoard(env.DB, "board-test-user", "Get Board", "dev");
     const board = await getBoard(env.DB, created.id);
     expect(board).not.toBeNull();
     expect(board!.id).toBe(created.id);
@@ -71,7 +71,7 @@ describe("boardRepo", () => {
   it("getBoard includes blocked status on tasks", async () => {
     const { createBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Blocked Board");
+    const board = await createBoard(env.DB, "board-test-user", "Blocked Board", "ops");
     const taskA = await createTask(env.DB, "board-test-user", { title: "Task A", board_id: board.id });
     await createTask(env.DB, "board-test-user", { title: "Task B", board_id: board.id, depends_on: [taskA.id] });
     const result = await getBoard(env.DB, board.id);
@@ -94,21 +94,21 @@ describe("boardRepo", () => {
 
   it("updateBoard updates name only", async () => {
     const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Update Name Board");
+    const board = await createBoard(env.DB, "board-test-user", "Update Name Board", "dev");
     const updated = await updateBoard(env.DB, board.id, { name: "New Name" });
     expect(updated!.name).toBe("New Name");
   });
 
   it("updateBoard updates description only", async () => {
     const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Update Desc Board");
+    const board = await createBoard(env.DB, "board-test-user", "Update Desc Board", "dev");
     const updated = await updateBoard(env.DB, board.id, { description: "New Desc" });
     expect(updated!.description).toBe("New Desc");
   });
 
   it("updateBoard updates both name and description", async () => {
     const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Update Both Board");
+    const board = await createBoard(env.DB, "board-test-user", "Update Both Board", "dev");
     const updated = await updateBoard(env.DB, board.id, { name: "Both Name", description: "Both Desc" });
     expect(updated!.name).toBe("Both Name");
     expect(updated!.description).toBe("Both Desc");
@@ -116,7 +116,7 @@ describe("boardRepo", () => {
 
   it("updateBoard with empty update returns board unchanged", async () => {
     const { createBoard, updateBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "No Update Board");
+    const board = await createBoard(env.DB, "board-test-user", "No Update Board", "dev");
     const updated = await updateBoard(env.DB, board.id, {});
     expect(updated!.name).toBe("No Update Board");
   });
@@ -129,7 +129,7 @@ describe("boardRepo", () => {
 
   it("deleteBoard removes a board", async () => {
     const { createBoard, deleteBoard, getBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "board-test-user", "Delete Board");
+    const board = await createBoard(env.DB, "board-test-user", "Delete Board", "dev");
     const deleted = await deleteBoard(env.DB, board.id);
     expect(deleted).toBe(true);
     const found = await getBoard(env.DB, board.id);

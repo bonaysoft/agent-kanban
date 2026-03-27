@@ -41,7 +41,7 @@ describe("createSSEResponse", () => {
 
   beforeAll(async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, "sse-user", "SSE Board");
+    const board = await createBoard(env.DB, "sse-user", "SSE Board", "ops");
     boardId = board.id;
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");

@@ -35,7 +35,7 @@ describe("getBoardActions", () => {
     await seedUser(env.DB, userId, `board-sse-unit-${randomUUID()}@test.com`);
 
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "board-sse-unit-board");
+    const board = await createBoard(env.DB, userId, "board-sse-unit-board", "ops");
     boardId = board.id;
 
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
@@ -78,7 +78,7 @@ describe("getBoardActions", () => {
 
   it("does not return notes from a different board", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const otherBoard = await createBoard(env.DB, userId, "board-sse-other-board");
+    const otherBoard = await createBoard(env.DB, userId, "board-sse-other-board", "ops");
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     await createTask(env.DB, userId, { title: "Other Board Task", board_id: otherBoard.id });
@@ -126,7 +126,7 @@ describe("GET /api/boards/:id/stream", () => {
     apiKey = await createApiKeyForUser(userId);
 
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "board-sse-route-board");
+    const board = await createBoard(env.DB, userId, "board-sse-route-board", "ops");
     boardId = board.id;
   });
 

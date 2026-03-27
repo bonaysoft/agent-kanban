@@ -130,7 +130,7 @@ describe("routes", () => {
     );
 
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "routes-board");
+    const board = await createBoard(env.DB, userId, "routes-board", "ops");
     boardId = board.id;
   });
 
@@ -163,7 +163,7 @@ describe("routes", () => {
   // ─── Boards ───
 
   it("POST /api/boards creates a board", async () => {
-    const res = await apiRequest("POST", "/api/boards", { name: "Route Board", description: "Test" }, userToken);
+    const res = await apiRequest("POST", "/api/boards", { name: "Route Board", type: "dev", description: "Test" }, userToken);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.name).toBe("Route Board");
@@ -222,7 +222,7 @@ describe("routes", () => {
 
   it("DELETE /api/boards/:id deletes board", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "Delete Route Board");
+    const board = await createBoard(env.DB, userId, "Delete Route Board", "dev");
     const res = await apiRequest("DELETE", `/api/boards/${board.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;

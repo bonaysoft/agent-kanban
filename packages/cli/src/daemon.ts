@@ -39,13 +39,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   mkdirSync(STATE_DIR, { recursive: true });
 
-  // Preflight: gh must be installed and authenticated
+  // Preflight: gh auth check — warn if missing (repo-based tasks need it)
   try {
     execSync("gh auth status", { stdio: "pipe" });
   } catch {
-    removePidFile();
-    logger.fatal("`gh` is not installed or not authenticated. Run `gh auth login` first.");
-    process.exit(1);
+    logger.warn("`gh` is not authenticated — repo-based tasks will be skipped");
   }
 
   const client = new MachineClient();

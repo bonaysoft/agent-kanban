@@ -1,4 +1,4 @@
-import { fetchTemplate } from "@agent-kanban/shared";
+import { fetchTemplate, isBoardType } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
@@ -33,8 +33,17 @@ async function createBoard(opts: Record<string, string>) {
     console.error("--name is required for board creation");
     process.exit(1);
   }
+  if (!opts.type) {
+    console.error("--type is required (dev or ops)");
+    process.exit(1);
+  }
+  if (!isBoardType(opts.type)) {
+    console.error(`Unknown type "${opts.type}" — must be dev or ops`);
+    process.exit(1);
+  }
   const client = await createClient();
-  const board = await client.createBoard({ name: opts.name, description: opts.description });
+  const type = opts.type;
+  const board = await client.createBoard({ name: opts.name, type, description: opts.description });
   const fmt = getFormat(opts.format);
   output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
 }
@@ -146,6 +155,7 @@ export function registerCreateCommand(program: Command) {
     .description("Create a resource (board, task, agent, repo, note)")
     .option("--name <name>", "Resource name (board, agent, repo)")
     .option("--description <desc>", "Description (board, task)")
+    .option("--type <type>", "Board type: dev, ops (board)")
     .option("--format <format>", "Output format (json, text)")
     // task flags
     .option("--board <id>", "Board ID (task)")

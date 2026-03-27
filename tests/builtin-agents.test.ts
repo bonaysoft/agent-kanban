@@ -28,6 +28,7 @@ async function applyMigrations(db: D1Database) {
     "0005_agent_runtime_required.sql",
     "0006_add_device_id.sql",
     "0007_task_seq.sql",
+    "0010_board_type.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -69,7 +70,7 @@ describe("builtin agents", () => {
   it("createBoard seeds builtin agents", async () => {
     await seedUser(env.DB, userId, "builtin@test.com");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    await createBoard(env.DB, userId, "Test Board");
+    await createBoard(env.DB, userId, "Test Board", "dev");
 
     const { listAgents } = await import("../apps/web/functions/api/agentRepo");
     const agents = await listAgents(env.DB, userId);
@@ -83,7 +84,7 @@ describe("builtin agents", () => {
 
   it("second board does not duplicate builtin agents", async () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    await createBoard(env.DB, userId, "Second Board");
+    await createBoard(env.DB, userId, "Second Board", "dev");
 
     const { listAgents } = await import("../apps/web/functions/api/agentRepo");
     const agents = await listAgents(env.DB, userId);
@@ -106,7 +107,7 @@ describe("builtin agents", () => {
     const otherUserId = "user-builtin-other";
     await seedUser(env.DB, otherUserId, "other@test.com");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    await createBoard(env.DB, otherUserId, "Other Board");
+    await createBoard(env.DB, otherUserId, "Other Board", "dev");
 
     const { listAgents } = await import("../apps/web/functions/api/agentRepo");
     const agents = await listAgents(env.DB, otherUserId);

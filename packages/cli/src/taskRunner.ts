@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
+import type { BoardType } from "@agent-kanban/shared";
 import { AgentClient, ApiError, type MachineClient } from "./client.js";
 import { getCredentials } from "./config.js";
 import { createLogger } from "./logger.js";
 import type { ProcessManager } from "./processManager.js";
 import { getProvider, normalizeRuntime } from "./providers/registry.js";
-import { createWorktree, removeWorktree } from "./repoOps.js";
 import { removeSession, type SavedSession, saveSession, updateSessionStatus } from "./savedSessions.js";
 import { ensureSkills } from "./skillManager.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
+import { createRepoWorkspace, createTempWorkspace, restoreWorkspace, type Workspace } from "./workspace.js";
 
 const logger = createLogger("runner");
 
@@ -17,8 +18,8 @@ export class TaskRunner {
     private pm: ProcessManager,
   ) {}
 
-  /** Full pipeline: session → keys → worktree → skills → spawn. Returns true on success. */
-  async dispatch(task: any, repoDir: string): Promise<boolean> {
+  /** Full pipeline: session → keys → workspace → skills → spawn. Returns true on success. */
+  async dispatch(task: any, repoDir: string | null, boardType: BoardType): Promise<boolean> {
     const agentId = task.assigned_to;
     const sessionId = randomUUID();
 
@@ -29,7 +30,7 @@ export class TaskRunner {
     try {
       await this.client.createSession(agentId, sessionId, pubKeyJwk.x!);
     } catch (err: any) {
-      if (err.message.includes("409") || err.message.includes("not found")) return false;
+      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) return false;
       throw err;
     }
 
@@ -44,12 +45,12 @@ export class TaskRunner {
       return false;
     }
 
-    let worktreeDir: string;
-    let branchName: string;
+    // ---- Workspace ----
+    let workspace: Workspace;
     try {
-      ({ worktreeDir, branchName } = createWorktree(repoDir, sessionId));
+      workspace = repoDir ? createRepoWorkspace(repoDir, sessionId) : createTempWorkspace(sessionId);
     } catch (err: any) {
-      logger.error(`Failed to create worktree in ${repoDir}: ${err.message}`);
+      logger.error(`Failed to create workspace: ${err.message}`);
       await abort();
       return false;
     }
@@ -58,9 +59,9 @@ export class TaskRunner {
     const provider = getProvider(providerName);
 
     const agentSkills = agentDetails.skills ?? [];
-    if (!ensureSkills(worktreeDir, agentSkills)) {
+    if (!ensureSkills(workspace.cwd, agentSkills)) {
       logger.error(`Skill install failed for task ${task.id}, releasing task`);
-      removeWorktree(repoDir, worktreeDir, branchName);
+      workspace.cleanup();
       await abort();
       return false;
     }
@@ -68,7 +69,7 @@ export class TaskRunner {
     const apiUrl = getCredentials().apiUrl;
     const agentClient = new AgentClient(apiUrl, agentId, sessionId, privateKey);
     const agentEnv = this.buildAgentEnv(agentId, sessionId, privKeyJwk);
-    const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
+    const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails, boardType));
 
     const repos = await this.client.listRepositories();
     const taskRepo = repos.find((r: any) => r.id === task.repository_id);
@@ -78,7 +79,7 @@ export class TaskRunner {
       `Title: ${task.title}`,
       task.description ? `Description: ${task.description}` : null,
       task.priority ? `Priority: ${task.priority}` : null,
-      `Repository: ${taskRepo?.url ?? task.repository_id}`,
+      task.repository_id ? `Repository: ${taskRepo?.url ?? task.repository_id}` : null,
       `Board: ${task.board_id}`,
     ]
       .filter(Boolean)
@@ -88,9 +89,7 @@ export class TaskRunner {
     saveSession({
       taskId: task.id,
       sessionId,
-      cwd: worktreeDir,
-      repoDir,
-      branchName,
+      workspace: workspace.info,
       agentId,
       privateKeyJwk: privKeyJwk,
       runtime: providerName,
@@ -102,14 +101,12 @@ export class TaskRunner {
       provider,
       taskId: task.id,
       sessionId,
-      cwd: worktreeDir,
-      repoDir,
-      branchName,
+      cwd: workspace.cwd,
       taskContext,
       agentClient,
       agentEnv,
       systemPromptFile,
-      onCleanup: () => removeWorktree(repoDir, worktreeDir, branchName),
+      onCleanup: () => workspace.cleanup(),
       model: agentDetails.model ?? undefined,
     });
 
@@ -118,20 +115,22 @@ export class TaskRunner {
 
   /** Resume a saved session (rate-limited or rejected). */
   async resumeSession(session: SavedSession, message: string): Promise<boolean> {
+    const workspace = restoreWorkspace(session.workspace);
+
     let task: any;
     try {
       task = await this.client.getTask(session.taskId);
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 404) {
         logger.warn(`Task ${session.taskId} not found (deleted), cleaning up session`);
-        removeWorktree(session.repoDir, session.cwd, session.branchName);
+        workspace.cleanup();
         removeSession(session.taskId);
         return false;
       }
       throw err;
     }
     if (!task || task.status === "cancelled" || task.status === "done") {
-      removeWorktree(session.repoDir, session.cwd, session.branchName);
+      workspace.cleanup();
       removeSession(session.taskId);
       return false;
     }
@@ -150,7 +149,7 @@ export class TaskRunner {
       await this.client.reopenSession(session.agentId, session.sessionId);
     } catch {
       logger.warn(`Failed to reopen session ${session.sessionId}, releasing task ${session.taskId}`);
-      removeWorktree(session.repoDir, session.cwd, session.branchName);
+      workspace.cleanup();
       removeSession(session.taskId);
       await this.client.releaseTask(session.taskId).catch(() => {});
       return false;
@@ -168,19 +167,17 @@ export class TaskRunner {
         provider,
         taskId: session.taskId,
         sessionId: session.sessionId,
-        cwd: session.cwd,
-        repoDir: session.repoDir,
-        branchName: session.branchName,
+        cwd: workspace.cwd,
         taskContext: message,
         agentClient,
         agentEnv,
         resume: true,
-        onCleanup: () => removeWorktree(session.repoDir, session.cwd, session.branchName),
+        onCleanup: () => workspace.cleanup(),
         model: session.model,
       });
     } catch {
       logger.warn(`Failed to resume task ${session.taskId}, releasing`);
-      removeWorktree(session.repoDir, session.cwd, session.branchName);
+      workspace.cleanup();
       removeSession(session.taskId);
       await this.client.releaseTask(session.taskId).catch(() => {});
       return false;

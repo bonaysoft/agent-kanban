@@ -1,4 +1,4 @@
-import type { Board, BoardWithTasks, Task } from "@agent-kanban/shared";
+import type { Board, BoardType, BoardWithTasks, Task } from "@agent-kanban/shared";
 import { customAlphabet } from "nanoid";
 import { seedBuiltinAgents } from "./agentRepo";
 import { type D1, newId, parseJsonFields } from "./db";
@@ -7,17 +7,17 @@ const nanoidSlug = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 10);
 
 import { computeBlocked } from "./taskDeps";
 
-export async function createBoard(db: D1, ownerId: string, name: string, description?: string): Promise<Board> {
+export async function createBoard(db: D1, ownerId: string, name: string, type: BoardType, description?: string): Promise<Board> {
   const id = newId();
   const now = new Date().toISOString();
   await db
-    .prepare("INSERT INTO boards (id, owner_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id, ownerId, name, description || null, now, now)
+    .prepare("INSERT INTO boards (id, owner_id, name, description, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, ownerId, name, description || null, type, now, now)
     .run();
 
   await seedBuiltinAgents(db, ownerId);
 
-  return { id, owner_id: ownerId, name, description: description || null, visibility: "private", share_slug: null, created_at: now, updated_at: now };
+  return db.prepare("SELECT * FROM boards WHERE id = ?").bind(id).first<Board>() as Promise<Board>;
 }
 
 export async function listBoards(db: D1, ownerId: string): Promise<Board[]> {

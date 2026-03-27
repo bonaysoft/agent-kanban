@@ -1,10 +1,19 @@
 // ─── Board ───
 
+export type BoardType = "dev" | "ops";
+
+export const BOARD_TYPES: readonly BoardType[] = ["dev", "ops"] as const;
+
+export function isBoardType(value: string): value is BoardType {
+  return BOARD_TYPES.includes(value as BoardType);
+}
+
 export interface Board {
   id: string;
   owner_id: string;
   name: string;
   description: string | null;
+  type: BoardType;
   visibility: "private" | "public";
   share_slug: string | null;
   created_at: string;
@@ -42,6 +51,7 @@ export interface Task {
   repository_name?: string;
   agent_name?: string;
   agent_public_key?: string | null;
+  board_type?: BoardType;
 }
 
 export interface TaskWithMeta extends Task {
@@ -282,6 +292,7 @@ export interface SessionUsageInput {
 export interface CreateBoardInput {
   name: string;
   description?: string;
+  type: BoardType;
 }
 
 export interface CreateRepositoryInput {

@@ -126,7 +126,7 @@ describe("getSystemStats", () => {
     const userId = "stats-board-owner";
     await seedUser(env.DB, userId, "stats-board-owner@test.com");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    await createBoard(env.DB, userId, "Stats Test Board");
+    await createBoard(env.DB, userId, "Stats Test Board", "dev");
     const after = await getSystemStats(env.DB);
     expect(after.boards.total).toBeGreaterThan(before.boards.total);
   });
@@ -135,7 +135,7 @@ describe("getSystemStats", () => {
     const userId = "stats-task-owner";
     await seedUser(env.DB, userId, "stats-task-owner@test.com");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "Stats Task Board");
+    const board = await createBoard(env.DB, userId, "Stats Task Board", "ops");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     await createTask(env.DB, userId, { title: "Stats Todo Task", board_id: board.id });
 
@@ -147,7 +147,7 @@ describe("getSystemStats", () => {
     const userId = "stats-done-owner";
     await seedUser(env.DB, userId, "stats-done-owner@test.com");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "Stats Done Board");
+    const board = await createBoard(env.DB, userId, "Stats Done Board", "ops");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Stats Done Task", board_id: board.id });
     await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(task.id).run();

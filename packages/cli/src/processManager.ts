@@ -20,8 +20,6 @@ export interface SpawnRequest {
   taskId: string;
   sessionId: string;
   cwd: string;
-  repoDir: string;
-  branchName: string;
   taskContext: string;
   agentClient: AgentClient;
   agentEnv: Record<string, string>;

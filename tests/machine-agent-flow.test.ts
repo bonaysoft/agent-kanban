@@ -33,6 +33,7 @@ async function applyMigrations(db: D1Database) {
     "0005_agent_runtime_required.sql",
     "0006_add_device_id.sql",
     "0007_task_seq.sql",
+    "0010_board_type.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -203,7 +204,7 @@ describe("machine → agent session flow", () => {
   });
 
   it("creates a board and task", async () => {
-    const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board");
+    const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board", "ops");
     boardId = board.id;
     const task = await (await import("../apps/web/functions/api/taskRepo")).createTask(env.DB, userId, {
       title: "Test task for agent",

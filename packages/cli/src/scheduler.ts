@@ -1,12 +1,14 @@
+import { isBoardType } from "@agent-kanban/shared";
 import { ApiError, type MachineClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { ProcessManager } from "./processManager.js";
 import { normalizeRuntime } from "./providers/registry.js";
-import { ensureCloned, prepareRepo, removeWorktree, repoDir } from "./repoOps.js";
+import { ensureCloned, prepareRepo, repoDir } from "./repoOps.js";
 import { loadSessions, removeSession } from "./savedSessions.js";
 import { ensureLefthookTask } from "./skillManager.js";
 import type { TaskRunner } from "./taskRunner.js";
+import { cleanupWorkspace } from "./workspace.js";
 
 const logger = createLogger("scheduler");
 
@@ -122,19 +124,19 @@ export class Scheduler {
       } catch (err: any) {
         if (err instanceof ApiError && err.status === 404) {
           logger.warn(`Task ${s.taskId} not found (deleted), cleaning up orphaned session`);
-          removeWorktree(s.repoDir, s.cwd, s.branchName);
+          cleanupWorkspace(s.workspace);
           removeSession(s.taskId);
           continue;
         }
         throw err;
       }
       if (!task || task.status === "done" || task.status === "cancelled") {
-        removeWorktree(s.repoDir, s.cwd, s.branchName);
+        cleanupWorkspace(s.workspace);
         removeSession(s.taskId);
       } else {
         // Task still viable — release and let it be re-dispatched
         await this.client.releaseTask(s.taskId).catch(() => {});
-        removeWorktree(s.repoDir, s.cwd, s.branchName);
+        cleanupWorkspace(s.workspace);
         removeSession(s.taskId);
         logger.info(`Cleaned up orphaned session for task ${s.taskId}`);
       }
@@ -158,7 +160,7 @@ export class Scheduler {
       } catch (err: any) {
         if (err instanceof ApiError && err.status === 404) {
           logger.warn(`Task ${s.taskId} not found (deleted), cleaning up review session`);
-          removeWorktree(s.repoDir, s.cwd, s.branchName);
+          cleanupWorkspace(s.workspace);
           removeSession(s.taskId);
           continue;
         }
@@ -193,7 +195,14 @@ export class Scheduler {
     }
 
     const available = tasks.filter((t: any) => {
-      if (t.blocked || !t.assigned_to || this.pm.hasTask(t.id) || !t.repository_id) return false;
+      if (t.blocked || !t.assigned_to || this.pm.hasTask(t.id)) return false;
+      if (!t.repository_id) {
+        if (t.board_type === "dev") {
+          logger.warn(`Dev task ${t.id} has no repository_id, skipping`);
+          return false;
+        }
+        return true;
+      }
       const repo = repoById.get(t.repository_id);
       return repo && repoDir(repo.url) !== null;
     });
@@ -226,21 +235,32 @@ export class Scheduler {
       return;
     }
 
-    const repo = repoById.get(task.repository_id)!;
-    const dir = repoDir(repo.url);
+    // Repo preparation — only for tasks with a repository
+    let dir: string | null = null;
+    if (task.repository_id) {
+      const repo = repoById.get(task.repository_id)!;
+      dir = repoDir(repo.url);
 
-    if (!prepareRepo(dir)) {
-      logger.error(`Repo not ready at ${dir}, skipping task ${task.id}`);
+      if (!prepareRepo(dir)) {
+        logger.error(`Repo not ready at ${dir}, skipping task ${task.id}`);
+        this.schedulePoll(this.opts.pollInterval);
+        return;
+      }
+
+      if (await ensureLefthookTask(this.client, task, dir, tasks)) {
+        this.schedulePoll(this.opts.pollInterval);
+        return;
+      }
+    }
+
+    const boardType = task.board_type;
+    if (!isBoardType(boardType)) {
+      logger.error(`Task ${task.id} has invalid board_type "${boardType}", skipping`);
       this.schedulePoll(this.opts.pollInterval);
       return;
     }
 
-    if (await ensureLefthookTask(this.client, task, dir, tasks)) {
-      this.schedulePoll(this.opts.pollInterval);
-      return;
-    }
-
-    const dispatched = await this.runner.dispatch(task, dir);
+    const dispatched = await this.runner.dispatch(task, dir, boardType);
     if (dispatched) this.prMonitor.track(task.id);
 
     this.backoffMs = this.opts.pollInterval;

@@ -30,6 +30,7 @@ async function applyMigrations(db: D1Database) {
     "0005_agent_runtime_required.sql",
     "0006_add_device_id.sql",
     "0007_task_seq.sql",
+    "0010_board_type.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -278,7 +279,7 @@ describe("task lifecycle repo functions", () => {
   beforeAll(async () => {
     await seedUser(env.DB);
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "sm-board");
+    const board = await createBoard(env.DB, userId, "sm-board", "ops");
     boardId = board.id;
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const agent = await createAgent(env.DB, userId, { name: "SM Test Agent", runtime: "claude" });
@@ -643,7 +644,7 @@ describe("task lifecycle HTTP permissions", () => {
 
     // Create board
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const board = await createBoard(env.DB, userId, "sm-http-board");
+    const board = await createBoard(env.DB, userId, "sm-http-board", "ops");
     boardId = board.id;
   });
 
