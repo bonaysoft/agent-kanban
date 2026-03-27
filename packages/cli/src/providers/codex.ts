@@ -1,4 +1,26 @@
-import type { AgentEvent, AgentProvider, SpawnOpts } from "./types.js";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createLogger } from "../logger.js";
+import type { AgentEvent, AgentProvider, SpawnOpts, UsageInfo, UsageWindow } from "./types.js";
+
+const logger = createLogger("codex");
+
+const AUTH_PATH = join(homedir(), ".codex", "auth.json");
+const USAGE_API = "https://chatgpt.com/backend-api/wham/usage";
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cachedUsage: UsageInfo | null = null;
+let cachedAt = 0;
+
+function readAccessToken(): string | null {
+  try {
+    const auth = JSON.parse(readFileSync(AUTH_PATH, "utf-8"));
+    return auth.access_token || null;
+  } catch {
+    return null;
+  }
+}
 
 /** Per 1M tokens, OpenAI pricing */
 const CODEX_PRICING: Record<string, { input: number; cached_input: number; output: number }> = {
@@ -108,5 +130,41 @@ export const codexProvider: AgentProvider = {
 
   buildInput(taskContext: string): string {
     return taskContext;
+  },
+
+  async getUsage(): Promise<UsageInfo | null> {
+    if (cachedUsage && Date.now() - cachedAt < CACHE_TTL_MS) {
+      return cachedUsage;
+    }
+
+    const token = readAccessToken();
+    if (!token) return cachedUsage;
+
+    try {
+      const res = await fetch(USAGE_API, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) {
+        logger.warn(`Codex usage API returned ${res.status}`);
+        return cachedUsage;
+      }
+
+      const data = (await res.json()) as Record<string, { utilization: number; resets_at: string } | undefined>;
+      const windows: UsageWindow[] = [];
+      if (data.primary_window) {
+        windows.push({ runtime: "codex", label: "Primary", ...data.primary_window });
+      }
+      if (data.secondary_window) {
+        windows.push({ runtime: "codex", label: "Secondary", ...data.secondary_window });
+      }
+      cachedUsage = { windows, updated_at: new Date().toISOString() };
+      cachedAt = Date.now();
+      return cachedUsage;
+    } catch (err: any) {
+      logger.warn(`Failed to fetch Codex usage: ${err.message}`);
+      return cachedUsage;
+    }
   },
 };

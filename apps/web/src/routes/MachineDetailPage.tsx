@@ -1,4 +1,4 @@
-import type { UsageWindow } from "@agent-kanban/shared";
+import { RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
@@ -6,13 +6,6 @@ import { formatRelative } from "../components/TaskDetailFields";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { useDeleteMachine, useMachine } from "../hooks/useMachines";
-
-const USAGE_LABELS: Record<string, string> = {
-  five_hour: "5-Hour",
-  seven_day: "7-Day",
-  seven_day_sonnet: "7-Day Sonnet",
-  seven_day_opus: "7-Day Opus",
-};
 
 function usageBarColor(pct: number): string {
   if (pct >= 75) return "bg-error";
@@ -157,42 +150,40 @@ export function MachineDetailPage() {
         </div>
 
         {/* Usage quota */}
-        {machine.usage_info &&
-          (() => {
-            const windows = Object.entries(machine.usage_info)
-              .filter(([k]) => k !== "updated_at" && USAGE_LABELS[k])
-              .map(([k, v]) => ({ key: k, label: USAGE_LABELS[k], ...(v as UsageWindow) }));
-            if (windows.length === 0) return null;
-            return (
-              <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
-                  <span className="text-[11px] font-mono text-content-tertiary">
-                    {machine.usage_info.updated_at ? formatRelative(machine.usage_info.updated_at) : ""}
-                  </span>
-                </div>
-                <div className="space-y-2.5">
-                  {windows.map((w) => (
-                    <div key={w.key}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-content-secondary">{w.label}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-content-primary">{Math.round(w.utilization)}%</span>
-                          <span className="text-[11px] text-content-tertiary">resets {formatResetCountdown(w.resets_at)}</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
-                          style={{ width: `${Math.min(w.utilization, 100)}%` }}
-                        />
-                      </div>
+        {machine.usage_info && machine.usage_info.windows.length > 0 && (
+          <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
+              <span className="text-[11px] font-mono text-content-tertiary">
+                {machine.usage_info.updated_at ? formatRelative(machine.usage_info.updated_at) : ""}
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {(machine.usage_info.windows as UsageWindow[]).map((w, i) => (
+                <div key={`${w.runtime}-${i}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-medium text-content-tertiary bg-surface-tertiary border border-border rounded px-1 py-0.5">
+                        {RUNTIME_LABELS[w.runtime] ?? w.runtime}
+                      </span>
+                      <span className="text-xs text-content-secondary">{w.label}</span>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-content-primary">{Math.round(w.utilization)}%</span>
+                      <span className="text-[11px] text-content-tertiary">resets {formatResetCountdown(w.resets_at)}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
+                      style={{ width: `${Math.min(w.utilization, 100)}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Offline reconnect */}
         {isOffline && (
