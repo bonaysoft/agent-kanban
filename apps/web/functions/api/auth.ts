@@ -67,6 +67,9 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Admin — user identity only (Better Auth plugin enforces role internally)
   { method: "POST", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
   { method: "GET", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
+
+  // Admin stats — user identity only (role check in handler)
+  { method: "GET", pattern: /^\/api\/admin\/stats$/, rule: { allow: ["user"] } },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {
