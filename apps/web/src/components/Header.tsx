@@ -4,6 +4,7 @@ import { useBoards } from "../hooks/useBoard";
 import { api } from "../lib/api";
 import { clearAuthToken, signOut, useSession } from "../lib/auth-client";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
+import { BoardShareSettings } from "./BoardShareSettings";
 import { BoardSwitcher } from "./BoardSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -96,6 +97,7 @@ export function Header() {
               <Button variant="ghost" size="sm" onClick={() => setSwitcherOpen(true)}>
                 {activeBoard.name}
               </Button>
+              <BoardShareSettings board={activeBoard} />
             </>
           )}
         </div>

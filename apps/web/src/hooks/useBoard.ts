@@ -70,7 +70,7 @@ export function useUpdateBoard() {
       api.boards.update(id, body),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["boards"] });
-      if (data?.id) queryClient.setQueryData(["board", data.id], data);
+      if (data?.id) queryClient.invalidateQueries({ queryKey: ["board", data.id] });
     },
   });
 }

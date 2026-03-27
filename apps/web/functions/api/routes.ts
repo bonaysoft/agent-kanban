@@ -6,7 +6,7 @@ import { closeSession, createSession, listSessions, reopenSession, updateSession
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
-import { createBoardSSEResponse } from "./boardSSE";
+import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -146,6 +146,12 @@ api.get("/api/share/:slug/badge.svg", async (c) => {
       "Cache-Control": "public, max-age=300",
     },
   });
+});
+
+api.get("/api/share/:slug/stream", async (c) => {
+  const board = await getBoardBySlug(c.env.DB, c.req.param("slug"));
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return createPublicBoardSSEResponse(c.env, board.id);
 });
 
 // Auth middleware for all API routes (except Better Auth's own endpoints)

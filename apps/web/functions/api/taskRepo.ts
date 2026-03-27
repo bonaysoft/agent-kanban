@@ -491,6 +491,22 @@ export async function getTaskActions(db: D1, taskId: string, since?: string): Pr
   return result.results;
 }
 
+export async function getBoardActionsByBoardId(db: D1, boardId: string, since: string): Promise<BoardAction[]> {
+  const result = await db
+    .prepare(`
+      SELECT n.*, ag.name as actor_name, ag.public_key as actor_public_key, ag.kind as agent_kind
+      FROM task_actions n
+      JOIN tasks t ON n.task_id = t.id
+      LEFT JOIN agents ag ON n.actor_type LIKE 'agent:%' AND n.actor_id = ag.id
+      WHERE t.board_id = ? AND n.created_at > ?
+      ORDER BY n.created_at ASC
+      LIMIT 100
+    `)
+    .bind(boardId, since)
+    .all<BoardAction>();
+  return result.results;
+}
+
 export async function getBoardActions(db: D1, boardId: string, ownerId: string, since: string): Promise<BoardAction[]> {
   const result = await db
     .prepare(`

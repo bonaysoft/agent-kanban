@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { AgentAvatarOverlay } from "../components/FloatingAvatar";
 import { KanbanColumn } from "../components/KanbanColumn";
+import { useAgentPresenceFromEvents } from "../hooks/useAgentPresence";
+import { usePublicBoardSSE } from "../hooks/usePublicBoardSSE";
 import { api } from "../lib/api";
 
 const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "cancelled"] as const;
@@ -27,6 +30,9 @@ export function SharePage() {
     enabled: !!slug,
     refetchInterval: 60_000,
   });
+
+  const { events } = usePublicBoardSSE(slug);
+  const avatars = useAgentPresenceFromEvents(events, board?.id);
 
   const columns = useMemo(() => {
     if (!board?.tasks) return [];
@@ -83,9 +89,9 @@ export function SharePage() {
           <span className="text-content-tertiary text-xs">/</span>
           <span className="text-sm font-medium text-content-primary">{board.name}</span>
         </div>
-        <Link to="/auth" className="text-xs text-content-tertiary hover:text-accent transition-colors">
-          Sign in →
-        </Link>
+        <a href="/" className="text-xs font-medium text-accent hover:text-accent/80 transition-colors">
+          Get Your Agent Team →
+        </a>
       </header>
 
       {board.description && <div className="px-5 py-2.5 border-b border-border text-sm text-content-secondary">{board.description}</div>}
@@ -105,6 +111,8 @@ export function SharePage() {
           </div>
         ))}
       </div>
+
+      <AgentAvatarOverlay avatars={avatars} />
 
       {/* Footer */}
       <footer className="flex-shrink-0 py-3 text-center border-t border-border bg-surface-secondary">

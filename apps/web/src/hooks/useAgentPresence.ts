@@ -62,8 +62,7 @@ function getSequence(action: TaskActionType): ChoreographyStep[] | null {
 
 // ─── Hook ───
 
-export function useAgentPresence(boardId: string | undefined) {
-  const { events } = useBoardSSE(boardId);
+export function useAgentPresenceFromEvents(events: BoardAction[], boardId: string | undefined) {
   const [avatars, setAvatars] = useState<Map<string, AgentAvatar>>(new Map());
   const processedRef = useRef(0);
   const queryClient = useQueryClient();
@@ -161,4 +160,9 @@ export function useAgentPresence(boardId: string | undefined) {
   }, []);
 
   return Array.from(avatars.values());
+}
+
+export function useAgentPresence(boardId: string | undefined) {
+  const { events } = useBoardSSE(boardId);
+  return useAgentPresenceFromEvents(events, boardId);
 }
