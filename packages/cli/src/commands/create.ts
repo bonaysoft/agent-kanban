@@ -103,13 +103,14 @@ async function createAgent(opts: Record<string, string>) {
     }
     body = {
       name: opts.name || template.name,
-      bio: template.bio,
-      soul: template.soul,
-      role: template.role,
-      handoff_to: template.handoff_to,
+      bio: opts.bio || template.bio,
+      soul: opts.soul || template.soul,
+      role: opts.role || template.role,
+      kind: opts.kind,
+      handoff_to: opts.handoffTo ? opts.handoffTo.split(",").map((s: string) => s.trim()) : template.handoff_to,
       runtime,
       model: opts.model || template.model,
-      skills: template.skills,
+      skills: opts.skills ? opts.skills.split(",").map((s: string) => s.trim()) : template.skills,
     };
   } else {
     if (!opts.name) {
@@ -121,7 +122,10 @@ async function createAgent(opts: Record<string, string>) {
     if (opts.bio) body.bio = opts.bio;
     if (opts.soul) body.soul = opts.soul;
     if (opts.role) body.role = opts.role;
+    if (opts.kind) body.kind = opts.kind;
+    if (opts.handoffTo) body.handoff_to = opts.handoffTo.split(",").map((s: string) => s.trim());
     if (opts.model) body.model = opts.model;
+    if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
   }
 
   const agent = await client.createAgent(body as any);
@@ -184,6 +188,9 @@ export function registerCreateCommand(program: Command) {
     .option("--role <role>", "Agent role (agent)")
     .option("--runtime <runtime>", "Agent runtime (agent)")
     .option("--model <model>", "Model to use (agent)")
+    .option("--kind <kind>", "Agent kind: worker, leader (agent)")
+    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff (agent)")
+    .option("--skills <skills>", "Comma-separated skill slugs (agent)")
     // repo flags
     .option("--url <url>", "Clone URL (repo)")
     // note flags

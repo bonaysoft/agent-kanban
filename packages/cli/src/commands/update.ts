@@ -50,6 +50,9 @@ export function registerUpdateCommand(program: Command) {
     .option("--role <role>", "Agent role")
     .option("--runtime <runtime>", "Agent runtime")
     .option("--model <model>", "Agent model")
+    .option("--kind <kind>", "Agent kind: worker, leader")
+    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
+    .option("--skills <skills>", "Comma-separated skill slugs")
     .action(async (resource: string, id: string, opts) => {
       const name = normalizeResource(resource);
       const client = await createClient();
@@ -101,8 +104,11 @@ export function registerUpdateCommand(program: Command) {
           if (opts.role) body.role = opts.role;
           if (opts.runtime) body.runtime = opts.runtime;
           if (opts.model) body.model = opts.model;
+          if (opts.kind) body.kind = opts.kind;
+          if (opts.handoffTo) body.handoff_to = opts.handoffTo.split(",").map((s: string) => s.trim());
+          if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
           if (Object.keys(body).length === 0) {
-            console.error("Nothing to update. Provide at least one option (--name, --bio, --role, --runtime, --model).");
+            console.error("Nothing to update. Provide at least one option (--name, --bio, --role, --runtime, --model, --kind, --skills).");
             process.exit(1);
           }
           const agent = await client.updateAgent(id, body);
