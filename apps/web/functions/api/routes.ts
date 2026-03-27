@@ -12,6 +12,7 @@ import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine }
 import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
+import { getSystemStats } from "./statsRepo";
 import {
   addTaskAction,
   assignTask,
@@ -561,6 +562,16 @@ api.delete("/api/boards/:id", async (c) => {
   const deleted = await deleteBoard(c.env.DB, c.req.param("id"));
   if (!deleted) throw new HTTPException(404, { message: "Board not found" });
   return c.json({ ok: true });
+});
+
+// ─── Admin ───
+
+api.get("/api/admin/stats", async (c) => {
+  if ((c.get("user") as any)?.role !== "admin") {
+    return c.json({ error: { code: "FORBIDDEN", message: "Admin role required" } }, 403);
+  }
+  const stats = await getSystemStats(c.env.DB);
+  return c.json(stats);
 });
 
 // ─── Repositories ───
