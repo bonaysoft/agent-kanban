@@ -11,6 +11,12 @@ const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
+const WINDOW_LABELS: Record<string, string> = {
+  five_hour: "5-Hour",
+  seven_day: "7-Day",
+  seven_day_sonnet: "7-Day Sonnet",
+  seven_day_opus: "7-Day Opus",
+};
 
 let cachedUsage: UsageInfo | null = null;
 let cachedAt = 0;
@@ -166,7 +172,7 @@ export const claudeProvider: AgentProvider = {
     }
 
     const token = readOAuthToken();
-    if (!token) return cachedUsage;
+    if (!token) return null;
 
     try {
       const res = await fetch(USAGE_API, {
@@ -183,13 +189,10 @@ export const claudeProvider: AgentProvider = {
       }
 
       const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
-      cachedUsage = {
-        ...(data.five_hour && { five_hour: data.five_hour }),
-        ...(data.seven_day && { seven_day: data.seven_day }),
-        ...(data.seven_day_sonnet && { seven_day_sonnet: data.seven_day_sonnet }),
-        ...(data.seven_day_opus && { seven_day_opus: data.seven_day_opus }),
-        updated_at: new Date().toISOString(),
-      };
+      const windows = Object.entries(WINDOW_LABELS)
+        .filter(([key]) => data[key])
+        .map(([key, label]) => ({ runtime: "claude" as const, label, utilization: data[key].utilization, resets_at: data[key].resets_at }));
+      cachedUsage = { windows, updated_at: new Date().toISOString() };
       cachedAt = Date.now();
       return cachedUsage;
     } catch (err: any) {

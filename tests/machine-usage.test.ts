@@ -74,15 +74,18 @@ describe("machine usage tracking", () => {
   it("heartbeat with usage_info stores and returns parsed object", async () => {
     const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
     const usageInfo: UsageInfo = {
-      five_hour: { utilization: 23.5, resets_at: "2026-03-21T15:00:00Z" },
-      seven_day: { utilization: 8.2, resets_at: "2026-03-25T00:00:00Z" },
+      windows: [
+        { runtime: "claude", label: "5-Hour", utilization: 23.5, resets_at: "2026-03-21T15:00:00Z" },
+        { runtime: "claude", label: "7-Day", utilization: 8.2, resets_at: "2026-03-25T00:00:00Z" },
+      ],
       updated_at: "2026-03-21T10:00:00Z",
     };
     const machine = await heartbeat(db, machineId, "user-001", { usage_info: usageInfo });
 
     expect(typeof machine.usage_info).toBe("object");
-    expect(machine.usage_info!.five_hour!.utilization).toBe(23.5);
-    expect(machine.usage_info!.seven_day!.resets_at).toBe("2026-03-25T00:00:00Z");
+    expect(machine.usage_info!.windows).toHaveLength(2);
+    expect(machine.usage_info!.windows[0].utilization).toBe(23.5);
+    expect(machine.usage_info!.windows[1].resets_at).toBe("2026-03-25T00:00:00Z");
     expect(machine.usage_info!.updated_at).toBe("2026-03-21T10:00:00Z");
   });
 
@@ -93,7 +96,7 @@ describe("machine usage tracking", () => {
     expect(machine).toBeTruthy();
     expect(machine!.runtimes).toEqual(["Claude Code"]);
     expect(typeof machine!.usage_info).toBe("object");
-    expect(machine!.usage_info!.five_hour!.utilization).toBe(23.5);
+    expect(machine!.usage_info!.windows[0].utilization).toBe(23.5);
   });
 
   it("listMachines returns parsed usage_info", async () => {
@@ -103,21 +106,24 @@ describe("machine usage tracking", () => {
     expect(machines.length).toBeGreaterThan(0);
     const m = machines.find((m) => m.id === machineId)!;
     expect(typeof m.usage_info).toBe("object");
-    expect(m.usage_info!.five_hour!.utilization).toBe(23.5);
+    expect(m.usage_info!.windows[0].utilization).toBe(23.5);
   });
 
   it("heartbeat overwrites usage_info with new data", async () => {
     const { updateMachine: heartbeat } = await import("../apps/web/functions/api/machineRepo");
     const newUsage: UsageInfo = {
-      five_hour: { utilization: 75.0, resets_at: "2026-03-21T20:00:00Z" },
-      seven_day_opus: { utilization: 45.0, resets_at: "2026-03-28T00:00:00Z" },
+      windows: [
+        { runtime: "claude", label: "5-Hour", utilization: 75.0, resets_at: "2026-03-21T20:00:00Z" },
+        { runtime: "codex", label: "Primary", utilization: 45.0, resets_at: "2026-03-28T00:00:00Z" },
+      ],
       updated_at: "2026-03-21T15:00:00Z",
     };
     const machine = await heartbeat(db, machineId, "user-001", { usage_info: newUsage });
 
-    expect(machine.usage_info!.five_hour!.utilization).toBe(75.0);
-    expect(machine.usage_info!.seven_day_opus!.utilization).toBe(45.0);
-    expect(machine.usage_info!.seven_day).toBeUndefined();
+    expect(machine.usage_info!.windows).toHaveLength(2);
+    expect(machine.usage_info!.windows[0].utilization).toBe(75.0);
+    expect(machine.usage_info!.windows[1].runtime).toBe("codex");
+    expect(machine.usage_info!.windows[1].utilization).toBe(45.0);
   });
 
   it("heartbeat updates version and runtimes", async () => {

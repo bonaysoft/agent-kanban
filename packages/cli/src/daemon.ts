@@ -8,7 +8,8 @@ import { createLogger } from "./logger.js";
 import { PID_FILE, STATE_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
 import { ProcessManager } from "./processManager.js";
-import { getAvailableProviders, getProvider } from "./providers/registry.js";
+import { getAvailableProviders } from "./providers/registry.js";
+import type { UsageInfo } from "./providers/types.js";
 import { Scheduler } from "./scheduler.js";
 import { cleanupStale, clearAll as clearSessionPids, removePid, savePid } from "./sessionPids.js";
 import { TaskRunner } from "./taskRunner.js";
@@ -54,7 +55,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const MIN_POLL_INTERVAL = 5000;
   const pollInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
   const availableProviders = getAvailableProviders();
-  const primaryProvider = availableProviders.length > 0 ? getProvider(availableProviders[0].name) : null;
 
   // Wire up components
   const prMonitor = new PrMonitor(client);
@@ -82,7 +82,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   // Heartbeat
   const heartbeatInterval = setInterval(() => {
     (async () => {
-      const usageInfo = primaryProvider?.getUsage ? await primaryProvider.getUsage() : null;
+      const providerResults = (await Promise.all(availableProviders.map((p) => p.getUsage?.() ?? Promise.resolve(null)))).filter(
+        Boolean,
+      ) as UsageInfo[];
+      const allWindows = providerResults.flatMap((u) => u.windows);
+      const updatedAt =
+        providerResults
+          .map((u) => u.updated_at)
+          .sort()
+          .at(-1) ?? new Date().toISOString();
+      const usageInfo = allWindows.length > 0 ? { windows: allWindows, updated_at: updatedAt } : null;
       await client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo });
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
