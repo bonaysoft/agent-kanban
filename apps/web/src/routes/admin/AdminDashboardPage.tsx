@@ -11,10 +11,11 @@ interface TasksByStatus {
 }
 
 interface AdminStats {
-  users: { total: number; new_this_week: number };
+  users: { total: number; recent: number };
   agents: { total: number; online: number };
-  tasks: { total: number; by_status: TasksByStatus };
+  tasks: TasksByStatus;
   boards: { total: number };
+  machines: { total: number; online: number };
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -103,7 +104,8 @@ export function AdminDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const tasksByStatus: TasksByStatus = stats?.tasks.by_status ?? { todo: 0, in_progress: 0, in_review: 0, done: 0, cancelled: 0 };
+  const tasksByStatus: TasksByStatus = stats?.tasks ?? { todo: 0, in_progress: 0, in_review: 0, done: 0, cancelled: 0 };
+  const taskTotal = Object.values(tasksByStatus).reduce((sum, n) => sum + n, 0);
   const activeTaskCount = (tasksByStatus.in_progress || 0) + (tasksByStatus.in_review || 0);
 
   return (
@@ -121,9 +123,9 @@ export function AdminDashboardPage() {
       ) : stats ? (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Users" value={stats.users.total} subtitle={`${stats.users.new_this_week} new this week`} />
+            <StatCard label="Users" value={stats.users.total} subtitle={`${stats.users.recent} new this week`} />
             <StatCard label="Agents" value={stats.agents.total} subtitle={`${stats.agents.online} online`} />
-            <StatCard label="Tasks" value={stats.tasks.total} subtitle={`${activeTaskCount} active`} />
+            <StatCard label="Tasks" value={taskTotal} subtitle={`${activeTaskCount} active`} />
             <StatCard label="Boards" value={stats.boards.total} subtitle="" />
           </div>
           <TaskStatusBar byStatus={tasksByStatus} />
