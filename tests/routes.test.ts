@@ -86,6 +86,7 @@ describe("routes", () => {
         os: "darwin",
         version: "1.0.0",
         runtimes: ["Claude Code"],
+        device_id: "test-device-routes",
       },
       apiKey,
     );

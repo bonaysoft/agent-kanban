@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentRuntime } from "@agent-kanban/shared";
 import { SignJWT } from "jose";
-import { getConfigValue } from "./config.js";
+import { getCredentials } from "./config.js";
 import type { UsageInfo } from "./types.js";
 
 export class ApiError extends Error {
@@ -104,7 +104,7 @@ export abstract class ApiClient {
   }
 
   // Machines
-  registerMachine(info: { name: string; os: string; version: string; runtimes: string[] }) {
+  registerMachine(info: { name: string; os: string; version: string; runtimes: string[]; device_id: string }) {
     return this.request<{ id: string; name: string }>("POST", "/api/machines", info);
   }
   heartbeat(machineId: string, info: { version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
@@ -204,12 +204,9 @@ export class MachineClient extends ApiClient {
   private apiKey: string;
 
   constructor() {
-    const url = getConfigValue("api-url");
-    const key = getConfigValue("api-key");
-    if (!url) throw new Error("API URL not configured. Run: agent-kanban config set api-url <url>");
-    if (!key) throw new Error("API key not configured. Run: agent-kanban config set api-key <key>");
-    super(url);
-    this.apiKey = key;
+    const { apiUrl, apiKey } = getCredentials();
+    super(apiUrl);
+    this.apiKey = apiKey;
   }
 
   protected async authorize(): Promise<string> {

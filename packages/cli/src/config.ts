@@ -2,17 +2,45 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CONFIG_FILE } from "./paths.js";
 
+interface Credential {
+  "api-url": string;
+  "api-key": string;
+}
+
 interface Config {
-  "api-url"?: string;
-  "api-key"?: string;
-  "machine-id"?: string;
+  current?: string;
+  credentials: Record<string, Credential>;
+}
+
+function hostFromUrl(url: string): string {
+  return new URL(url).host;
+}
+
+function migrate(raw: Record<string, any>): Config {
+  if (raw["api-url"] && raw["api-key"]) {
+    const host = hostFromUrl(raw["api-url"]);
+    const config: Config = {
+      current: host,
+      credentials: {
+        [host]: { "api-url": raw["api-url"], "api-key": raw["api-key"] },
+      },
+    };
+    writeConfig(config);
+    return config;
+  }
+  return { credentials: {} };
 }
 
 export function readConfig(): Config {
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+    // Detect legacy format: has top-level api-url instead of credentials
+    if (raw["api-url"] && !raw.credentials) {
+      return migrate(raw);
+    }
+    return { credentials: {}, ...raw };
   } catch {
-    return {};
+    return { credentials: {} };
   }
 }
 
@@ -21,18 +49,46 @@ export function writeConfig(config: Config): void {
   writeFileSync(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-export function getConfigValue(key: string): string | undefined {
-  return readConfig()[key as keyof Config];
+export function getCredentials(host?: string): { apiUrl: string; apiKey: string } {
+  const config = readConfig();
+  const target = host || config.current;
+  if (!target) throw new Error("No environment configured. Run: ak start --api-url <url> --api-key <key>");
+  const cred = config.credentials[target];
+  if (!cred) throw new Error(`No credentials for ${target}. Run: ak start --api-url <url> --api-key <key>`);
+  return { apiUrl: cred["api-url"], apiKey: cred["api-key"] };
 }
 
-export function setConfigValue(key: string, value: string): void {
+export function saveCredentials(apiUrl: string, apiKey: string): void {
+  const host = hostFromUrl(apiUrl);
   const config = readConfig();
-  (config as Record<string, string>)[key] = value;
+  config.credentials[host] = { "api-url": apiUrl, "api-key": apiKey };
+  config.current = host;
   writeConfig(config);
 }
 
-export function deleteConfigValue(key: string): void {
+export function updateCredentials(apiUrl: string, updates: Partial<Credential>): void {
+  const host = hostFromUrl(apiUrl);
   const config = readConfig();
-  delete (config as Record<string, string>)[key];
+  const existing = config.credentials[host];
+  if (!existing) throw new Error(`No credentials for ${host}`);
+  config.credentials[host] = { ...existing, ...updates };
   writeConfig(config);
+}
+
+export function setCurrent(apiUrl: string): void {
+  const host = hostFromUrl(apiUrl);
+  const config = readConfig();
+  if (!config.credentials[host]) throw new Error(`No credentials for ${host}`);
+  config.current = host;
+  writeConfig(config);
+}
+
+// Backward-compatible helpers used by other modules during transition
+export function getConfigValue(key: "api-url" | "api-key"): string | undefined {
+  try {
+    const { apiUrl, apiKey } = getCredentials();
+    return key === "api-url" ? apiUrl : apiKey;
+  } catch {
+    return undefined;
+  }
 }

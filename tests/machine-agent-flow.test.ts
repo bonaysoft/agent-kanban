@@ -25,7 +25,14 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
+  const files = [
+    "0001_initial.sql",
+    "0002_rename_task_logs_to_task_notes.sql",
+    "0003_agent_kind.sql",
+    "0004_rename_task_notes_to_task_actions.sql",
+    "0005_agent_runtime_required.sql",
+    "0006_add_device_id.sql",
+  ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -122,6 +129,7 @@ describe("machine → agent session flow", () => {
         os: "darwin arm64",
         version: "1.0.0",
         runtimes: ["Claude Code"],
+        device_id: "test-device-agent-flow",
       },
       apiKey,
     );

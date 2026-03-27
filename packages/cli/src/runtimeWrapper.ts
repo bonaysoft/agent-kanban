@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type Agent, type AgentRuntime, generateKeypair } from "@agent-kanban/shared";
 import { MachineClient } from "./client.js";
-import { getConfigValue } from "./config.js";
+import { getCredentials } from "./config.js";
 import { loadIdentity, type StoredIdentity, saveIdentity } from "./identity.js";
 import { collectUsage } from "./usageCollector.js";
 
@@ -30,9 +30,11 @@ async function ensureIdentity(runtimeName: AgentRuntime, client: MachineClient):
 }
 
 export async function wrapRuntime(runtimeName: AgentRuntime, binary: string, args: string[]): Promise<void> {
-  const apiUrl = getConfigValue("api-url");
-  if (!apiUrl) {
-    console.error("API URL not configured. Run: ak config set api-url <url>");
+  let apiUrl: string;
+  try {
+    apiUrl = getCredentials().apiUrl;
+  } catch {
+    console.error("No credentials configured. Run: ak start --api-url <url> --api-key <key>");
     process.exit(1);
   }
 

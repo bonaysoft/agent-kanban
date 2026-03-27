@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import type { Command } from "commander";
-import { deleteConfigValue, getConfigValue, setConfigValue } from "../config.js";
+import { getCredentials, saveCredentials, setCurrent } from "../config.js";
 import { DAEMON_STATE_FILE, LOGS_DIR, PID_FILE, SESSION_PIDS_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 
@@ -16,16 +15,6 @@ interface DaemonState {
   taskTimeout: number;
   apiUrl: string;
   startedAt: string;
-}
-
-function confirm(question: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.toLowerCase() === "y");
-    });
-  });
 }
 
 function rotateLogs(): void {
@@ -122,28 +111,27 @@ export function registerStartCommand(program: Command) {
     .option("--poll-interval <ms>", "Poll interval in ms", "10000")
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)", "7200000")
     .action(async (opts) => {
-      if (opts.apiUrl) setConfigValue("api-url", opts.apiUrl);
-      if (opts.apiKey) {
-        const oldKey = getConfigValue("api-key");
-        if (oldKey && oldKey !== opts.apiKey && getConfigValue("machine-id")) {
-          const machineId = getConfigValue("machine-id");
-          const yes = await confirm(
-            `This machine is already registered (${machineId}) with a different API key.\nSwitch to the new key and re-register? [y/N] `,
-          );
-          if (!yes) {
-            console.log("Aborted.");
-            process.exit(0);
-          }
-          deleteConfigValue("machine-id");
+      // Save or resolve credentials
+      if (opts.apiUrl && opts.apiKey) {
+        saveCredentials(opts.apiUrl, opts.apiKey);
+      } else if (opts.apiUrl) {
+        // Switch to existing credentials for this host
+        try {
+          setCurrent(opts.apiUrl);
+        } catch {
+          console.error(`No saved credentials for ${opts.apiUrl}. Pass --api-key as well.`);
+          process.exit(1);
         }
-        setConfigValue("api-key", opts.apiKey);
       }
 
-      const apiUrl = getConfigValue("api-url");
-      if (!apiUrl || !getConfigValue("api-key")) {
-        console.error("API URL and key required. Pass --api-url and --api-key, or set via: ak config set api-url <url>");
+      let creds: { apiUrl: string; apiKey: string };
+      try {
+        creds = getCredentials();
+      } catch {
+        console.error("API URL and key required. Pass --api-url and --api-key.");
         process.exit(1);
       }
+      const apiUrl = creds.apiUrl;
 
       // Check if already running
       const existingPid = readDaemonPid();

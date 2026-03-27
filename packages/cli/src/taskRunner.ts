@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AgentClient, ApiError, type MachineClient } from "./client.js";
-import { getConfigValue } from "./config.js";
+import { getCredentials } from "./config.js";
 import { createLogger } from "./logger.js";
 import type { ProcessManager } from "./processManager.js";
 import { getProvider, normalizeRuntime } from "./providers/registry.js";
@@ -65,7 +65,7 @@ export class TaskRunner {
       return false;
     }
 
-    const apiUrl = getConfigValue("api-url")!;
+    const apiUrl = getCredentials().apiUrl;
     const agentClient = new AgentClient(apiUrl, agentId, sessionId, privateKey);
     const agentEnv = this.buildAgentEnv(agentId, sessionId, privKeyJwk);
     const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails));
@@ -157,7 +157,7 @@ export class TaskRunner {
     }
 
     const provider = getProvider(normalizeRuntime(session.runtime));
-    const apiUrl = getConfigValue("api-url")!;
+    const apiUrl = getCredentials().apiUrl;
     const agentClient = new AgentClient(apiUrl, session.agentId, session.sessionId, privateKey);
     const agentEnv = this.buildAgentEnv(session.agentId, session.sessionId, session.privateKeyJwk);
 
@@ -200,7 +200,7 @@ export class TaskRunner {
       AK_AGENT_ID: agentId,
       AK_SESSION_ID: sessionId,
       AK_AGENT_KEY: JSON.stringify(privateKeyJwk),
-      AK_API_URL: getConfigValue("api-url")!,
+      AK_API_URL: getCredentials().apiUrl,
     };
   }
 }

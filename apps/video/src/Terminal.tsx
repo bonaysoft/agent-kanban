@@ -133,7 +133,6 @@ interface TerminalProps {
 export function Terminal({ events, title }: TerminalProps) {
   const frame = useCurrentFrame();
 
-
   const lines: React.ReactNode[] = [];
 
   for (const ev of events) {

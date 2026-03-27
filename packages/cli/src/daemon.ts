@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { arch, hostname, platform, release } from "node:os";
 import { join } from "node:path";
 import { MachineClient } from "./client.js";
-import { getConfigValue, setConfigValue } from "./config.js";
+import { generateDeviceId } from "./device.js";
 import { createLogger } from "./logger.js";
 import { PID_FILE, STATE_DIR } from "./paths.js";
 import { PrMonitor } from "./prMonitor.js";
@@ -40,15 +40,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const client = new MachineClient();
 
-  // Register machine
+  // Register machine (upsert by device_id on server)
   const machineInfo = getMachineInfo();
-  let machineId = getConfigValue("machine-id");
-  if (!machineId) {
-    const machine = await client.registerMachine(machineInfo);
-    machineId = machine.id;
-    setConfigValue("machine-id", machineId);
-    logger.info(`Machine registered: ${machineId}`);
-  }
+  const deviceId = generateDeviceId();
+  const machine = await client.registerMachine({ ...machineInfo, device_id: deviceId });
+  const machineId = machine.id;
+  logger.info(`Machine ready: ${machineId} (device: ${deviceId})`);
 
   await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
   await cleanupStale(client, machineId);

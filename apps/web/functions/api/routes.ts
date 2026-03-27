@@ -8,7 +8,7 @@ import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse } from "./boardSSE";
 import { createLogger } from "./logger";
-import { createMachine, deleteMachine, getMachine, listMachines, updateMachine } from "./machineRepo";
+import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
@@ -85,8 +85,25 @@ api.use("/api/*", async (c, next) => {
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
   const body = await c.req.json<{ version?: string; runtimes?: string[]; usage_info?: any }>();
-  const updated = await updateMachine(c.env.DB, c.req.param("id"), c.get("ownerId"), body);
+  const machineId = c.req.param("id");
+  const updated = await updateMachine(c.env.DB, machineId, c.get("ownerId"), body);
   if (!updated) throw new HTTPException(404, { message: "Machine not found" });
+
+  // Bind API key to this machine if unbound; reject if bound to a different machine
+  const boundMachineId = c.get("machineId");
+  if (boundMachineId && boundMachineId !== machineId) {
+    throw new HTTPException(403, { message: "API key is bound to a different machine" });
+  }
+  if (!boundMachineId) {
+    const auth = createAuth(c.env);
+    const authCtx = await auth.$context;
+    await authCtx.adapter.update({
+      model: "apikey",
+      where: [{ field: "id", value: c.get("apiKeyId")! }],
+      update: { metadata: JSON.stringify({ machineId }) },
+    });
+  }
+
   return c.json(updated);
 });
 
@@ -102,13 +119,13 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
-  const body = await c.req.json<{ name: string; os: string; version: string; runtimes: string[] }>();
-  if (!body.name || !body.os || !body.version || !body.runtimes) {
-    throw new HTTPException(400, { message: "name, os, version, and runtimes are required" });
+  const body = await c.req.json<{ name: string; os: string; version: string; runtimes: string[]; device_id: string }>();
+  if (!body.name || !body.os || !body.version || !body.runtimes || !body.device_id) {
+    throw new HTTPException(400, { message: "name, os, version, runtimes, and device_id are required" });
   }
-  const machine = await createMachine(c.env.DB, c.get("ownerId"), body);
+  const machine = await upsertMachine(c.env.DB, c.get("ownerId"), body);
 
-  // Bind this API key to the machine via metadata, and create BA agentHost
+  // Registration always binds the API key to the upserted machine
   const auth = createAuth(c.env);
   const authCtx = await auth.$context;
   await authCtx.adapter.update({
@@ -116,20 +133,25 @@ api.post("/api/machines", async (c) => {
     where: [{ field: "id", value: c.get("apiKeyId")! }],
     update: { metadata: JSON.stringify({ machineId: machine.id }) },
   });
-  const now = new Date();
-  await authCtx.adapter.create({
-    model: "agentHost",
-    data: {
-      id: machine.id,
-      name: machine.name,
-      userId: c.get("ownerId"),
-      status: "active",
-      activatedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    forceAllowId: true,
-  });
+
+  // Ensure BA agentHost exists (idempotent)
+  const existing = await authCtx.adapter.findOne({ model: "agentHost", where: [{ field: "id", value: machine.id }] });
+  if (!existing) {
+    const now = new Date();
+    await authCtx.adapter.create({
+      model: "agentHost",
+      data: {
+        id: machine.id,
+        name: machine.name,
+        userId: c.get("ownerId"),
+        status: "active",
+        activatedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      },
+      forceAllowId: true,
+    });
+  }
 
   return c.json(machine, 201);
 });

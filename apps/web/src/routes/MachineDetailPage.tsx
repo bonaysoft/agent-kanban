@@ -46,6 +46,7 @@ export function MachineDetailPage() {
   const { machine, loading } = useMachine(id);
   const deleteMachine = useDeleteMachine();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showReconnect, setShowReconnect] = useState(false);
 
   async function handleDelete() {
     if (!id) return;
@@ -193,14 +194,16 @@ export function MachineDetailPage() {
             );
           })()}
 
-        {/* Offline reconnect guide */}
+        {/* Offline reconnect */}
         {isOffline && (
-          <div className="bg-warning/5 border border-warning/20 rounded-lg p-4 space-y-3">
-            <div className="text-sm font-medium text-warning">Machine is offline</div>
-            <p className="text-xs text-content-secondary">Restart the daemon to reconnect this machine:</p>
-            <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto">
-              {`ak start --api-url ${apiUrl}`}
-            </pre>
+          <div className="bg-warning/5 border border-warning/20 rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-warning">Machine is offline</div>
+              <p className="text-xs text-content-secondary mt-0.5">Generate a new API key to reconnect this machine.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowReconnect(true)}>
+              Reconnect
+            </Button>
           </div>
         )}
 
@@ -240,6 +243,24 @@ export function MachineDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Reconnect dialog */}
+      <Dialog open={showReconnect} onOpenChange={setShowReconnect}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reconnect {machine?.name}</DialogTitle>
+            <DialogDescription>Run this command to reconnect:</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <pre className="bg-surface-primary border border-border rounded-lg p-3 text-xs font-mono text-content-secondary overflow-x-auto whitespace-pre-wrap break-all">
+              {`ak start --api-url ${apiUrl}`}
+            </pre>
+            <Button variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(`ak start --api-url ${apiUrl}`)}>
+              Copy to clipboard
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

@@ -7,7 +7,7 @@ import { registerDeleteCommand } from "./commands/delete.js";
 import { registerGetCommand } from "./commands/get.js";
 import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
-import { getConfigValue, setConfigValue } from "./config.js";
+import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { loadIdentity } from "./identity.js";
 import { getFormat, output } from "./output.js";
 import { detectRuntime } from "./runtime.js";
@@ -82,22 +82,43 @@ program.helpInformation = () => {
 const configCmd = program.command("config").description("Manage CLI configuration");
 
 configCmd
-  .command("set <key> <value>")
-  .description("Set a config value (api-url, api-key)")
-  .action((key, value) => {
-    setConfigValue(key, value);
-    console.log(`Set ${key}`);
+  .command("set")
+  .description("Save credentials: ak config set --api-url <url> --api-key <key>")
+  .requiredOption("--api-url <url>", "API server URL")
+  .requiredOption("--api-key <key>", "Machine API key")
+  .action((opts) => {
+    saveCredentials(opts.apiUrl, opts.apiKey);
+    const host = new URL(opts.apiUrl).host;
+    console.log(`Saved credentials for ${host}`);
   });
 
 configCmd
-  .command("get <key>")
-  .description("Get a config value")
-  .action((key) => {
-    const value = getConfigValue(key);
-    if (value) console.log(value);
-    else {
-      console.error(`Not set: ${key}`);
+  .command("get")
+  .description("Show current credentials")
+  .action(() => {
+    try {
+      const { apiUrl, apiKey } = getCredentials();
+      console.log(`api-url: ${apiUrl}`);
+      console.log(`api-key: ${apiKey.slice(0, 8)}...`);
+    } catch (e: any) {
+      console.error(e.message);
       process.exit(1);
+    }
+  });
+
+configCmd
+  .command("list")
+  .description("List all saved environments")
+  .action(() => {
+    const config = readConfig();
+    const hosts = Object.keys(config.credentials);
+    if (hosts.length === 0) {
+      console.log("No environments configured.");
+      return;
+    }
+    for (const host of hosts) {
+      const marker = host === config.current ? "* " : "  ";
+      console.log(`${marker}${host}`);
     }
   });
 

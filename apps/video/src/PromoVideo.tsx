@@ -136,7 +136,6 @@ function SplitScreen({ left, right, splitRatio = 0.5 }: { left: React.ReactNode;
   );
 }
 
-
 // ─── Main composition ───
 
 export const PromoVideo: React.FC = () => {

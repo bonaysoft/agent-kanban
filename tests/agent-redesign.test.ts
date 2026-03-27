@@ -30,7 +30,14 @@ const env = {
 let mf: Miniflare;
 
 async function applyMigrations(db: D1Database) {
-  const files = ["0001_initial.sql", "0002_rename_task_logs_to_task_notes.sql", "0003_agent_kind.sql", "0004_rename_task_notes_to_task_actions.sql"];
+  const files = [
+    "0001_initial.sql",
+    "0002_rename_task_logs_to_task_notes.sql",
+    "0003_agent_kind.sql",
+    "0004_rename_task_notes_to_task_actions.sql",
+    "0005_agent_runtime_required.sql",
+    "0006_add_device_id.sql",
+  ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     for (const stmt of sql
@@ -144,10 +151,16 @@ describe("agent status computation", () => {
 
   it("setup", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const { createMachine } = await import("../apps/web/functions/api/machineRepo");
+    const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-status", "status@test.com");
     _apiKey = await createApiKeyForUser(userId);
-    const machine = await createMachine(env.DB, userId, { name: "status-machine", os: "test", version: "1.0", runtimes: [] });
+    const machine = await upsertMachine(env.DB, userId, {
+      name: "status-machine",
+      os: "test",
+      version: "1.0",
+      runtimes: [],
+      device_id: "test-device-redesign-status",
+    });
     machineId = machine.id;
 
     // Create BA agentHost
@@ -221,9 +234,15 @@ describe("session lifecycle", () => {
 
   it("setup", async () => {
     const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const { createMachine } = await import("../apps/web/functions/api/machineRepo");
+    const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-session", "session@test.com");
-    const machine = await createMachine(env.DB, userId, { name: "session-machine", os: "test", version: "1.0", runtimes: [] });
+    const machine = await upsertMachine(env.DB, userId, {
+      name: "session-machine",
+      os: "test",
+      version: "1.0",
+      runtimes: [],
+      device_id: "test-device-redesign-session",
+    });
     machineId = machine.id;
 
     const { createAuth } = await import("../apps/web/functions/api/betterAuth");

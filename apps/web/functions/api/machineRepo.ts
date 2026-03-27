@@ -7,6 +7,7 @@ export interface CreateMachineInfo {
   os: string;
   version: string;
   runtimes: string[];
+  device_id: string;
 }
 
 export interface HeartbeatInfo {
@@ -15,25 +16,18 @@ export interface HeartbeatInfo {
   usage_info?: UsageInfo | null;
 }
 
-export async function createMachine(db: D1, ownerId: string, info: CreateMachineInfo): Promise<Machine> {
+export async function upsertMachine(db: D1, ownerId: string, info: CreateMachineInfo): Promise<Machine> {
   const id = newId();
   const now = new Date().toISOString();
+  // device_id is the stable hardware fingerprint — never updated after creation
   await db
-    .prepare("INSERT INTO machines (id, owner_id, name, os, version, runtimes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'offline', ?)")
-    .bind(id, ownerId, info.name, info.os, info.version, JSON.stringify(info.runtimes), now)
+    .prepare(`INSERT INTO machines (id, owner_id, device_id, name, os, version, runtimes, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'offline', ?)
+      ON CONFLICT(owner_id, device_id) DO UPDATE SET name = excluded.name, os = excluded.os, version = excluded.version, runtimes = excluded.runtimes`)
+    .bind(id, ownerId, info.device_id, info.name, info.os, info.version, JSON.stringify(info.runtimes), now)
     .run();
-  return {
-    id,
-    owner_id: ownerId,
-    name: info.name,
-    status: "offline",
-    os: info.os,
-    version: info.version,
-    runtimes: info.runtimes,
-    usage_info: null,
-    last_heartbeat_at: null,
-    created_at: now,
-  };
+  const row = await db.prepare("SELECT * FROM machines WHERE owner_id = ? AND device_id = ?").bind(ownerId, info.device_id).first<Machine>();
+  return parseMachine(row!);
 }
 
 export async function deleteMachine(db: D1, machineId: string, ownerId: string): Promise<boolean> {
