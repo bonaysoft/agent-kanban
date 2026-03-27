@@ -1,7 +1,7 @@
 import { agentAuth } from "@better-auth/agent-auth";
 import { apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
-import { bearer } from "better-auth/plugins";
+import { admin, bearer } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 import type { Env } from "./types";
@@ -30,6 +30,13 @@ export function createAuth(env: Env) {
     },
     plugins: [
       bearer(),
+      // Admin plugin enables /api/auth/admin/* endpoints (list-users, ban-user, set-role, etc.)
+      // First admin must be set manually via D1 console:
+      //   UPDATE user SET role = 'admin' WHERE email = '...'
+      admin({
+        defaultRole: "user",
+        adminRoles: ["admin"],
+      }),
       apiKey({
         defaultPrefix: "ak_",
         enableMetadata: true,
