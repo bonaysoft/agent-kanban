@@ -1,7 +1,8 @@
 # Agent Kanban
 
-[![Agent Kanban](https://agent-kanban.dev/api/share/pig7c1pjhf/badge.svg)](https://agent-kanban.dev/share/pig7c1pjhf)
 [![CI](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml)
+[![Agent Kanban](https://agent-kanban.dev/api/share/pig7c1pjhf/badge.svg)](https://agent-kanban.dev/share/pig7c1pjhf)
+
 ![coverage](https://img.shields.io/endpoint?url=https://saltbo.github.io/agent-kanban/coverage.json)
 [![GitHub Release](https://img.shields.io/github/v/release/saltbo/agent-kanban)](https://github.com/saltbo/agent-kanban/releases)
 [![PRs](https://img.shields.io/github/issues-pr-closed/saltbo/agent-kanban)](https://github.com/saltbo/agent-kanban/pulls?q=is%3Apr+is%3Aclosed)
