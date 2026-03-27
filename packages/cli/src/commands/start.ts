@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
@@ -133,13 +133,29 @@ export function registerStartCommand(program: Command) {
       }
       const apiUrl = creds.apiUrl;
 
-      // Check if already running
+      // Check if already running — PID file check
       const existingPid = readDaemonPid();
       if (existingPid) {
         console.error(`Daemon already running (PID ${existingPid}). Stop it first or remove ${PID_FILE}`);
         process.exit(1);
       }
       if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+
+      // Check for orphaned daemon (PID file gone but process alive)
+      try {
+        const psOut = execSync("ps axo pid,command", { stdio: "pipe" }).toString();
+        for (const line of psOut.split("\n")) {
+          if (line.includes("__daemon") && line.includes("--max-concurrent")) {
+            const orphanPid = parseInt(line.trim(), 10);
+            if (orphanPid && orphanPid !== process.pid) {
+              console.error(`Orphaned daemon found (PID ${orphanPid}). Killing it before starting.`);
+              process.kill(orphanPid, "SIGKILL");
+            }
+          }
+        }
+      } catch {
+        // ps failed — proceed anyway
+      }
 
       // Rotate logs
       rotateLogs();
@@ -200,7 +216,7 @@ export function registerStopCommand(program: Command) {
   program
     .command("stop")
     .description("Stop the Machine daemon")
-    .action(() => {
+    .action(async () => {
       const pid = readDaemonPid();
       if (!pid) {
         console.log("○ Daemon is not running");
@@ -215,7 +231,33 @@ export function registerStopCommand(program: Command) {
 
       process.kill(pid, "SIGTERM");
 
-      console.log(`● Daemon stopped (PID ${pid})`);
+      // Wait for the process to actually exit (up to 10s)
+      const deadline = Date.now() + 10_000;
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      while (Date.now() < deadline) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          break; // Process exited
+        }
+        await sleep(200);
+      }
+
+      // Check if it's still alive
+      let alive = false;
+      try {
+        process.kill(pid, 0);
+        alive = true;
+      } catch {
+        // dead — good
+      }
+
+      if (alive) {
+        process.kill(pid, "SIGKILL");
+        console.log(`● Daemon force-killed (PID ${pid}, SIGTERM timed out)`);
+      } else {
+        console.log(`● Daemon stopped (PID ${pid})`);
+      }
       if (uptimeStr) console.log(`  Uptime: ${uptimeStr}`);
     });
 }
