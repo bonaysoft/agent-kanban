@@ -15,6 +15,7 @@ import { MachinesPage } from "./routes/MachinesPage";
 import { NewBoardPage } from "./routes/NewBoardPage";
 import { OnboardingPage } from "./routes/OnboardingPage";
 import { RepositoriesPage } from "./routes/RepositoriesPage";
+import { SharePage } from "./routes/SharePage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/landing" element={<LandingPage />} />
+        <Route path="/share/:slug" element={<SharePage />} />
         <Route path="/" element={<RootRoute />} />
         <Route
           path="/onboarding"

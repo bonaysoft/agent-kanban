@@ -86,7 +86,7 @@ export function BoardPage() {
   return (
     <div className="h-screen overflow-hidden bg-surface-primary flex flex-col">
       <Header />
-      <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
+      <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} board={board} />
 
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">
