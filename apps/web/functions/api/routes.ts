@@ -108,8 +108,12 @@ api.get("/api/share/:slug/badge.svg", async (c) => {
     else if (t.status === "done") counts.done++;
   }
 
-  const label = board.name;
-  const value = `${counts.todo} todo · ${counts.in_progress} active · ${counts.in_review} review · ${counts.done} done`;
+  function escapeXml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  }
+
+  const label = escapeXml(board.name);
+  const value = escapeXml(`${counts.todo} todo · ${counts.in_progress} active · ${counts.in_review} review · ${counts.done} done`);
 
   const labelWidth = Math.max(label.length * 7 + 16, 60);
   const valueWidth = value.length * 6.5 + 16;

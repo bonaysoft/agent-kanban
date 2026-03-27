@@ -90,7 +90,11 @@ export const api = {
     delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
   },
   share: {
-    getBoard: (slug: string) => fetch(`/api/share/${slug}`).then((r) => r.json()) as Promise<any>,
+    getBoard: (slug: string) =>
+      fetch(`/api/share/${slug}`).then((r) => {
+        if (!r.ok) throw new Error("Board not found");
+        return r.json();
+      }) as Promise<any>,
   },
   repositories: {
     list: () => request<any[]>("GET", "/repositories"),
