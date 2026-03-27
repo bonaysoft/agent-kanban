@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Skeleton } from "../../components/ui/skeleton";
 import { api } from "../../lib/api";
 
@@ -18,12 +19,12 @@ interface AdminStats {
   machines: { total: number; online: number };
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  todo: "#71717A",
-  in_progress: "#22D3EE",
-  in_review: "#EAB308",
-  done: "#22C55E",
-  cancelled: "#3F3F46",
+const STATUS_BAR_CLASS: Record<string, string> = {
+  todo: "bg-zinc-500",
+  in_progress: "bg-accent",
+  in_review: "bg-warning",
+  done: "bg-success",
+  cancelled: "bg-zinc-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -36,23 +37,29 @@ const STATUS_LABELS: Record<string, string> = {
 
 function StatCard({ label, value, subtitle }: { label: string; value: number; subtitle: string }) {
   return (
-    <div className="bg-zinc-900 dark:bg-zinc-900 rounded-lg p-6 border border-zinc-800">
-      <p className="text-sm text-zinc-500 mb-1">{label}</p>
-      <p className="text-[32px] font-semibold text-zinc-100 leading-none" style={{ fontFamily: "Geist Mono, monospace" }}>
-        {value}
-      </p>
-      <p className="text-xs text-zinc-400 mt-2">{subtitle}</p>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs font-medium text-content-tertiary uppercase tracking-wider">{label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-4xl font-semibold font-mono text-content-primary leading-none">{value}</p>
+        {subtitle && <p className="text-xs text-content-tertiary mt-2">{subtitle}</p>}
+      </CardContent>
+    </Card>
   );
 }
 
 function StatCardSkeleton() {
   return (
-    <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 space-y-3">
-      <Skeleton className="h-4 w-20 bg-zinc-800" />
-      <Skeleton className="h-9 w-16 bg-zinc-800" />
-      <Skeleton className="h-3 w-28 bg-zinc-800" />
-    </div>
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-3 w-20" />
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Skeleton className="h-9 w-16" />
+        <Skeleton className="h-3 w-28" />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -66,15 +73,13 @@ function TaskStatusBar({ byStatus }: { byStatus: TasksByStatus }) {
 
   return (
     <div className="mt-8">
-      <p className="text-sm font-medium text-zinc-400 mb-3">Task Status Breakdown</p>
+      <p className="text-xs font-medium text-content-tertiary uppercase tracking-wider mb-3">Task Status Breakdown</p>
       <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
         {statuses.map((status) => {
           const count = byStatus[status] || 0;
           if (count === 0) return null;
           const pct = (count / total) * 100;
-          return (
-            <div key={status} style={{ width: `${pct}%`, backgroundColor: STATUS_COLORS[status] }} title={`${STATUS_LABELS[status]}: ${count}`} />
-          );
+          return <div key={status} className={STATUS_BAR_CLASS[status]} style={{ width: `${pct}%` }} title={`${STATUS_LABELS[status]}: ${count}`} />;
         })}
       </div>
       <div className="flex flex-wrap gap-4 mt-3">
@@ -82,9 +87,9 @@ function TaskStatusBar({ byStatus }: { byStatus: TasksByStatus }) {
           const count = byStatus[status] || 0;
           return (
             <div key={status} className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: STATUS_COLORS[status] }} />
-              <span className="text-xs text-zinc-500">{STATUS_LABELS[status]}</span>
-              <span className="text-xs font-mono text-zinc-400">{count}</span>
+              <span className={`inline-block w-2.5 h-2.5 rounded-sm ${STATUS_BAR_CLASS[status]}`} />
+              <span className="text-xs text-content-tertiary">{STATUS_LABELS[status]}</span>
+              <span className="text-xs font-mono text-content-secondary">{count}</span>
             </div>
           );
         })}
@@ -110,9 +115,7 @@ export function AdminDashboardPage() {
 
   return (
     <div className="px-8 py-10 max-w-5xl">
-      <h1 className="text-2xl font-semibold text-zinc-100 mb-8" style={{ letterSpacing: "-0.02em" }}>
-        Dashboard
-      </h1>
+      <h1 className="text-2xl font-semibold text-content-primary tracking-tight mb-8">Dashboard</h1>
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -131,7 +134,7 @@ export function AdminDashboardPage() {
           <TaskStatusBar byStatus={tasksByStatus} />
         </>
       ) : (
-        <p className="text-zinc-500 text-sm">Failed to load stats.</p>
+        <p className="text-content-tertiary text-sm">Failed to load stats.</p>
       )}
     </div>
   );
