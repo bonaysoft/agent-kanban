@@ -22,6 +22,7 @@ export type TaskStatus = "todo" | "in_progress" | "in_review" | "done" | "cancel
 export interface Task {
   id: string;
   board_id: string;
+  seq: number;
   status: TaskStatus;
   title: string;
   description: string | null;

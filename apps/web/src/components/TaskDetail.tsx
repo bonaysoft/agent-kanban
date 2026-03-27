@@ -16,7 +16,7 @@ import { ActivityLog } from "./ActivityLog";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
-import { EditableText, Field, FieldLabel } from "./TaskDetailFields";
+import { Field, FieldLabel } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
@@ -116,12 +116,6 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
 
   async function reload() {
     await queryClient.invalidateQueries({ queryKey: ["task", taskId] });
-  }
-
-  async function handleUpdate(field: string, value: string | null) {
-    await api.tasks.update(taskId, { [field]: value });
-    await reload();
-    onRefresh();
   }
 
   async function handleReviewAction(action: "reject" | "complete") {
@@ -302,7 +296,8 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
             <div className="flex items-start justify-between p-5 border-b border-border">
               <div className="flex-1 min-w-0 mr-4">
                 <div className="flex items-center gap-2">
-                  <EditableText value={task.title} onSave={(v) => handleUpdate("title", v)} className="text-lg font-semibold text-content-primary" />
+                  <span className="font-mono text-sm text-content-tertiary">#{task.seq}</span>
+                  <span className="text-lg font-semibold text-content-primary">{task.title}</span>
                   {task.blocked && (
                     <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase">
                       Blocked

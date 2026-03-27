@@ -58,15 +58,23 @@ export async function createTask(
     await assertAssignableWorkerAgent(db, input.assigned_to, 400);
   }
 
+  // Atomically allocate the next seq number via RETURNING
+  const seqResult = await db
+    .prepare("UPDATE boards SET task_seq = task_seq + 1 WHERE id = ? RETURNING task_seq")
+    .bind(board.id)
+    .first<{ task_seq: number }>();
+  const seq = seqResult!.task_seq;
+
   const stmts = [
     db
       .prepare(`
-      INSERT INTO tasks (id, board_id, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
-      VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, board_id, seq, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, position, created_at, updated_at)
+      VALUES (?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
     `)
       .bind(
         taskId,
         board.id,
+        seq,
         input.title,
         input.description || null,
         input.repository_id || null,
@@ -100,6 +108,7 @@ export async function createTask(
   return {
     id: taskId,
     board_id: board.id,
+    seq,
     status: "todo" as const,
     title: input.title,
     description: input.description || null,

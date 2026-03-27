@@ -44,6 +44,7 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
       }
     >
       <div className="flex items-center gap-1.5 mb-2">
+        <span className="font-mono text-[11px] text-content-tertiary shrink-0">#{task.seq}</span>
         <div className="text-[13px] font-medium leading-snug text-content-primary flex-1">{task.title}</div>
         {task.blocked && (
           <Badge variant="destructive" className="text-[10px] font-mono font-semibold uppercase shrink-0">

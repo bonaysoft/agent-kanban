@@ -9,6 +9,7 @@ import { Button } from "./ui/button";
 
 interface DemoTask {
   id: string;
+  seq: number;
   title: string;
   priority: string;
   status: string;
@@ -36,8 +37,10 @@ function assign(i: number) {
 
 function makeTasks(): DemoTask[] {
   const now = new Date().toISOString();
+  let seqCounter = 0;
   const t = (id: string, title: string, pri: string, repo: string, ag?: number): DemoTask => ({
     id,
+    seq: ++seqCounter,
     title,
     priority: pri,
     status: "todo",
