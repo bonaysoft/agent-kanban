@@ -33,6 +33,7 @@
 
 html {
   background-color: var(--bg-primary);
+  overscroll-behavior: none;
 }
 
 body {
