@@ -85,8 +85,12 @@ export const api = {
     list: () => request<any[]>("GET", "/boards"),
     get: (id: string) => request<any>("GET", `/boards/${id}`),
     create: (input: { name: string; description?: string }) => request<any>("POST", "/boards", input),
-    update: (id: string, body: { name?: string; description?: string }) => request<any>("PATCH", `/boards/${id}`, body),
+    update: (id: string, body: { name?: string; description?: string; visibility?: "private" | "public" }) =>
+      request<any>("PATCH", `/boards/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
+  },
+  share: {
+    getBoard: (slug: string) => fetch(`/api/share/${slug}`).then((r) => r.json()) as Promise<any>,
   },
   repositories: {
     list: () => request<any[]>("GET", "/repositories"),

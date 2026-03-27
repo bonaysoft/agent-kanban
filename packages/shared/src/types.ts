@@ -5,6 +5,8 @@ export interface Board {
   owner_id: string;
   name: string;
   description: string | null;
+  visibility: "private" | "public";
+  share_slug: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -5,7 +5,7 @@ import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAge
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
-import { createBoard, deleteBoard, getBoard, getBoardByName, listBoards, updateBoard } from "./boardRepo";
+import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse } from "./boardSSE";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
@@ -74,6 +74,75 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
 });
 
 api.get("/api/ping", (c) => c.json({ pong: true }));
+
+// ─── Public Share Routes (no auth required) ───
+
+api.get("/api/share/:slug", async (c) => {
+  const board = await getBoardBySlug(c.env.DB, c.req.param("slug"));
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+
+  const publicTasks = board.tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    labels: t.labels,
+    agent_name: t.agent_name,
+    agent_public_key: t.agent_public_key,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+  }));
+
+  return c.json({ ...board, tasks: publicTasks });
+});
+
+api.get("/api/share/:slug/badge.svg", async (c) => {
+  const board = await getBoardBySlug(c.env.DB, c.req.param("slug"));
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+
+  const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+  for (const t of board.tasks) {
+    if (t.status === "todo") counts.todo++;
+    else if (t.status === "in_progress") counts.in_progress++;
+    else if (t.status === "in_review") counts.in_review++;
+    else if (t.status === "done") counts.done++;
+  }
+
+  const label = board.name;
+  const value = `${counts.todo} todo · ${counts.in_progress} active · ${counts.in_review} review · ${counts.done} done`;
+
+  const labelWidth = Math.max(label.length * 7 + 16, 60);
+  const valueWidth = value.length * 6.5 + 16;
+  const totalWidth = labelWidth + valueWidth;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="${totalWidth}" height="20" rx="3" fill="#fff"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelWidth}" height="20" fill="#1e293b"/>
+    <rect x="${labelWidth}" width="${valueWidth}" height="20" fill="#0891b2"/>
+    <rect width="${totalWidth}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${labelWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
+    <text x="${labelWidth / 2}" y="14">${label}</text>
+    <text x="${labelWidth + valueWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${value}</text>
+    <text x="${labelWidth + valueWidth / 2}" y="14">${value}</text>
+  </g>
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      "Content-Type": "image/svg+xml",
+      "Cache-Control": "public, max-age=300",
+    },
+  });
+});
 
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
@@ -472,7 +541,7 @@ api.get("/api/boards/:id", async (c) => {
 });
 
 api.patch("/api/boards/:id", async (c) => {
-  const body = await c.req.json<{ name?: string; description?: string }>();
+  const body = await c.req.json<{ name?: string; description?: string; visibility?: "private" | "public" }>();
   const board = await updateBoard(c.env.DB, c.req.param("id"), body);
   if (!board) throw new HTTPException(404, { message: "Board not found" });
   return c.json(board);
