@@ -27,6 +27,7 @@ CREATE TABLE agents_new (
   updated_at TEXT NOT NULL
 );
 
-INSERT INTO agents_new SELECT * FROM agents;
+INSERT INTO agents_new (id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
+  SELECT id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at FROM agents;
 DROP TABLE agents;
 ALTER TABLE agents_new RENAME TO agents;
