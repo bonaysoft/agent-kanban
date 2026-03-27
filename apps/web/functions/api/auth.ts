@@ -63,6 +63,10 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
 
   // Sessions — machine reopen
   { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/reopen$/, rule: { allow: ["machine"] } },
+
+  // Admin — user identity only (Better Auth plugin enforces role internally)
+  { method: "POST", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
+  { method: "GET", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
 ];
 
 function matchRouteRule(method: string, path: string): RouteRule | null {
