@@ -89,15 +89,14 @@ export type Priority = "low" | "medium" | "high" | "urgent";
 export type MachineStatus = "online" | "offline";
 
 export interface UsageWindow {
+  runtime: AgentRuntime;
+  label: string;
   utilization: number;
   resets_at: string;
 }
 
 export interface UsageInfo {
-  five_hour?: UsageWindow;
-  seven_day?: UsageWindow;
-  seven_day_sonnet?: UsageWindow;
-  seven_day_opus?: UsageWindow;
+  windows: UsageWindow[];
   updated_at: string;
 }
 

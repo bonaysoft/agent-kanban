@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentProvider, SpawnOpts, UsageInfo } from "./types.js";
+import type { AgentEvent, AgentProvider, SpawnOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("claude");
 
@@ -11,6 +11,13 @@ const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
+
+const CLAUDE_WINDOW_LABELS: Record<string, string> = {
+  five_hour: "5-Hour",
+  seven_day: "7-Day",
+  seven_day_sonnet: "7-Day Sonnet",
+  seven_day_opus: "7-Day Opus",
+};
 
 let cachedUsage: UsageInfo | null = null;
 let cachedAt = 0;
@@ -183,13 +190,10 @@ export const claudeProvider: AgentProvider = {
       }
 
       const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
-      cachedUsage = {
-        ...(data.five_hour && { five_hour: data.five_hour }),
-        ...(data.seven_day && { seven_day: data.seven_day }),
-        ...(data.seven_day_sonnet && { seven_day_sonnet: data.seven_day_sonnet }),
-        ...(data.seven_day_opus && { seven_day_opus: data.seven_day_opus }),
-        updated_at: new Date().toISOString(),
-      };
+      const windows: UsageWindow[] = Object.entries(CLAUDE_WINDOW_LABELS)
+        .filter(([key]) => data[key])
+        .map(([key, label]) => ({ runtime: "claude", label, ...data[key] }));
+      cachedUsage = { windows, updated_at: new Date().toISOString() };
       cachedAt = Date.now();
       return cachedUsage;
     } catch (err: any) {
