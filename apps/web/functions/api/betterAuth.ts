@@ -40,7 +40,7 @@ export function createAuth(env: Env) {
       apiKey({
         defaultPrefix: "ak_",
         enableMetadata: true,
-        rateLimit: { enabled: true, maxRequests: 600, timeWindow: 60 * 1000 },
+        rateLimit: { enabled: false },
       }),
       agentAuth({
         allowedKeyAlgorithms: ["Ed25519"],

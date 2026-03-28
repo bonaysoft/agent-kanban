@@ -143,11 +143,9 @@ describe("routes", () => {
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 
-  it("returns X-RateLimit headers for API key requests", async () => {
+  it("authenticates with API key", async () => {
     const res = await apiRequest("GET", "/api/boards", undefined, apiKey);
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-RateLimit-Limit")).toBe("600");
-    expect(res.headers.get("X-RateLimit-Remaining")).toBeTruthy();
   });
 
   // ─── Error handler ───

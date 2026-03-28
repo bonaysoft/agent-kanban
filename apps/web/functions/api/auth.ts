@@ -1,9 +1,6 @@
 import type { Context, Next } from "hono";
 import { createAuth } from "./betterAuth";
-import { createLogger } from "./logger";
 import type { Env } from "./types";
-
-const logger = createLogger("api");
 
 type IdentityType = "user" | "machine" | "agent:worker" | "agent:leader";
 
@@ -143,14 +140,6 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
     return c.json({ error: { code: "UNAUTHORIZED", message: err?.message || "Invalid API key" } }, 401);
   }
   if (!result?.valid) {
-    if (result?.error?.code === "RATE_LIMITED") {
-      const retryAfter = result.error.details?.tryAgainIn ? Math.ceil(result.error.details.tryAgainIn / 1000) : 60;
-      logger.info(`Rate limited: retry_after=${retryAfter}s path=${c.req.path}`);
-      return c.json(
-        { error: { code: "RATE_LIMITED", message: `Rate limit exceeded. Retry after ${retryAfter}s` } },
-        { status: 429, headers: { "Retry-After": String(retryAfter) } },
-      );
-    }
     return c.json({ error: result?.error || { code: "UNAUTHORIZED", message: "Invalid API key" } }, 401);
   }
 
@@ -160,11 +149,6 @@ async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: str
   const metadata = result.key.metadata as Record<string, any> | null;
   if (metadata?.machineId) c.set("machineId", metadata.machineId);
 
-  const key = result.key;
-  if (key?.rateLimitMax != null) {
-    c.header("X-RateLimit-Limit", String(key.rateLimitMax));
-    c.header("X-RateLimit-Remaining", String(Math.max(0, key.rateLimitMax - (key.requestCount || 0))));
-  }
   return enforceRouteRule(c, next);
 }
 
