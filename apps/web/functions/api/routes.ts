@@ -7,6 +7,7 @@ import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
+import { getRootPublicKey } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -626,6 +627,14 @@ api.delete("/api/repositories/:id", async (c) => {
   if (repo.owner_id !== ownerId) throw new HTTPException(403, { message: "Forbidden" });
   await deleteRepository(c.env.DB, c.req.param("id"));
   return c.json({ ok: true });
+});
+
+// ─── GPG Keys ───
+
+api.get("/api/gpg/public-key", async (c) => {
+  const armoredPublicKey = await getRootPublicKey(c.env.DB, c.get("ownerId"));
+  if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG root key not found" });
+  return c.json({ armored_public_key: armoredPublicKey });
 });
 
 export { api };

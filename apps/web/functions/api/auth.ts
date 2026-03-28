@@ -61,6 +61,9 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Sessions — machine reopen
   { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/reopen$/, rule: { allow: ["machine"] } },
 
+  // GPG keys — user only
+  { method: "GET", pattern: /^\/api\/gpg\/public-key$/, rule: { allow: ["user"] } },
+
   // Admin — user identity only (Better Auth plugin enforces role internally)
   { method: "POST", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
   { method: "GET", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },

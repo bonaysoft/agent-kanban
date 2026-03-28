@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@agent-kanban/shared": "workspace:*",
-    "framer-motion": "^12.38.0"
+    "framer-motion": "^12.38.0",
+    "openpgp": "^6.3.0"
   }
 }
