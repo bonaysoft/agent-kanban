@@ -14,10 +14,11 @@ interface GpgKeyRow extends GpgKey {
   armored_private_key: string;
 }
 
-async function generateRootKey(): Promise<{ armoredPrivateKey: string; armoredPublicKey: string; fingerprint: string }> {
+async function generateRootKey(ownerEmail: string): Promise<{ armoredPrivateKey: string; armoredPublicKey: string; fingerprint: string }> {
   const { privateKey, publicKey } = await openpgp.generateKey({
-    type: "curve25519",
-    userIDs: [{ name: "Agent Kanban Root", email: "root@mails.agent-kanban.dev" }],
+    type: "ecc",
+    curve: "ed25519",
+    userIDs: [{ name: "Agent Kanban", email: ownerEmail }],
     format: "armored",
   });
   const parsed = await openpgp.readPrivateKey({ armoredKey: privateKey as string });
@@ -25,14 +26,14 @@ async function generateRootKey(): Promise<{ armoredPrivateKey: string; armoredPu
   return { armoredPrivateKey: privateKey as string, armoredPublicKey: publicKey as string, fingerprint };
 }
 
-export async function getOrCreateRootKey(db: D1, ownerId: string): Promise<GpgKey> {
+export async function getOrCreateRootKey(db: D1, ownerId: string, ownerEmail: string): Promise<GpgKey> {
   const existing = await db
     .prepare("SELECT id, owner_id, armored_public_key, fingerprint, created_at, updated_at FROM gpg_keys WHERE owner_id = ?")
     .bind(ownerId)
     .first<GpgKey>();
   if (existing) return existing;
 
-  const { armoredPrivateKey, armoredPublicKey, fingerprint } = await generateRootKey();
+  const { armoredPrivateKey, armoredPublicKey, fingerprint } = await generateRootKey(ownerEmail);
   const id = newId();
   const now = new Date().toISOString();
 
@@ -54,7 +55,7 @@ export async function addSubkey(db: D1, ownerId: string): Promise<{ fingerprint:
   if (!row) return null;
 
   const privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
-  const updatedKey = await privateKey.addSubkey({ type: "curve25519", sign: true });
+  const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519", sign: true });
   const armoredPrivate = updatedKey.armor();
   const armoredPublic = updatedKey.toPublic().armor();
 
