@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    pool: "forks",
+    fileParallelism: false,
     include: ["**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
