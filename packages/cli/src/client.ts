@@ -24,15 +24,27 @@ export abstract class ApiClient {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const authorization = await this.authorize();
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: authorization,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10000),
-    });
+    const doFetch = () =>
+      fetch(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authorization,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(10000),
+      });
+
+    let res: Response;
+    try {
+      res = await doFetch();
+    } catch (err: any) {
+      if (err?.cause?.code === "ECONNRESET") {
+        res = await doFetch();
+      } else {
+        throw err;
+      }
+    }
 
     const data = (await res.json()) as T & { error?: { code: string; message: string } };
 

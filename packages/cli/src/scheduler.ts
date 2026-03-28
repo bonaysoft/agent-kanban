@@ -6,6 +6,7 @@ import type { ProcessManager } from "./processManager.js";
 import { normalizeRuntime } from "./providers/registry.js";
 import { ensureCloned, prepareRepo, repoDir } from "./repoOps.js";
 import { loadSessions, removeSession } from "./savedSessions.js";
+import { isProcessAlive } from "./sessionPids.js";
 import { ensureLefthookTask } from "./skillManager.js";
 import type { TaskRunner } from "./taskRunner.js";
 import { cleanupWorkspace } from "./workspace.js";
@@ -117,7 +118,8 @@ export class Scheduler {
     // Clean up orphaned active sessions (crash recovery)
     for (const s of loadSessions("active")) {
       if (this.pm.hasTask(s.taskId)) continue;
-      // Session marked active but no process running — stale from crash
+      // Check if the process is still alive before treating as orphan
+      if (isProcessAlive(s.sessionId)) continue;
       let task: any;
       try {
         task = await this.client.getTask(s.taskId);
@@ -274,7 +276,7 @@ export class Scheduler {
       logger.warn("Rate limited, backing off");
       this.backoffMs = Math.min(Math.max(this.backoffMs * 2, 30000), 60000);
     } else {
-      logger.warn(`Poll error: ${err.message}`);
+      logger.warn(`Poll error: ${err.message}${err.cause ? ` — cause: ${err.cause.message ?? err.cause}` : ""}`);
       this.backoffMs = Math.min(this.backoffMs * 2, 60000);
     }
     this.schedulePoll(this.backoffMs);

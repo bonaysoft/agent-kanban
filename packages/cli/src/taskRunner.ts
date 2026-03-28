@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -93,62 +93,72 @@ export class TaskRunner {
       return false;
     }
 
-    const apiUrl = getCredentials().apiUrl;
-    const agentClient = new AgentClient(apiUrl, agentId, sessionId, privateKey);
-    const agentEnv = this.buildAgentEnv({
-      agentId,
-      sessionId,
-      privateKeyJwk: privKeyJwk,
-      agentName: agentDetails.name,
-      agentUsername: (agentDetails as any).username ?? agentId,
-      gpgSubkeyId,
-      gnupgHome,
-    });
-    const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails, boardType));
+    try {
+      const apiUrl = getCredentials().apiUrl;
+      const agentClient = new AgentClient(apiUrl, agentId, sessionId, privateKey);
+      const agentEnv = this.buildAgentEnv({
+        agentId,
+        sessionId,
+        privateKeyJwk: privKeyJwk,
+        agentName: agentDetails.name,
+        agentUsername: (agentDetails as any).username ?? agentId,
+        gpgSubkeyId,
+        gnupgHome,
+      });
+      const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails, boardType));
 
-    const repos = await this.client.listRepositories();
-    const taskRepo = repos.find((r: any) => r.id === task.repository_id);
+      const repos = await this.client.listRepositories();
+      const taskRepo = repos.find((r: any) => r.id === task.repository_id);
 
-    const taskContext = [
-      `Task ID: ${task.id}`,
-      `Title: ${task.title}`,
-      task.description ? `Description: ${task.description}` : null,
-      task.priority ? `Priority: ${task.priority}` : null,
-      task.repository_id ? `Repository: ${taskRepo?.url ?? task.repository_id}` : null,
-      `Board: ${task.board_id}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+      const taskContext = [
+        `Task ID: ${task.id}`,
+        `Title: ${task.title}`,
+        task.description ? `Description: ${task.description}` : null,
+        task.priority ? `Priority: ${task.priority}` : null,
+        task.repository_id ? `Repository: ${taskRepo?.url ?? task.repository_id}` : null,
+        `Board: ${task.board_id}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-    // Persist session before spawning — crash-safe
-    saveSession({
-      taskId: task.id,
-      sessionId,
-      workspace: workspace.info,
-      agentId,
-      privateKeyJwk: privKeyJwk,
-      runtime: providerName,
-      model: agentDetails.model ?? undefined,
-      status: "active",
-      gpgSubkeyId,
-      agentUsername: (agentDetails as any).username ?? agentId,
-      agentName: agentDetails.name,
-    });
+      // Persist session before spawning — crash-safe
+      saveSession({
+        taskId: task.id,
+        sessionId,
+        workspace: workspace.info,
+        agentId,
+        privateKeyJwk: privKeyJwk,
+        runtime: providerName,
+        model: agentDetails.model ?? undefined,
+        status: "active",
+        gpgSubkeyId,
+        agentUsername: (agentDetails as any).username ?? agentId,
+        agentName: agentDetails.name,
+      });
 
-    await this.pm.spawnAgent({
-      provider,
-      taskId: task.id,
-      sessionId,
-      cwd: workspace.cwd,
-      taskContext,
-      agentClient,
-      agentEnv,
-      systemPromptFile,
-      onCleanup: () => { workspace.cleanup(); cleanupGnupgHome(gnupgHome); },
-      model: agentDetails.model ?? undefined,
-    });
+      await this.pm.spawnAgent({
+        provider,
+        taskId: task.id,
+        sessionId,
+        cwd: workspace.cwd,
+        taskContext,
+        agentClient,
+        agentEnv,
+        systemPromptFile,
+        onCleanup: () => {
+          workspace.cleanup();
+          cleanupGnupgHome(gnupgHome);
+        },
+        model: agentDetails.model ?? undefined,
+      });
 
-    return true;
+      return true;
+    } catch (err) {
+      workspace.cleanup();
+      cleanupGnupgHome(gnupgHome);
+      await abort();
+      throw err;
+    }
   }
 
   /** Resume a saved session (rate-limited or rejected). */
@@ -228,7 +238,10 @@ export class TaskRunner {
         agentClient,
         agentEnv,
         resume: true,
-        onCleanup: () => { workspace.cleanup(); cleanupGnupgHome(gnupgHome); },
+        onCleanup: () => {
+          workspace.cleanup();
+          cleanupGnupgHome(gnupgHome);
+        },
         model: session.model,
       });
     } catch {
@@ -287,12 +300,20 @@ function setupGnupgHome(armoredPrivateKey: string): string {
       stdio: "pipe",
     });
   } finally {
-    try { rmSync(keyFile); } catch { /* best-effort */ }
+    try {
+      rmSync(keyFile);
+    } catch {
+      /* best-effort */
+    }
   }
   return gnupgHome;
 }
 
 function cleanupGnupgHome(gnupgHome: string | null): void {
   if (!gnupgHome) return;
-  try { rmSync(gnupgHome, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try {
+    rmSync(gnupgHome, { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
 }
