@@ -77,7 +77,7 @@ api.on(["GET", "POST"], "/api/auth/**", async (c) => {
   }
 });
 
-api.get("/api/ping", (c) => c.json({ pong: true }));
+api.get("/api/ping", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
 // ─── Public Share Routes (no auth required) ───
 
