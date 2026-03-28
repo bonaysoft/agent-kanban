@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /share/
+Disallow: /api/
+
+Sitemap: https://agent-kanban.dev/sitemap.xml
