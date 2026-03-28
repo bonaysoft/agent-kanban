@@ -30,6 +30,7 @@
     "kysely-d1": "^0.4.0",
     "lucide-react": "^0.577.0",
     "nanoid": "^5.0.0",
+    "openpgp": "^6.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
