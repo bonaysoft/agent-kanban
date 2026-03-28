@@ -155,10 +155,32 @@ export function normalizeRuntime(runtime: string): AgentRuntime {
   return RUNTIME_ALIASES[runtime] ?? (runtime as AgentRuntime);
 }
 
+// ─── Agent Username ───
+
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,37}[a-z0-9]$/;
+
+/** Returns true if the username matches GitHub-style rules: lowercase alphanumeric + hyphens, 3–39 chars, no leading/trailing/consecutive hyphens. */
+export function isValidUsername(username: string): boolean {
+  return USERNAME_RE.test(username) && !username.includes("--");
+}
+
+/** Derives a valid username from a human-readable name. */
+export function deriveUsername(name: string): string {
+  const sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 39);
+  if (!sanitized) return "agent";
+  if (sanitized.length < 3) return sanitized.padEnd(3, "0");
+  return sanitized;
+}
+
 export interface Agent {
   id: string;
   owner_id: string;
   name: string;
+  username: string;
   bio: string | null;
   soul: string | null;
   role: string | null;
@@ -183,6 +205,7 @@ export interface AgentWithActivity extends Agent {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   cost_micro_usd: number;
+  email: string;
 }
 
 // ─── Agent Session ───
@@ -268,6 +291,7 @@ export interface CompleteTaskInput {
 
 export interface CreateAgentInput {
   name: string;
+  username?: string;
   bio?: string;
   soul?: string;
   role?: string;

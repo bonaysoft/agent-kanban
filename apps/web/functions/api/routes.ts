@@ -277,6 +277,7 @@ api.get("/api/agents/:id", async (c) => {
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{
     name: string;
+    username?: string;
     bio?: string;
     soul?: string;
     role?: string;
