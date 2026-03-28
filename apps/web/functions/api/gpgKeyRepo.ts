@@ -17,7 +17,7 @@ interface GpgKeyRow extends GpgKey {
 async function generateRootKey(ownerEmail: string): Promise<{ armoredPrivateKey: string; armoredPublicKey: string; fingerprint: string }> {
   const { privateKey, publicKey } = await openpgp.generateKey({
     type: "ecc",
-    curve: "ed25519",
+    curve: "ed25519Legacy",
     userIDs: [{ name: "Agent Kanban", email: ownerEmail }],
     format: "armored",
   });
