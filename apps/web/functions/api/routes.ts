@@ -187,8 +187,10 @@ api.get("/agents/:file{.+\\.gpg$}", async (c) => {
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   const armoredPublicKey = await getRootPublicKey(c.env.DB, agent.owner_id);
   if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG key not found" });
+  const accept = c.req.header("Accept") || "";
+  const contentType = accept.includes("text/html") ? "text/plain" : "application/pgp-keys";
   return new Response(armoredPublicKey, {
-    headers: { "Content-Type": "application/pgp-keys", "Cache-Control": "public, max-age=3600" },
+    headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=3600" },
   });
 });
 

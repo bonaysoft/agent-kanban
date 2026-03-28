@@ -22,6 +22,16 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8788",
       },
+      "/.well-known": {
+        target: "http://localhost:8788",
+      },
+      "/agents": {
+        target: "http://localhost:8788",
+        bypass(req) {
+          // Only proxy .gpg requests, let SPA handle the rest
+          if (!req.url?.endsWith(".gpg")) return req.url;
+        },
+      },
     },
   },
 });
