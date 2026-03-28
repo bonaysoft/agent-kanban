@@ -55,7 +55,7 @@ export async function addSubkey(db: D1, ownerId: string): Promise<{ fingerprint:
   if (!row) return null;
 
   const privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
-  const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519", sign: true });
+  const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519Legacy", sign: true });
   const armoredPrivate = updatedKey.armor();
   const armoredPublic = updatedKey.toPublic().armor();
 

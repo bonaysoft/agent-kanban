@@ -104,4 +104,8 @@ export const api = {
   admin: {
     getStats: () => request<any>("GET", "/admin/stats"),
   },
+  github: {
+    syncGpg: () => request<{ ok: boolean }>("POST", "/github/sync-gpg"),
+    syncEmails: () => request<{ ok: boolean }>("POST", "/github/sync-emails"),
+  },
 };

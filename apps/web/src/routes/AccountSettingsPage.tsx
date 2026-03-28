@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
 import { useBoards, useDeleteBoard, useUpdateBoard } from "../hooks/useBoard";
+import { api } from "../lib/api";
+import { authClient } from "../lib/auth-client";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 
 function BoardItem({ board }: { board: any }) {
@@ -116,6 +118,93 @@ function BoardItem({ board }: { board: any }) {
   );
 }
 
+function GitHubSection() {
+  const [accounts, setAccounts] = useState<Array<{ providerId: string }>>([]);
+  const [syncing, setSyncing] = useState<"gpg" | "emails" | null>(null);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    authClient.listAccounts().then((res: any) => {
+      if (res.data) setAccounts(res.data);
+    });
+  }, []);
+
+  const isConnected = accounts.some((a) => a.providerId === "github");
+
+  async function handleConnect() {
+    await authClient.signIn.social({ provider: "github", callbackURL: "/settings" });
+  }
+
+  async function handleSyncGpg() {
+    setSyncing("gpg");
+    setSyncMsg(null);
+    try {
+      await api.github.syncGpg();
+      setSyncMsg("GPG key synced to GitHub.");
+    } catch (err: any) {
+      setSyncMsg(`Error: ${err.message}`);
+    } finally {
+      setSyncing(null);
+    }
+  }
+
+  async function handleSyncEmails() {
+    setSyncing("emails");
+    setSyncMsg(null);
+    try {
+      await api.github.syncEmails();
+      setSyncMsg("Agent emails synced to GitHub.");
+    } catch (err: any) {
+      setSyncMsg(`Error: ${err.message}`);
+    } finally {
+      setSyncing(null);
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">GitHub</h2>
+      <div className="border border-border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-content-primary font-medium">GitHub Account</p>
+            <p className="text-xs text-content-tertiary mt-0.5">
+              {isConnected ? "Connected — GPG keys and agent emails can be synced." : "Not connected"}
+            </p>
+          </div>
+          {!isConnected && (
+            <button onClick={handleConnect} className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90">
+              Connect GitHub
+            </button>
+          )}
+          {isConnected && <span className="text-xs text-green-500 font-medium">Connected</span>}
+        </div>
+
+        {isConnected && (
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSyncGpg}
+              disabled={syncing !== null}
+              className="text-xs px-3 py-1.5 rounded-md border border-border text-content-secondary hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+            >
+              {syncing === "gpg" ? "Syncing…" : "Sync GPG Key"}
+            </button>
+            <button
+              onClick={handleSyncEmails}
+              disabled={syncing !== null}
+              className="text-xs px-3 py-1.5 rounded-md border border-border text-content-secondary hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+            >
+              {syncing === "emails" ? "Syncing…" : "Sync Emails"}
+            </button>
+          </div>
+        )}
+
+        {syncMsg && <p className={`text-xs ${syncMsg.startsWith("Error") ? "text-error" : "text-content-secondary"}`}>{syncMsg}</p>}
+      </div>
+    </section>
+  );
+}
+
 export function AccountSettingsPage() {
   const [currentTheme, setCurrentTheme] = useState<Theme>(getTheme());
   const { boards } = useBoards();
@@ -150,6 +239,9 @@ export function AccountSettingsPage() {
             ))}
           </div>
         </section>
+
+        {/* GitHub */}
+        <GitHubSection />
 
         {/* Boards */}
         <section className="space-y-3">
