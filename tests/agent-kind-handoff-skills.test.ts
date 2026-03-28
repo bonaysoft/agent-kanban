@@ -124,7 +124,7 @@ describe("create agent: --skills flag", () => {
   });
 });
 
-describe("update agent: --kind, --handoff-to, --skills flags", () => {
+describe("update agent: --handoff-to, --skills flags", () => {
   let agentId: string;
 
   beforeAll(async () => {
@@ -134,21 +134,6 @@ describe("update agent: --kind, --handoff-to, --skills flags", () => {
       runtime: "claude",
     });
     agentId = agent.id;
-  });
-
-  it("updates kind from worker to leader", async () => {
-    const { updateAgent } = await import("../apps/web/functions/api/agentRepo");
-    const updated = await updateAgent(db, agentId, { kind: "leader" });
-
-    expect(updated).toBeTruthy();
-    expect(updated!.kind).toBe("leader");
-  });
-
-  it("kind update persists through getAgent", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
-    const fetched = await getAgent(db, agentId, "owner-update");
-
-    expect(fetched!.kind).toBe("leader");
   });
 
   it("updates handoff_to via updateAgent", async () => {
@@ -167,23 +152,14 @@ describe("update agent: --kind, --handoff-to, --skills flags", () => {
     expect(updated!.skills).toEqual(["agent-kanban"]);
   });
 
-  it("updates kind back to worker", async () => {
-    const { updateAgent } = await import("../apps/web/functions/api/agentRepo");
-    const updated = await updateAgent(db, agentId, { kind: "worker" });
-
-    expect(updated!.kind).toBe("worker");
-  });
-
-  it("all three fields persist together", async () => {
+  it("handoff_to and skills persist together", async () => {
     const { updateAgent, getAgent } = await import("../apps/web/functions/api/agentRepo");
     await updateAgent(db, agentId, {
-      kind: "leader",
       handoff_to: ["final-leader"],
       skills: ["agent-kanban", "browse"],
     });
 
     const fetched = await getAgent(db, agentId, "owner-update");
-    expect(fetched!.kind).toBe("leader");
     expect(fetched!.handoff_to).toEqual(["final-leader"]);
     expect(fetched!.skills).toEqual(["agent-kanban", "browse"]);
   });
