@@ -17,7 +17,7 @@ interface GpgKeyRow extends GpgKey {
 async function generateRootKey(ownerEmail: string): Promise<{ armoredPrivateKey: string; armoredPublicKey: string; fingerprint: string }> {
   const { privateKey, publicKey } = await openpgp.generateKey({
     type: "ecc",
-    curve: "ed25519",
+    curve: "ed25519Legacy",
     userIDs: [{ name: "Agent Kanban", email: ownerEmail }],
     format: "armored",
   });
@@ -55,7 +55,7 @@ export async function addSubkey(db: D1, ownerId: string): Promise<{ fingerprint:
   if (!row) return null;
 
   const privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
-  const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519", sign: true });
+  const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519Legacy", sign: true });
   const armoredPrivate = updatedKey.armor();
   const armoredPublic = updatedKey.toPublic().armor();
 

@@ -7,7 +7,8 @@ import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
-import { getRootPublicKey } from "./gpgKeyRepo";
+import { addAgentEmail, getGithubToken, syncGpgKey } from "./githubService";
+import { addSubkey, getRootPublicKey } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -295,7 +296,12 @@ api.post("/api/agents", async (c) => {
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
-  const agent = await createAgent(c.env.DB, c.get("ownerId"), body as CreateAgentInput);
+  const ownerId = c.get("ownerId");
+  const agent = await createAgent(c.env.DB, ownerId, body as CreateAgentInput);
+
+  // Add GPG subkey for this agent, then sync to GitHub (best-effort, silent on failure)
+  await syncAgentToGithub(c.env, ownerId, agent.id);
+
   return c.json(agent, 201);
 });
 
@@ -637,4 +643,55 @@ api.get("/api/gpg/public-key", async (c) => {
   return c.json({ armored_public_key: armoredPublicKey });
 });
 
+// ─── GitHub Integration ───
+
+api.post("/api/github/sync-gpg", async (c) => {
+  const ownerId = c.get("ownerId");
+  const token = await getGithubToken(c.env.DB, ownerId);
+  if (!token) throw new HTTPException(400, { message: "GitHub account not connected" });
+
+  const row = await c.env.DB.prepare("SELECT armored_public_key, fingerprint FROM gpg_keys WHERE owner_id = ?")
+    .bind(ownerId)
+    .first<{ armored_public_key: string; fingerprint: string }>();
+  if (!row) throw new HTTPException(404, { message: "GPG root key not found" });
+
+  await syncGpgKey(token, row.armored_public_key, row.fingerprint);
+  return c.json({ ok: true });
+});
+
+api.post("/api/github/sync-emails", async (c) => {
+  const ownerId = c.get("ownerId");
+  const token = await getGithubToken(c.env.DB, ownerId);
+  if (!token) throw new HTTPException(400, { message: "GitHub account not connected" });
+
+  const agents = await listAgents(c.env.DB, ownerId);
+  await Promise.all(agents.map((a) => addAgentEmail(token, agentEmail(a.id))));
+  return c.json({ ok: true });
+});
+
 export { api };
+
+// ─── Helpers ───
+
+function agentEmail(agentId: string): string {
+  return `${agentId}@mails.agent-kanban.dev`;
+}
+
+async function syncAgentToGithub(env: Env, ownerId: string, agentId: string): Promise<void> {
+  try {
+    await addSubkey(env.DB, ownerId);
+
+    const token = await getGithubToken(env.DB, ownerId);
+    if (!token) return;
+
+    const row = await env.DB.prepare("SELECT armored_public_key, fingerprint FROM gpg_keys WHERE owner_id = ?")
+      .bind(ownerId)
+      .first<{ armored_public_key: string; fingerprint: string }>();
+    if (!row) return;
+
+    await syncGpgKey(token, row.armored_public_key, row.fingerprint);
+    await addAgentEmail(token, agentEmail(agentId));
+  } catch (err: any) {
+    logger.warn(`github sync failed for agent ${agentId}: ${err.message}`);
+  }
+}

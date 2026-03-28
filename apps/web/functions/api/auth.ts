@@ -64,6 +64,10 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // GPG keys — user only
   { method: "GET", pattern: /^\/api\/gpg\/public-key$/, rule: { allow: ["user"] } },
 
+  // GitHub integration — user only
+  { method: "POST", pattern: /^\/api\/github\/sync-gpg$/, rule: { allow: ["user"] } },
+  { method: "POST", pattern: /^\/api\/github\/sync-emails$/, rule: { allow: ["user"] } },
+
   // Admin — user identity only (Better Auth plugin enforces role internally)
   { method: "POST", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
   { method: "GET", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },
