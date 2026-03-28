@@ -14,6 +14,9 @@ export interface SavedSession {
   runtime: AgentRuntime;
   model?: string;
   status: SessionStatus;
+  gpgSubkeyId?: string | null;
+  agentUsername?: string;
+  agentName?: string;
 }
 
 function readAll(): SavedSession[] {

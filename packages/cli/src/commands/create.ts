@@ -1,4 +1,4 @@
-import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
+import { deriveUsername, fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
@@ -101,8 +101,10 @@ async function createAgent(opts: Record<string, string>) {
       console.error("Template has no runtime. Pass --runtime explicitly.");
       process.exit(1);
     }
+    const name = opts.name || template.name;
     body = {
-      name: opts.name || template.name,
+      name,
+      username: opts.username || deriveUsername(name),
       bio: opts.bio || template.bio,
       soul: opts.soul || template.soul,
       role: opts.role || template.role,
@@ -118,7 +120,7 @@ async function createAgent(opts: Record<string, string>) {
       process.exit(1);
     }
     const runtime = opts.runtime || detectRuntime();
-    body = { name: opts.name, runtime };
+    body = { name: opts.name, username: opts.username || deriveUsername(opts.name), runtime };
     if (opts.bio) body.bio = opts.bio;
     if (opts.soul) body.soul = opts.soul;
     if (opts.role) body.role = opts.role;
@@ -182,6 +184,7 @@ export function registerCreateCommand(program: Command) {
     .option("--depends-on <ids>", "Comma-separated dependency task IDs (task)")
     .option("--scheduled-at <time>", "ISO 8601 time to schedule task (task)")
     // agent flags
+    .option("--username <username>", "Agent username (agent)")
     .option("--template <slug>", "Agent template slug (agent)")
     .option("--bio <bio>", "Agent bio (agent)")
     .option("--soul <soul>", "Agent soul — persistent behavior instructions (agent)")

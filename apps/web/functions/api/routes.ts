@@ -1,14 +1,14 @@
 import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
+import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, setAgentGpgSubkeyId, updateAgent } from "./agentRepo";
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { addAgentEmail, getGithubToken, syncGpgKey } from "./githubService";
-import { addSubkey, getRootPublicKey } from "./gpgKeyRepo";
+import { addSubkey, getArmoredPrivateKey, getRootPublicKey } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -279,6 +279,7 @@ api.get("/api/agents/:id", async (c) => {
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{
     name: string;
+    username?: string;
     bio?: string;
     soul?: string;
     role?: string;
@@ -637,6 +638,16 @@ api.delete("/api/repositories/:id", async (c) => {
 
 // ─── GPG Keys ───
 
+api.get("/api/agents/:id/gpg-key", async (c) => {
+  const agent = await c.env.DB.prepare("SELECT gpg_subkey_id FROM agents WHERE id = ? AND owner_id = ?")
+    .bind(c.req.param("id"), c.get("ownerId"))
+    .first<{ gpg_subkey_id: string | null }>();
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  const armoredPrivateKey = await getArmoredPrivateKey(c.env.DB, c.get("ownerId"));
+  if (!armoredPrivateKey) throw new HTTPException(404, { message: "GPG key not found" });
+  return c.json({ armored_private_key: armoredPrivateKey, gpg_subkey_id: agent.gpg_subkey_id });
+});
+
 api.get("/api/gpg/public-key", async (c) => {
   const armoredPublicKey = await getRootPublicKey(c.env.DB, c.get("ownerId"));
   if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG root key not found" });
@@ -679,7 +690,10 @@ function agentEmail(agentId: string): string {
 
 async function syncAgentToGithub(env: Env, ownerId: string, agentId: string): Promise<void> {
   try {
-    await addSubkey(env.DB, ownerId);
+    const subkey = await addSubkey(env.DB, ownerId);
+    if (subkey) {
+      await setAgentGpgSubkeyId(env.DB, agentId, subkey.keyId.toUpperCase());
+    }
 
     const token = await getGithubToken(env.DB, ownerId);
     if (!token) return;

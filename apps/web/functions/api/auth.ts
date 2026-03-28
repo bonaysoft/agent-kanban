@@ -61,7 +61,8 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Sessions — machine reopen
   { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/reopen$/, rule: { allow: ["machine"] } },
 
-  // GPG keys — user only
+  // GPG keys — user only (public key), machine for agent private key
+  { method: "GET", pattern: /^\/api\/agents\/[^/]+\/gpg-key$/, rule: { allow: ["machine"] } },
   { method: "GET", pattern: /^\/api\/gpg\/public-key$/, rule: { allow: ["user"] } },
 
   // GitHub integration — user only

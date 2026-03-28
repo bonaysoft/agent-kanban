@@ -96,6 +96,9 @@ export abstract class ApiClient {
   getAgent(agentId: string) {
     return this.request("GET", `/api/agents/${agentId}`);
   }
+  getAgentGpgKey(agentId: string) {
+    return this.request<{ armored_private_key: string; gpg_subkey_id: string | null }>("GET", `/api/agents/${agentId}/gpg-key`);
+  }
   updateAgent(agentId: string, body: Record<string, unknown>) {
     return this.request("PATCH", `/api/agents/${agentId}`, body);
   }
@@ -132,6 +135,7 @@ export abstract class ApiClient {
   }
   createAgent(input: {
     name: string;
+    username?: string;
     bio?: string;
     soul?: string;
     role?: string;
