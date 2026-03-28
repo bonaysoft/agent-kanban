@@ -16,7 +16,7 @@ import { ActivityLog } from "./ActivityLog";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
-import { Field, FieldLabel } from "./TaskDetailFields";
+import { Field, FieldLabel, formatRelative } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
@@ -176,6 +176,18 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
           <span className="text-sm font-medium text-accent">{TASK_STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <Field label="Assigned to" value={agentDisplay} />
+        {task.scheduled_at && (
+          <Field
+            label="Scheduled"
+            value={
+              <span className="font-mono text-[13px]" title={dayjs(task.scheduled_at).format("YYYY-MM-DD HH:mm:ss Z")}>
+                {new Date(task.scheduled_at).getTime() > Date.now()
+                  ? dayjs(task.scheduled_at).format("MM-DD HH:mm")
+                  : formatRelative(task.scheduled_at)}
+              </span>
+            }
+          />
+        )}
         <Field
           label="Duration"
           value={

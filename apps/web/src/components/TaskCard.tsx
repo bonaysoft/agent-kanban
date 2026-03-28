@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 import { agentColor } from "../lib/agentIdentity";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { Badge } from "./ui/badge";
@@ -63,6 +65,11 @@ export function TaskCard({ task, onClick, onAgentClick, isNew }: TaskCardProps) 
           <Badge variant="secondary" className={`text-[11px] font-mono border-none ${priorityColors[task.priority]}`}>
             {task.priority}
           </Badge>
+        )}
+        {task.scheduled_at && new Date(task.scheduled_at).getTime() > Date.now() && (
+          <span className="font-mono text-[11px] text-content-tertiary" title={task.scheduled_at}>
+            🕐 {dayjs(task.scheduled_at).format("MM-DD HH:mm")}
+          </span>
         )}
       </div>
 
