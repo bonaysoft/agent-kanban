@@ -103,6 +103,7 @@ async function createAgent(opts: Record<string, string>) {
     }
     body = {
       name: opts.name || template.name,
+      username: opts.username,
       bio: opts.bio || template.bio,
       soul: opts.soul || template.soul,
       role: opts.role || template.role,
@@ -119,6 +120,7 @@ async function createAgent(opts: Record<string, string>) {
     }
     const runtime = opts.runtime || detectRuntime();
     body = { name: opts.name, runtime };
+    if (opts.username) body.username = opts.username;
     if (opts.bio) body.bio = opts.bio;
     if (opts.soul) body.soul = opts.soul;
     if (opts.role) body.role = opts.role;
@@ -183,6 +185,7 @@ export function registerCreateCommand(program: Command) {
     .option("--scheduled-at <time>", "ISO 8601 time to schedule task (task)")
     // agent flags
     .option("--template <slug>", "Agent template slug (agent)")
+    .option("--username <username>", "Agent username (agent)")
     .option("--bio <bio>", "Agent bio (agent)")
     .option("--soul <soul>", "Agent soul — persistent behavior instructions (agent)")
     .option("--role <role>", "Agent role (agent)")

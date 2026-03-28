@@ -1,4 +1,4 @@
-import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, isValidUsername, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, updateAgent } from "./agentRepo";
@@ -278,6 +278,7 @@ api.get("/api/agents/:id", async (c) => {
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{
     name: string;
+    username?: string;
     bio?: string;
     soul?: string;
     role?: string;
@@ -294,6 +295,9 @@ api.post("/api/agents", async (c) => {
   }
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
+  }
+  if (body.username !== undefined && !isValidUsername(body.username)) {
+    throw new HTTPException(400, { message: "Invalid username: must be 1-40 lowercase alphanumeric characters or hyphens" });
   }
   const agent = await createAgent(c.env.DB, c.get("ownerId"), body as CreateAgentInput);
   return c.json(agent, 201);

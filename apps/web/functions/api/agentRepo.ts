@@ -1,5 +1,13 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
-import { type AgentRuntime, BUILTIN_TEMPLATES, computeFingerprint, computeKeyId, generateKeypair } from "@agent-kanban/shared";
+import {
+  type AgentRuntime,
+  BUILTIN_TEMPLATES,
+  computeFingerprint,
+  computeKeyId,
+  deriveUsername,
+  generateKeypair,
+  isValidUsername,
+} from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
@@ -12,15 +20,27 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
   const skillsJson = input.skills ? JSON.stringify(input.skills) : null;
   const handoffJson = input.handoff_to ? JSON.stringify(input.handoff_to) : null;
 
+  const username = input.username ?? deriveUsername(input.name, id.slice(0, 8));
+
+  if (!isValidUsername(username)) {
+    throw new Error(`Invalid username: "${username}". Must be 1-40 lowercase alphanumeric characters or hyphens.`);
+  }
+
+  const existing = await db.prepare("SELECT id FROM agents WHERE owner_id = ? AND username = ?").bind(ownerId, username).first();
+  if (existing) {
+    throw new Error(`Username "${username}" is already taken.`);
+  }
+
   await db
     .prepare(`
-    INSERT INTO agents (id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, owner_id, name, username, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .bind(
       id,
       ownerId,
       input.name,
+      username,
       input.bio ?? null,
       input.soul ?? null,
       input.role ?? null,
@@ -42,6 +62,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     id,
     owner_id: ownerId,
     name: input.name,
+    username,
     bio: input.bio ?? null,
     soul: input.soul ?? null,
     role: input.role ?? null,
@@ -71,7 +92,7 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
 export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
   const result = await db
     .prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.name, a.username, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
@@ -87,13 +108,13 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
   `)
     .bind(ownerId)
     .all<AgentWithActivity>();
-  return result.results.map(parseAgent);
+  return result.results.map((r) => ({ ...parseAgent(r), email: `${r.username}+${r.id.slice(0, 8)}@agent-kanban.dev` }));
 }
 
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
   return db
     .prepare(`
-    SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
+    SELECT a.id, a.owner_id, a.name, a.username, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
@@ -108,7 +129,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
   `)
     .bind(agentId, ownerId)
     .first<AgentWithActivity>()
-    .then((r) => (r ? parseAgent(r) : null));
+    .then((r) => (r ? { ...parseAgent(r), email: `${r.username}+${r.id.slice(0, 8)}@agent-kanban.dev` } : null));
 }
 
 export async function updateAgent(

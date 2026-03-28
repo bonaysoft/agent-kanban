@@ -138,6 +138,22 @@ export type AgentStatus = "online" | "offline";
 export type AgentKind = "worker" | "leader";
 export type AgentRuntime = "claude" | "codex" | "gemini";
 
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$/;
+
+export function isValidUsername(value: string): boolean {
+  return USERNAME_RE.test(value);
+}
+
+export function deriveUsername(name: string, idPrefix: string): string {
+  const derived = name
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return derived || `agent-${idPrefix}`;
+}
+
 export const AGENT_RUNTIMES: readonly AgentRuntime[] = ["claude", "codex", "gemini"] as const;
 
 export const RUNTIME_LABELS: Record<AgentRuntime, string> = {
@@ -159,6 +175,7 @@ export interface Agent {
   id: string;
   owner_id: string;
   name: string;
+  username: string;
   bio: string | null;
   soul: string | null;
   role: string | null;
@@ -183,6 +200,7 @@ export interface AgentWithActivity extends Agent {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   cost_micro_usd: number;
+  email: string;
 }
 
 // ─── Agent Session ───
@@ -268,6 +286,7 @@ export interface CompleteTaskInput {
 
 export interface CreateAgentInput {
   name: string;
+  username?: string;
   bio?: string;
   soul?: string;
   role?: string;
