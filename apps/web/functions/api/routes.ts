@@ -8,7 +8,7 @@ import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { addAgentEmail, getGithubToken, syncGpgKey } from "./githubService";
-import { addSubkey, getArmoredPrivateKey, getRootPublicKey } from "./gpgKeyRepo";
+import { addSubkey, getArmoredPrivateKey, getOrCreateRootKey, getRootPublicKey } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -690,6 +690,8 @@ function agentEmail(agentId: string): string {
 
 async function syncAgentToGithub(env: Env, ownerId: string, agentId: string): Promise<void> {
   try {
+    const owner = await env.DB.prepare("SELECT email FROM user WHERE id = ?").bind(ownerId).first<{ email: string }>();
+    await getOrCreateRootKey(env.DB, ownerId, owner?.email ?? "noreply@agent-kanban.dev");
     const subkey = await addSubkey(env.DB, ownerId);
     if (subkey) {
       await setAgentGpgSubkeyId(env.DB, agentId, subkey.keyId.toUpperCase());
