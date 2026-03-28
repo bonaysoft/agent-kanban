@@ -10,10 +10,10 @@ interface GithubGpgKey {
 
 export async function getGithubToken(db: D1, userId: string): Promise<string | null> {
   const row = await db
-    .prepare("SELECT access_token FROM account WHERE user_id = ? AND provider_id = 'github'")
+    .prepare("SELECT accessToken FROM account WHERE userId = ? AND providerId = 'github'")
     .bind(userId)
-    .first<{ access_token: string }>();
-  return row?.access_token ?? null;
+    .first<{ accessToken: string }>();
+  return row?.accessToken ?? null;
 }
 
 export async function syncGpgKey(token: string, armoredPublicKey: string, fingerprint: string): Promise<void> {
