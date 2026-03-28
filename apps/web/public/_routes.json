@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "include": ["/api/*", "/share/*"],
+  "include": ["/api/*", "/share/*", "/agents/*.gpg", "/.well-known/*"],
   "exclude": []
 }

@@ -31,15 +31,15 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
     rule: { allow: ["machine", "agent:worker", "agent:leader"], capability: "agent:usage" },
   },
 
-  // Tasks — CRUD
-  { method: "POST", pattern: /^\/api\/tasks$/, rule: { allow: ["agent:worker", "agent:leader"] } },
-  { method: "PATCH", pattern: /^\/api\/tasks\/[^/]+$/, rule: { allow: ["agent:worker", "agent:leader"] } },
-  { method: "DELETE", pattern: /^\/api\/tasks\/[^/]+$/, rule: { allow: ["agent:worker", "agent:leader"] } },
+  // Tasks — CRUD (machine creates/assigns via CLI, agents operate)
+  { method: "POST", pattern: /^\/api\/tasks$/, rule: { allow: ["machine", "agent:worker", "agent:leader"] } },
+  { method: "PATCH", pattern: /^\/api\/tasks\/[^/]+$/, rule: { allow: ["machine", "agent:worker", "agent:leader"] } },
+  { method: "DELETE", pattern: /^\/api\/tasks\/[^/]+$/, rule: { allow: ["machine", "agent:worker", "agent:leader"] } },
 
   // Task lifecycle — agents operate, machine manages
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/claim$/, rule: { allow: ["agent:worker"], capability: "task:claim" } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/review$/, rule: { allow: ["agent:worker"], capability: "task:review" } },
-  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["agent:leader"] } },
+  { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/assign$/, rule: { allow: ["machine", "agent:leader"] } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/release$/, rule: { allow: ["machine"] } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/complete$/, rule: { allow: ["user", "machine", "agent:leader"], capability: "task:complete" } },
   { method: "POST", pattern: /^\/api\/tasks\/[^/]+\/cancel$/, rule: { allow: ["user", "machine", "agent:leader"], capability: "task:cancel" } },
