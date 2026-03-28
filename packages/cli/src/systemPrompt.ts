@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentRuntime, BoardType } from "@agent-kanban/shared";
 
 export interface AgentInfo {
+  id: string;
   name: string;
   role: string | null;
   soul: string | null;
@@ -41,6 +42,10 @@ ${handoffSection}
 
 Name: ${agent.name}
 Role: ${agent.role ?? "general"}
+Profile: https://agent-kanban.dev/agents/${agent.id}
+
+Every commit message must end with this trailer (after a blank line):
+Agent-Profile: https://agent-kanban.dev/agents/${agent.id}
 
 ${agent.soul ?? ""}
 `;
@@ -73,7 +78,8 @@ const DEV_RULES = `\
 - Always create a PR and submit via \`task review --pr-url\` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
 - If a task is too large, break it into subtasks via \`ak task create --parent <task-id>\`.
-- **Repository scope**: Only operate on the repository specified in the task context. Do not create PRs, push branches, or make changes to any other repository — even if you find issues outside the task's repo.`;
+- **Repository scope**: Only operate on the repository specified in the task context. Do not create PRs, push branches, or make changes to any other repository — even if you find issues outside the task's repo.
+- **Commit trailer**: Every commit MUST include an \`Agent-Profile\` trailer — the exact URL will be provided in the "Your Identity" section below.`;
 
 const OPS_RULES = `\
 - Always claim before working. **If claim fails, stop immediately** — do not perform any actions.
