@@ -52,6 +52,7 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     skills: input.skills ?? null,
     public_key: publicKeyBase64,
     fingerprint,
+    gpg_subkey_id: null,
     builtin: builtin ? 1 : 0,
     created_at: now,
     updated_at: now,
@@ -72,7 +73,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
   const result = await db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
-      a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      a.public_key, a.fingerprint, a.gpg_subkey_id, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
@@ -94,7 +95,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
   return db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
-      a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      a.public_key, a.fingerprint, a.gpg_subkey_id, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
@@ -159,4 +160,8 @@ export async function getAgentLogs(db: D1, agentId: string): Promise<any[]> {
 export async function getAgentPrivateKey(db: D1, agentId: string): Promise<JsonWebKey | null> {
   const row = await db.prepare("SELECT private_key FROM agents WHERE id = ?").bind(agentId).first<{ private_key: string }>();
   return row ? JSON.parse(row.private_key) : null;
+}
+
+export async function setAgentGpgSubkeyId(db: D1, agentId: string, gpgSubkeyId: string): Promise<void> {
+  await db.prepare("UPDATE agents SET gpg_subkey_id = ? WHERE id = ?").bind(gpgSubkeyId, agentId).run();
 }

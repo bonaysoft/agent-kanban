@@ -169,6 +169,7 @@ export interface Agent {
   skills: string[] | null;
   public_key: string;
   fingerprint: string;
+  gpg_subkey_id: string | null;
   builtin: number;
   created_at: string;
   updated_at: string;

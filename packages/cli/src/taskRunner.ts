@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BoardType } from "@agent-kanban/shared";
 import { AgentClient, ApiError, type MachineClient } from "./client.js";
 import { getCredentials } from "./config.js";
@@ -11,6 +15,16 @@ import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemP
 import { createRepoWorkspace, createTempWorkspace, restoreWorkspace, type Workspace } from "./workspace.js";
 
 const logger = createLogger("runner");
+
+interface BuildEnvOpts {
+  agentId: string;
+  sessionId: string;
+  privateKeyJwk: JsonWebKey;
+  agentName: string;
+  agentUsername: string;
+  gpgSubkeyId: string | null;
+  gnupgHome: string | null;
+}
 
 export class TaskRunner {
   constructor(
@@ -38,7 +52,7 @@ export class TaskRunner {
 
     const abort = () => this.releaseAndClose(task.id, agentId, sessionId);
 
-    const agentDetails = (await this.client.getAgent(agentId)) as AgentInfo | null;
+    const agentDetails = (await this.client.getAgent(agentId)) as (AgentInfo & { gpg_subkey_id?: string | null }) | null;
     if (!agentDetails) {
       logger.error(`Agent ${agentId} not found, releasing task ${task.id}`);
       await abort();
@@ -55,12 +69,25 @@ export class TaskRunner {
       return false;
     }
 
+    // ---- GPG setup ----
+    const gpgSubkeyId = agentDetails.gpg_subkey_id ?? null;
+    let gnupgHome: string | null = null;
+    if (gpgSubkeyId) {
+      try {
+        const gpgData = await this.client.getAgentGpgKey(agentId);
+        gnupgHome = setupGnupgHome(gpgData.armored_private_key);
+      } catch (err: any) {
+        logger.warn(`GPG setup failed for agent ${agentId}: ${err.message} — proceeding without signing`);
+      }
+    }
+
     const providerName = normalizeRuntime(agentDetails.runtime);
     const provider = getProvider(providerName);
 
     const agentSkills = agentDetails.skills ?? [];
     if (!ensureSkills(workspace.cwd, agentSkills)) {
       logger.error(`Skill install failed for task ${task.id}, releasing task`);
+      cleanupGnupgHome(gnupgHome);
       workspace.cleanup();
       await abort();
       return false;
@@ -68,7 +95,15 @@ export class TaskRunner {
 
     const apiUrl = getCredentials().apiUrl;
     const agentClient = new AgentClient(apiUrl, agentId, sessionId, privateKey);
-    const agentEnv = this.buildAgentEnv(agentId, sessionId, privKeyJwk);
+    const agentEnv = this.buildAgentEnv({
+      agentId,
+      sessionId,
+      privateKeyJwk: privKeyJwk,
+      agentName: agentDetails.name,
+      agentUsername: agentId,
+      gpgSubkeyId,
+      gnupgHome,
+    });
     const systemPromptFile = writePromptFile(sessionId, generateSystemPrompt(agentDetails, boardType));
 
     const repos = await this.client.listRepositories();
@@ -95,6 +130,9 @@ export class TaskRunner {
       runtime: providerName,
       model: agentDetails.model ?? undefined,
       status: "active",
+      gpgSubkeyId,
+      agentUsername: agentId,
+      agentName: agentDetails.name,
     });
 
     await this.pm.spawnAgent({
@@ -106,7 +144,10 @@ export class TaskRunner {
       agentClient,
       agentEnv,
       systemPromptFile,
-      onCleanup: () => workspace.cleanup(),
+      onCleanup: () => {
+        workspace.cleanup();
+        cleanupGnupgHome(gnupgHome);
+      },
       model: agentDetails.model ?? undefined,
     });
 
@@ -155,10 +196,29 @@ export class TaskRunner {
       return false;
     }
 
+    // Re-fetch GPG key from API (not persisted to disk) and recreate GNUPGHOME.
+    let gnupgHome: string | null = null;
+    if (session.gpgSubkeyId) {
+      try {
+        const gpgData = await this.client.getAgentGpgKey(session.agentId);
+        gnupgHome = setupGnupgHome(gpgData.armored_private_key);
+      } catch (err: any) {
+        logger.warn(`GPG resume setup failed for task ${session.taskId}: ${err.message} — proceeding without signing`);
+      }
+    }
+
     const provider = getProvider(normalizeRuntime(session.runtime));
     const apiUrl = getCredentials().apiUrl;
     const agentClient = new AgentClient(apiUrl, session.agentId, session.sessionId, privateKey);
-    const agentEnv = this.buildAgentEnv(session.agentId, session.sessionId, session.privateKeyJwk);
+    const agentEnv = this.buildAgentEnv({
+      agentId: session.agentId,
+      sessionId: session.sessionId,
+      privateKeyJwk: session.privateKeyJwk,
+      agentName: session.agentName,
+      agentUsername: session.agentUsername,
+      gpgSubkeyId: session.gpgSubkeyId,
+      gnupgHome,
+    });
 
     logger.info(`Resuming task ${session.taskId} (session=${session.sessionId.slice(0, 8)})`);
 
@@ -172,11 +232,15 @@ export class TaskRunner {
         agentClient,
         agentEnv,
         resume: true,
-        onCleanup: () => workspace.cleanup(),
+        onCleanup: () => {
+          workspace.cleanup();
+          cleanupGnupgHome(gnupgHome);
+        },
         model: session.model,
       });
     } catch {
       logger.warn(`Failed to resume task ${session.taskId}, releasing`);
+      cleanupGnupgHome(gnupgHome);
       workspace.cleanup();
       removeSession(session.taskId);
       await this.client.releaseTask(session.taskId).catch(() => {});
@@ -192,12 +256,61 @@ export class TaskRunner {
     await this.client.closeSession(agentId, sessionId).catch(() => {});
   }
 
-  private buildAgentEnv(agentId: string, sessionId: string, privateKeyJwk: JsonWebKey): Record<string, string> {
-    return {
+  private buildAgentEnv(opts: BuildEnvOpts): Record<string, string> {
+    const { agentId, sessionId, privateKeyJwk, agentName, agentUsername, gpgSubkeyId, gnupgHome } = opts;
+    const email = `${agentUsername}@mails.agent-kanban.dev`;
+    const displayName = `${agentName} (agent-kanban)`;
+
+    const env: Record<string, string> = {
       AK_AGENT_ID: agentId,
       AK_SESSION_ID: sessionId,
       AK_AGENT_KEY: JSON.stringify(privateKeyJwk),
       AK_API_URL: getCredentials().apiUrl,
+      GIT_AUTHOR_NAME: displayName,
+      GIT_AUTHOR_EMAIL: email,
+      GIT_COMMITTER_NAME: displayName,
+      GIT_COMMITTER_EMAIL: email,
     };
+
+    if (gnupgHome && gpgSubkeyId) {
+      env.GNUPGHOME = gnupgHome;
+      env.GIT_CONFIG_COUNT = "3";
+      env.GIT_CONFIG_KEY_0 = "gpg.format";
+      env.GIT_CONFIG_VALUE_0 = "openpgp";
+      env.GIT_CONFIG_KEY_1 = "user.signingkey";
+      env.GIT_CONFIG_VALUE_1 = `${gpgSubkeyId}!`;
+      env.GIT_CONFIG_KEY_2 = "commit.gpgsign";
+      env.GIT_CONFIG_VALUE_2 = "true";
+    }
+
+    return env;
+  }
+}
+
+function setupGnupgHome(armoredPrivateKey: string): string {
+  const gnupgHome = mkdtempSync(join(tmpdir(), "ak-gpg-"));
+  const keyFile = join(gnupgHome, "key.asc");
+  writeFileSync(keyFile, armoredPrivateKey, { mode: 0o600 });
+  try {
+    execFileSync("gpg", ["--batch", "--import", keyFile], {
+      env: { ...process.env, GNUPGHOME: gnupgHome },
+      stdio: "pipe",
+    });
+  } finally {
+    try {
+      rmSync(keyFile);
+    } catch {
+      /* best-effort key file removal */
+    }
+  }
+  return gnupgHome;
+}
+
+function cleanupGnupgHome(gnupgHome: string | null): void {
+  if (!gnupgHome) return;
+  try {
+    rmSync(gnupgHome, { recursive: true, force: true });
+  } catch {
+    /* best-effort cleanup */
   }
 }

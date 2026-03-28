@@ -14,13 +14,17 @@ export interface SavedSession {
   runtime: AgentRuntime;
   model?: string;
   status: SessionStatus;
+  gpgSubkeyId: string | null;
+  agentUsername: string;
+  agentName: string;
 }
 
 function readAll(): SavedSession[] {
   try {
     return JSON.parse(readFileSync(SAVED_SESSIONS_FILE, "utf-8"));
-  } catch {
-    return [];
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return [];
+    throw err;
   }
 }
 

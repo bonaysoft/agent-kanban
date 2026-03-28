@@ -80,3 +80,11 @@ export async function getRootPublicKey(db: D1, ownerId: string): Promise<string 
     .first<Pick<GpgKey, "armored_public_key">>();
   return row?.armored_public_key ?? null;
 }
+
+export async function getArmoredPrivateKey(db: D1, ownerId: string): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT armored_private_key FROM gpg_keys WHERE owner_id = ?")
+    .bind(ownerId)
+    .first<Pick<GpgKeyRow, "armored_private_key">>();
+  return row?.armored_private_key ?? null;
+}
