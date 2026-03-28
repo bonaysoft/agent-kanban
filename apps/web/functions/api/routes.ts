@@ -179,6 +179,40 @@ api.get("/api/share/:slug/stream", async (c) => {
   return createPublicBoardSSEResponse(c.env, board.id);
 });
 
+// ─── Public GPG Key Endpoints (no auth required) ───
+
+api.get("/agents/:file{.+\\.gpg$}", async (c) => {
+  const username = c.req.param("file").replace(/\.gpg$/, "");
+  const agent = await c.env.DB.prepare("SELECT owner_id FROM agents WHERE username = ?").bind(username).first<{ owner_id: string }>();
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  const armoredPublicKey = await getRootPublicKey(c.env.DB, agent.owner_id);
+  if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG key not found" });
+  return new Response(armoredPublicKey, {
+    headers: { "Content-Type": "application/pgp-keys", "Cache-Control": "public, max-age=3600" },
+  });
+});
+
+api.get("/.well-known/openpgpkey/hu/:hash", async (c) => {
+  const hash = c.req.param("hash");
+  const localPart = c.req.query("l");
+  if (!localPart) throw new HTTPException(400, { message: "Missing l= query parameter" });
+  const agent = await c.env.DB.prepare("SELECT owner_id FROM agents WHERE username = ?").bind(localPart).first<{ owner_id: string }>();
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  // Verify the hash matches the local part (WKD uses SHA-1 + z-base-32)
+  const expectedHash = await wkdHash(localPart);
+  if (hash !== expectedHash) throw new HTTPException(404, { message: "Hash mismatch" });
+  const armoredPublicKey = await getRootPublicKey(c.env.DB, agent.owner_id);
+  if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG key not found" });
+  return new Response(armoredPublicKey, {
+    headers: { "Content-Type": "application/pgp-keys", "Cache-Control": "public, max-age=3600" },
+  });
+});
+
+// WKD policy file — required by the protocol
+api.get("/.well-known/openpgpkey/policy", (c) => {
+  return new Response("", { headers: { "Content-Type": "text/plain" } });
+});
+
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
@@ -705,12 +739,6 @@ api.get("/api/agents/:id/gpg-key", async (c) => {
   return c.json({ armored_private_key: armoredPrivateKey, gpg_subkey_id: agent.gpg_subkey_id });
 });
 
-api.get("/api/gpg/public-key", async (c) => {
-  const armoredPublicKey = await getRootPublicKey(c.env.DB, c.get("ownerId"));
-  if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG root key not found" });
-  return c.json({ armored_public_key: armoredPublicKey });
-});
-
 // ─── Agent Inbox ───
 
 api.get("/api/agents/:id/inbox", async (c) => {
@@ -739,6 +767,27 @@ export { api };
 
 function agentEmail(username: string): string {
   return `${username}@mails.agent-kanban.dev`;
+}
+
+const ZBASE32 = "ybndrfg8ejkmcpqxot1uwisza345h769";
+
+async function wkdHash(localPart: string): Promise<string> {
+  const data = new TextEncoder().encode(localPart.toLowerCase());
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", data));
+  // z-base-32 encode (RFC 6189)
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of hash) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += ZBASE32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += ZBASE32[(value << (5 - bits)) & 31];
+  return out;
 }
 
 async function syncToGithub(env: Env, ownerId: string, email: string): Promise<void> {
