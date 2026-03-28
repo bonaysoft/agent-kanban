@@ -151,20 +151,10 @@ api.get("/api/share/:slug/badge.svg", async (c) => {
 });
 
 api.get("/api/sitemap.xml", async (c) => {
-  const boards = await c.env.DB.prepare("SELECT share_slug, updated_at FROM boards WHERE visibility = 'public' AND share_slug IS NOT NULL").all<{
-    share_slug: string;
-    updated_at: string;
-  }>();
-
-  const urls = [
-    `  <url><loc>https://agent-kanban.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>`,
-    ...boards.results.map(
-      (b) =>
-        `  <url><loc>https://agent-kanban.dev/share/${b.share_slug}</loc><lastmod>${b.updated_at.split("T")[0]}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>`,
-    ),
-  ];
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://agent-kanban.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+</urlset>`;
   return new Response(xml, {
     headers: { "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" },
   });
