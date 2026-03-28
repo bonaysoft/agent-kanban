@@ -308,7 +308,7 @@ api.post("/api/agents", async (c) => {
   try {
     // GPG subkey
     await getOrCreateRootKey(c.env.DB, ownerId);
-    const subkey = await addSubkey(c.env.DB, ownerId);
+    const subkey = await addSubkey(c.env.DB, ownerId, email);
 
     // Single atomic insert with all fields
     const agent = await insertAgent(c.env.DB, prepared, {

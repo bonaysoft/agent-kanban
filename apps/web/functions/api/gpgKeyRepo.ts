@@ -49,14 +49,27 @@ export async function getOrCreateRootKey(db: D1, ownerId: string): Promise<GpgKe
   return { id, owner_id: ownerId, armored_public_key: armoredPublicKey, fingerprint, created_at: now, updated_at: now };
 }
 
-export async function addSubkey(db: D1, ownerId: string): Promise<{ fingerprint: string; keyId: string } | null> {
+export async function addSubkey(db: D1, ownerId: string, agentEmail: string): Promise<{ fingerprint: string; keyId: string } | null> {
   const row = await db
     .prepare("SELECT armored_private_key FROM gpg_keys WHERE owner_id = ?")
     .bind(ownerId)
     .first<Pick<GpgKeyRow, "armored_private_key">>();
   if (!row) return null;
 
-  const privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
+  let privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
+
+  // Add agent email as a UID on the root key (required for GitHub signature verification)
+  const existingUIDs = privateKey.users.map((u) => u.userID).filter(Boolean);
+  const alreadyHasEmail = existingUIDs.some((uid) => uid?.email === agentEmail);
+  if (!alreadyHasEmail) {
+    const userIDs = [
+      ...existingUIDs.map((uid) => ({ name: uid!.name ?? "Agent Kanban", email: uid!.email ?? "" })),
+      { name: "Agent Kanban", email: agentEmail },
+    ];
+    const reformatted = await openpgp.reformatKey({ privateKey, userIDs, format: "object" });
+    privateKey = reformatted.privateKey;
+  }
+
   const updatedKey = await privateKey.addSubkey({ type: "ecc", curve: "ed25519Legacy", sign: true });
   const armoredPrivate = updatedKey.armor();
   const armoredPublic = updatedKey.toPublic().armor();
