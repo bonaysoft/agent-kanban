@@ -1,14 +1,7 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
-import {
-  type AgentRuntime,
-  BUILTIN_TEMPLATES,
-  computeFingerprint,
-  computeKeyId,
-  deriveUsername,
-  generateKeypair,
-  isValidUsername,
-} from "@agent-kanban/shared";
+import { type AgentRuntime, BUILTIN_TEMPLATES } from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
+import { addSubkey, getOrCreateRootKey } from "./gpgKeyRepo";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
 
@@ -16,24 +9,27 @@ export interface PreparedAgent extends Agent {
   privateKeyJwk: JsonWebKey;
 }
 
-export async function prepareAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<PreparedAgent> {
-  const { publicKeyBase64, privateKeyJwk } = await generateKeypair();
-  const fingerprint = await computeFingerprint(publicKeyBase64);
-  const id = computeKeyId(fingerprint);
-  const username = input.username ?? deriveUsername(input.name);
-  if (!isValidUsername(username)) {
-    throw new Error(`Invalid username "${username}"`);
-  }
-  const existing = await db.prepare("SELECT 1 FROM agents WHERE owner_id = ? AND username = ?").bind(ownerId, username).first();
-  if (existing) {
-    throw new Error(`Username "${username}" is already taken`);
-  }
+export interface AgentIdentity {
+  id: string;
+  publicKeyBase64: string;
+  fingerprint: string;
+  privateKeyJwk: JsonWebKey;
+}
+
+export async function prepareAgent(
+  db: D1,
+  ownerId: string,
+  input: CreateAgentInput,
+  identity: AgentIdentity,
+  builtin = false,
+): Promise<PreparedAgent> {
+  const { id, publicKeyBase64, fingerprint, privateKeyJwk } = identity;
   const now = new Date().toISOString();
   return {
     id,
     owner_id: ownerId,
     name: input.name,
-    username,
+    username: input.username,
     gpg_subkey_id: null,
     bio: input.bio ?? null,
     soul: input.soul ?? null,
@@ -88,8 +84,22 @@ export async function insertAgent(db: D1, agent: PreparedAgent, extras?: { mailb
   return result;
 }
 
-export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<Agent> {
-  const prepared = await prepareAgent(db, ownerId, input, builtin);
+export async function createAgentIdentity(db: D1, ownerId: string, agentEmail: string): Promise<AgentIdentity> {
+  await getOrCreateRootKey(db, ownerId);
+  const subkey = await addSubkey(db, ownerId, agentEmail);
+  if (!subkey) throw new Error("addSubkey returned null after getOrCreateRootKey — should not happen");
+  const { x, d } = subkey.privateKeyJwk;
+  if (!x || !d) throw new Error("GPG subkey produced invalid JWK — missing x or d field");
+  return {
+    id: subkey.keyId,
+    publicKeyBase64: x,
+    fingerprint: subkey.fingerprint,
+    privateKeyJwk: subkey.privateKeyJwk,
+  };
+}
+
+export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput, identity: AgentIdentity, builtin = false): Promise<Agent> {
+  const prepared = await prepareAgent(db, ownerId, input, identity, builtin);
   return insertAgent(db, prepared);
 }
 
@@ -97,9 +107,14 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
   const existing = await db.prepare("SELECT role FROM agents WHERE owner_id = ? AND builtin = 1").bind(ownerId).all<{ role: string }>();
   const existingRoles = new Set(existing.results.map((a) => a.role));
 
+  const hash = Array.from(new TextEncoder().encode(ownerId)).reduce((h, b) => ((h << 5) - h + b) >>> 0, 0);
+  const ownerSuffix = hash.toString(36).slice(0, 6);
   for (const tpl of BUILTIN_TEMPLATES) {
     if (tpl.role && existingRoles.has(tpl.role)) continue;
-    await createAgent(db, ownerId, { ...tpl, runtime: tpl.runtime as AgentRuntime }, true);
+    const username = `${tpl.username ?? tpl.role!}-${ownerSuffix}`;
+    const input = { ...tpl, username, runtime: tpl.runtime as AgentRuntime } as CreateAgentInput;
+    const identity = await createAgentIdentity(db, ownerId, `${username}@mails.agent-kanban.dev`);
+    await createAgent(db, ownerId, input, identity, true);
   }
 }
 

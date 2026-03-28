@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -38,8 +38,7 @@ describe("getBoardActions", () => {
     const board = await createBoard(env.DB, userId, "board-sse-unit-board", "ops");
     boardId = board.id;
 
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SSE Unit Agent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "SSE Unit Agent", username: "sse-unit-agent", runtime: "claude" });
     agentId = agent.id;
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
@@ -142,8 +141,7 @@ describe("GET /api/boards/:id/stream", () => {
   });
 
   it("emits board_note events for existing notes in the stream body", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SSE Route Agent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "SSE Route Agent", username: "sse-route-agent", runtime: "claude" });
 
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     await createTask(env.DB, userId, { title: "SSE Stream Task", board_id: boardId, actorType: "agent:worker", actorId: agent.id });

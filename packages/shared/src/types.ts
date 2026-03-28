@@ -145,7 +145,12 @@ export function isValidUsername(value: string): boolean {
 }
 
 export function deriveUsername(name: string): string {
-  const derived = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 40);
+  const derived = name
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
   return derived || "agent";
 }
 
@@ -282,7 +287,7 @@ export interface CompleteTaskInput {
 
 export interface CreateAgentInput {
   name: string;
-  username?: string;
+  username: string;
   bio?: string;
   soul?: string;
   role?: string;

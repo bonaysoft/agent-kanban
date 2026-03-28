@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const BETTER_AUTH_URL = "http://localhost:8788";
 const env = createTestEnv();
@@ -93,8 +93,7 @@ describe("routes", () => {
     expect(machineRes.status).toBe(201);
     machineId = ((await machineRes.json()) as { id: string }).id;
 
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "Routes Agent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "Routes Agent", username: "routes-agent", runtime: "claude" });
     agentId = agent.id;
 
     sessionId = randomUUID();
@@ -112,7 +111,12 @@ describe("routes", () => {
     );
 
     // Create a leader agent and session for complete/cancel/reject tests
-    const leaderAgent = await createAgent(env.DB, userId, { name: "Routes Leader Agent", runtime: "claude", kind: "leader" });
+    const leaderAgent = await createTestAgent(env.DB, userId, {
+      name: "Routes Leader Agent",
+      username: "routes-leader-agent",
+      runtime: "claude",
+      kind: "leader",
+    });
     leaderAgentId = leaderAgent.id;
 
     leaderSessionId = randomUUID();
@@ -301,7 +305,7 @@ describe("routes", () => {
   });
 
   it("POST /api/agents creates an agent", async () => {
-    const res = await apiRequest("POST", "/api/agents", { name: "New Route Agent", runtime: "claude" }, apiKey);
+    const res = await apiRequest("POST", "/api/agents", { name: "New Route Agent", username: "new-route-agent", runtime: "claude" }, apiKey);
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.name).toBe("New Route Agent");
@@ -319,7 +323,12 @@ describe("routes", () => {
   });
 
   it("POST /api/agents rejects reserved role", async () => {
-    const res = await apiRequest("POST", "/api/agents", { name: "Bad Role", runtime: "claude", role: "quality-goalkeeper" }, apiKey);
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Bad Role", username: "bad-role", runtime: "claude", role: "quality-goalkeeper" },
+      apiKey,
+    );
     expect(res.status).toBe(403);
   });
 
@@ -660,8 +669,7 @@ describe("routes", () => {
   });
 
   it("DELETE /api/agents/:id deletes the agent", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const tempAgent = await createAgent(env.DB, userId, { name: "Temp Agent For Delete", runtime: "claude" });
+    const tempAgent = await createTestAgent(env.DB, userId, { name: "Temp Agent For Delete", username: "temp-agent-for-delete", runtime: "claude" });
     const res = await apiRequest("DELETE", `/api/agents/${tempAgent.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;

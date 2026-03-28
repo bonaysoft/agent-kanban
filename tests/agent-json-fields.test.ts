@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -24,6 +25,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -55,9 +57,9 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   let agentId: string;
 
   it("createAgent returns skills and handoff_to as arrays", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(db, ownerId, {
+    const agent = await createTestAgent(db, ownerId, {
       name: "Test Agent",
+      username: "test-agent",
       runtime: "claude",
       skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
       handoff_to: ["quality-goalkeeper", "enduser"],
@@ -71,8 +73,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("createAgent with null skills/handoff_to returns null", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(db, ownerId, { name: "Bare Agent", runtime: "claude" });
+    const agent = await createTestAgent(db, ownerId, { name: "Bare Agent", username: "bare-agent", runtime: "claude" });
 
     expect(agent.skills).toBeNull();
     expect(agent.handoff_to).toBeNull();

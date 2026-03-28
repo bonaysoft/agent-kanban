@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 // Integration tests for Agent Entity Redesign:
 // - Agent CRUD (update, delete)
@@ -43,6 +44,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -113,9 +115,15 @@ describe("agent CRUD", () => {
   let agentId: string;
 
   it("setup user", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     userId = await seedUser(env.DB, "user-crud", "crud@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "CrudAgent", bio: "test bio", soul: "be helpful", runtime: "claude", model: "opus" });
+    const agent = await createTestAgent(env.DB, userId, {
+      name: "CrudAgent",
+      username: "crud-agent",
+      bio: "test bio",
+      soul: "be helpful",
+      runtime: "claude",
+      model: "opus",
+    });
     agentId = agent.id;
     expect(agent.name).toBe("CrudAgent");
     expect(agent.bio).toBe("test bio");
@@ -131,8 +139,8 @@ describe("agent CRUD", () => {
   });
 
   it("deletes agent", async () => {
-    const { createAgent, deleteAgent } = await import("../apps/web/functions/api/agentRepo");
-    const temp = await createAgent(env.DB, userId, { name: "ToDelete", runtime: "claude" });
+    const { deleteAgent } = await import("../apps/web/functions/api/agentRepo");
+    const temp = await createTestAgent(env.DB, userId, { name: "ToDelete", username: "to-delete", runtime: "claude" });
     const deleted = await deleteAgent(env.DB, temp.id);
     expect(deleted).toBe(true);
     const row = await env.DB.prepare("SELECT id FROM agents WHERE id = ?").bind(temp.id).first();
@@ -156,7 +164,6 @@ describe("agent status computation", () => {
   let _apiKey: string;
 
   it("setup", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-status", "status@test.com");
     _apiKey = await createApiKeyForUser(userId);
@@ -187,7 +194,7 @@ describe("agent status computation", () => {
       forceAllowId: true,
     });
 
-    const agent = await createAgent(env.DB, userId, { name: "StatusAgent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "StatusAgent", username: "status-agent", runtime: "claude" });
     agentId = agent.id;
   });
 
@@ -239,7 +246,6 @@ describe("session lifecycle", () => {
   let sessionId: string;
 
   it("setup", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
     userId = await seedUser(env.DB, "user-session", "session@test.com");
     const machine = await upsertMachine(env.DB, userId, {
@@ -267,7 +273,7 @@ describe("session lifecycle", () => {
       forceAllowId: true,
     });
 
-    const agent = await createAgent(env.DB, userId, { name: "SessionAgent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "SessionAgent", username: "session-agent", runtime: "claude" });
     agentId = agent.id;
   });
 
@@ -336,11 +342,10 @@ describe("message sender model", () => {
   let taskId: string;
 
   it("setup board + task", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     userId = await seedUser(env.DB, "user-msg", "msg@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "MsgAgent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "MsgAgent", username: "msg-agent", runtime: "claude" });
     agentId = agent.id;
     const board = await createBoard(env.DB, userId, "msg-board", "ops");
     const task = await createTask(env.DB, userId, { title: "Msg task", board_id: board.id });
@@ -421,11 +426,10 @@ describe("user assigns task to agent", () => {
   let taskId: string;
 
   it("setup", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
     userId = await seedUser(env.DB, "user-assign", "assign@test.com");
-    const agent = await createAgent(env.DB, userId, { name: "AssignAgent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "AssignAgent", username: "assign-agent", runtime: "claude" });
     agentId = agent.id;
     const board = await createBoard(env.DB, userId, "assign-board", "ops");
     const task = await createTask(env.DB, userId, { title: "Assign task", board_id: board.id });

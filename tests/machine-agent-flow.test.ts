@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 // Integration test: full flow — user creates agent → machine creates session → agent claims task
 // Tests the actual Hono routes with auth middleware.
@@ -38,6 +39,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -151,8 +153,12 @@ describe("machine → agent session flow", () => {
 
   it("user creates a persistent agent", async () => {
     // Create agent directly via repo (user-only route, no API key auth in test)
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "Test Agent", runtime: "claude", model: "claude-sonnet-4-20250514" });
+    const agent = await createTestAgent(env.DB, userId, {
+      name: "Test Agent",
+      username: "test-agent",
+      runtime: "claude",
+      model: "claude-sonnet-4-20250514",
+    });
     agentId = agent.id;
     expect(agent.fingerprint).toBeTruthy();
     expect(agent.public_key).toBeTruthy();
@@ -189,8 +195,12 @@ describe("machine → agent session flow", () => {
   });
 
   it("machine creates a leader agent and session", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const leaderAgent = await createAgent(env.DB, userId, { name: "Flow Leader Agent", runtime: "claude", kind: "leader" });
+    const leaderAgent = await createTestAgent(env.DB, userId, {
+      name: "Flow Leader Agent",
+      username: "flow-leader-agent",
+      runtime: "claude",
+      kind: "leader",
+    });
     leaderAgentId = leaderAgent.id;
 
     leaderSessionId = randomUUID();

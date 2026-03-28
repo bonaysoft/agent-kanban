@@ -3,7 +3,7 @@
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getSystemStats } from "../apps/web/functions/api/statsRepo";
-import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -160,8 +160,7 @@ describe("getSystemStats", () => {
     const before = await getSystemStats(env.DB);
     const userId = "stats-agent-owner";
     await seedUser(env.DB, userId, "stats-agent-owner@test.com");
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    await createAgent(env.DB, userId, { name: "Stats Agent", runtime: "claude" });
+    await createTestAgent(env.DB, userId, { name: "Stats Agent", username: "stats-agent", runtime: "claude" });
     const after = await getSystemStats(env.DB);
     expect(after.agents.total).toBeGreaterThan(before.agents.total);
   });

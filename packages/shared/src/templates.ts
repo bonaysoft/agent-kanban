@@ -6,6 +6,7 @@ const TEMPLATES_BASE = "https://raw.githubusercontent.com/saltbo/agent-kanban/ma
 
 export interface AgentTemplate {
   name: string;
+  username?: string;
   bio?: string;
   soul?: string;
   role?: string;
@@ -29,6 +30,7 @@ export async function fetchTemplateIndex(): Promise<TemplateIndex[]> {
 export const BUILTIN_TEMPLATES: AgentTemplate[] = [
   {
     name: "Quality Goalkeeper",
+    username: "quality-goalkeeper",
     bio: "Establishes quality standards, configures quality gates, reviews quality reports",
     soul: [
       "I am the quality goalkeeper. I own the engineering quality bar for the project.",

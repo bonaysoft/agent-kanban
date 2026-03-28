@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
@@ -35,6 +36,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -285,12 +287,16 @@ describe("task lifecycle repo functions", () => {
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const board = await createBoard(env.DB, userId, "sm-board", "ops");
     boardId = board.id;
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SM Test Agent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "SM Test Agent", username: "sm-test-agent", runtime: "claude" });
     testAgentId = agent.id;
-    const agent2 = await createAgent(env.DB, userId, { name: "SM Agent 2", runtime: "claude" });
+    const agent2 = await createTestAgent(env.DB, userId, { name: "SM Agent 2", username: "sm-agent-2", runtime: "claude" });
     otherAgentId = agent2.id;
-    const leaderAgent = await createAgent(env.DB, userId, { name: "SM Leader Agent", runtime: "claude", kind: "leader" });
+    const leaderAgent = await createTestAgent(env.DB, userId, {
+      name: "SM Leader Agent",
+      username: "sm-leader-agent",
+      runtime: "claude",
+      kind: "leader",
+    });
     leaderAgentId = leaderAgent.id;
   });
 
@@ -627,8 +633,7 @@ describe("task lifecycle HTTP permissions", () => {
     _machineId = ((await res.json()) as any).id;
 
     // Create agent
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(env.DB, userId, { name: "SM Agent", runtime: "claude" });
+    const agent = await createTestAgent(env.DB, userId, { name: "SM Agent", username: "sm-agent", runtime: "claude" });
     agentId = agent.id;
 
     // Create session

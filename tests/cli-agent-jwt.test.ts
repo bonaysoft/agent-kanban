@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 // Integration test: validates CLI AgentClient JWT passthrough with new session model
 // User creates agent → machine creates session → AgentClient uses session JWT
@@ -37,6 +38,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -140,8 +142,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     _machineId = ((await machineRes.json()) as any).id;
 
     // Create persistent agent (user-only, use repo directly)
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(testEnv.DB, userId, { name: "JWT Test Agent", runtime: "claude" });
+    const agent = await createTestAgent(testEnv.DB, userId, { name: "JWT Test Agent", username: "jwt-test-agent", runtime: "claude" });
     agentId = agent.id;
 
     // Create session keypair (CSR — daemon generates locally)
@@ -163,7 +164,12 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     expect(sessionRes.status).toBe(201);
 
     // Create leader agent + session for assign
-    const leaderAgent = await createAgent(testEnv.DB, userId, { name: "JWT Leader Agent", runtime: "claude", kind: "leader" });
+    const leaderAgent = await createTestAgent(testEnv.DB, userId, {
+      name: "JWT Leader Agent",
+      username: "jwt-leader-agent",
+      runtime: "claude",
+      kind: "leader",
+    });
     leaderAgentId = leaderAgent.id;
     leaderSessionId = randomUUID();
     const leaderKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);

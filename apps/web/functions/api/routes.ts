@@ -1,14 +1,24 @@
-import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, isValidUsername, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { deleteAgent, getAgent, getAgentLogs, getAgentMailboxToken, insertAgent, listAgents, prepareAgent, updateAgent } from "./agentRepo";
+import {
+  createAgentIdentity,
+  deleteAgent,
+  getAgent,
+  getAgentLogs,
+  getAgentMailboxToken,
+  insertAgent,
+  listAgents,
+  prepareAgent,
+  updateAgent,
+} from "./agentRepo";
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
-import { addSubkey, getArmoredPrivateKey, getOrCreateRootKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
+import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMailbox, deleteMailbox, getEmail, getInbox } from "./mailsService";
@@ -280,7 +290,7 @@ api.get("/api/agents/:id", async (c) => {
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{
     name: string;
-    username?: string;
+    username: string;
     bio?: string;
     soul?: string;
     role?: string;
@@ -291,7 +301,9 @@ api.post("/api/agents", async (c) => {
     skills?: string[];
   }>();
   if (!body.name) throw new HTTPException(400, { message: "name is required" });
+  if (!body.username) throw new HTTPException(400, { message: "username is required" });
   if (!body.runtime) throw new HTTPException(400, { message: "runtime is required" });
+  if (!isValidUsername(body.username)) throw new HTTPException(400, { message: `Invalid username "${body.username}"` });
   if (!AGENT_RUNTIMES.includes(body.runtime as any)) {
     throw new HTTPException(400, { message: `Invalid runtime "${body.runtime}". Must be one of: ${AGENT_RUNTIMES.join(", ")}` });
   }
@@ -299,21 +311,24 @@ api.post("/api/agents", async (c) => {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
   const ownerId = c.get("ownerId");
-  const prepared = await prepareAgent(c.env.DB, ownerId, body as CreateAgentInput);
-  const email = agentEmail(prepared.username);
+
+  // Validate username uniqueness before GPG mutation
+  const taken = await c.env.DB.prepare("SELECT 1 FROM agents WHERE username = ?").bind(body.username).first();
+  if (taken) throw new HTTPException(409, { message: `Username "${body.username}" is already taken` });
+
+  // GPG subkey — its Ed25519 material becomes the agent's unified key
+  const email = agentEmail(body.username);
+  const identity = await createAgentIdentity(c.env.DB, ownerId, email);
+  const prepared = await prepareAgent(c.env.DB, ownerId, body as CreateAgentInput, identity);
 
   // External service — create mailbox (skip if MAILS_ADMIN_TOKEN not configured)
   const mailboxToken = c.env.MAILS_ADMIN_TOKEN ? await createMailbox(c.env.MAILS_ADMIN_TOKEN, email) : undefined;
 
   try {
-    // GPG subkey
-    await getOrCreateRootKey(c.env.DB, ownerId);
-    const subkey = await addSubkey(c.env.DB, ownerId, email);
-
     // Single atomic insert with all fields
     const agent = await insertAgent(c.env.DB, prepared, {
       mailboxToken,
-      gpgSubkeyId: subkey?.keyId.toUpperCase(),
+      gpgSubkeyId: identity.id.toUpperCase(),
     });
 
     // GitHub sync — best-effort, skip if not connected

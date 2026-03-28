@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { CreateAgentInput } from "@agent-kanban/shared";
 import { Miniflare } from "miniflare";
 
 const MIGRATIONS_DIR = join(__dirname, "../../apps/web/migrations");
@@ -31,6 +32,7 @@ export async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -60,4 +62,15 @@ export async function setupMiniflare() {
   const db = await mf.getD1Database("DB");
   await applyMigrations(db);
   return { mf, db };
+}
+
+/** Ensure user row exists + create agent with GPG identity. Drop-in replacement for bare createAgent() in tests. */
+export async function createTestAgent(db: D1Database, ownerId: string, input: CreateAgentInput, builtin = false) {
+  // Ensure user row exists (idempotent)
+  const existing = await db.prepare("SELECT 1 FROM user WHERE id = ?").bind(ownerId).first();
+  if (!existing) await seedUser(db, ownerId, `${ownerId}@test.local`);
+
+  const { createAgent, createAgentIdentity } = await import("../../apps/web/functions/api/agentRepo");
+  const identity = await createAgentIdentity(db, ownerId, `${input.username}@mails.agent-kanban.dev`);
+  return createAgent(db, ownerId, input, identity, builtin);
 }

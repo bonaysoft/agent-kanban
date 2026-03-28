@@ -33,6 +33,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -104,7 +105,7 @@ describe("builtin agents", () => {
 
     expect(builtin!.public_key).toBeTruthy();
     expect(builtin!.fingerprint).toBeTruthy();
-    expect(builtin!.fingerprint).toHaveLength(64);
+    expect(builtin!.fingerprint).toHaveLength(40); // GPG v4 fingerprint (SHA-1)
   });
 
   it("different tenant gets separate builtin agents", async () => {

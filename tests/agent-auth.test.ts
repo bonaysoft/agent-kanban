@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent } from "./helpers/db";
 
 // Integration test: validates the new agent-auth bridge
 // User creates Agent → Machine creates Session (CSR) → Session JWT → auth
@@ -31,6 +32,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -107,8 +109,7 @@ describe("agent-auth bridge", () => {
   });
 
   it("creates a persistent agent with keypair", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
-    const agent = await createAgent(db, userId, { name: "Test Agent", runtime: "claude" });
+    const agent = await createTestAgent(db, userId, { name: "Test Agent", username: "test-agent", runtime: "claude" });
     agentId = agent.id;
 
     expect(agent.public_key).toBeTruthy();

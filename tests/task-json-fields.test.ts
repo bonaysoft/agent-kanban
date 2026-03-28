@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestAgent, seedUser } from "./helpers/db";
 
 const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
@@ -24,6 +25,7 @@ async function applyMigrations(db: D1Database) {
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
     "0014_agent_mailbox_token.sql",
+    "0015_username_global_unique.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -56,6 +58,7 @@ describe("task JSON field parsing (labels, input)", () => {
   let taskId: string;
 
   it("setup: create board", async () => {
+    await seedUser(db, ownerId, `${ownerId}@test.local`);
     const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const board = await createBoard(db, ownerId, "json-test-board", "ops");
     boardId = board.id;
@@ -143,10 +146,9 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("lifecycle functions preserve parsed JSON fields", async () => {
-    const { createAgent } = await import("../apps/web/functions/api/agentRepo");
     const { assignTask, claimTask, reviewTask } = await import("../apps/web/functions/api/taskRepo");
 
-    const agent = await createAgent(db, ownerId, { name: "worker", runtime: "claude" });
+    const agent = await createTestAgent(db, ownerId, { name: "worker", username: "worker", runtime: "claude" });
     const assigned = await assignTask(db, taskId, agent.id, "machine", "system");
     expect(Array.isArray(assigned!.labels)).toBe(true);
 

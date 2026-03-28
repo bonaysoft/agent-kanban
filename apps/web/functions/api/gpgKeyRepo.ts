@@ -49,7 +49,13 @@ export async function getOrCreateRootKey(db: D1, ownerId: string): Promise<GpgKe
   return { id, owner_id: ownerId, armored_public_key: armoredPublicKey, fingerprint, created_at: now, updated_at: now };
 }
 
-export async function addSubkey(db: D1, ownerId: string, agentEmail: string): Promise<{ fingerprint: string; keyId: string } | null> {
+export interface SubkeyResult {
+  fingerprint: string;
+  keyId: string;
+  privateKeyJwk: JsonWebKey;
+}
+
+export async function addSubkey(db: D1, ownerId: string, agentEmail: string): Promise<SubkeyResult | null> {
   const row = await db
     .prepare("SELECT armored_private_key FROM gpg_keys WHERE owner_id = ?")
     .bind(ownerId)
@@ -79,13 +85,35 @@ export async function addSubkey(db: D1, ownerId: string, agentEmail: string): Pr
   const subkeyFingerprint = newSubkey.getFingerprint();
   const keyId = newSubkey.getKeyID().toHex();
 
+  // Extract Ed25519 material from the subkey as JWK (same key for JWT auth).
+  // These are openpgp.js internal fields for ed25519Legacy subkeys — guard against format changes.
+  const skPacket = newSubkey.keyPacket as any;
+  const Q: Uint8Array | undefined = skPacket.publicParams?.Q;
+  const seed: Uint8Array | undefined = skPacket.privateParams?.seed;
+  if (!Q || Q.length !== 33 || Q[0] !== 0x40 || !seed || seed.length !== 32) {
+    throw new Error("Unexpected ed25519Legacy subkey format — openpgp.js internal API may have changed");
+  }
+  const rawPub = Q.subarray(1);
+  const privateKeyJwk: JsonWebKey = {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: bytesToBase64Url(rawPub),
+    d: bytesToBase64Url(seed),
+  };
+
   const now = new Date().toISOString();
   await db
     .prepare("UPDATE gpg_keys SET armored_private_key = ?, armored_public_key = ?, updated_at = ? WHERE owner_id = ?")
     .bind(armoredPrivate, armoredPublic, now, ownerId)
     .run();
 
-  return { fingerprint: subkeyFingerprint, keyId };
+  return { fingerprint: subkeyFingerprint, keyId, privateKeyJwk };
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export async function getArmoredPrivateKey(db: D1, ownerId: string): Promise<string | null> {
