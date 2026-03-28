@@ -164,7 +164,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
 export async function updateAgent(
   db: D1,
   agentId: string,
-  updates: Partial<Pick<Agent, "name" | "bio" | "soul" | "role" | "handoff_to" | "runtime" | "model" | "skills">>,
+  updates: Partial<Pick<Agent, "name" | "bio" | "soul" | "role" | "kind" | "handoff_to" | "runtime" | "model" | "skills">>,
 ): Promise<Agent | null> {
   const agent = await db.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first<Agent>();
   if (!agent) return null;
@@ -174,7 +174,7 @@ export async function updateAgent(
   const binds: unknown[] = [now];
 
   const jsonFields = new Set(["skills", "handoff_to"]);
-  const fields = ["name", "bio", "soul", "role", "handoff_to", "runtime", "model", "skills"] as const;
+  const fields = ["name", "bio", "soul", "role", "kind", "handoff_to", "runtime", "model", "skills"] as const;
   for (const field of fields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);
