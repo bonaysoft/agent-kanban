@@ -61,6 +61,45 @@ ak create task --board <id> --title "Title" \
 - **Never call `task complete`** — only humans complete tasks.
 - Always create a PR and submit via `task review --pr-url` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
+- **Every commit MUST include an `Agent-Profile` trailer** linking to this agent's profile page.
+
+## Commit Trailer
+
+Every commit message must include the following git trailer:
+
+```
+Agent-Profile: https://agent-kanban.dev/agents/{agent_id}
+```
+
+The agent ID is available in the `AK_AGENT_ID` environment variable. Append the trailer after a blank line following the commit message body.
+
+Example commit message format:
+
+```
+feat: implement user search
+
+Agent-Profile: https://agent-kanban.dev/agents/57c1eb3a80a84529
+```
+
+You can append it with `git interpret-trailers`:
+
+```bash
+git commit -m "$(git interpret-trailers --trailer "Agent-Profile: https://agent-kanban.dev/agents/$AK_AGENT_ID" <<'EOF'
+feat: implement user search
+EOF
+)"
+```
+
+Or manually append it when constructing the commit message via a heredoc:
+
+```bash
+git commit -m "$(cat <<EOF
+feat: implement user search
+
+Agent-Profile: https://agent-kanban.dev/agents/$AK_AGENT_ID
+EOF
+)"
+```
 
 ## Error Handling
 
