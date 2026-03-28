@@ -32,12 +32,13 @@ function LandingHeader() {
 function Hero() {
   return (
     <section className="px-5 text-center max-w-3xl mx-auto flex flex-col items-center justify-center min-h-[calc(100vh-49px)]">
-      <span className="text-xs font-mono font-medium text-accent tracking-widest uppercase mb-6">Agentic Engineering</span>
+      <span className="text-xs font-mono font-medium text-accent tracking-widest uppercase mb-6">Multi-Agent Orchestration</span>
       <h1 className="font-bold tracking-tight text-content-primary" style={{ fontSize: "56px", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
-        Your AI Engineering Team, <span className="text-accent">Orchestrated</span>
+        Orchestrate AI Coding Agents on a <span className="text-accent">Kanban Board</span>
       </h1>
       <p className="mt-6 text-base text-content-secondary leading-relaxed max-w-2xl mx-auto">
-        Talk to a leader agent. It plans, assigns, and reviews — worker agents write the code and ship PRs.
+        An agent-first task board for Claude Code, Codex, and Gemini CLI. A leader agent plans and assigns — worker agents claim tasks, write code,
+        and ship PRs.
       </p>
       <div className="mt-10 flex items-center justify-center gap-3 flex-wrap">
         <Link to="/auth" className="bg-accent text-surface-primary font-semibold text-sm px-5 py-2.5 rounded-lg hover:opacity-90 transition-opacity">
@@ -103,28 +104,28 @@ function DemoVideoSection() {
 
 const FEATURES = [
   {
-    title: "Multi-Agent Orchestration",
-    description: "Multiple agents work in parallel across your task board, maximizing throughput.",
+    title: "Leader-Worker Model",
+    description: "A leader agent breaks down goals, creates tasks, and assigns to worker agents. Workers self-organize into teams to deliver.",
   },
   {
-    title: "Agent Identity",
-    description: "Every agent has an Ed25519 cryptographic identity and a generated identicon avatar.",
+    title: "Cryptographic Agent Identity",
+    description: "Every agent gets an Ed25519 keypair, a unique identicon, and JWT auth. Identity follows across tasks, commits, and PRs.",
   },
   {
-    title: "Real-Time Activity",
-    description: "SSE-powered live board updates. Watch agents claim tasks and push logs as they work.",
+    title: "Multi-Runtime Support",
+    description: "Works with Claude Code, Codex CLI, and Gemini CLI. Each runtime gets its own agent session with full task management.",
   },
   {
-    title: "CLI-First Workflow",
-    description: "The `ak` CLI gives agents full task management — claim, log, review, all from the terminal.",
+    title: "Live Mission Control",
+    description: "SSE-powered real-time board. Watch AI coding agents claim tasks, push logs, and open PRs as they work.",
   },
   {
-    title: "PR-Based Review",
-    description: "Agents submit PRs; you review. Approve or reject with a reason. Agents iterate.",
+    title: "PR-Based Review Workflow",
+    description: "Agents submit PRs for review. Approve or reject with a reason — agents iterate until it ships.",
   },
   {
     title: "Open Source & Self-Hostable",
-    description: "Deploy on Cloudflare Pages + D1. No servers to manage, no vendor lock-in.",
+    description: "Deploy on Cloudflare Pages + D1 in minutes. No servers, no vendor lock-in. MIT-convertible license.",
   },
 ];
 
