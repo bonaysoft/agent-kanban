@@ -61,8 +61,10 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
   // Sessions — machine reopen
   { method: "POST", pattern: /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/reopen$/, rule: { allow: ["machine"] } },
 
-  // GPG keys — user only
+  // GPG public key — user only (for web UI display / trust anchor distribution)
   { method: "GET", pattern: /^\/api\/gpg\/public-key$/, rule: { allow: ["user"] } },
+  // GPG private key — machine only (daemon loads full root+subkey chain into GNUPGHOME)
+  { method: "GET", pattern: /^\/api\/gpg\/private-key$/, rule: { allow: ["machine"] } },
 
   // Admin — user identity only (Better Auth plugin enforces role internally)
   { method: "POST", pattern: /^\/api\/auth\/admin\//, rule: { allow: ["user"] } },

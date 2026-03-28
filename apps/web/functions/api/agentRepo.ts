@@ -1,6 +1,7 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
 import { type AgentRuntime, BUILTIN_TEMPLATES, computeFingerprint, computeKeyId, generateKeypair } from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
+import { addSubkey, getOrCreateRootKey } from "./gpgKeyRepo";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
 
@@ -12,10 +13,16 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
   const skillsJson = input.skills ? JSON.stringify(input.skills) : null;
   const handoffJson = input.handoff_to ? JSON.stringify(input.handoff_to) : null;
 
+  await getOrCreateRootKey(db, ownerId);
+  const subkey = await addSubkey(db, ownerId);
+  if (!subkey) throw new Error("Failed to generate GPG subkey: root key not found after creation");
+  const gpgSubkeyFingerprint = subkey.fingerprint;
+  const gpgSubkeyId = subkey.keyId.toUpperCase();
+
   await db
     .prepare(`
-    INSERT INTO agents (id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, owner_id, name, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, gpg_subkey_id, gpg_subkey_fingerprint, builtin, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .bind(
       id,
@@ -32,6 +39,8 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
       publicKeyBase64,
       JSON.stringify(privateKeyJwk),
       fingerprint,
+      gpgSubkeyId,
+      gpgSubkeyFingerprint,
       builtin ? 1 : 0,
       now,
       now,
@@ -52,6 +61,8 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     skills: input.skills ?? null,
     public_key: publicKeyBase64,
     fingerprint,
+    gpg_subkey_id: gpgSubkeyId,
+    gpg_subkey_fingerprint: gpgSubkeyFingerprint,
     builtin: builtin ? 1 : 0,
     created_at: now,
     updated_at: now,
@@ -72,7 +83,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
   const result = await db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
-      a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      a.public_key, a.fingerprint, a.gpg_subkey_id, a.gpg_subkey_fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
@@ -94,7 +105,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
   return db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
-      a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      a.public_key, a.fingerprint, a.gpg_subkey_id, a.gpg_subkey_fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,

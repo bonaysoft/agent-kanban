@@ -7,7 +7,7 @@ import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
-import { getRootPublicKey } from "./gpgKeyRepo";
+import { getRootPrivateKey, getRootPublicKey } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMessage, listMessages } from "./messageRepo";
@@ -635,6 +635,14 @@ api.get("/api/gpg/public-key", async (c) => {
   const armoredPublicKey = await getRootPublicKey(c.env.DB, c.get("ownerId"));
   if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG root key not found" });
   return c.json({ armored_public_key: armoredPublicKey });
+});
+
+// Returns the owner's full armored private key (root + all subkeys).
+// Used by the machine daemon to set up GNUPGHOME for git commit signing.
+api.get("/api/gpg/private-key", async (c) => {
+  const armoredPrivateKey = await getRootPrivateKey(c.env.DB, c.get("ownerId"));
+  if (!armoredPrivateKey) throw new HTTPException(404, { message: "GPG root key not found" });
+  return c.json({ armored_private_key: armoredPrivateKey });
 });
 
 export { api };

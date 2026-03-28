@@ -46,30 +46,39 @@ export async function getOrCreateRootKey(db: D1, ownerId: string): Promise<GpgKe
   return { id, owner_id: ownerId, armored_public_key: armoredPublicKey, fingerprint, created_at: now, updated_at: now };
 }
 
+// Adds a new signing subkey to the owner's root key.
+// Uses optimistic locking (updated_at comparison) to detect concurrent writes
+// and retries up to 3 times to avoid the TOCTOU race between read and update.
 export async function addSubkey(db: D1, ownerId: string): Promise<{ fingerprint: string; keyId: string } | null> {
-  const row = await db
-    .prepare("SELECT armored_private_key FROM gpg_keys WHERE owner_id = ?")
-    .bind(ownerId)
-    .first<Pick<GpgKeyRow, "armored_private_key">>();
-  if (!row) return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await db
+      .prepare("SELECT armored_private_key, updated_at FROM gpg_keys WHERE owner_id = ?")
+      .bind(ownerId)
+      .first<Pick<GpgKeyRow, "armored_private_key"> & { updated_at: string }>();
+    if (!row) return null;
 
-  const privateKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
-  const updatedKey = await privateKey.addSubkey({ type: "curve25519", sign: true });
-  const armoredPrivate = updatedKey.armor();
-  const armoredPublic = updatedKey.toPublic().armor();
+    const rootKey = await openpgp.readPrivateKey({ armoredKey: row.armored_private_key });
+    const existingFingerprints = new Set(rootKey.getSubkeys().map((sk) => sk.getFingerprint()));
+    const updatedKey = await rootKey.addSubkey({ type: "curve25519", sign: true });
+    const armoredPrivate = updatedKey.armor();
+    const armoredPublic = updatedKey.toPublic().armor();
 
-  const subkeys = updatedKey.getSubkeys();
-  const newSubkey = subkeys[subkeys.length - 1];
-  const subkeyFingerprint = newSubkey.getFingerprint();
-  const keyId = newSubkey.getKeyID().toHex();
+    const newSubkey = updatedKey.getSubkeys().find((sk) => !existingFingerprints.has(sk.getFingerprint()));
+    if (!newSubkey) throw new Error("addSubkey: could not identify newly added subkey");
 
-  const now = new Date().toISOString();
-  await db
-    .prepare("UPDATE gpg_keys SET armored_private_key = ?, armored_public_key = ?, updated_at = ? WHERE owner_id = ?")
-    .bind(armoredPrivate, armoredPublic, now, ownerId)
-    .run();
+    const subkeyFingerprint = newSubkey.getFingerprint();
+    const keyId = newSubkey.getKeyID().toHex();
 
-  return { fingerprint: subkeyFingerprint, keyId };
+    const now = new Date().toISOString();
+    const result = await db
+      .prepare("UPDATE gpg_keys SET armored_private_key = ?, armored_public_key = ?, updated_at = ? WHERE owner_id = ? AND updated_at = ?")
+      .bind(armoredPrivate, armoredPublic, now, ownerId, row.updated_at)
+      .run();
+
+    if (result.meta.changes > 0) return { fingerprint: subkeyFingerprint, keyId };
+    // Another writer updated the key between our read and write — retry.
+  }
+  throw new Error("addSubkey: failed to update root key after 3 attempts due to concurrent writes");
 }
 
 export async function getRootPublicKey(db: D1, ownerId: string): Promise<string | null> {
@@ -78,4 +87,12 @@ export async function getRootPublicKey(db: D1, ownerId: string): Promise<string 
     .bind(ownerId)
     .first<Pick<GpgKey, "armored_public_key">>();
   return row?.armored_public_key ?? null;
+}
+
+export async function getRootPrivateKey(db: D1, ownerId: string): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT armored_private_key FROM gpg_keys WHERE owner_id = ?")
+    .bind(ownerId)
+    .first<Pick<GpgKeyRow, "armored_private_key">>();
+  return row?.armored_private_key ?? null;
 }
