@@ -231,6 +231,10 @@ export function AgentDetailPage() {
                   />
                 </div>
 
+                <p className="mt-1.5 font-mono text-xs text-content-tertiary">
+                  @{agent.username} · {agent.username}@mails.agent-kanban.dev
+                </p>
+
                 {agent.bio && <p className="mt-2 text-sm text-content-secondary">{agent.bio}</p>}
 
                 {/* Meta */}

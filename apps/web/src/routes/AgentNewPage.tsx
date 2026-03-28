@@ -29,6 +29,7 @@ export function AgentNewPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
 
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [soul, setSoul] = useState("");
   const [role, setRole] = useState("");
@@ -43,6 +44,7 @@ export function AgentNewPage() {
   function applyTemplate(t: AgentTemplate) {
     setSelectedTemplate(t);
     setName(t.name);
+    setUsername(t.username || "");
     setBio(t.bio || "");
     setSoul(t.soul || "");
     setRole(t.role || "");
@@ -56,6 +58,7 @@ export function AgentNewPage() {
   function startCustom() {
     setSelectedTemplate(null);
     setName("");
+    setUsername("");
     setBio("");
     setSoul("");
     setRole("");
@@ -67,11 +70,12 @@ export function AgentNewPage() {
   }
 
   async function handleCreate() {
-    if (!name.trim()) return;
+    if (!name.trim() || !username.trim()) return;
     setError(null);
     try {
       await createAgent.mutateAsync({
         name: name.trim(),
+        username: username.trim(),
         bio: bio.trim() || undefined,
         soul: soul.trim() || undefined,
         role: role.trim() || undefined,
@@ -98,6 +102,8 @@ export function AgentNewPage() {
             existingRoles={existingRoles}
             name={name}
             setName={setName}
+            username={username}
+            setUsername={setUsername}
             bio={bio}
             setBio={setBio}
             soul={soul}
@@ -291,6 +297,8 @@ interface FormStepProps {
   existingRoles: string[];
   name: string;
   setName: (v: string) => void;
+  username: string;
+  setUsername: (v: string) => void;
   bio: string;
   setBio: (v: string) => void;
   soul: string;
@@ -317,6 +325,8 @@ function FormStep(props: FormStepProps) {
     existingRoles,
     name,
     setName,
+    username,
+    setUsername,
     bio,
     setBio,
     soul,
@@ -376,15 +386,25 @@ function FormStep(props: FormStepProps) {
                 <Input id="agent-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bolt" className="font-mono" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="agent-role">Role</Label>
+                <Label htmlFor="agent-username">Username</Label>
                 <Input
-                  id="agent-role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  placeholder="e.g. backend-developer"
+                  id="agent-username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  placeholder="e.g. bolt"
                   className="font-mono"
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="agent-role">Role</Label>
+              <Input
+                id="agent-role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="e.g. backend-developer"
+                className="font-mono"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="agent-bio">Bio</Label>

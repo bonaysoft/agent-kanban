@@ -64,6 +64,7 @@ export const api = {
     get: (id: string) => request<any>("GET", `/agents/${id}`),
     create: (input: {
       name: string;
+      username: string;
       bio?: string;
       soul?: string;
       role?: string;

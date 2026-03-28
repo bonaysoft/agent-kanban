@@ -110,6 +110,8 @@ function AgentCard({ agent }: { agent: any }) {
           ) : null}
         </div>
 
+        <span className="mt-0.5 font-mono text-[10px] text-content-tertiary">@{agent.username}</span>
+
         {/* Fingerprint badge */}
         <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5" style={{ background: "var(--bg-secondary)" }}>
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" className="opacity-50">

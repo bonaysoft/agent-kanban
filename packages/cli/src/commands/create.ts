@@ -104,7 +104,7 @@ async function createAgent(opts: Record<string, string>) {
     const name = opts.name || template.name;
     body = {
       name,
-      username: opts.username || deriveUsername(name),
+      username: opts.username || template.username || deriveUsername(name),
       bio: opts.bio || template.bio,
       soul: opts.soul || template.soul,
       role: opts.role || template.role,
