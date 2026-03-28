@@ -3,4 +3,4 @@ Allow: /
 Allow: /share/
 Disallow: /api/
 
-Sitemap: https://agent-kanban.dev/sitemap.xml
+Sitemap: https://agent-kanban.dev/api/sitemap.xml
