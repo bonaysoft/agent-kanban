@@ -28,7 +28,7 @@ export async function prepareAgent(
   return {
     id,
     owner_id: ownerId,
-    name: input.name,
+    name: input.name || input.username,
     username: input.username,
     gpg_subkey_id: null,
     bio: input.bio ?? null,

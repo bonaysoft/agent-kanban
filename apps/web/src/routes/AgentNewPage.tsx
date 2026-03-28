@@ -70,11 +70,11 @@ export function AgentNewPage() {
   }
 
   async function handleCreate() {
-    if (!name.trim() || !username.trim()) return;
+    if (!username.trim()) return;
     setError(null);
     try {
       await createAgent.mutateAsync({
-        name: name.trim(),
+        name: name.trim() || undefined,
         username: username.trim(),
         bio: bio.trim() || undefined,
         soul: soul.trim() || undefined,

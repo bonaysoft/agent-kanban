@@ -312,13 +312,13 @@ describe("routes", () => {
     expect(body.runtime).toBe("claude");
   });
 
-  it("POST /api/agents requires name", async () => {
+  it("POST /api/agents requires username", async () => {
     const res = await apiRequest("POST", "/api/agents", { runtime: "claude" }, apiKey);
     expect(res.status).toBe(400);
   });
 
   it("POST /api/agents requires runtime", async () => {
-    const res = await apiRequest("POST", "/api/agents", { name: "No Runtime Agent" }, apiKey);
+    const res = await apiRequest("POST", "/api/agents", { username: "no-runtime-agent" }, apiKey);
     expect(res.status).toBe(400);
   });
 

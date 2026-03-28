@@ -1,4 +1,4 @@
-import { deriveUsername, fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
+import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
@@ -101,10 +101,14 @@ async function createAgent(opts: Record<string, string>) {
       console.error("Template has no runtime. Pass --runtime explicitly.");
       process.exit(1);
     }
-    const name = opts.name || template.name;
+    const username = opts.username || template.username;
+    if (!username) {
+      console.error("--username is required (template has no default username)");
+      process.exit(1);
+    }
     body = {
-      name,
-      username: opts.username || template.username || deriveUsername(name),
+      name: opts.name || template.name || username,
+      username,
       bio: opts.bio || template.bio,
       soul: opts.soul || template.soul,
       role: opts.role || template.role,
@@ -115,12 +119,12 @@ async function createAgent(opts: Record<string, string>) {
       skills: opts.skills ? opts.skills.split(",").map((s: string) => s.trim()) : template.skills,
     };
   } else {
-    if (!opts.name) {
-      console.error("Either --template or --name is required");
+    if (!opts.username) {
+      console.error("--username is required");
       process.exit(1);
     }
     const runtime = opts.runtime || detectRuntime();
-    body = { name: opts.name, username: opts.username || deriveUsername(opts.name), runtime };
+    body = { name: opts.name || opts.username, username: opts.username, runtime };
     if (opts.bio) body.bio = opts.bio;
     if (opts.soul) body.soul = opts.soul;
     if (opts.role) body.role = opts.role;

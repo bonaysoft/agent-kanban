@@ -63,7 +63,7 @@ export const api = {
     list: () => request<any[]>("GET", "/agents"),
     get: (id: string) => request<any>("GET", `/agents/${id}`),
     create: (input: {
-      name: string;
+      name?: string;
       username: string;
       bio?: string;
       soul?: string;

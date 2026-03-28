@@ -286,7 +286,7 @@ export interface CompleteTaskInput {
 }
 
 export interface CreateAgentInput {
-  name: string;
+  name?: string;
   username: string;
   bio?: string;
   soul?: string;

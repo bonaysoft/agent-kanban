@@ -323,7 +323,7 @@ api.get("/api/agents/:id", async (c) => {
 
 api.post("/api/agents", async (c) => {
   const body = await c.req.json<{
-    name: string;
+    name?: string;
     username: string;
     bio?: string;
     soul?: string;
@@ -334,7 +334,6 @@ api.post("/api/agents", async (c) => {
     model?: string;
     skills?: string[];
   }>();
-  if (!body.name) throw new HTTPException(400, { message: "name is required" });
   if (!body.username) throw new HTTPException(400, { message: "username is required" });
   if (!body.runtime) throw new HTTPException(400, { message: "runtime is required" });
   if (!isValidUsername(body.username)) throw new HTTPException(400, { message: `Invalid username "${body.username}"` });
