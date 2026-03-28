@@ -1,16 +1,17 @@
 import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { createAgent, deleteAgent, getAgent, getAgentLogs, listAgents, setAgentGpgSubkeyId, updateAgent } from "./agentRepo";
+import { deleteAgent, getAgent, getAgentLogs, getAgentMailboxToken, insertAgent, listAgents, prepareAgent, updateAgent } from "./agentRepo";
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
-import { addAgentEmail, getGithubToken, syncGpgKey } from "./githubService";
-import { addSubkey, getArmoredPrivateKey, getOrCreateRootKey, getRootPublicKey } from "./gpgKeyRepo";
+import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
+import { addSubkey, getArmoredPrivateKey, getOrCreateRootKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
 import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
+import { createMailbox, deleteMailbox, getEmail, getInbox } from "./mailsService";
 import { createMessage, listMessages } from "./messageRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
@@ -298,16 +299,42 @@ api.post("/api/agents", async (c) => {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
   const ownerId = c.get("ownerId");
-  const agent = await createAgent(c.env.DB, ownerId, body as CreateAgentInput);
+  const prepared = await prepareAgent(c.env.DB, ownerId, body as CreateAgentInput);
+  const email = agentEmail(prepared.username);
 
-  // Add GPG subkey for this agent, then sync to GitHub (best-effort, silent on failure)
-  await syncAgentToGithub(c.env, ownerId, agent.id);
+  // External service — create mailbox (skip if MAILS_ADMIN_TOKEN not configured)
+  const mailboxToken = c.env.MAILS_ADMIN_TOKEN ? await createMailbox(c.env.MAILS_ADMIN_TOKEN, email) : undefined;
 
-  return c.json(agent, 201);
+  try {
+    // GPG subkey
+    await getOrCreateRootKey(c.env.DB, ownerId);
+    const subkey = await addSubkey(c.env.DB, ownerId);
+
+    // Single atomic insert with all fields
+    const agent = await insertAgent(c.env.DB, prepared, {
+      mailboxToken,
+      gpgSubkeyId: subkey?.keyId.toUpperCase(),
+    });
+
+    // GitHub sync — best-effort, skip if not connected
+    try {
+      await syncToGithub(c.env, ownerId, email);
+    } catch (err: unknown) {
+      logger.warn(`github sync failed for agent ${agent.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return c.json(agent, 201);
+  } catch (err) {
+    await deleteMailbox(c.env.MAILS_ADMIN_TOKEN, email).catch((cleanupErr: unknown) => {
+      logger.warn(`mailbox cleanup failed for ${email}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
+    });
+    throw err;
+  }
 });
 
 api.patch("/api/agents/:id", async (c) => {
-  const existing = await c.env.DB.prepare("SELECT builtin FROM agents WHERE id = ?").bind(c.req.param("id")).first<{ builtin: number }>();
+  const ownerId = c.get("ownerId");
+  const existing = await getAgent(c.env.DB, c.req.param("id"), ownerId);
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
   const body = await c.req.json();
@@ -316,10 +343,25 @@ api.patch("/api/agents/:id", async (c) => {
 });
 
 api.delete("/api/agents/:id", async (c) => {
-  const existing = await c.env.DB.prepare("SELECT builtin FROM agents WHERE id = ?").bind(c.req.param("id")).first<{ builtin: number }>();
-  if (!existing) throw new HTTPException(404, { message: "Agent not found" });
-  if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
-  const _deleted = await deleteAgent(c.env.DB, c.req.param("id"));
+  const agent = await c.env.DB.prepare("SELECT id, username, builtin FROM agents WHERE id = ?")
+    .bind(c.req.param("id"))
+    .first<{ id: string; username: string; builtin: number }>();
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  if (agent.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
+  const email = agentEmail(agent.username);
+  await deleteAgent(c.env.DB, agent.id);
+  if (c.env.MAILS_ADMIN_TOKEN) {
+    await deleteMailbox(c.env.MAILS_ADMIN_TOKEN, email);
+  }
+
+  // Remove email from GitHub (best-effort)
+  const token = await getGithubToken(c.env.DB, c.get("ownerId"));
+  if (token) {
+    await removeAgentEmail(token, email).catch((err: unknown) => {
+      logger.warn(`github email cleanup failed for ${email}: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }
+
   return c.json({ ok: true });
 });
 
@@ -654,60 +696,44 @@ api.get("/api/gpg/public-key", async (c) => {
   return c.json({ armored_public_key: armoredPublicKey });
 });
 
-// ─── GitHub Integration ───
+// ─── Agent Inbox ───
 
-api.post("/api/github/sync-gpg", async (c) => {
+api.get("/api/agents/:id/inbox", async (c) => {
   const ownerId = c.get("ownerId");
-  const token = await getGithubToken(c.env.DB, ownerId);
-  if (!token) throw new HTTPException(400, { message: "GitHub account not connected" });
-
-  const row = await c.env.DB.prepare("SELECT armored_public_key, fingerprint FROM gpg_keys WHERE owner_id = ?")
-    .bind(ownerId)
-    .first<{ armored_public_key: string; fingerprint: string }>();
-  if (!row) throw new HTTPException(404, { message: "GPG root key not found" });
-
-  await syncGpgKey(token, row.armored_public_key, row.fingerprint);
-  return c.json({ ok: true });
+  const agent = await getAgent(c.env.DB, c.req.param("id"), ownerId);
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  const mailboxToken = await getAgentMailboxToken(c.env.DB, agent.id);
+  if (!mailboxToken) return c.json({ emails: [] });
+  const emails = await getInbox(mailboxToken, agentEmail(agent.username));
+  return c.json({ emails });
 });
 
-api.post("/api/github/sync-emails", async (c) => {
+api.get("/api/agents/:id/inbox/:emailId", async (c) => {
   const ownerId = c.get("ownerId");
-  const token = await getGithubToken(c.env.DB, ownerId);
-  if (!token) throw new HTTPException(400, { message: "GitHub account not connected" });
-
-  const agents = await listAgents(c.env.DB, ownerId);
-  await Promise.all(agents.map((a) => addAgentEmail(token, agentEmail(a.id))));
-  return c.json({ ok: true });
+  const agent = await getAgent(c.env.DB, c.req.param("id"), ownerId);
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  const mailboxToken = await getAgentMailboxToken(c.env.DB, agent.id);
+  if (!mailboxToken) throw new HTTPException(404, { message: "Mailbox not configured" });
+  const email = await getEmail(mailboxToken, c.req.param("emailId"));
+  return c.json(email);
 });
 
 export { api };
 
 // ─── Helpers ───
 
-function agentEmail(agentId: string): string {
-  return `${agentId}@mails.agent-kanban.dev`;
+function agentEmail(username: string): string {
+  return `${username}@mails.agent-kanban.dev`;
 }
 
-async function syncAgentToGithub(env: Env, ownerId: string, agentId: string): Promise<void> {
-  try {
-    const owner = await env.DB.prepare("SELECT email FROM user WHERE id = ?").bind(ownerId).first<{ email: string }>();
-    await getOrCreateRootKey(env.DB, ownerId, owner?.email ?? "noreply@agent-kanban.dev");
-    const subkey = await addSubkey(env.DB, ownerId);
-    if (subkey) {
-      await setAgentGpgSubkeyId(env.DB, agentId, subkey.keyId.toUpperCase());
-    }
+async function syncToGithub(env: Env, ownerId: string, email: string): Promise<void> {
+  const token = await getGithubToken(env.DB, ownerId);
+  if (!token) return;
 
-    const token = await getGithubToken(env.DB, ownerId);
-    if (!token) return;
+  const rootKey = await getRootKeyInfo(env.DB, ownerId);
+  if (!rootKey) return;
 
-    const row = await env.DB.prepare("SELECT armored_public_key, fingerprint FROM gpg_keys WHERE owner_id = ?")
-      .bind(ownerId)
-      .first<{ armored_public_key: string; fingerprint: string }>();
-    if (!row) return;
-
-    await syncGpgKey(token, row.armored_public_key, row.fingerprint);
-    await addAgentEmail(token, agentEmail(agentId));
-  } catch (err: any) {
-    logger.warn(`github sync failed for agent ${agentId}: ${err.message}`);
-  }
+  const subkeyIds = await getSubkeyIds(rootKey.armoredPublicKey);
+  await syncGpgKey(token, rootKey.armoredPublicKey, rootKey.fingerprint, subkeyIds);
+  await addAgentEmail(token, email);
 }

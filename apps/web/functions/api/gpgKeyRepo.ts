@@ -26,14 +26,16 @@ async function generateRootKey(ownerEmail: string): Promise<{ armoredPrivateKey:
   return { armoredPrivateKey: privateKey as string, armoredPublicKey: publicKey as string, fingerprint };
 }
 
-export async function getOrCreateRootKey(db: D1, ownerId: string, ownerEmail: string): Promise<GpgKey> {
+export async function getOrCreateRootKey(db: D1, ownerId: string): Promise<GpgKey> {
   const existing = await db
     .prepare("SELECT id, owner_id, armored_public_key, fingerprint, created_at, updated_at FROM gpg_keys WHERE owner_id = ?")
     .bind(ownerId)
     .first<GpgKey>();
   if (existing) return existing;
 
-  const { armoredPrivateKey, armoredPublicKey, fingerprint } = await generateRootKey(ownerEmail);
+  const owner = await db.prepare("SELECT email FROM user WHERE id = ?").bind(ownerId).first<{ email: string }>();
+  if (!owner?.email) throw new Error("Owner email not found — cannot create GPG root key");
+  const { armoredPrivateKey, armoredPublicKey, fingerprint } = await generateRootKey(owner.email);
   const id = newId();
   const now = new Date().toISOString();
 
@@ -81,10 +83,24 @@ export async function getArmoredPrivateKey(db: D1, ownerId: string): Promise<str
   return row?.armored_private_key ?? null;
 }
 
+export async function getRootKeyInfo(db: D1, ownerId: string): Promise<{ armoredPublicKey: string; fingerprint: string } | null> {
+  const row = await db
+    .prepare("SELECT armored_public_key, fingerprint FROM gpg_keys WHERE owner_id = ?")
+    .bind(ownerId)
+    .first<{ armored_public_key: string; fingerprint: string }>();
+  if (!row) return null;
+  return { armoredPublicKey: row.armored_public_key, fingerprint: row.fingerprint };
+}
+
 export async function getRootPublicKey(db: D1, ownerId: string): Promise<string | null> {
   const row = await db
     .prepare("SELECT armored_public_key FROM gpg_keys WHERE owner_id = ?")
     .bind(ownerId)
     .first<Pick<GpgKey, "armored_public_key">>();
   return row?.armored_public_key ?? null;
+}
+
+export async function getSubkeyIds(armoredPublicKey: string): Promise<string[]> {
+  const key = await openpgp.readKey({ armoredKey: armoredPublicKey });
+  return key.getSubkeys().map((sk) => sk.getKeyID().toHex().toUpperCase());
 }

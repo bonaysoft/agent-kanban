@@ -1,56 +1,34 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
-import { type AgentRuntime, BUILTIN_TEMPLATES, computeFingerprint, computeKeyId, deriveUsername, generateKeypair, isValidUsername } from "@agent-kanban/shared";
+import {
+  type AgentRuntime,
+  BUILTIN_TEMPLATES,
+  computeFingerprint,
+  computeKeyId,
+  deriveUsername,
+  generateKeypair,
+  isValidUsername,
+} from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
 
-export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<Agent> {
+export interface PreparedAgent extends Agent {
+  privateKeyJwk: JsonWebKey;
+}
+
+export async function prepareAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<PreparedAgent> {
   const { publicKeyBase64, privateKeyJwk } = await generateKeypair();
   const fingerprint = await computeFingerprint(publicKeyBase64);
   const id = computeKeyId(fingerprint);
-  const now = new Date().toISOString();
-  const skillsJson = input.skills ? JSON.stringify(input.skills) : null;
-  const handoffJson = input.handoff_to ? JSON.stringify(input.handoff_to) : null;
-
   const username = input.username ?? deriveUsername(input.name);
   if (!isValidUsername(username)) {
     throw new Error(`Invalid username "${username}"`);
   }
-  const existing = await db
-    .prepare("SELECT 1 FROM agents WHERE owner_id = ? AND username = ?")
-    .bind(ownerId, username)
-    .first();
+  const existing = await db.prepare("SELECT 1 FROM agents WHERE owner_id = ? AND username = ?").bind(ownerId, username).first();
   if (existing) {
     throw new Error(`Username "${username}" is already taken`);
   }
-
-  await db
-    .prepare(`
-    INSERT INTO agents (id, owner_id, name, username, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-    .bind(
-      id,
-      ownerId,
-      input.name,
-      username,
-      input.bio ?? null,
-      input.soul ?? null,
-      input.role ?? null,
-      input.kind ?? "worker",
-      handoffJson,
-      input.runtime,
-      input.model ?? null,
-      skillsJson,
-      publicKeyBase64,
-      JSON.stringify(privateKeyJwk),
-      fingerprint,
-      builtin ? 1 : 0,
-      now,
-      now,
-    )
-    .run();
-
+  const now = new Date().toISOString();
   return {
     id,
     owner_id: ownerId,
@@ -70,7 +48,49 @@ export async function createAgent(db: D1, ownerId: string, input: CreateAgentInp
     builtin: builtin ? 1 : 0,
     created_at: now,
     updated_at: now,
+    privateKeyJwk,
   };
+}
+
+export async function insertAgent(db: D1, agent: PreparedAgent, extras?: { mailboxToken?: string; gpgSubkeyId?: string }): Promise<Agent> {
+  const skillsJson = agent.skills ? JSON.stringify(agent.skills) : null;
+  const handoffJson = agent.handoff_to ? JSON.stringify(agent.handoff_to) : null;
+  await db
+    .prepare(`
+    INSERT INTO agents (id, owner_id, name, username, bio, soul, role, kind, handoff_to, runtime, model, skills, public_key, private_key, fingerprint, builtin, mailbox_token, gpg_subkey_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(
+      agent.id,
+      agent.owner_id,
+      agent.name,
+      agent.username,
+      agent.bio,
+      agent.soul,
+      agent.role,
+      agent.kind,
+      handoffJson,
+      agent.runtime,
+      agent.model,
+      skillsJson,
+      agent.public_key,
+      JSON.stringify(agent.privateKeyJwk),
+      agent.fingerprint,
+      agent.builtin,
+      extras?.mailboxToken ?? null,
+      extras?.gpgSubkeyId ?? null,
+      agent.created_at,
+      agent.updated_at,
+    )
+    .run();
+  const { privateKeyJwk: _, ...result } = agent;
+  if (extras?.gpgSubkeyId) result.gpg_subkey_id = extras.gpgSubkeyId;
+  return result;
+}
+
+export async function createAgent(db: D1, ownerId: string, input: CreateAgentInput, builtin = false): Promise<Agent> {
+  const prepared = await prepareAgent(db, ownerId, input, builtin);
+  return insertAgent(db, prepared);
 }
 
 export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> {
@@ -178,4 +198,9 @@ export async function getAgentPrivateKey(db: D1, agentId: string): Promise<JsonW
 
 export async function setAgentGpgSubkeyId(db: D1, agentId: string, gpgSubkeyId: string): Promise<void> {
   await db.prepare("UPDATE agents SET gpg_subkey_id = ? WHERE id = ?").bind(gpgSubkeyId, agentId).run();
+}
+
+export async function getAgentMailboxToken(db: D1, agentId: string): Promise<string | null> {
+  const row = await db.prepare("SELECT mailbox_token FROM agents WHERE id = ?").bind(agentId).first<{ mailbox_token: string | null }>();
+  return row?.mailbox_token ?? null;
 }

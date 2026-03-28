@@ -6,6 +6,7 @@ export interface Env {
   ALLOWED_HOSTS: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  MAILS_ADMIN_TOKEN: string;
 }
 
 declare module "hono" {

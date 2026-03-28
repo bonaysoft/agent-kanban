@@ -6,6 +6,7 @@ const USER_AGENT = "agent-kanban/1.0";
 interface GithubGpgKey {
   id: number;
   key_id: string;
+  subkeys: { key_id: string }[];
 }
 
 export async function getGithubToken(db: D1, userId: string): Promise<string | null> {
@@ -16,7 +17,7 @@ export async function getGithubToken(db: D1, userId: string): Promise<string | n
   return row?.accessToken ?? null;
 }
 
-export async function syncGpgKey(token: string, armoredPublicKey: string, fingerprint: string): Promise<void> {
+export async function syncGpgKey(token: string, armoredPublicKey: string, fingerprint: string, subkeyIds: string[]): Promise<void> {
   const headers = {
     Authorization: `Bearer ${token}`,
     "User-Agent": USER_AGENT,
@@ -28,15 +29,20 @@ export async function syncGpgKey(token: string, armoredPublicKey: string, finger
 
   const keys = (await listRes.json()) as GithubGpgKey[];
 
-  // GitHub key_id is the last 16 hex chars of the fingerprint (uppercased)
-  const keyIdSuffix = fingerprint.toUpperCase().slice(-16);
-  const existing = keys.find((k) => k.key_id.toUpperCase() === keyIdSuffix);
+  // Delete any key that matches our root fingerprint or contains overlapping subkeys
+  const rootKeyId = fingerprint.toUpperCase().slice(-16);
+  const ourSubkeyIds = new Set(subkeyIds.map((id) => id.toUpperCase()));
 
-  if (existing) {
-    await fetch(`${GITHUB_API}/user/gpg_keys/${existing.id}`, {
-      method: "DELETE",
-      headers,
-    });
+  const toDelete = keys.filter((k) => {
+    if (k.key_id.toUpperCase() === rootKeyId) return true;
+    return k.subkeys?.some((sk) => ourSubkeyIds.has(sk.key_id.toUpperCase()));
+  });
+
+  for (const key of toDelete) {
+    const delRes = await fetch(`${GITHUB_API}/user/gpg_keys/${key.id}`, { method: "DELETE", headers });
+    if (!delRes.ok && delRes.status !== 404) {
+      throw new Error(`GitHub delete GPG key ${key.id} failed: ${delRes.status}`);
+    }
   }
 
   const createRes = await fetch(`${GITHUB_API}/user/gpg_keys`, {
@@ -64,5 +70,21 @@ export async function addAgentEmail(token: string, email: string): Promise<void>
   if (!res.ok && res.status !== 422) {
     const body = await res.text();
     throw new Error(`GitHub add email failed: ${res.status} ${body}`);
+  }
+}
+
+export async function removeAgentEmail(token: string, email: string): Promise<void> {
+  const res = await fetch(`${GITHUB_API}/user/emails`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": USER_AGENT,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ emails: [email] }),
+  });
+  if (!res.ok && res.status !== 404 && res.status !== 422) {
+    const body = await res.text();
+    throw new Error(`GitHub remove email failed: ${res.status} ${body}`);
   }
 }

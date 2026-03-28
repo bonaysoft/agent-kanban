@@ -11,6 +11,7 @@ export function createTestEnv() {
     ALLOWED_HOSTS: "localhost:8788",
     GITHUB_CLIENT_ID: "x",
     GITHUB_CLIENT_SECRET: "x",
+    MAILS_ADMIN_TOKEN: "",
   };
 }
 
@@ -29,6 +30,7 @@ export async function applyMigrations(db: D1Database) {
     "0011_task_scheduled_at.sql",
     "0012_gpg_keys.sql",
     "0013_agent_identity.sql",
+    "0014_agent_mailbox_token.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");

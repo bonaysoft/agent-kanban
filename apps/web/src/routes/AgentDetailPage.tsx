@@ -1,4 +1,5 @@
-import { useState } from "react";
+import DOMPurify from "dompurify";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
 import { Header } from "../components/Header";
@@ -8,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { useAgent, useAgentSessions, useAgentTasks, useDeleteAgent } from "../hooks/useAgents";
 import { agentColor, agentColorRgb, agentFingerprint } from "../lib/agentIdentity";
+import { api } from "../lib/api";
 
 const actionStyles: Record<string, string> = {
   claimed: "text-accent",
@@ -38,7 +40,7 @@ function formatCost(microUsd: number): string {
   return `$${(microUsd / 1_000_000).toFixed(2)}`;
 }
 
-type Tab = "mission" | "activity" | "sessions";
+type Tab = "mission" | "activity" | "sessions" | "inbox";
 
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -85,6 +87,7 @@ export function AgentDetailPage() {
     { key: "mission", label: "Mission" },
     { key: "activity", label: "Activity", count: agent.logs?.length },
     { key: "sessions", label: "Sessions", count: sessions.length },
+    { key: "inbox", label: "Inbox" },
   ];
 
   return (
@@ -321,6 +324,7 @@ export function AgentDetailPage() {
           {tab === "mission" && <MissionTab task={task} color={color} rgb={rgb} />}
           {tab === "activity" && <ActivityTab logs={agent.logs} rgb={rgb} />}
           {tab === "sessions" && <SessionsTab sessions={sessions} color={color} />}
+          {tab === "inbox" && <InboxTab agentId={agent.id} email={agent.email} />}
         </div>
       </div>
     </div>
@@ -488,6 +492,106 @@ function DeleteAgentDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface InboxMessage {
+  id: string;
+  from_address: string;
+  from_name: string;
+  subject: string;
+  received_at: string;
+}
+
+interface InboxMessageDetail extends InboxMessage {
+  body_html: string;
+  body_text: string;
+}
+
+function EmailBody({ html, text }: { html: string; text: string }) {
+  return (
+    <div
+      className="mt-3 text-sm text-content-secondary [&_a]:text-accent [&_a]:underline overflow-auto max-h-[400px]"
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by DOMPurify
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html || text || "") }}
+    />
+  );
+}
+
+function InboxTab({ agentId, email }: { agentId: string; email: string }) {
+  const [emails, setEmails] = useState<InboxMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEmail, setSelectedEmail] = useState<InboxMessageDetail | null>(null);
+  const [loadingEmail, setLoadingEmail] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    api.agents
+      .inbox(agentId)
+      .then((res) => setEmails(res.emails))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [agentId]);
+
+  async function handleViewEmail(emailId: string) {
+    if (selectedEmail?.id === emailId) {
+      setSelectedEmail(null);
+      return;
+    }
+    setLoadingEmail(true);
+    setError(null);
+    try {
+      const detail = await api.agents.inboxEmail(agentId, emailId);
+      setSelectedEmail(detail);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoadingEmail(false);
+    }
+  }
+
+  if (loading) return <p className="text-sm text-content-tertiary">Loading inbox...</p>;
+  if (error) return <p className="text-sm text-error">{error}</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-xs text-content-tertiary">{email}</span>
+      </div>
+
+      {emails.length === 0 ? (
+        <p className="text-sm text-content-tertiary">No emails yet.</p>
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+          {emails.map((msg) => (
+            <div key={msg.id}>
+              <div
+                className="flex items-center gap-4 px-4 py-3 hover:bg-surface-tertiary/50 cursor-pointer transition-colors"
+                onClick={() => handleViewEmail(msg.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-content-primary truncate">{msg.subject}</div>
+                  <div className="text-xs text-content-tertiary mt-0.5">{msg.from_name || msg.from_address}</div>
+                </div>
+                <span className="text-xs text-content-tertiary shrink-0">{new Date(msg.received_at).toLocaleDateString()}</span>
+              </div>
+
+              {selectedEmail?.id === msg.id && (
+                <div className="px-4 pb-4 border-t border-border/50">
+                  {loadingEmail ? (
+                    <p className="text-xs text-content-tertiary py-3">Loading...</p>
+                  ) : (
+                    <EmailBody html={selectedEmail.body_html} text={selectedEmail.body_text} />
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

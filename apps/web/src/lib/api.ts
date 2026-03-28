@@ -75,6 +75,8 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) => request<any>("PATCH", `/agents/${id}`, body),
     delete: (id: string) => request<void>("DELETE", `/agents/${id}`),
     sessions: (agentId: string) => request<any[]>("GET", `/agents/${agentId}/sessions`),
+    inbox: (agentId: string) => request<{ emails: any[] }>("GET", `/agents/${agentId}/inbox`),
+    inboxEmail: (agentId: string, emailId: string) => request<any>("GET", `/agents/${agentId}/inbox/${emailId}`),
   },
   machines: {
     list: () => request<any[]>("GET", "/machines"),
@@ -103,9 +105,5 @@ export const api = {
   },
   admin: {
     getStats: () => request<any>("GET", "/admin/stats"),
-  },
-  github: {
-    syncGpg: () => request<{ ok: boolean }>("POST", "/github/sync-gpg"),
-    syncEmails: () => request<{ ok: boolean }>("POST", "/github/sync-emails"),
   },
 };
