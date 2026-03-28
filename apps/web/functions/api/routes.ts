@@ -102,8 +102,10 @@ api.get("/api/share/:slug", async (c) => {
     status: t.status,
     priority: t.priority,
     labels: t.labels,
+    repository_name: t.repository_name,
     agent_name: t.agent_name,
     agent_public_key: t.agent_public_key,
+    scheduled_at: t.scheduled_at,
     created_at: t.created_at,
     updated_at: t.updated_at,
   }));
