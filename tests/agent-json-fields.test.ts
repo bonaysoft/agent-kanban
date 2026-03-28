@@ -90,6 +90,15 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     expect(agent.handoff_to).toEqual(["quality-goalkeeper", "enduser"]);
   });
 
+  it("listAgents returns email derived from username", async () => {
+    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const agents = await listAgents(db, ownerId);
+    const agent = agents.find((a) => a.id === agentId)!;
+
+    expect(agent.username).toBe("test-agent");
+    expect(agent.email).toBe("test-agent@mails.agent-kanban.dev");
+  });
+
   it("getAgent returns parsed arrays", async () => {
     const { getAgent } = await import("../apps/web/functions/api/agentRepo");
     const agent = await getAgent(db, agentId, ownerId);
@@ -98,6 +107,15 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     expect(Array.isArray(agent!.skills)).toBe(true);
     expect(agent!.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
     expect(Array.isArray(agent!.handoff_to)).toBe(true);
+  });
+
+  it("getAgent returns email derived from username", async () => {
+    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const agent = await getAgent(db, agentId, ownerId);
+
+    expect(agent).toBeTruthy();
+    expect(agent!.username).toBe("test-agent");
+    expect(agent!.email).toBe("test-agent@mails.agent-kanban.dev");
   });
 
   it("updateAgent accepts arrays and returns parsed arrays", async () => {
