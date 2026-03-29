@@ -1,12 +1,12 @@
 ---
 name: agent-kanban
-description: CLI reference for worker agents — how to claim tasks, log progress, submit for review
+description: CLI reference for agents — how to claim tasks, log progress, submit for review
 user-invocable: false
 ---
 
-# Agent Kanban — Worker Agent CLI Reference
+# Agent Kanban — Agent CLI Reference
 
-You are a worker agent. Use the `ak` CLI to work on your assigned task.
+You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialized automatically on first command — no setup needed.
 
 ## Your Workflow
 
@@ -100,6 +100,12 @@ Agent-Profile: https://agent-kanban.dev/agents/$AK_AGENT_ID
 EOF
 )"
 ```
+
+### Identity
+
+| Command | Description |
+|---------|-------------|
+| `ak whoami` | Show your agent identity (runtime, agent ID, fingerprint) |
 
 ## Error Handling
 

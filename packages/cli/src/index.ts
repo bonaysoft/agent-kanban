@@ -206,16 +206,14 @@ registerDeleteCommand(program);
 program
   .command("whoami")
   .description("Show agent identity for the current runtime")
-  .action(() => {
+  .action(async () => {
+    // Trigger auto-init so whoami works as first command
+    await createClient();
     const runtime = detectRuntime();
     const runtimeKey = runtime ?? "default";
     const identity = loadIdentity(runtimeKey);
     if (!identity) {
-      console.error(
-        runtime
-          ? `No identity for ${runtimeKey}. Identity is created on first ak command inside the runtime.`
-          : "No runtime detected. This command must run inside an agent runtime (Claude Code, Codex, Gemini CLI).",
-      );
+      console.error("Failed to resolve identity.");
       process.exit(1);
     }
     console.log(`Runtime:     ${runtimeKey}`);
