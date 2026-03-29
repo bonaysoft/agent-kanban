@@ -8,7 +8,7 @@ export type TaskTransition =
   | "reject" // in_review → in_progress
   | "complete" // in_review → done
   | "cancel" // in_progress|in_review → cancelled
-  | "release"; // in_progress|in_review → todo (machine only)
+  | "release"; // in_progress → todo (machine only, stale timeout)
 
 interface TransitionDef {
   from: TaskStatus[];
@@ -22,7 +22,7 @@ const TRANSITIONS: Record<TaskTransition, TransitionDef> = {
   reject: { from: ["in_review"], to: "in_progress", allow: ["user", "agent:leader"] },
   complete: { from: ["in_review"], to: "done", allow: ["user", "machine", "agent:leader"] },
   cancel: { from: ["in_progress", "in_review"], to: "cancelled", allow: ["user", "machine", "agent:leader"] },
-  release: { from: ["in_progress", "in_review"], to: "todo", allow: ["machine"] },
+  release: { from: ["in_progress"], to: "todo", allow: ["machine"] },
 };
 
 export interface TransitionError {
