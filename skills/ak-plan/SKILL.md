@@ -110,8 +110,8 @@ Create tasks with full specs. For each task:
 
 Create tasks in dependency order so earlier task IDs can be referenced:
 ```bash
-T1=$(ak create task --board $BOARD --title "..." --repo $REPO --priority high --format json | jq -r .id)
-T2=$(ak create task --board $BOARD --title "..." --repo $REPO --depends-on $T1 --format json | jq -r .id)
+T1=$(ak create task --board $BOARD --title "..." --repo $REPO --priority high -o json | jq -r .id)
+T2=$(ak create task --board $BOARD --title "..." --repo $REPO --depends-on $T1 -o json | jq -r .id)
 ```
 
 ### Task Description Quality
@@ -178,7 +178,7 @@ When all tasks are done, report the final summary to the user.
 
 ## Rules
 
-- **Prefer text output** — only use `--format json | jq` when extracting fields into variables (e.g. task IDs for `--depends-on`). For display, use default text output or `--format text`.
+- **Prefer text output** — only use `-o json | jq` when extracting fields into variables (e.g. task IDs for `--depends-on`). For display, use default text output.
 - **Always get repo URL from `git remote -v`** — never guess
 - **Discuss the plan with the user before creating tasks** — don't just start creating
 - **Set depends-on at creation time** — don't leave deps for later

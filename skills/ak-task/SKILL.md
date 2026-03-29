@@ -76,10 +76,10 @@ Report to user: task ID, title, assigned agent.
 
 Poll until the task reaches `in_review`:
 ```bash
-ak get task --format json | jq '.[] | select(.id == "<task-id>") | {status, pr_url}'
+ak get task -o json | jq '.[] | select(.id == "<task-id>") | {status, pr_url}'
 ```
 
-Use `--format json` here because you need to extract fields programmatically.
+Use `-o json` here because you need to extract fields programmatically.
 
 Poll every 30 seconds. When status becomes `in_review` and `pr_url` is set, proceed to Step 6.
 
