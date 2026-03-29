@@ -270,7 +270,7 @@ export class TaskRunner {
   private buildAgentEnv(opts: BuildEnvOpts): Record<string, string> {
     const { agentId, sessionId, privateKeyJwk, agentName, agentUsername, gpgSubkeyId, gnupgHome } = opts;
     const email = `${agentUsername}@mails.agent-kanban.dev`;
-    const displayName = `${agentName} (agent-kanban)`;
+    const displayName = agentName;
     const env: Record<string, string> = {
       AK_AGENT_ID: agentId,
       AK_SESSION_ID: sessionId,
