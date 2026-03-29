@@ -322,6 +322,46 @@ describe("routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /api/agents rejects invalid username format", async () => {
+    const res = await apiRequest("POST", "/api/agents", { username: "My Invalid Agent!", runtime: "claude" }, apiKey);
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/agents rejects duplicate username", async () => {
+    // First create succeeds
+    const r1 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
+    expect(r1.status).toBe(201);
+    // Same username second time → conflict
+    const r2 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
+    expect(r2.status).toBe(409);
+  });
+
+  it("POST /api/agents returns username in response", async () => {
+    const res = await apiRequest("POST", "/api/agents", { username: "username-check-agent", runtime: "claude" }, apiKey);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as any;
+    expect(body.username).toBe("username-check-agent");
+  });
+
+  it("GET /api/agents returns email derived from username", async () => {
+    const res = await apiRequest("GET", "/api/agents", undefined, apiKey);
+    expect(res.status).toBe(200);
+    const agents = (await res.json()) as any[];
+    for (const agent of agents) {
+      if (agent.username) {
+        expect(agent.email).toBe(`${agent.username}@mails.agent-kanban.dev`);
+      }
+    }
+  });
+
+  it("GET /api/agents/:id returns email derived from username", async () => {
+    const res = await apiRequest("GET", `/api/agents/${agentId}`, undefined, apiKey);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.username).toBeTruthy();
+    expect(body.email).toBe(`${body.username}@mails.agent-kanban.dev`);
+  });
+
   it("POST /api/agents rejects reserved role", async () => {
     const res = await apiRequest(
       "POST",
