@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { createClient } from "../client.js";
-import { getFormat, output } from "../output.js";
+import { getOutputFormat, output } from "../output.js";
 
 export function registerDeleteCommand(program: Command) {
   const deleteCmd = program.command("delete").description("Delete a resource (board, task, agent, repo)");
@@ -8,10 +8,10 @@ export function registerDeleteCommand(program: Command) {
   deleteCmd
     .command("board <id>")
     .description("Delete a board")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const board = await client.deleteBoard(id);
       output(board, fmt, () => `Deleted board ${id}`);
     });
@@ -19,10 +19,10 @@ export function registerDeleteCommand(program: Command) {
   deleteCmd
     .command("task <id>")
     .description("Delete a task")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const task = await client.deleteTask(id);
       output(task, fmt, () => `Deleted task ${id}`);
     });
@@ -30,10 +30,10 @@ export function registerDeleteCommand(program: Command) {
   deleteCmd
     .command("agent <id>")
     .description("Delete an agent")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const agent = await client.deleteAgent(id);
       output(agent, fmt, () => `Deleted agent ${id}`);
     });
@@ -41,10 +41,10 @@ export function registerDeleteCommand(program: Command) {
   deleteCmd
     .command("repo <id>")
     .description("Delete a repository")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const repo = await client.deleteRepository(id);
       output(repo, fmt, () => `Deleted repository ${id}`);
     });

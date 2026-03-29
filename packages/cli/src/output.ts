@@ -1,15 +1,48 @@
-export function getFormat(explicit?: string): "json" | "text" {
-  if (explicit === "json") return "json";
-  return "text";
+import { stringify } from "yaml";
+
+export type OutputFormat = "json" | "yaml" | "wide" | "text";
+
+export function getOutputFormat(explicit?: string): OutputFormat {
+  switch (explicit) {
+    case "json":
+      return "json";
+    case "yaml":
+      return "yaml";
+    case "wide":
+      return "wide";
+    default:
+      return "text";
+  }
 }
 
-export function output(data: unknown, format: "json" | "text", textFormatter?: (data: any) => string): void {
-  if (format === "json") {
-    console.log(JSON.stringify(data, null, 2));
-  } else if (textFormatter) {
-    console.log(textFormatter(data));
-  } else {
-    console.log(JSON.stringify(data, null, 2));
+function toYamlOutput(data: unknown, kind?: string): string {
+  if (!kind) return stringify(data);
+  if (Array.isArray(data)) {
+    return data.map((item) => `---\n${stringify({ kind, spec: item })}`).join("");
+  }
+  return stringify({ kind, spec: data });
+}
+
+export function output(
+  data: unknown,
+  format: OutputFormat,
+  textFormatter?: (data: any) => string,
+  options?: { wideFormatter?: (data: any) => string; kind?: string },
+): void {
+  switch (format) {
+    case "json":
+      console.log(JSON.stringify(data, null, 2));
+      break;
+    case "yaml":
+      console.log(toYamlOutput(data, options?.kind));
+      break;
+    case "wide": {
+      const fn = options?.wideFormatter ?? textFormatter;
+      console.log(fn ? fn(data) : JSON.stringify(data, null, 2));
+      break;
+    }
+    default:
+      console.log(textFormatter ? textFormatter(data) : JSON.stringify(data, null, 2));
   }
 }
 
@@ -24,6 +57,23 @@ export function formatTaskList(tasks: any[]): string {
     const agent = t.assigned_to ? `→ ${t.assigned_to.slice(0, 8)}` : "";
     const pr = t.pr_url ? `PR: ${t.pr_url}` : "";
     return `  ${t.id}  ${status} ${priority.padEnd(8)} ${t.title} ${blocked} ${repo} ${agent} ${pr}`.trimEnd();
+  });
+
+  return lines.join("\n");
+}
+
+export function formatTaskListWide(tasks: any[]): string {
+  if (tasks.length === 0) return "No tasks found.";
+
+  const lines = tasks.map((t) => {
+    const status = `[${t.status}]`.padEnd(14);
+    const priority = t.priority ? `[${t.priority}]` : "";
+    const blocked = t.blocked ? " BLOCKED" : "";
+    const repo = t.repository_name ? t.repository_name.padEnd(20) : "".padEnd(20);
+    const agent = t.assigned_to ? t.assigned_to.slice(0, 12).padEnd(14) : "".padEnd(14);
+    const created = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : "";
+    const pr = t.pr_url ? `PR: ${t.pr_url}` : "";
+    return `  ${t.id}  ${status} ${priority.padEnd(8)} ${t.title} ${blocked} ${repo} ${agent} ${created} ${pr}`.trimEnd();
   });
 
   return lines.join("\n");
