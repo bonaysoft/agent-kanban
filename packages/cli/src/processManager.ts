@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import type { AgentClient, ApiClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { AgentEvent, AgentProvider } from "./providers/types.js";
-import { removeSession, updateSessionStatus } from "./savedSessions.js";
+import { removeSession, updateSession } from "./sessionStore.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
 
 const logger = createLogger("process");
@@ -158,7 +158,7 @@ export class ProcessManager {
     this.agents.delete(taskId);
     await this.terminateProcess(agent.process);
     this.safeCleanup(agent);
-    removeSession(taskId);
+    removeSession(agent.sessionId);
     await this.client
       .closeSession(agent.agentClient.getAgentId(), agent.sessionId)
       .catch((err: any) => logger.warn(`Failed to close session for cancelled task ${taskId}: ${err.message}`));
@@ -173,7 +173,7 @@ export class ProcessManager {
       this.agents.delete(taskId);
       await this.terminateProcess(agent.process);
       this.safeCleanup(agent);
-      removeSession(taskId);
+      removeSession(agent.sessionId);
       await this.closeSession(agent.agentClient);
       await this.releaseTask(taskId);
     }
@@ -203,16 +203,16 @@ export class ProcessManager {
         // No result event but clean exit — check task status as fallback
         const task = (await this.client.getTask(taskId)) as any;
         if (task?.status === "in_review") {
-          updateSessionStatus(taskId, "in_review");
+          updateSession(sessionId, { status: "in_review" });
           logger.info(`Task ${taskId} in review, preserving worktree`);
         } else {
           logger.info(`Agent finished task ${taskId}`);
           this.safeCleanup(agent);
-          removeSession(taskId);
+          removeSession(sessionId);
         }
       } else if (agent.rateLimited) {
         logger.warn(`Agent for task ${taskId} (${agent.provider.name}) exited due to rate limit, suspending`);
-        updateSessionStatus(taskId, "rate_limited");
+        updateSession(sessionId, { status: "rate_limited" });
       } else {
         logger.warn(`Agent crashed on task ${taskId} (${agent.provider.name}, exit ${code})`);
         if (stderrBuffer.trim()) {
@@ -221,7 +221,7 @@ export class ProcessManager {
         }
         await this.releaseTask(taskId);
         this.safeCleanup(agent);
-        removeSession(taskId);
+        removeSession(sessionId);
       }
     } finally {
       this.agents.delete(taskId); // idempotent — ensure removed even on error
@@ -236,7 +236,7 @@ export class ProcessManager {
     if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
     this.agents.delete(taskId);
     this.safeCleanup(agent);
-    removeSession(taskId);
+    removeSession(agent.sessionId);
     await this.closeSession(agentClient);
     await this.releaseTask(taskId);
     this.callbacks.onSlotFreed();
@@ -292,7 +292,7 @@ export class ProcessManager {
           }
           const task = (await this.client.getTask(taskId)) as any;
           if (task?.status === "in_review") {
-            updateSessionStatus(taskId, "in_review");
+            updateSession(agent.sessionId, { status: "in_review" });
             logger.info(`Task ${taskId} in review, preserving worktree`);
           }
           this.terminateProcess(agent.process);

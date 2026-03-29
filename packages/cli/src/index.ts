@@ -11,7 +11,6 @@ import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { loadIdentity } from "./identity.js";
 import { getFormat, output } from "./output.js";
 import { detectRuntime } from "./runtime.js";
-import { wrapRuntime } from "./runtimeWrapper.js";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
 
@@ -40,15 +39,7 @@ const helpSections: [string, [string, string][]][] = [
       ["task release <id>", "Release a task back to todo"],
     ],
   ],
-  [
-    "Runtime Wrappers",
-    [
-      ["claude [args...]", "Launch Claude Code with leader identity"],
-      ["codex [args...]", "Launch Codex CLI with leader identity"],
-      ["gemini [args...]", "Launch Gemini CLI with leader identity"],
-      ["whoami", "Show agent identity for current runtime"],
-    ],
-  ],
+  ["Identity", [["whoami", "Show agent identity for current runtime"]]],
   [
     "Daemon",
     [
@@ -222,8 +213,8 @@ program
     if (!identity) {
       console.error(
         runtime
-          ? `No identity for ${runtimeKey}. Run: ak ${runtimeKey} to auto-create.`
-          : "No runtime detected. Run ak claude, ak codex, or ak gemini to create an identity.",
+          ? `No identity for ${runtimeKey}. Identity is created on first ak command inside the runtime.`
+          : "No runtime detected. This command must run inside an agent runtime (Claude Code, Codex, Gemini CLI).",
       );
       process.exit(1);
     }
@@ -232,29 +223,6 @@ program
     console.log(`Name:        ${identity.name}`);
     console.log(`Fingerprint: ${identity.fingerprint}`);
   });
-
-// ─── Runtime Wrappers ───
-
-program
-  .command("claude")
-  .description("Launch Claude Code with leader agent identity")
-  .allowUnknownOption()
-  .allowExcessArguments()
-  .action(async (_opts, cmd) => wrapRuntime("claude", "claude", cmd.args));
-
-program
-  .command("codex")
-  .description("Launch Codex CLI with leader agent identity")
-  .allowUnknownOption()
-  .allowExcessArguments()
-  .action(async (_opts, cmd) => wrapRuntime("codex", "codex", cmd.args));
-
-program
-  .command("gemini")
-  .description("Launch Gemini CLI with leader agent identity")
-  .allowUnknownOption()
-  .allowExcessArguments()
-  .action(async (_opts, cmd) => wrapRuntime("gemini", "gemini", cmd.args));
 
 // ─── Daemon ───
 
@@ -277,4 +245,7 @@ program
     });
   });
 
-program.parseAsync();
+program.parseAsync().catch((err: Error) => {
+  console.error(err.message);
+  process.exit(1);
+});

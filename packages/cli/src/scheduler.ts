@@ -5,8 +5,7 @@ import type { PrMonitor } from "./prMonitor.js";
 import type { ProcessManager } from "./processManager.js";
 import { normalizeRuntime } from "./providers/registry.js";
 import { ensureCloned, prepareRepo, repoDir } from "./repoOps.js";
-import { loadSessions, removeSession } from "./savedSessions.js";
-import { isProcessAlive } from "./sessionPids.js";
+import { isPidAlive, listSessions, removeSession } from "./sessionStore.js";
 import { ensureLefthookTask } from "./skillManager.js";
 import type { TaskRunner } from "./taskRunner.js";
 import { cleanupWorkspace } from "./workspace.js";
@@ -115,62 +114,61 @@ export class Scheduler {
   }
 
   private async resumeSavedSessions(): Promise<void> {
-    // Clean up orphaned active sessions (crash recovery)
-    for (const s of loadSessions("active")) {
-      if (this.pm.hasTask(s.taskId)) continue;
-      // Check if the process is still alive before treating as orphan
-      if (isProcessAlive(s.sessionId)) continue;
+    // Clean up orphaned active worker sessions (crash recovery)
+    for (const s of listSessions({ type: "worker", status: "active" })) {
+      if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
+      if (isPidAlive(s.pid)) continue;
       let task: any;
       try {
         task = await this.client.getTask(s.taskId);
       } catch (err: any) {
         if (err instanceof ApiError && err.status === 404) {
           logger.warn(`Task ${s.taskId} not found (deleted), cleaning up orphaned session`);
-          cleanupWorkspace(s.workspace);
-          removeSession(s.taskId);
+          cleanupWorkspace(s.workspace!);
+          removeSession(s.sessionId);
           continue;
         }
         throw err;
       }
       if (!task || task.status === "done" || task.status === "cancelled") {
-        cleanupWorkspace(s.workspace);
-        removeSession(s.taskId);
+        cleanupWorkspace(s.workspace!);
+        removeSession(s.sessionId);
       } else {
         // Task still viable — release and let it be re-dispatched
         await this.client.releaseTask(s.taskId).catch(() => {});
-        cleanupWorkspace(s.workspace);
-        removeSession(s.taskId);
+        cleanupWorkspace(s.workspace!);
+        removeSession(s.sessionId);
         logger.info(`Cleaned up orphaned session for task ${s.taskId}`);
       }
     }
 
     // Resume rate-limited sessions whose runtime is no longer paused
-    for (const s of loadSessions("rate_limited")) {
+    for (const s of listSessions({ type: "worker", status: "rate_limited" })) {
       if (this.pm.activeCount >= this.opts.maxConcurrent) return;
-      if (this.pm.hasTask(s.taskId)) continue;
+      if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
       if (this.isRuntimePaused(s.runtime)) continue;
       await this.runner.resumeSession(s, "");
     }
 
     // Resume rejected review sessions
-    for (const s of loadSessions("in_review")) {
+    for (const s of listSessions({ type: "worker", status: "in_review" })) {
       if (this.pm.activeCount >= this.opts.maxConcurrent) return;
-      if (this.pm.hasTask(s.taskId)) continue;
+      if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
       let task: any;
       try {
         task = await this.client.getTask(s.taskId);
       } catch (err: any) {
         if (err instanceof ApiError && err.status === 404) {
           logger.warn(`Task ${s.taskId} not found (deleted), cleaning up review session`);
-          cleanupWorkspace(s.workspace);
-          removeSession(s.taskId);
+          cleanupWorkspace(s.workspace!);
+          removeSession(s.sessionId);
           continue;
         }
         throw err;
       }
 
       if (!task || task.status === "done" || task.status === "cancelled") {
-        removeSession(s.taskId);
+        removeSession(s.sessionId);
         continue;
       }
 

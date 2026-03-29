@@ -9,7 +9,7 @@ import { getCredentials } from "./config.js";
 import { createLogger } from "./logger.js";
 import type { ProcessManager } from "./processManager.js";
 import { getProvider, normalizeRuntime } from "./providers/registry.js";
-import { removeSession, type SavedSession, saveSession, updateSessionStatus } from "./savedSessions.js";
+import { removeSession, type SessionFile, updateSession, writeSession } from "./sessionStore.js";
 import { ensureSkills } from "./skillManager.js";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
 import { createRepoWorkspace, createTempWorkspace, restoreWorkspace, type Workspace } from "./workspace.js";
@@ -122,15 +122,19 @@ export class TaskRunner {
         .join("\n");
 
       // Persist session before spawning — crash-safe
-      saveSession({
-        taskId: task.id,
-        sessionId,
-        workspace: workspace.info,
+      writeSession({
+        type: "worker",
         agentId,
-        privateKeyJwk: privKeyJwk,
+        sessionId,
+        pid: 0, // updated by onProcessStarted callback
         runtime: providerName,
-        model: agentDetails.model ?? undefined,
+        startedAt: Date.now(),
+        apiUrl: getCredentials().apiUrl,
+        privateKeyJwk: privKeyJwk,
+        taskId: task.id,
+        workspace: workspace.info,
         status: "active",
+        model: agentDetails.model ?? undefined,
         gpgSubkeyId,
         agentUsername: (agentDetails as any).username ?? agentId,
         agentName: agentDetails.name,
@@ -162,24 +166,25 @@ export class TaskRunner {
   }
 
   /** Resume a saved session (rate-limited or rejected). */
-  async resumeSession(session: SavedSession, message: string): Promise<boolean> {
-    const workspace = restoreWorkspace(session.workspace);
+  async resumeSession(session: SessionFile, message: string): Promise<boolean> {
+    const workspace = restoreWorkspace(session.workspace!);
+    const taskId = session.taskId!;
 
     let task: any;
     try {
-      task = await this.client.getTask(session.taskId);
+      task = await this.client.getTask(taskId);
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 404) {
-        logger.warn(`Task ${session.taskId} not found (deleted), cleaning up session`);
+        logger.warn(`Task ${taskId} not found (deleted), cleaning up session`);
         workspace.cleanup();
-        removeSession(session.taskId);
+        removeSession(session.sessionId);
         return false;
       }
       throw err;
     }
     if (!task || task.status === "cancelled" || task.status === "done") {
       workspace.cleanup();
-      removeSession(session.taskId);
+      removeSession(session.sessionId);
       return false;
     }
 
@@ -188,18 +193,18 @@ export class TaskRunner {
       privateKey = (await crypto.subtle.importKey("jwk", session.privateKeyJwk, { name: "Ed25519" } as any, true, ["sign"])) as CryptoKey;
     } catch (err: any) {
       logger.error(`Failed to import key for session ${session.sessionId}: ${err.message}`);
-      removeSession(session.taskId);
-      await this.client.releaseTask(session.taskId).catch(() => {});
+      removeSession(session.sessionId);
+      await this.client.releaseTask(taskId).catch(() => {});
       return false;
     }
 
     try {
       await this.client.reopenSession(session.agentId, session.sessionId);
     } catch {
-      logger.warn(`Failed to reopen session ${session.sessionId}, releasing task ${session.taskId}`);
+      logger.warn(`Failed to reopen session ${session.sessionId}, releasing task ${taskId}`);
       workspace.cleanup();
-      removeSession(session.taskId);
-      await this.client.releaseTask(session.taskId).catch(() => {});
+      removeSession(session.sessionId);
+      await this.client.releaseTask(taskId).catch(() => {});
       return false;
     }
 
@@ -226,12 +231,12 @@ export class TaskRunner {
       gnupgHome,
     });
 
-    logger.info(`Resuming task ${session.taskId} (session=${session.sessionId.slice(0, 8)})`);
+    logger.info(`Resuming task ${taskId} (session=${session.sessionId.slice(0, 8)})`);
 
     try {
       await this.pm.spawnAgent({
         provider,
-        taskId: session.taskId,
+        taskId: taskId,
         sessionId: session.sessionId,
         cwd: workspace.cwd,
         taskContext: message,
@@ -245,15 +250,15 @@ export class TaskRunner {
         model: session.model,
       });
     } catch {
-      logger.warn(`Failed to resume task ${session.taskId}, releasing`);
+      logger.warn(`Failed to resume task ${taskId}, releasing`);
       workspace.cleanup();
       cleanupGnupgHome(gnupgHome);
-      removeSession(session.taskId);
-      await this.client.releaseTask(session.taskId).catch(() => {});
+      removeSession(session.sessionId);
+      await this.client.releaseTask(taskId).catch(() => {});
       return false;
     }
 
-    updateSessionStatus(session.taskId, "active");
+    updateSession(session.sessionId, { status: "active" });
     return true;
   }
 

@@ -1,10 +1,11 @@
 import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
-import { DAEMON_STATE_FILE, LOGS_DIR, PID_FILE, SESSION_PIDS_FILE, STATE_DIR } from "../paths.js";
+import { DAEMON_STATE_FILE, IDENTITIES_DIR, LOGS_DIR, PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
+import { clearAllSessions, isPidAlive, listSessions } from "../sessionStore.js";
 
 const MAX_LOG_ARCHIVES = 5;
 
@@ -70,21 +71,7 @@ function formatUptime(startMs: number): string {
 }
 
 function countActiveSessions(): number {
-  try {
-    const data = JSON.parse(readFileSync(SESSION_PIDS_FILE, "utf-8"));
-    let alive = 0;
-    for (const pid of Object.values(data)) {
-      try {
-        process.kill(pid as number, 0);
-        alive++;
-      } catch {
-        /* dead */
-      }
-    }
-    return alive;
-  } catch {
-    return 0;
-  }
+  return listSessions().filter((s) => isPidAlive(s.pid)).length;
 }
 
 function formatProviders(all: string[]): string {
@@ -133,11 +120,18 @@ export function registerStartCommand(program: Command) {
       }
       const apiUrl = creds.apiUrl;
 
-      // Check if already running — PID file check
+      // Check if already running — PID file check (must precede filesystem mutations)
       const existingPid = readDaemonPid();
       if (existingPid) {
         console.error(`Daemon already running (PID ${existingPid}). Stop it first or remove ${PID_FILE}`);
         process.exit(1);
+      }
+
+      // Clear identity/session cache if API URL changed
+      const prevState = readDaemonState();
+      if (prevState && prevState.apiUrl !== apiUrl) {
+        rmSync(IDENTITIES_DIR, { recursive: true, force: true });
+        clearAllSessions();
       }
       if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
 

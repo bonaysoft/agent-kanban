@@ -11,8 +11,9 @@ import { ProcessManager } from "./processManager.js";
 import { getAvailableProviders } from "./providers/registry.js";
 import type { AgentProvider, UsageInfo } from "./providers/types.js";
 import { Scheduler } from "./scheduler.js";
-import { cleanupStale, clearAll as clearSessionPids, removePid, savePid } from "./sessionPids.js";
+import { clearAllSessions, isPidAlive, listSessions, migrateLegacySessions, removeSession, updateSession } from "./sessionStore.js";
 import { TaskRunner } from "./taskRunner.js";
+import { collectUsage as collectLeaderUsage } from "./usageCollector.js";
 
 const logger = createLogger("daemon");
 
@@ -56,7 +57,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   logger.info(`Machine ready: ${machineId} (device: ${deviceId})`);
 
   await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
-  await cleanupStale(client, machineId);
+  migrateLegacySessions();
+  await cleanupStaleSessions(client, machineId);
   logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const MIN_POLL_INTERVAL = 5000;
@@ -73,8 +75,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       onSlotFreed: () => scheduler.onSlotFreed(),
       onRateLimited: (runtime, resetAt) => scheduler.pauseForRateLimit(runtime, resetAt),
       onRateLimitCleared: (runtime) => scheduler.clearRateLimit(runtime),
-      onProcessStarted: savePid,
-      onProcessExited: removePid,
+      onProcessStarted: (sessionId, pid) => updateSession(sessionId, { pid }),
+      onProcessExited: () => {},
     },
     opts.taskTimeout,
   );
@@ -86,11 +88,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     pollInterval,
   });
 
-  // Heartbeat
+  // Heartbeat + leader session monitoring
   const heartbeatInterval = setInterval(() => {
     (async () => {
       const usageInfo = await collectUsage(availableProviders);
       await client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo });
+      await cleanupLeaderSessions(client);
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
 
@@ -101,7 +104,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     prMonitor.stop();
     clearInterval(heartbeatInterval);
     await pm.killAll();
-    clearSessionPids();
+    await cleanupLeaderSessions(client);
+    clearAllSessions();
     removePidFile();
     logger.info("Daemon stopped.");
     process.exit(0);
@@ -113,6 +117,45 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   prMonitor.start();
   scheduler.start();
+}
+
+async function cleanupLeaderSessions(client: MachineClient): Promise<void> {
+  for (const session of listSessions({ type: "leader" })) {
+    if (isPidAlive(session.pid)) continue;
+    // PID dead — collect usage, close session, remove file
+    const usage = await collectLeaderUsage(session.runtime, session.startedAt);
+    if (usage) {
+      await client.updateSessionUsage(session.agentId, session.sessionId, usage).catch((err: any) => {
+        logger.warn(`Leader usage report failed for ${session.sessionId.slice(0, 8)}: ${err.message}`);
+      });
+    }
+    await client.closeSession(session.agentId, session.sessionId).catch((err: any) => {
+      logger.warn(`Leader session close failed for ${session.sessionId.slice(0, 8)}: ${err.message}`);
+    });
+    removeSession(session.sessionId);
+    logger.info(`Cleaned up leader session ${session.sessionId.slice(0, 8)} (${session.runtime}, PID ${session.pid})`);
+  }
+}
+
+async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
+  try {
+    const agents = (await client.listAgents()) as any[];
+    let closedCount = 0;
+    for (const agent of agents) {
+      const sessions = (await client.listSessions(agent.id)) as any[];
+      for (const session of sessions) {
+        if (session.status !== "active" || session.machine_id !== machineId) continue;
+        const local = listSessions().find((s) => s.sessionId === session.id);
+        if (local && isPidAlive(local.pid)) continue;
+        await client.closeSession(agent.id, session.id).catch(() => {});
+        if (local) removeSession(local.sessionId);
+        closedCount++;
+      }
+    }
+    if (closedCount > 0) logger.info(`Cleaned up ${closedCount} stale session(s) from previous run`);
+  } catch (err: any) {
+    logger.warn(`Session cleanup failed: ${err.message}`);
+  }
 }
 
 function removePidFile(): void {
