@@ -118,8 +118,11 @@ describe("validateTransition", () => {
     expect(validateTransition("release", "in_progress", "machine")).toBeNull();
   });
 
-  it("allows release: in_review → todo (machine)", () => {
-    expect(validateTransition("release", "in_review", "machine")).toBeNull();
+  it("rejects release from in_review", () => {
+    expect(validateTransition("release", "in_review", "machine")).toEqual({
+      code: "INVALID_TRANSITION",
+      message: "Cannot release from in_review (allowed from: in_progress)",
+    });
   });
 
   // Invalid transitions — wrong source status
@@ -456,12 +459,11 @@ describe("task lifecycle repo functions", () => {
       expect(result!.status).toBe("todo");
     });
 
-    it("succeeds: in_review → todo (machine)", async () => {
+    it("rejects release from in_review", async () => {
       const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
-      const result = await releaseTask(env.DB, task.id, "machine", "system", "machine");
-      expect(result!.status).toBe("todo");
+      await expect(releaseTask(env.DB, task.id, "machine", "system", "machine")).rejects.toThrow("Cannot release from in_review");
     });
 
     it("rejects release from todo", async () => {
