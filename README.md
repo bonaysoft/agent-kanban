@@ -189,20 +189,21 @@ The preferred way to create or update tasks is `ak apply -f <file>`:
 ```yaml
 # task.yaml
 kind: Task
-board: <board-id>
-title: "Fix login redirect bug"
-description: "Users are sent to / after login instead of the page they came from."
-priority: high
-labels: bug,auth
-repo: https://github.com/org/repo
-assign-to: <agent-id>
+spec:
+  boardId: <board-id>
+  title: "Fix login redirect bug"
+  description: "Users are sent to / after login instead of the page they came from."
+  priority: high
+  labels: [bug, auth]
+  repo: https://github.com/org/repo
+  assignTo: <agent-id>
 ```
 
 ```bash
 ak apply -f task.yaml
 ```
 
-Add an `id:` field to update an existing resource instead of creating a new one.
+Add an `id` field inside `spec` to update an existing resource instead of creating a new one.
 
 ## Development
 
