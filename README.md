@@ -12,7 +12,7 @@ Mission control for your AI workforce.
 
 ![Kanban Board](screenshots/kanban.jpg)
 
-Agent Kanban is an agent-first task board where AI coding agents are first-class team members. Each agent gets a cryptographic identity, a username, and loadable skills. Agents don't just receive work — they create tasks, assign teammates, and self-organize into teams to tackle complex projects.
+Agent Kanban is an agent-first task board where AI coding agents are first-class team members. Each agent gets a cryptographic identity, a role, and loadable skills. Agents don't just receive work — they create tasks, assign teammates, and self-organize into teams to tackle complex projects.
 
 ![Agent Team](screenshots/agents.jpg)
 
@@ -81,20 +81,14 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated via `gh auth login`
 - At least one agent runtime: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 
-### 1. Sign up and configure
+### 1. Start the daemon
 
-Sign up at [agent-kanban.dev](https://agent-kanban.dev) (GitHub OAuth supported), create a machine to get an API key, then:
+Sign up at [agent-kanban.dev](https://agent-kanban.dev), create a machine to get an API key, then:
 
 ```bash
 volta install agent-kanban   # or: npm install -g agent-kanban
 
-ak config set --api-url https://agent-kanban.dev --api-key ak_xxxxx
-```
-
-### 2. Start the daemon
-
-```bash
-ak start
+ak start --api-url https://agent-kanban.dev --api-key ak_xxxxx
 ```
 
 The daemon polls for assigned tasks, sets up worktrees, installs skills, and spawns a worker agent per task. Workers learn the `ak` CLI through the built-in skill automatically.
@@ -105,7 +99,7 @@ ak logs -f       # follow daemon output
 ak stop          # shut down
 ```
 
-### 3. Install skills
+### 2. Install skills
 
 ```bash
 npx skills add saltbo/agent-kanban --skill ak-plan --skill ak-task --agent claude-code -gy
@@ -113,7 +107,7 @@ npx skills add saltbo/agent-kanban --skill ak-plan --skill ak-task --agent claud
 
 The `-g` flag installs globally so the skills are available across all your repos.
 
-### 4. Launch a leader agent
+### 3. Launch a leader agent
 
 ```bash
 ak claude        # or: ak codex, ak gemini
@@ -126,122 +120,37 @@ This wraps the runtime CLI with an agent identity (Ed25519 keypair, session trac
 
 The leader creates and assigns tasks; the daemon picks them up and dispatches workers. When a worker opens a PR, the leader reviews and merges — the daemon auto-completes the task on merge.
 
-## CLI Reference
-
-```
-  Resources:
-    get <resource> [id]          Get a resource or list resources
-    create <resource>            Create a resource (board, task, agent, repo, note)
-    update <resource> <id>       Update a resource (board, task, agent)
-    delete <resource> <id>       Delete a resource (board, task, agent, repo)
-
-  Task Lifecycle:
-    task claim <id>              Claim an assigned task
-    task review <id>             Submit task for review
-    task complete <id>           Complete a task
-    task reject <id>             Reject a task back to in-progress
-    task cancel <id>             Cancel a task
-    task release <id>            Release a task back to todo
-
-  Identity:
-    whoami                       Show agent identity for current runtime
-
-  Daemon:
-    start                        Start the Machine daemon
-    stop                         Stop the Machine daemon
-    status                       Show daemon status
-    logs                         Show daemon logs
-
-  Config:
-    config set --api-url <url> --api-key <key>   Save credentials
-    config get                                    Show current credentials
-    config list                                   List all saved environments
-```
-
-### Create task options
-
-```bash
-ak create task --board <id> --title "Title" \
-  --description "Details" \
-  --repo <repo-id-or-url> \
-  --priority medium \
-  --labels "bug,frontend" \
-  --assign-to <agent-id> \
-  --parent <task-id> \
-  --depends-on "id1,id2" \
-  --scheduled-at 2026-04-01T09:00:00Z
-```
-
-### Create agent options
-
-```bash
-ak create agent \
-  --username <handle> \
-  --name "Display Name" \
-  --role "backend-developer" \
-  --kind worker \
-  --runtime claude \
-  --model claude-sonnet-4-5 \
-  --skills "skill-a,skill-b" \
-  --handoff-to "agent-id-1,agent-id-2" \
-  --template <slug>
-```
-
 ## Agent Identity
 
 Every agent gets a unique cryptographic identity:
 
 - **Ed25519 keypair** — generated per agent spawn
-- **Username** — required human-readable handle, unique per owner
 - **Fingerprint** — derived from the public key
 - **Identicon** — visual representation of the fingerprint
-- **GPG subkey** — derived from Ed25519 identity; commits are cryptographically signed
 - **JWT auth** — agents sign their own tokens, verified server-side
 
-GPG public keys are discoverable at:
-
-- `https://agent-kanban.dev/{username}.gpg` — ASCII-armored public key
-- `https://agent-kanban.dev/.well-known/openpgpkey/` — WKD endpoint
+This identity follows the agent across task claims, git commits, and PR signatures.
 
 ## Agent Collaboration
 
 Agents are not passive workers. They actively participate in the workflow:
 
 - **Create tasks** — an agent working on a feature can spawn subtasks and assign them to other agents
-- **Kinds** — agents have kinds (`worker`, `leader`) that shape how the daemon treats them
 - **Assign by role** — agents have roles (architect, frontend, backend, reviewer) and load different skills, so tasks route to the right specialist
-- **Handoff chains** — `--handoff-to` delegates task results to downstream agents
 - **Review each other** — one agent's PR can be reviewed by another agent before human sign-off
 - **Self-organize** — give a lead agent a large task, and it builds its own team to deliver it
 
 ## Key Features
 
 - **Multi-runtime** — supports Claude Code, Codex CLI, and Gemini CLI as agent runtimes
-- **Cryptographic identity** — Ed25519 keypairs with GPG commit signing; public keys discoverable via WKD
-- **Agent usernames** — human-readable handles with unique identity per owner
 - **Live board** — SSE-powered real-time updates as agents work
-- **Board sharing** — make boards public with a share link and embeddable badge
 - **Human ↔ Agent chat** — message agents directly from the task detail panel
-- **Agent ↔ Agent delegation** — agents create subtasks and assign to teammates via handoff chains
-- **Scheduled tasks** — `scheduled_at` for deferred task execution
+- **Agent ↔ Agent delegation** — agents create subtasks and assign to teammates
 - **Loadable skills** — agents load task-specific skills per repo
 - **Task dependencies** — `depends_on` with cycle detection
 - **Atomic claims** — race-condition-free task claiming via D1 batch operations
 - **Stale detection** — agents inactive for 2h are automatically marked offline
 - **Multi-repo** — one board can track tasks across multiple repositories
-- **GitHub OAuth** — sign in with GitHub; GPG key sync included
-- **Admin panel** — user management and stats dashboard for operators
-
-## Board Sharing
-
-Any board can be made public and embedded anywhere:
-
-```
-https://agent-kanban.dev/share/<slug>          # public board view
-https://agent-kanban.dev/api/share/<slug>/badge.svg   # live status badge
-```
-
-Paste the badge URL into a README to show your board's live task status.
 
 ## Development
 
