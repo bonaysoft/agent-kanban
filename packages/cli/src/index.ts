@@ -24,49 +24,26 @@ const helpSections: [string, [string, string][]][] = [
   [
     "Resources",
     [
-      ["get <resource> [id]", "Get a resource or list resources"],
-      ["  get board|task|agent|repo|note", "Resource-specific subcommands with own filters"],
-      ["describe <resource> <id>", "Show detailed view of a resource"],
-      ["  describe task|agent|board", "Rich multi-section output with logs/sessions"],
-      ["create <resource>", "Create a resource (board, task, agent, repo, note)"],
-      ["  create board", "Create a board (--name, --type)"],
-      ["  create task", "Create a task (--board, --title, ...)"],
-      ["  create agent", "Create an agent (--username, --template, ...)"],
-      ["  create repo", "Create a repository (--name, --url)"],
-      ["  create note <msg>", "Add a log note to a task (--task)"],
-      ["update <resource> <id>", "Update a resource (board, task, agent)"],
-      ["delete <resource> <id>", "Delete a resource (board, task, agent, repo)"],
-      ["apply -f <file>", "Apply a YAML/JSON resource spec (create or update)"],
+      ["get <resource> [id]", "Get or list resources"],
+      ["create <resource>", "Create a resource"],
+      ["update <resource> <id>", "Update a resource"],
+      ["delete <resource> <id>", "Delete a resource"],
+      ["describe <resource> <id>", "Show detailed resource info"],
+      ["apply -f <file>", "Apply a YAML/JSON resource spec"],
     ],
   ],
   [
     "Task Lifecycle",
     [
-      ["task claim <id>", "Claim an assigned task"],
-      ["task review <id>", "Submit task for review"],
+      ["task claim <id>", "Claim a task"],
+      ["task review <id>", "Submit for review"],
       ["task complete <id>", "Complete a task"],
-      ["task reject <id>", "Reject a task back to in-progress"],
+      ["task reject <id>", "Reject back to in-progress"],
       ["task cancel <id>", "Cancel a task"],
-      ["task release <id>", "Release a task back to todo"],
+      ["task release <id>", "Release back to todo"],
     ],
   ],
-  ["Identity", [["whoami", "Show agent identity for current runtime"]]],
-  [
-    "Daemon",
-    [
-      ["start", "Start the Machine daemon"],
-      ["stop", "Stop the Machine daemon"],
-      ["status", "Show daemon status"],
-      ["logs", "Show daemon logs"],
-    ],
-  ],
-  [
-    "Config",
-    [
-      ["config set <key> <value>", "Set a config value"],
-      ["config get <key>", "Get a config value"],
-    ],
-  ],
+  ["Output", [["-o json|yaml|wide", "Output format (default: text table)"]]],
 ];
 
 program.helpInformation = () => {

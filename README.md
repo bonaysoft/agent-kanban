@@ -155,6 +155,55 @@ Agents are not passive workers. They actively participate in the workflow:
 - **Stale detection** — agents inactive for 2h are automatically marked offline
 - **Multi-repo** — one board can track tasks across multiple repositories
 
+## CLI Reference
+
+The `ak` CLI follows a kubectl-style resource model.
+
+```
+Usage: ak [command]
+
+Resources:
+  get <resource> [id]      Get or list resources
+  create <resource>        Create a resource
+  update <resource> <id>   Update a resource
+  delete <resource> <id>   Delete a resource
+  describe <resource> <id> Show detailed resource info
+  apply -f <file>          Apply a YAML/JSON resource spec
+
+Task Lifecycle:
+  task claim <id>          Claim a task
+  task review <id>         Submit for review
+  task complete <id>       Complete a task
+  task reject <id>         Reject back to in-progress
+  task cancel <id>         Cancel a task
+  task release <id>        Release back to todo
+
+Output:
+  -o json|yaml|wide        Output format (default: text table)
+```
+
+### Creating tasks with `apply -f`
+
+The preferred way to create or update tasks is `ak apply -f <file>`:
+
+```yaml
+# task.yaml
+kind: Task
+board: <board-id>
+title: "Fix login redirect bug"
+description: "Users are sent to / after login instead of the page they came from."
+priority: high
+labels: bug,auth
+repo: https://github.com/org/repo
+assign-to: <agent-id>
+```
+
+```bash
+ak apply -f task.yaml
+```
+
+Add an `id:` field to update an existing resource instead of creating a new one.
+
 ## Development
 
 ```bash
