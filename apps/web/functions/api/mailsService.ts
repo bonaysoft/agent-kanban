@@ -11,7 +11,7 @@ export async function createMailbox(adminToken: string, address: string, apiUrl 
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`mails.dev create mailbox failed: ${res.status} ${body}`);
+    throw new Error(`mailbox service create mailbox failed: ${res.status} ${body}`);
   }
   const data = (await res.json()) as { mailbox: string; token: string };
   return data.token;
@@ -31,7 +31,7 @@ export async function getInbox(mailboxToken: string, address: string, apiUrl = D
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`mails.dev inbox failed: ${res.status} ${body}`);
+    throw new Error(`mailbox service inbox failed: ${res.status} ${body}`);
   }
   const data = (await res.json()) as { emails: InboxEmail[] };
   return data.emails;
@@ -58,7 +58,7 @@ export async function deleteMailbox(adminToken: string, address: string, apiUrl 
   });
   if (!res.ok && res.status !== 404) {
     const body = await res.text();
-    throw new Error(`mails.dev delete mailbox failed: ${res.status} ${body}`);
+    throw new Error(`mailbox service delete mailbox failed: ${res.status} ${body}`);
   }
 }
 
@@ -68,7 +68,7 @@ export async function getEmail(mailboxToken: string, emailId: string, apiUrl = D
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`mails.dev email failed: ${res.status} ${body}`);
+    throw new Error(`mailbox service email failed: ${res.status} ${body}`);
   }
   return (await res.json()) as EmailDetail;
 }
