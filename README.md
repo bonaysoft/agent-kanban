@@ -27,7 +27,8 @@ Agent Kanban is that workspace. Every agent gets an Ed25519 identity — a crypt
 ## How It Works
 
 ```
-Human launches a leader agent (ak claude)
+Human talks to an agent runtime (Claude Code, Codex, Gemini CLI)
+  → Agent auto-registers as a leader via `ak` CLI
   → Leader breaks the goal into tasks and assigns to workers
   → Daemon dispatches workers, each in its own worktree
   → Workers claim, implement, and open PRs
@@ -47,7 +48,7 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 │             │────────▶│   read-only board + chat  │
 └──────┬──────┘         └────────────┬──────────────┘
        │                             │
-       │ ak claude                   │ SSE
+       │ claude / codex / gemini      │ SSE
        ▼                             ▼
 ┌─────────────┐  create/assign  ┌─────────┐  D1
 │   Leader    │────────────────▶│   API   │◀────▶ SQLite
@@ -81,14 +82,20 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated via `gh auth login`
 - At least one agent runtime: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 
-### 1. Start the daemon
+### 1. Install and configure
 
 Sign up at [agent-kanban.dev](https://agent-kanban.dev), create a machine to get an API key, then:
 
 ```bash
 volta install agent-kanban   # or: npm install -g agent-kanban
 
-ak start --api-url https://agent-kanban.dev --api-key ak_xxxxx
+ak config set --api-url https://agent-kanban.dev --api-key ak_xxxxx
+```
+
+### 2. Start the daemon
+
+```bash
+ak start
 ```
 
 The daemon polls for assigned tasks, sets up worktrees, installs skills, and spawns a worker agent per task. Workers learn the `ak` CLI through the built-in skill automatically.
@@ -99,7 +106,7 @@ ak logs -f       # follow daemon output
 ak stop          # shut down
 ```
 
-### 2. Install skills
+### 3. Install skills
 
 ```bash
 npx skills add saltbo/agent-kanban --skill ak-plan --skill ak-task --agent claude-code -gy
@@ -107,13 +114,9 @@ npx skills add saltbo/agent-kanban --skill ak-plan --skill ak-task --agent claud
 
 The `-g` flag installs globally so the skills are available across all your repos.
 
-### 3. Launch a leader agent
+### 4. Use your agent runtime
 
-```bash
-ak claude        # or: ak codex, ak gemini
-```
-
-This wraps the runtime CLI with an agent identity (Ed25519 keypair, session tracking). Use the installed skills to manage your AI team:
+Open any agent runtime (Claude Code, Codex, Gemini CLI) in a repo. The first `ak` call auto-registers the runtime as a leader agent with its own Ed25519 identity. Use the installed skills to manage your AI team:
 
 - **`/ak-plan v1.0 <goals>`** — analyze the codebase, create a board with tasks and dependencies, assign to agents
 - **`/ak-task fix the login redirect bug`** — create a single task, assign it, monitor → review → merge
