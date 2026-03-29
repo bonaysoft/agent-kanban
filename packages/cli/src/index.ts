@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 import { createClient } from "./client.js";
+import { registerApplyCommand } from "./commands/apply.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
 import { registerGetCommand } from "./commands/get.js";
@@ -26,6 +27,7 @@ const helpSections: [string, [string, string][]][] = [
       ["create <resource>", "Create a resource (board, task, agent, repo, note)"],
       ["update <resource> <id>", "Update a resource (board, task, agent)"],
       ["delete <resource> <id>", "Delete a resource (board, task, agent, repo)"],
+      ["apply -f <file>", "Apply a YAML/JSON resource spec (create or update)"],
     ],
   ],
   [
@@ -200,6 +202,7 @@ registerGetCommand(program);
 registerCreateCommand(program);
 registerUpdateCommand(program);
 registerDeleteCommand(program);
+registerApplyCommand(program);
 
 // ─── Identity ───
 
