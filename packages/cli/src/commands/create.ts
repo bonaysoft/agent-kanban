@@ -3,7 +3,6 @@ import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
 import { getFormat, output } from "../output.js";
 import { getAvailableProviders } from "../providers/registry.js";
-import { normalizeResource } from "./resources.js";
 
 function detectRuntime(): string {
   const available = getAvailableProviders();
@@ -169,53 +168,62 @@ async function createNote(taskId: string, message: string) {
 }
 
 export function registerCreateCommand(program: Command) {
-  program
-    .command("create <resource> [message]")
-    .description("Create a resource (board, task, agent, repo, note)")
-    .option("--name <name>", "Resource name (board, agent, repo)")
-    .option("--description <desc>", "Description (board, task)")
-    .option("--type <type>", "Board type: dev, ops (board)")
-    .option("--format <format>", "Output format (json, text)")
-    // task flags
-    .option("--board <id>", "Board ID (task)")
-    .option("--title <title>", "Task title")
-    .option("--repo <repo>", "Repository ID or URL (task)")
-    .option("--priority <priority>", "Priority: low, medium, high, urgent (task)")
-    .option("--labels <labels>", "Comma-separated labels (task)")
-    .option("--input <json>", "JSON input payload (task)")
-    .option("--assign-to <id>", "Agent ID to assign (task)")
-    .option("--parent <id>", "Parent task ID (task)")
-    .option("--depends-on <ids>", "Comma-separated dependency task IDs (task)")
-    .option("--scheduled-at <time>", "ISO 8601 time to schedule task (task)")
-    // agent flags
-    .option("--username <username>", "Agent username (agent)")
-    .option("--template <slug>", "Agent template slug (agent)")
-    .option("--bio <bio>", "Agent bio (agent)")
-    .option("--soul <soul>", "Agent soul — persistent behavior instructions (agent)")
-    .option("--role <role>", "Agent role (agent)")
-    .option("--runtime <runtime>", "Agent runtime (agent)")
-    .option("--model <model>", "Model to use (agent)")
-    .option("--kind <kind>", "Agent kind: worker, leader (agent)")
-    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff (agent)")
-    .option("--skills <skills>", "Comma-separated skill slugs (agent)")
-    // repo flags
-    .option("--url <url>", "Clone URL (repo)")
-    // note flags
-    .option("--task <id>", "Task ID (note)")
-    .action(async (resource: string, message: string | undefined, opts) => {
-      const name = normalizeResource(resource);
+  const createCmd = program.command("create").description("Create a resource");
 
-      switch (name) {
-        case "board":
-          return createBoard(opts);
-        case "task":
-          return createTask(opts);
-        case "agent":
-          return createAgent(opts);
-        case "repo":
-          return createRepo(opts);
-        case "note":
-          return createNote(opts.task, message || "");
-      }
-    });
+  createCmd
+    .command("board")
+    .description("Create a board")
+    .requiredOption("--name <name>", "Board name")
+    .requiredOption("--type <type>", "Board type: dev, ops")
+    .option("--description <desc>", "Board description")
+    .option("--format <format>", "Output format (json, text)")
+    .action((opts) => createBoard(opts));
+
+  createCmd
+    .command("task")
+    .description("Create a task")
+    .requiredOption("--board <id>", "Board ID")
+    .requiredOption("--title <title>", "Task title")
+    .option("--description <desc>", "Task description")
+    .option("--repo <repo>", "Repository ID or URL")
+    .option("--priority <priority>", "Priority: low, medium, high, urgent")
+    .option("--labels <labels>", "Comma-separated labels")
+    .option("--input <json>", "JSON input payload")
+    .option("--assign-to <id>", "Agent ID to assign")
+    .option("--parent <id>", "Parent task ID")
+    .option("--depends-on <ids>", "Comma-separated dependency task IDs")
+    .option("--scheduled-at <time>", "ISO 8601 time to schedule task")
+    .option("--format <format>", "Output format (json, text)")
+    .action((opts) => createTask(opts));
+
+  createCmd
+    .command("agent")
+    .description("Create an agent")
+    .option("--name <name>", "Agent display name")
+    .option("--username <username>", "Agent username")
+    .option("--template <slug>", "Agent template slug")
+    .option("--bio <bio>", "Agent bio")
+    .option("--soul <soul>", "Agent soul — persistent behavior instructions")
+    .option("--role <role>", "Agent role")
+    .option("--runtime <runtime>", "Agent runtime")
+    .option("--model <model>", "Model to use")
+    .option("--kind <kind>", "Agent kind: worker, leader")
+    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
+    .option("--skills <skills>", "Comma-separated skill slugs")
+    .option("--format <format>", "Output format (json, text)")
+    .action((opts) => createAgent(opts));
+
+  createCmd
+    .command("repo")
+    .description("Register a repository")
+    .requiredOption("--name <name>", "Repository name")
+    .requiredOption("--url <url>", "Clone URL")
+    .option("--format <format>", "Output format (json, text)")
+    .action((opts) => createRepo(opts));
+
+  createCmd
+    .command("note <message>")
+    .description("Add a progress log note to a task")
+    .requiredOption("--task <id>", "Task ID")
+    .action((message, opts) => createNote(opts.task, message));
 }
