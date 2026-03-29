@@ -24,6 +24,11 @@ const helpSections: [string, [string, string][]][] = [
     [
       ["get <resource> [id]", "Get a resource or list resources"],
       ["create <resource>", "Create a resource (board, task, agent, repo, note)"],
+      ["  create board", "Create a board (--name, --type)"],
+      ["  create task", "Create a task (--board, --title, ...)"],
+      ["  create agent", "Create an agent (--username, --template, ...)"],
+      ["  create repo", "Create a repository (--name, --url)"],
+      ["  create note <msg>", "Add a log note to a task (--task)"],
       ["update <resource> <id>", "Update a resource (board, task, agent)"],
       ["delete <resource> <id>", "Delete a resource (board, task, agent, repo)"],
     ],
