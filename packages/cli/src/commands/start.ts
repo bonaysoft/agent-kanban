@@ -300,7 +300,7 @@ export function registerLogsCommand(program: Command) {
     .command("logs")
     .description("Show Machine daemon logs")
     .option("--lines <n>", "Number of lines to show", "50")
-    .option("--no-follow", "Print and exit without streaming")
+    .option("-f, --follow", "Stream new log lines as they appear")
     .action((opts) => {
       const logFile = join(LOGS_DIR, "daemon.log");
       if (!existsSync(logFile)) {
