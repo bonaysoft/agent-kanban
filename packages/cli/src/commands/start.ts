@@ -6,6 +6,7 @@ import { getCredentials, saveCredentials, setCurrent } from "../config.js";
 import { DAEMON_STATE_FILE, IDENTITIES_DIR, LOGS_DIR, PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 import { clearAllSessions, isPidAlive, listSessions } from "../sessionStore.js";
+import { getVersion } from "../version.js";
 
 const MAX_LOG_ARCHIVES = 5;
 
@@ -195,7 +196,7 @@ export function registerStartCommand(program: Command) {
 
       const timeoutLabel = state.taskTimeout === 0 ? "none" : `${state.taskTimeout / 1000}s`;
       const providersLabel = formatProviders(state.providers);
-      console.log(`● Daemon started (PID ${child.pid})`);
+      console.log(`● Daemon started (PID ${child.pid}, v${getVersion()})`);
       console.log(`  Providers:   ${providersLabel}`);
       console.log(`  Concurrency: ${state.maxConcurrent}`);
       console.log(`  Poll:        ${state.pollInterval / 1000}s`);
@@ -282,7 +283,7 @@ export function registerStatusCommand(program: Command) {
 
       const sessions = countActiveSessions();
 
-      console.log(`● Daemon running (PID ${pid})`);
+      console.log(`● Daemon running (PID ${pid}, v${getVersion()})`);
       if (uptimeStr) console.log(`  Uptime:      ${uptimeStr}`);
       if (state) {
         const providersLabel = formatProviders(state.providers ?? []);

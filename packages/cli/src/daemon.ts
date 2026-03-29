@@ -1,7 +1,6 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, unlinkSync } from "node:fs";
 import { arch, hostname, platform, release } from "node:os";
-import { join } from "node:path";
 import { MachineClient } from "./client.js";
 import { generateDeviceId } from "./device.js";
 import { createLogger } from "./logger.js";
@@ -14,6 +13,7 @@ import { Scheduler } from "./scheduler.js";
 import { clearAllSessions, isPidAlive, listSessions, migrateLegacySessions, removeSession, updateSession } from "./sessionStore.js";
 import { TaskRunner } from "./taskRunner.js";
 import { collectUsage as collectLeaderUsage } from "./usageCollector.js";
+import { getVersion } from "./version.js";
 
 const logger = createLogger("daemon");
 
@@ -113,7 +113,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  logger.info(`Daemon started (PID ${process.pid}, max_concurrent=${opts.maxConcurrent}, runtimes=${machineInfo.runtimes.join(",") || "none"})`);
+  logger.info(
+    `Daemon started (PID ${process.pid}, v${machineInfo.version}, max_concurrent=${opts.maxConcurrent}, runtimes=${machineInfo.runtimes.join(",") || "none"})`,
+  );
 
   prMonitor.start();
   scheduler.start();
@@ -169,12 +171,5 @@ function removePidFile(): void {
 function getMachineInfo() {
   const os = `${platform()} ${arch()} ${release()}`;
   const runtimes = getAvailableProviders().map((p) => p.label);
-  let version = "unknown";
-  try {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
-    version = pkg.version;
-  } catch {
-    /* ignore */
-  }
-  return { name: hostname(), os, version, runtimes };
+  return { name: hostname(), os, version: getVersion(), runtimes };
 }

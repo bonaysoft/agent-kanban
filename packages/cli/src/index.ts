@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Command } from "commander";
 import { createClient } from "./client.js";
 import { registerApplyCommand } from "./commands/apply.js";
@@ -13,11 +11,10 @@ import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { loadIdentity } from "./identity.js";
 import { getOutputFormat, output } from "./output.js";
 import { detectRuntime } from "./runtime.js";
-
-const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
+import { getVersion } from "./version.js";
 
 const program = new Command();
-program.name("ak").description("Agent-first kanban board").version(pkg.version);
+program.name("ak").description("Agent-first kanban board").version(getVersion());
 
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - s.length));
 const helpSections: [string, [string, string][]][] = [
@@ -47,7 +44,7 @@ const helpSections: [string, [string, string][]][] = [
 ];
 
 program.helpInformation = () => {
-  const lines = [`Usage: ak [command]\n`, `Agent-first kanban board (v${pkg.version})\n`];
+  const lines = [`Usage: ak [command]\n`, `Agent-first kanban board (v${getVersion()})\n`];
   for (const [title, cmds] of helpSections) {
     lines.push(`  ${title}:`);
     for (const [cmd, desc] of cmds) lines.push(`    ${pad(cmd, 28)} ${desc}`);
