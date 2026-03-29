@@ -9,8 +9,9 @@ import {
   formatRepositoryList,
   formatTask,
   formatTaskList,
+  formatTaskListWide,
   formatTaskNotes,
-  getFormat,
+  getOutputFormat,
   output,
 } from "../output.js";
 
@@ -20,33 +21,33 @@ export function registerGetCommand(program: Command) {
   getCmd
     .command("board [id]")
     .description("Get a board or list boards")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string | undefined, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       if (id) {
         const board = await client.getBoard(id);
-        output(board, fmt, formatBoard);
+        output(board, fmt, formatBoard, { kind: "board" });
       } else {
         const boards = await client.listBoards();
-        output(boards, fmt, formatBoardList);
+        output(boards, fmt, formatBoardList, { kind: "board" });
       }
     });
 
   getCmd
     .command("task [id]")
     .description("Get a task or list tasks")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, wide, text)")
     .option("--board <id>", "Filter by board ID")
     .option("--status <status>", "Filter by status")
     .option("--label <label>", "Filter by label")
     .option("--repo <id>", "Filter by repository ID")
     .action(async (id: string | undefined, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       if (id) {
         const task = await client.getTask(id);
-        output(task, fmt, formatTask);
+        output(task, fmt, formatTask, { kind: "task" });
       } else {
         const params: Record<string, string> = {};
         if (opts.board) params.board_id = opts.board;
@@ -54,51 +55,51 @@ export function registerGetCommand(program: Command) {
         if (opts.label) params.label = opts.label;
         if (opts.repo) params.repository_id = opts.repo;
         const tasks = await client.listTasks(params);
-        output(tasks, fmt, formatTaskList);
+        output(tasks, fmt, formatTaskList, { wideFormatter: formatTaskListWide, kind: "task" });
       }
     });
 
   getCmd
     .command("agent [id]")
     .description("Get an agent or list agents")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string | undefined, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       if (id) {
         const agent = await client.getAgent(id);
-        output(agent, fmt, formatAgent);
+        output(agent, fmt, formatAgent, { kind: "agent" });
       } else {
         const agents = await client.listAgents();
-        output(agents, fmt, formatAgentList);
+        output(agents, fmt, formatAgentList, { kind: "agent" });
       }
     });
 
   getCmd
     .command("repo [id]")
     .description("Get a repository or list repositories")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string | undefined, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       if (id) {
         const repo = await client.getRepository(id);
-        output(repo, fmt, formatRepository);
+        output(repo, fmt, formatRepository, { kind: "repo" });
       } else {
         const repos = await client.listRepositories();
-        output(repos, fmt, formatRepositoryList);
+        output(repos, fmt, formatRepositoryList, { kind: "repo" });
       }
     });
 
   getCmd
     .command("note [task-id]")
     .description("Get notes for a task")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, text)")
     .option("--task <id>", "Task ID")
     .option("--since <timestamp>", "Only show notes after this timestamp")
     .action(async (taskId: string | undefined, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const id = taskId ?? opts.task;
       if (!id) {
         console.error("Usage: ak get note <task-id>  or  ak get note --task <task-id>");

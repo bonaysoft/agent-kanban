@@ -11,7 +11,7 @@ import { registerLogsCommand, registerStartCommand, registerStatusCommand, regis
 import { registerUpdateCommand } from "./commands/update.js";
 import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { loadIdentity } from "./identity.js";
-import { getFormat, output } from "./output.js";
+import { getOutputFormat, output } from "./output.js";
 import { detectRuntime } from "./runtime.js";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf-8"));
@@ -131,22 +131,22 @@ const taskCmd = program.command("task").description("Task lifecycle commands");
 taskCmd
   .command("claim <id>")
   .description("Claim an assigned task — start working on it")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.claimTask(id);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t: any) => `Claimed task ${t.id}: ${t.title} (now in progress)`);
   });
 
 taskCmd
   .command("cancel <id>")
   .description("Cancel a task")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.cancelTask(id);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t) => `Cancelled task ${t.id}: ${t.title}`);
   });
 
@@ -154,13 +154,13 @@ taskCmd
   .command("review <id>")
   .description("Move a task to In Review")
   .option("--pr-url <url>", "Pull request URL")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.prUrl) body.pr_url = opts.prUrl;
     const task = await client.reviewTask(id, body);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t) => `Moved task ${t.id} to review: ${t.title}`);
   });
 
@@ -169,14 +169,14 @@ taskCmd
   .description("Complete a task (ops fallback)")
   .option("--result <result>", "Completion result summary")
   .option("--pr-url <url>", "PR URL")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.result) body.result = opts.result;
     if (opts.prUrl) body.pr_url = opts.prUrl;
     const task = await client.completeTask(id, body);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t) => `Completed task ${t.id}: ${t.title}`);
   });
 
@@ -184,24 +184,24 @@ taskCmd
   .command("reject <id>")
   .description("Reject a task from review back to in-progress")
   .option("--reason <reason>", "Reason for rejection (logged)")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const body: Record<string, unknown> = {};
     if (opts.reason) body.reason = opts.reason;
     const task = await client.rejectTask(id, body);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t) => `Rejected task ${t.id}: ${t.title} (back to in-progress)`);
   });
 
 taskCmd
   .command("release <id>")
   .description("Release a task back to todo (ops fallback)")
-  .option("--format <format>", "Output format (json, text)")
+  .option("-o, --output <format>", "Output format (json, yaml, text)")
   .action(async (id, opts) => {
     const client = await createClient();
     const task = await client.releaseTask(id);
-    const fmt = getFormat(opts.format);
+    const fmt = getOutputFormat(opts.output);
     output(task, fmt, (t) => `Released task ${t.id}: ${t.title} (back to todo)`);
   });
 

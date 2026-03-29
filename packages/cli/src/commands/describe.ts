@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { createClient } from "../client.js";
-import { getFormat, output } from "../output.js";
+import { getOutputFormat, output } from "../output.js";
 
 function pad(label: string): string {
   return `${label}:`.padEnd(14);
@@ -129,45 +129,33 @@ export function registerDescribeCommand(program: Command) {
   describeCmd
     .command("task <id>")
     .description("Show full detail for a task: logs, messages")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const [task, notes, messages] = await Promise.all([client.getTask(id), client.getTaskNotes(id), client.getMessages(id)]);
-      if (fmt === "json") {
-        output({ task, notes, messages }, fmt);
-      } else {
-        console.log(formatDescribeTask(task, notes as any[], messages as any[]));
-      }
+      output({ task, notes, messages }, fmt, () => formatDescribeTask(task, notes as any[], messages as any[]), { kind: "task" });
     });
 
   describeCmd
     .command("agent <id>")
     .description("Show full detail for an agent: sessions, task history")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const [agent, sessions] = await Promise.all([client.getAgent(id), client.listSessions(id)]);
-      if (fmt === "json") {
-        output({ agent, sessions }, fmt);
-      } else {
-        console.log(formatDescribeAgent(agent, sessions));
-      }
+      output({ agent, sessions }, fmt, () => formatDescribeAgent(agent, sessions), { kind: "agent" });
     });
 
   describeCmd
     .command("board <id>")
     .description("Show full detail for a board: all tasks with status counts")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       const board = await client.getBoard(id);
-      if (fmt === "json") {
-        output(board, fmt);
-      } else {
-        console.log(formatDescribeBoard(board));
-      }
+      output(board, fmt, formatDescribeBoard, { kind: "board" });
     });
 }

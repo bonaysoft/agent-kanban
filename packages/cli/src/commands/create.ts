@@ -1,7 +1,7 @@
 import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
-import { getFormat, output } from "../output.js";
+import { getOutputFormat, output } from "../output.js";
 import { getAvailableProviders } from "../providers/registry.js";
 
 function detectRuntime(): string {
@@ -36,7 +36,7 @@ export function registerCreateCommand(program: Command) {
     .requiredOption("--name <name>", "Board name")
     .requiredOption("--type <type>", "Board type: dev, ops")
     .option("--description <desc>", "Board description")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       if (!isBoardType(opts.type)) {
         console.error(`Unknown type "${opts.type}" — must be dev or ops`);
@@ -44,7 +44,7 @@ export function registerCreateCommand(program: Command) {
       }
       const client = await createClient();
       const board = await client.createBoard({ name: opts.name, type: opts.type, description: opts.description });
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(board, fmt, (b) => `Created board ${b.id}: ${b.name}`);
     });
 
@@ -62,7 +62,7 @@ export function registerCreateCommand(program: Command) {
     .option("--parent <id>", "Parent task ID")
     .option("--depends-on <ids>", "Comma-separated dependency task IDs")
     .option("--scheduled-at <time>", "ISO 8601 time to schedule task")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       const client = await createClient();
       const body: Record<string, unknown> = { title: opts.title, board_id: opts.board };
@@ -90,7 +90,7 @@ export function registerCreateCommand(program: Command) {
         }
       }
       const task = await client.createTask(body);
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(task, fmt, (t) => `Created task ${t.id}: ${t.title}`);
     });
 
@@ -108,7 +108,7 @@ export function registerCreateCommand(program: Command) {
     .option("--kind <kind>", "Agent kind: worker, leader")
     .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
     .option("--skills <skills>", "Comma-separated skill slugs")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       const client = await createClient();
       let body: Record<string, unknown>;
@@ -154,7 +154,7 @@ export function registerCreateCommand(program: Command) {
       }
 
       const agent = await client.createAgent(body as any);
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(agent, fmt, (a) => `Created agent ${a.id}: ${a.name} (${a.role || "no role"})`);
     });
 
@@ -163,11 +163,11 @@ export function registerCreateCommand(program: Command) {
     .description("Create a repository")
     .requiredOption("--name <name>", "Repository name")
     .requiredOption("--url <url>", "Clone URL")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       const client = await createClient();
       const repo = await client.createRepository({ name: opts.name, url: opts.url });
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(repo, fmt, (r) => `Added repository ${r.id}: ${r.name}`);
     });
 

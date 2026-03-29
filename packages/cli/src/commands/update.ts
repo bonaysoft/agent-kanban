@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { type ApiClient, createClient } from "../client.js";
-import { getFormat, output } from "../output.js";
+import { getOutputFormat, output } from "../output.js";
 
 async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string> {
   if (!repoRef.includes("://") && !repoRef.startsWith("git@")) return repoRef;
@@ -36,7 +36,7 @@ export function registerUpdateCommand(program: Command) {
     .description("Update a board")
     .option("--name <name>", "New name")
     .option("--description <desc>", "New description")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
       const boardId = await resolveBoardId(client, id);
@@ -48,7 +48,7 @@ export function registerUpdateCommand(program: Command) {
         process.exit(1);
       }
       const board = await client.updateBoard(boardId, body);
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(board, fmt, (b) => `Updated board ${b.id}: ${b.name}`);
     });
 
@@ -62,7 +62,7 @@ export function registerUpdateCommand(program: Command) {
     .option("--input <json>", "JSON input payload")
     .option("--depends-on <ids>", "Comma-separated task IDs")
     .option("--repo <repo>", "Repository ID or URL")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
       const body: Record<string, unknown> = {};
@@ -85,7 +85,7 @@ export function registerUpdateCommand(program: Command) {
         process.exit(1);
       }
       const task = await client.updateTask(id, body);
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(task, fmt, (t) => `Updated task ${t.id}: ${t.title}`);
     });
 
@@ -101,7 +101,7 @@ export function registerUpdateCommand(program: Command) {
     .option("--kind <kind>", "Agent kind: worker, leader")
     .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
     .option("--skills <skills>", "Comma-separated skill slugs")
-    .option("--format <format>", "Output format (json, text)")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
       const body: Record<string, unknown> = {};
@@ -119,7 +119,7 @@ export function registerUpdateCommand(program: Command) {
         process.exit(1);
       }
       const agent = await client.updateAgent(id, body);
-      const fmt = getFormat(opts.format);
+      const fmt = getOutputFormat(opts.output);
       output(agent, fmt, (a) => `Updated agent ${a.id}: ${a.name}`);
     });
 }

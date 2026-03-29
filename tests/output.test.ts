@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatAgent,
   formatAgentList,
@@ -9,7 +9,7 @@ import {
   formatTask,
   formatTaskList,
   formatTaskNotes,
-  getFormat,
+  getOutputFormat,
   output,
 } from "../packages/cli/src/output";
 
@@ -480,55 +480,103 @@ describe("formatBoard", () => {
   });
 });
 
-describe("getFormat", () => {
-  it("returns 'json' when explicit is 'json'", () => {
-    expect(getFormat("json")).toBe("json");
+describe("getOutputFormat", () => {
+  it("returns 'json' when given 'json'", () => {
+    expect(getOutputFormat("json")).toBe("json");
   });
 
-  it("returns 'text' when explicit is 'text'", () => {
-    expect(getFormat("text")).toBe("text");
+  it("returns 'yaml' when given 'yaml'", () => {
+    expect(getOutputFormat("yaml")).toBe("yaml");
   });
 
-  it("returns a valid format string when no explicit value given", () => {
-    const result = getFormat();
-    expect(["json", "text"]).toContain(result);
+  it("returns 'wide' when given 'wide'", () => {
+    expect(getOutputFormat("wide")).toBe("wide");
+  });
+
+  it("returns 'text' when given an unrecognized value", () => {
+    expect(getOutputFormat("unknown")).toBe("text");
+  });
+
+  it("returns 'text' when given undefined", () => {
+    expect(getOutputFormat(undefined)).toBe("text");
   });
 });
 
 describe("output", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("calls textFormatter in text mode when provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     let called = false;
     const formatter = (_data: any) => {
       called = true;
       return "formatted";
     };
-    // Redirect console.log to avoid test noise
-    const original = console.log;
-    console.log = () => {};
     output({ foo: "bar" }, "text", formatter);
-    console.log = original;
     expect(called).toBe(true);
+    spy.mockRestore();
   });
 
   it("falls back to JSON.stringify in text mode when no formatter provided", () => {
-    let logged = "";
-    const original = console.log;
-    console.log = (v: string) => {
-      logged = v;
-    };
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     output({ foo: "bar" }, "text");
-    console.log = original;
-    expect(logged).toContain('"foo"');
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('"foo"'));
   });
 
   it("outputs pretty-printed JSON in json mode", () => {
-    let logged = "";
-    const original = console.log;
-    console.log = (v: string) => {
-      logged = v;
-    };
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     output({ foo: "bar" }, "json");
-    console.log = original;
+    const logged = spy.mock.calls[0][0];
     expect(JSON.parse(logged)).toEqual({ foo: "bar" });
+  });
+
+  it("outputs yaml with kind/spec envelope for a single object when kind is provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    output({ title: "My Task", status: "todo" }, "yaml", undefined, { kind: "task" });
+    const logged = spy.mock.calls[0][0];
+    expect(logged).toContain("kind: task");
+    expect(logged).toContain("spec:");
+  });
+
+  it("outputs multi-doc yaml for an array when kind is provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const item1 = { title: "Task 1", status: "todo" };
+    const item2 = { title: "Task 2", status: "done" };
+    output([item1, item2], "yaml", undefined, { kind: "task" });
+    const logged = spy.mock.calls[0][0];
+    // Each document must start with ---
+    const docSeparators = logged.match(/^---$/gm) || [];
+    expect(docSeparators.length).toBe(2);
+    expect(logged).toContain("Task 1");
+    expect(logged).toContain("Task 2");
+  });
+
+  it("outputs raw yaml without wrapper when no kind is provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    output({ foo: "bar" }, "yaml");
+    const logged = spy.mock.calls[0][0];
+    expect(logged).not.toContain("kind:");
+    expect(logged).not.toContain("spec:");
+    expect(logged).toContain("foo:");
+  });
+
+  it("calls wideFormatter in wide mode when wideFormatter is provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const textFn = vi.fn(() => "text-output");
+    const wideFn = vi.fn(() => "wide-output");
+    output({ foo: "bar" }, "wide", textFn, { wideFormatter: wideFn });
+    expect(wideFn).toHaveBeenCalledWith({ foo: "bar" });
+    expect(textFn).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith("wide-output");
+  });
+
+  it("falls back to textFormatter in wide mode when wideFormatter is not provided", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const textFn = vi.fn(() => "text-output");
+    output({ foo: "bar" }, "wide", textFn);
+    expect(textFn).toHaveBeenCalledWith({ foo: "bar" });
+    expect(spy).toHaveBeenCalledWith("text-output");
   });
 });
