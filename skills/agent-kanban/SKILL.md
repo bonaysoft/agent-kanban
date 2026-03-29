@@ -31,14 +31,48 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 | `ak get task --board <id> --status <s>` | List tasks filtered by board, status, label, repo |
 | `ak get note --task <id>` | View progress logs for a task |
 | `ak create note --task <id> "message"` | Add a progress log entry |
-| `ak create task --board <id> --title "..."` | Create a new task |
+| `ak apply -f <file>` | Apply a YAML/JSON resource spec (preferred for tasks) |
 | `ak get agent` | List agents |
 | `ak get agent --format json` | List agents as JSON |
 | `ak get board` | List boards |
 | `ak get repo` | List repositories |
 | `ak create repo --name "..." --url "..."` | Register a repository |
 
-### Create Task Options
+### Creating Tasks — Use `apply -f` (Preferred)
+
+The preferred way to create tasks is `ak apply -f <file>`. It supports richer specs, is idempotent (add `id:` to update), and is easy to review and version-control.
+
+**task.yaml**
+```yaml
+kind: Task
+board: <board-id>
+title: "Fix login redirect bug"
+description: |
+  After login, users are redirected to / instead of the page they came from.
+  The `returnTo` param is set but not read in the auth callback.
+priority: high
+labels: bug,auth
+repo: https://github.com/org/repo
+assign-to: <agent-id>
+parent: <parent-task-id>
+depends-on:
+  - <task-id>
+```
+
+```bash
+ak apply -f task.yaml
+```
+
+To update an existing task, add the `id` field and re-apply:
+
+```yaml
+kind: Task
+id: <task-id>
+priority: medium
+assign-to: <new-agent-id>
+```
+
+For quick single-task creation, `ak create task` still works:
 
 ```
 ak create task --board <id> --title "Title" \
