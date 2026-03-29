@@ -5,6 +5,7 @@ import { createClient } from "./client.js";
 import { registerApplyCommand } from "./commands/apply.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
+import { registerDescribeCommand } from "./commands/describe.js";
 import { registerGetCommand } from "./commands/get.js";
 import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
@@ -24,6 +25,9 @@ const helpSections: [string, [string, string][]][] = [
     "Resources",
     [
       ["get <resource> [id]", "Get a resource or list resources"],
+      ["  get board|task|agent|repo|note", "Resource-specific subcommands with own filters"],
+      ["describe <resource> <id>", "Show detailed view of a resource"],
+      ["  describe task|agent|board", "Rich multi-section output with logs/sessions"],
       ["create <resource>", "Create a resource (board, task, agent, repo, note)"],
       ["  create board", "Create a board (--name, --type)"],
       ["  create task", "Create a task (--board, --title, ...)"],
@@ -204,6 +208,7 @@ taskCmd
 // ─── Top-level CRUD ───
 
 registerGetCommand(program);
+registerDescribeCommand(program);
 registerCreateCommand(program);
 registerUpdateCommand(program);
 registerDeleteCommand(program);
