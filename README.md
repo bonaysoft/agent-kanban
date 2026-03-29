@@ -48,7 +48,7 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 │             │────────▶│   read-only board + chat  │
 └──────┬──────┘         └────────────┬──────────────┘
        │                             │
-       │ claude / codex / gemini      │ SSE
+       │ claude / codex / gemini     │ SSE
        ▼                             ▼
 ┌─────────────┐  create/assign  ┌─────────┐  D1
 │   Leader    │────────────────▶│   API   │◀────▶ SQLite
