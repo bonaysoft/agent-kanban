@@ -10,7 +10,7 @@ const logger = createLogger("claude");
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error"]);
+const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error", "rate_limit"]);
 
 const CLAUDE_WINDOW_LABELS: Record<string, string> = {
   five_hour: "5-Hour",
@@ -49,7 +49,9 @@ function detectError(event: any): { code?: string; detail: string } | null {
   if (event.type !== "error" && !event.error) return null;
 
   let code: string | undefined;
-  if (event.error && typeof event.error === "object") {
+  if (typeof event.error === "string") {
+    code = event.error;
+  } else if (event.error && typeof event.error === "object") {
     code = event.error.type;
   }
 

@@ -198,7 +198,11 @@ export class ProcessManager {
       await this.closeSession(agentClient);
 
       if (agent.resultReceived) {
-        // handleEvent already updated session status — nothing to do
+        if (agent.rateLimited) {
+          logger.warn(`Agent for task ${taskId} (${agent.provider.name}) hit usage limit (cost=$0), suspending`);
+          updateSession(sessionId, { status: "rate_limited" });
+        }
+        // else: handleEvent already updated session status
       } else if (code === 0) {
         // No result event but clean exit — check task status as fallback
         const task = (await this.client.getTask(taskId)) as any;
@@ -286,8 +290,8 @@ export class ProcessManager {
           .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
         if (agent) {
           agent.resultReceived = true;
-          // Rate limit was transient — agent completed despite the warning
-          if (agent.rateLimited) {
+          // cost=0 indicates the agent was blocked by usage limit before doing any work
+          if (agent.rateLimited && cost > 0) {
             this.callbacks.onRateLimitCleared?.(agent.provider.name);
           }
           const task = (await this.client.getTask(taskId)) as any;
