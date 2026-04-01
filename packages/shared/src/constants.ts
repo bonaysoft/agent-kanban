@@ -28,7 +28,7 @@ export const AGENT_STATUSES = ["online", "offline"] as const;
 
 export const MACHINE_STATUSES = ["online", "offline"] as const;
 
-export const STALE_TIMEOUT_MS = 7200000; // 2 hours (task stale)
+export const STALE_TIMEOUT_MS = 86400000; // 24 hours (task stale)
 
 export const MACHINE_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 

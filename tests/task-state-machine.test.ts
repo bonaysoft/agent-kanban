@@ -261,9 +261,8 @@ describe("validateTransition", () => {
     expect(err?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects release by agent:leader", () => {
-    const err = validateTransition("release", "in_progress", "agent:leader");
-    expect(err?.code).toBe("FORBIDDEN");
+  it("allows release by agent:leader", () => {
+    expect(validateTransition("release", "in_progress", "agent:leader")).toBeNull();
   });
 });
 
@@ -479,11 +478,12 @@ describe("task lifecycle repo functions", () => {
       await expect(releaseTask(env.DB, task.id, "agent:worker", "system", "agent:worker")).rejects.toThrow();
     });
 
-    it("rejects release by agent:leader", async () => {
+    it("allows release by agent:leader", async () => {
       const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
-      await expect(releaseTask(env.DB, task.id, "agent:leader", "system", "agent:leader")).rejects.toThrow();
+      const result = await releaseTask(env.DB, task.id, "agent:leader", "system", "agent:leader");
+      expect(result!.status).toBe("todo");
     });
   });
 

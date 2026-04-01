@@ -75,8 +75,8 @@ describe("shared constants", () => {
     expect(AGENT_STATUSES).toEqual(["online", "offline"]);
   });
 
-  it("STALE_TIMEOUT_MS is 2 hours", () => {
-    expect(STALE_TIMEOUT_MS).toBe(7200000);
+  it("STALE_TIMEOUT_MS is 24 hours", () => {
+    expect(STALE_TIMEOUT_MS).toBe(86400000);
   });
 
   it("PRIORITIES has 4 levels", () => {
