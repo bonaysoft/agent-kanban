@@ -35,314 +35,392 @@ vi.mock("../packages/cli/src/logger.js", () => ({
   }),
 }));
 
-import { buildArgs, buildResumeArgs, claudeProvider, formatInput, parseEvent } from "../packages/cli/src/providers/claude.js";
+// Mock claude-agent-sdk so execute() does not invoke the real SDK
+vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
+  query: vi.fn().mockReturnValue({
+    [Symbol.asyncIterator]: async function* () {},
+    close: vi.fn(),
+    streamInput: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { claudeProvider, mapSDKMessage } from "../packages/cli/src/providers/claude.js";
 
 // ---------------------------------------------------------------------------
-// parseEvent — rate_limit_event (blocked)
+// mapSDKMessage — rate_limit_event
 // ---------------------------------------------------------------------------
 
-describe("parseEvent — rate_limit_event", () => {
-  it("returns rate_limit event when rate_limit_event status is blocked", () => {
-    const resetsAt = Math.floor(Date.now() / 1000) + 3600;
-    const raw = JSON.stringify({
+describe("mapSDKMessage — rate_limit_event rejected", () => {
+  it("returns rate_limit event when status is rejected", () => {
+    const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "blocked", resetsAt },
-    });
-    const result = parseEvent(raw);
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
     expect(result?.type).toBe("rate_limit");
   });
 
-  it("includes resetAt ISO string derived from resetsAt epoch", () => {
+  it("includes resetAt as ISO string derived from resetsAt epoch", () => {
     const resetsAt = 1700000000;
-    const raw = JSON.stringify({
+    const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "blocked", resetsAt },
-    });
-    const result = parseEvent(raw);
-    expect(result).toEqual({ type: "rate_limit", resetAt: new Date(resetsAt * 1000).toISOString() });
+      rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 0.95 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(new Date(result.resetAt).getTime()).toBe(resetsAt * 1000);
+    }
   });
 
-  it("returns null when rate_limit_event status is not blocked", () => {
-    const raw = JSON.stringify({
+  it("includes rateLimitType from rate_limit_info", () => {
+    const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "allowed", resetsAt: 1700000000 },
-    });
-    expect(parseEvent(raw)).toBeNull();
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "rate_limit") {
+      expect(result.rateLimitType).toBe("five_hour");
+    }
   });
 
-  it("returns null when rate_limit_event has no rate_limit_info", () => {
-    const raw = JSON.stringify({ type: "rate_limit_event" });
-    expect(parseEvent(raw)).toBeNull();
+  it("includes utilization from rate_limit_info", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "rate_limit") {
+      expect(result.utilization).toBe(0.95);
+    }
+  });
+
+  it("uses 1-hour fallback resetAt when resetsAt is absent", () => {
+    const before = Date.now();
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "rejected", resetsAt: null, rateLimitType: "five_hour", utilization: 0.9 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    const after = Date.now();
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      const resetMs = new Date(result.resetAt).getTime();
+      expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
+      expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+    }
+  });
+});
+
+describe("mapSDKMessage — rate_limit_event allowed_warning", () => {
+  it("returns null when status is allowed_warning", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.8 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)).toBeNull();
+  });
+
+  it("returns null for any other non-rejected status", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.5 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseEvent — string error codes (e.g. event.error = "rate_limit")
+// mapSDKMessage — assistant message
 // ---------------------------------------------------------------------------
 
-describe("parseEvent — string error field", () => {
-  it("returns rate_limit for assistant event with error: 'rate_limit' (real Claude CLI usage-limit shape)", () => {
-    // Real event shape from Claude CLI when account hits usage limit
-    const raw = JSON.stringify({
+describe("mapSDKMessage — assistant message", () => {
+  it("returns message event with text from content block", () => {
+    const msg = {
       type: "assistant",
-      error: "rate_limit",
-      isApiErrorMessage: true,
-      message: {
-        model: "<synthetic>",
-        content: [{ type: "text", text: "You're out of extra usage · resets 2pm (America/Toronto)" }],
-        usage: { input_tokens: 0, output_tokens: 0 },
-      },
-    });
-    const result = parseEvent(raw);
-    expect(result?.type).toBe("rate_limit");
-  });
-
-  it("includes a future resetAt for string rate_limit error", () => {
-    const before = Date.now();
-    const raw = JSON.stringify({
-      type: "assistant",
-      error: "rate_limit",
-      message: { content: [{ type: "text", text: "limit hit" }] },
-    });
-    const result = parseEvent(raw);
-    const after = Date.now();
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
-      const resetAt = new Date(result.resetAt).getTime();
-      expect(resetAt).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
-      expect(resetAt).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+      message: { content: [{ type: "text", text: "hello" }] },
+      error: undefined,
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
+      expect(result.text).toBe("hello");
     }
   });
 
-  it("returns error for string error codes not in RATE_LIMIT_CODES", () => {
-    const raw = JSON.stringify({
+  it("joins multiple text blocks with newline", () => {
+    const msg = {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Line one" },
+          { type: "text", text: "Line two" },
+        ],
+      },
+      error: undefined,
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
+      expect(result.text).toBe("Line one\nLine two");
+    }
+  });
+
+  it("returns null when content has no text blocks", () => {
+    const msg = {
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "tu1" }] },
+      error: undefined,
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)).toBeNull();
+  });
+
+  it("returns null when message content is missing", () => {
+    const msg = {
+      type: "assistant",
+      message: {},
+      error: undefined,
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mapSDKMessage — assistant with error field
+// ---------------------------------------------------------------------------
+
+describe("mapSDKMessage — assistant with error field", () => {
+  it("returns rate_limit event when error is 'rate_limit'", () => {
+    const msg = {
+      type: "assistant",
+      error: "rate_limit",
+      message: { content: [{ type: "text", text: "usage limit hit" }] },
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+  });
+
+  it("rate_limit resetAt for string error is roughly 1 hour from now", () => {
+    const before = Date.now();
+    const msg = {
+      type: "assistant",
+      error: "rate_limit",
+      message: { content: [] },
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    const after = Date.now();
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      const resetMs = new Date(result.resetAt).getTime();
+      expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
+      expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+    }
+  });
+
+  it("returns error event when error is a non-rate-limit string", () => {
+    const msg = {
       type: "assistant",
       error: "authentication_error",
-      message: { content: [{ type: "text", text: "Not authenticated" }] },
-    });
-    const result = parseEvent(raw);
-    expect(result).toMatchObject({ type: "error", code: "authentication_error" });
-  });
-
-  it("returns error for object error with non-rate-limit type", () => {
-    const raw = JSON.stringify({
-      type: "error",
-      error: { type: "server_error", message: "Something went wrong" },
-    });
-    const result = parseEvent(raw);
-    expect(result).toMatchObject({ type: "error", code: "server_error", detail: "Something went wrong" });
+      message: { content: [] },
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("error");
+    if (result?.type === "error") {
+      expect(result.code).toBe("authentication_error");
+    }
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseEvent — RATE_LIMIT_CODES (existing behavior, Fix 3 baseline)
+// mapSDKMessage — result
 // ---------------------------------------------------------------------------
 
-describe("parseEvent — rate_limit_error and overloaded_error codes", () => {
-  it("returns rate_limit for error with type rate_limit_error", () => {
-    const raw = JSON.stringify({
-      type: "error",
-      error: { type: "rate_limit_error", message: "Rate limit reached" },
-    });
-    const result = parseEvent(raw);
-    expect(result?.type).toBe("rate_limit");
+describe("mapSDKMessage — result", () => {
+  it("returns result event", () => {
+    const msg = {
+      type: "result",
+      subtype: "success",
+      total_cost_usd: 0.05,
+      usage: { input_tokens: 100, output_tokens: 50 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)?.type).toBe("result");
   });
 
-  it("returns rate_limit for error with type overloaded_error", () => {
-    const raw = JSON.stringify({
-      type: "error",
-      error: { type: "overloaded_error", message: "Overloaded" },
-    });
-    const result = parseEvent(raw);
-    expect(result?.type).toBe("rate_limit");
-  });
-
-  it("includes a resetAt approximately 1 hour in the future for rate_limit_error", () => {
-    const before = Date.now();
-    const raw = JSON.stringify({
-      type: "error",
-      error: { type: "rate_limit_error", message: "Rate limit" },
-    });
-    const result = parseEvent(raw);
-    const after = Date.now();
-
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
-      const resetAt = new Date(result.resetAt).getTime();
-      expect(resetAt).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
-      expect(resetAt).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+  it("includes cost from total_cost_usd", () => {
+    const msg = {
+      type: "result",
+      subtype: "success",
+      total_cost_usd: 0.12,
+      usage: { input_tokens: 10, output_tokens: 5 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "result") {
+      expect(result.cost).toBe(0.12);
     }
   });
 
-  it("returns error with code for unknown error types", () => {
-    const raw = JSON.stringify({
-      type: "error",
-      error: { type: "permission_error", message: "Not allowed" },
-    });
-    const result = parseEvent(raw);
-    expect(result).toMatchObject({ type: "error", code: "permission_error", detail: "Not allowed" });
+  it("defaults cost to 0 when total_cost_usd is absent", () => {
+    const msg = {
+      type: "result",
+      subtype: "success",
+      usage: { input_tokens: 10, output_tokens: 5 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "result") {
+      expect(result.cost).toBe(0);
+    }
+  });
+
+  it("includes usage when present", () => {
+    const usage = { input_tokens: 100, output_tokens: 50 };
+    const msg = {
+      type: "result",
+      subtype: "success",
+      total_cost_usd: 0,
+      usage,
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "result") {
+      expect(result.usage).toEqual(usage);
+    }
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseEvent — other event types
+// mapSDKMessage — unknown type
 // ---------------------------------------------------------------------------
 
-describe("parseEvent — non-error event types", () => {
-  it("returns null for unparseable JSON", () => {
-    expect(parseEvent("not json")).toBeNull();
-  });
-
-  it("returns null for empty string", () => {
-    expect(parseEvent("")).toBeNull();
-  });
-
+describe("mapSDKMessage — unknown type", () => {
   it("returns null for unrecognized event type", () => {
-    const raw = JSON.stringify({ type: "system_prompt" });
-    expect(parseEvent(raw)).toBeNull();
+    const msg = { type: "system_prompt", uuid: "u1", session_id: "s1" } as unknown as SDKMessage;
+    expect(mapSDKMessage(msg)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// claudeProvider identity
+// ---------------------------------------------------------------------------
+
+describe("claudeProvider identity", () => {
+  it("name is claude", () => {
+    expect(claudeProvider.name).toBe("claude");
   });
 
-  it("returns message event for assistant text content", () => {
-    const raw = JSON.stringify({
+  it("label is Claude Code", () => {
+    expect(claudeProvider.label).toBe("Claude Code");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// claudeProvider.execute — verifies handle shape and SDK interaction via mocked SDK
+// ---------------------------------------------------------------------------
+
+describe("claudeProvider.execute — handle shape", () => {
+  it("resolves to a handle with events, abort, pid, and send", async () => {
+    const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "build feature" });
+    expect(handle).toHaveProperty("events");
+    expect(typeof handle.abort).toBe("function");
+    expect(typeof handle.send).toBe("function");
+    expect(handle.pid).toBeNull();
+  });
+
+  it("events is an async iterable", async () => {
+    const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    expect(typeof handle.events[Symbol.asyncIterator]).toBe("function");
+  });
+
+  it("events yields mapped AgentEvents from SDK messages", async () => {
+    const { query: mockQuery } = await import("@anthropic-ai/claude-agent-sdk");
+    const sdkMsg = {
       type: "assistant",
-      message: { content: [{ type: "text", text: "Hello from agent" }] },
-    });
-    const result = parseEvent(raw);
-    expect(result).toEqual({ type: "message", text: "Hello from agent" });
+      message: { content: [{ type: "text", text: "SDK message" }] },
+      error: undefined,
+      parent_tool_use_id: null,
+      uuid: "u1",
+      session_id: "s1",
+    };
+    vi.mocked(mockQuery).mockReturnValueOnce({
+      [Symbol.asyncIterator]: async function* () {
+        yield sdkMsg;
+      },
+      close: vi.fn(),
+      streamInput: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    const events: any[] = [];
+    for await (const ev of handle.events) events.push(ev);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "message", text: "SDK message" });
   });
 
-  it("returns null for assistant event with no text blocks", () => {
-    const raw = JSON.stringify({
-      type: "assistant",
-      message: { content: [{ type: "tool_use", id: "t1" }] },
-    });
-    expect(parseEvent(raw)).toBeNull();
+  it("abort() calls close() on the query object", async () => {
+    const { query: mockQuery } = await import("@anthropic-ai/claude-agent-sdk");
+    const closeSpy = vi.fn();
+    vi.mocked(mockQuery).mockReturnValueOnce({
+      [Symbol.asyncIterator]: async function* () {},
+      close: closeSpy,
+      streamInput: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    await handle.abort();
+    expect(closeSpy).toHaveBeenCalledOnce();
   });
 
-  it("returns result event with cost and usage", () => {
-    const raw = JSON.stringify({
-      type: "result",
-      total_cost_usd: 0.0042,
-      usage: { input_tokens: 100, output_tokens: 50 },
-    });
-    const result = parseEvent(raw);
-    expect(result).toMatchObject({
-      type: "result",
-      cost: 0.0042,
-      usage: { input_tokens: 100, output_tokens: 50 },
-    });
-  });
-
-  it("returns result event with cost 0 when total_cost_usd is absent", () => {
-    const raw = JSON.stringify({ type: "result" });
-    const result = parseEvent(raw);
-    expect(result).toMatchObject({ type: "result", cost: 0 });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildArgs
-// ---------------------------------------------------------------------------
-
-describe("buildArgs", () => {
-  it("includes --session-id with the provided sessionId", () => {
-    const args = buildArgs({ sessionId: "sess-123", cwd: "/", env: {}, taskContext: "" });
-    const idx = args.indexOf("--session-id");
-    expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("sess-123");
-  });
-
-  it("always includes --print flag", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
-    expect(args).toContain("--print");
-  });
-
-  it("always includes --dangerously-skip-permissions flag", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
-    expect(args).toContain("--dangerously-skip-permissions");
-  });
-
-  it("includes --system-prompt-file when systemPromptFile is provided", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/tmp/prompt.txt" });
-    const idx = args.indexOf("--system-prompt-file");
-    expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("/tmp/prompt.txt");
-  });
-
-  it("does not include --system-prompt-file when systemPromptFile is absent", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
-    expect(args).not.toContain("--system-prompt-file");
-  });
-
-  it("includes --model when model is provided", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", model: "claude-opus-4" });
-    const idx = args.indexOf("--model");
-    expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("claude-opus-4");
-  });
-
-  it("does not include --model when model is absent", () => {
-    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
-    expect(args).not.toContain("--model");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildResumeArgs
-// ---------------------------------------------------------------------------
-
-describe("buildResumeArgs", () => {
-  it("includes --resume with the provided sessionId", () => {
-    const args = buildResumeArgs("sess-456");
-    const idx = args.indexOf("--resume");
-    expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("sess-456");
-  });
-
-  it("always includes --print flag", () => {
-    const args = buildResumeArgs("s1");
-    expect(args).toContain("--print");
-  });
-
-  it("always includes --dangerously-skip-permissions flag", () => {
-    const args = buildResumeArgs("s1");
-    expect(args).toContain("--dangerously-skip-permissions");
-  });
-
-  it("includes --model when model is provided", () => {
-    const args = buildResumeArgs("s1", "claude-sonnet-4-5");
-    const idx = args.indexOf("--model");
-    expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("claude-sonnet-4-5");
-  });
-
-  it("does not include --model when model is absent", () => {
-    const args = buildResumeArgs("s1");
-    expect(args).not.toContain("--model");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatInput (previously buildInput)
-// ---------------------------------------------------------------------------
-
-describe("formatInput", () => {
-  it("returns valid JSON string", () => {
-    const raw = formatInput("do the task");
-    expect(() => JSON.parse(raw)).not.toThrow();
-  });
-
-  it("wraps taskContext in a user message envelope", () => {
-    const parsed = JSON.parse(formatInput("do the task"));
-    expect(parsed.type).toBe("user");
-    expect(parsed.message.role).toBe("user");
-    expect(parsed.message.content).toBe("do the task");
-  });
-
-  it("preserves the task context string verbatim", () => {
-    const context = "Fix bug #42 in repo foo/bar";
-    const parsed = JSON.parse(formatInput(context));
-    expect(parsed.message.content).toBe(context);
+  it("send() calls streamInput() with a user message async generator", async () => {
+    const { query: mockQuery } = await import("@anthropic-ai/claude-agent-sdk");
+    const streamInputSpy = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(mockQuery).mockReturnValueOnce({
+      [Symbol.asyncIterator]: async function* () {},
+      close: vi.fn(),
+      streamInput: streamInputSpy,
+    } as any);
+    const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    await handle.send("ping");
+    expect(streamInputSpy).toHaveBeenCalledOnce();
   });
 });
 

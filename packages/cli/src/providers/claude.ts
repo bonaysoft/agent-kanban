@@ -2,8 +2,9 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
-import { spawnAgent } from "./spawnHelper.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("claude");
@@ -11,7 +12,6 @@ const logger = createLogger("claude");
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const RATE_LIMIT_CODES = new Set(["rate_limit_error", "overloaded_error", "rate_limit"]);
 
 const CLAUDE_WINDOW_LABELS: Record<string, string> = {
   five_hour: "5-Hour",
@@ -46,116 +46,52 @@ function readOAuthToken(): string | null {
   }
 }
 
-function detectError(event: any): { code?: string; detail: string } | null {
-  if (event.type !== "error" && !event.error) return null;
-
-  let code: string | undefined;
-  if (typeof event.error === "string") {
-    code = event.error;
-  } else if (event.error && typeof event.error === "object") {
-    code = event.error.type;
-  }
-
-  let detail: string | undefined;
-  if (event.type === "assistant" && Array.isArray(event.message?.content)) {
-    const textBlock = event.message.content.find((e: any) => e.type === "text" && e.text);
-    if (textBlock?.text) detail = textBlock.text;
-  }
-  if (!detail) {
-    detail = event.error?.message || (event.error !== "unknown" ? event.error : undefined) || event.message || JSON.stringify(event);
-  }
-
-  return { code, detail: String(detail) };
-}
-
-export function parseEvent(raw: string): AgentEvent | null {
-  let event: any;
-  try {
-    event = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (event.type === "rate_limit_event") {
-    const info = event.rate_limit_info;
-    if (info?.status === "blocked" || info?.status === "rejected") {
-      const resetAt = new Date(info.resetsAt * 1000).toISOString();
-      return { type: "rate_limit", resetAt, rateLimitType: info.rateLimitType, utilization: info.utilization };
+/** Map a single SDK message to an AgentEvent (or null to skip). */
+export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
+  switch (msg.type) {
+    case "rate_limit_event": {
+      const info = msg.rate_limit_info;
+      if (info.status === "rejected") {
+        const resetAt = info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        return { type: "rate_limit", resetAt, rateLimitType: info.rateLimitType, utilization: info.utilization };
+      }
+      if (info.status === "allowed_warning") {
+        logger.warn(`Rate limit warning: ${info.rateLimitType} at ${((info.utilization ?? 0) * 100).toFixed(0)}%`);
+      }
+      return null;
     }
-    return null;
-  }
 
-  const err = detectError(event);
-  if (err) {
-    if (err.code && RATE_LIMIT_CODES.has(err.code)) {
-      const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      return { type: "rate_limit", resetAt };
+    case "assistant": {
+      if (msg.error === "rate_limit") {
+        const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        return { type: "rate_limit", resetAt };
+      }
+      if (msg.error) {
+        return { type: "error", code: msg.error, detail: msg.error };
+      }
+      const texts: string[] = [];
+      if (Array.isArray(msg.message?.content)) {
+        for (const block of msg.message.content) {
+          if (block.type === "text" && block.text) texts.push(block.text);
+        }
+      }
+      if (texts.length > 0) {
+        return { type: "message", text: texts.join("\n") };
+      }
+      return null;
     }
-    return { type: "error", code: err.code, detail: err.detail };
-  }
 
-  if (event.type === "assistant" && Array.isArray(event.message?.content)) {
-    const texts: string[] = [];
-    for (const block of event.message.content) {
-      if (block.type === "text" && block.text) texts.push(block.text);
+    case "result": {
+      return {
+        type: "result",
+        cost: msg.total_cost_usd || 0,
+        usage: msg.usage as Record<string, any>,
+      };
     }
-    if (texts.length > 0) {
-      return { type: "message", text: texts.join("\n") };
-    }
-  }
 
-  if (event.type === "result") {
-    return {
-      type: "result",
-      cost: event.total_cost_usd || 0,
-      usage: event.usage,
-    };
+    default:
+      return null;
   }
-
-  return null;
-}
-
-export function buildArgs(opts: ExecuteOpts): string[] {
-  const args = [
-    "--print",
-    "--verbose",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--dangerously-skip-permissions",
-    "--session-id",
-    opts.sessionId,
-  ];
-  if (opts.systemPromptFile) {
-    args.push("--system-prompt-file", opts.systemPromptFile);
-  }
-  if (opts.model) {
-    args.push("--model", opts.model);
-  }
-  return args;
-}
-
-export function buildResumeArgs(sessionId: string, model?: string): string[] {
-  const args = [
-    "--resume",
-    sessionId,
-    "--print",
-    "--verbose",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--dangerously-skip-permissions",
-  ];
-  if (model) {
-    args.push("--model", model);
-  }
-  return args;
-}
-
-export function formatInput(text: string): string {
-  return JSON.stringify({ type: "user", message: { role: "user", content: text } });
 }
 
 export const claudeProvider: AgentProvider = {
@@ -163,21 +99,48 @@ export const claudeProvider: AgentProvider = {
   label: "Claude Code",
 
   execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    const args = opts.resume ? buildResumeArgs(opts.sessionId, opts.model) : buildArgs(opts);
-    const handle = spawnAgent({
-      command: "claude",
-      args,
-      cwd: opts.cwd,
-      env: opts.env,
-      input: formatInput(opts.taskContext),
-      parseEvent,
+    const systemPrompt = opts.systemPromptFile ? readFileSync(opts.systemPromptFile, "utf-8") : undefined;
+    const abortController = new AbortController();
+
+    const q = query({
+      prompt: opts.taskContext,
+      options: {
+        sessionId: opts.resume ? undefined : opts.sessionId,
+        resume: opts.resume ? opts.sessionId : undefined,
+        cwd: opts.cwd,
+        env: opts.env,
+        systemPrompt,
+        model: opts.model,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        abortController,
+      },
     });
 
-    // Wrap send to format as stream-json user message
-    const originalSend = handle.send;
-    handle.send = (message: string) => originalSend(formatInput(message));
+    const events = (async function* () {
+      for await (const msg of q) {
+        const event = mapSDKMessage(msg);
+        if (event) yield event;
+      }
+    })();
 
-    return Promise.resolve(handle);
+    return Promise.resolve({
+      events,
+      pid: null,
+      async abort() {
+        q.close();
+      },
+      async send(message: string) {
+        const userMsg = async function* () {
+          yield {
+            type: "user" as const,
+            message: { role: "user" as const, content: message },
+            parent_tool_use_id: null,
+          };
+        };
+        await q.streamInput(userMsg());
+      },
+    });
   },
 
   async getUsage(): Promise<UsageInfo | null> {

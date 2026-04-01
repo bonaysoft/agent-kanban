@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { Codex, type ThreadEvent } from "@openai/codex-sdk";
 import { createLogger } from "../logger.js";
-import { spawnAgent } from "./spawnHelper.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("codex");
@@ -52,89 +52,98 @@ function calcCost(inputTokens: number, cachedInputTokens: number, outputTokens: 
   return (inputTokens * price.input + cachedInputTokens * price.cached_input + outputTokens * price.output) / 1_000_000;
 }
 
-function parseEvent(raw: string): AgentEvent | null {
-  let event: any;
-  try {
-    event = JSON.parse(raw);
-  } catch {
-    return null;
-  }
+/** Map a single Codex thread event to an AgentEvent (or null to skip). */
+export function mapThreadEvent(event: ThreadEvent): AgentEvent | null {
+  switch (event.type) {
+    case "item.completed": {
+      if (event.item.type === "agent_message" && event.item.text) {
+        return { type: "message", text: event.item.text };
+      }
+      return null;
+    }
 
-  if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item?.text) {
-    return { type: "message", text: event.item.text };
-  }
+    case "turn.completed": {
+      const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
+      const cost = calcCost(input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
+      return {
+        type: "result",
+        cost,
+        usage: {
+          input_tokens: input_tokens ?? 0,
+          output_tokens: output_tokens ?? 0,
+          cache_read_input_tokens: cached_input_tokens ?? 0,
+          cache_creation_input_tokens: 0,
+        },
+      };
+    }
 
-  if (event.type === "turn.completed" && event.usage) {
-    const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
-    const cost = calcCost(input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
-    return {
-      type: "result",
-      cost,
-      usage: {
-        input_tokens: input_tokens ?? 0,
-        output_tokens: output_tokens ?? 0,
-        cache_read_input_tokens: cached_input_tokens ?? 0,
-        cache_creation_input_tokens: 0,
-      },
-    };
-  }
+    case "turn.failed": {
+      const msg = String(event.error?.message || JSON.stringify(event));
+      const resetAt = parseRateLimitReset(msg);
+      if (resetAt) return { type: "rate_limit", resetAt };
+      return { type: "error", detail: msg };
+    }
 
-  if (event.type === "turn.failed") {
-    const msg = String(event.error?.message || JSON.stringify(event));
-    const resetAt = parseRateLimitReset(msg);
-    if (resetAt) return { type: "rate_limit", resetAt };
-    return { type: "error", detail: msg };
-  }
+    case "error": {
+      const detail = String(event.message || JSON.stringify(event));
+      const resetAt = parseRateLimitReset(detail);
+      if (resetAt) return { type: "rate_limit", resetAt };
+      return { type: "error", detail };
+    }
 
-  if (event.type === "error") {
-    const detail = String(event.message || JSON.stringify(event));
-    const resetAt = parseRateLimitReset(detail);
-    if (resetAt) return { type: "rate_limit", resetAt };
-    return { type: "error", detail };
+    default:
+      return null;
   }
-
-  return null;
-}
-
-function buildArgs(opts: ExecuteOpts): string[] {
-  if (opts.model) currentModel = opts.model;
-  const args = ["exec", "--json", "--dangerously-bypass-approvals-and-sandbox"];
-  if (opts.systemPromptFile) {
-    args.push("-c", `model_instructions_file=${opts.systemPromptFile}`);
-  }
-  if (opts.model) {
-    args.push("-m", opts.model);
-  }
-  args.push("-");
-  return args;
-}
-
-function buildResumeArgs(sessionId: string, model?: string): string[] {
-  if (model) currentModel = model;
-  const args = ["exec", "resume", sessionId, "--json", "--dangerously-bypass-approvals-and-sandbox"];
-  if (model) {
-    args.push("-m", model);
-  }
-  args.push("-");
-  return args;
 }
 
 export const codexProvider: AgentProvider = {
   name: "codex",
   label: "Codex CLI",
 
-  execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    const args = opts.resume ? buildResumeArgs(opts.sessionId, opts.model) : buildArgs(opts);
-    return Promise.resolve(
-      spawnAgent({
-        command: "codex",
-        args,
-        cwd: opts.cwd,
-        env: opts.env,
-        input: opts.taskContext,
-        parseEvent,
-      }),
-    );
+  async execute(opts: ExecuteOpts): Promise<AgentHandle> {
+    if (opts.model) currentModel = opts.model;
+
+    const codex = new Codex({ env: opts.env });
+    const thread = opts.resume
+      ? codex.resumeThread(opts.sessionId, {
+          model: opts.model,
+          workingDirectory: opts.cwd,
+          sandboxMode: "danger-full-access",
+          approvalPolicy: "never",
+        })
+      : codex.startThread({
+          model: opts.model,
+          workingDirectory: opts.cwd,
+          sandboxMode: "danger-full-access",
+          approvalPolicy: "never",
+        });
+
+    const abortController = new AbortController();
+    const streamed = await thread.runStreamed(opts.taskContext, { signal: abortController.signal });
+
+    const events = (async function* () {
+      for await (const event of streamed.events) {
+        const mapped = mapThreadEvent(event);
+        if (mapped) yield mapped;
+      }
+    })();
+
+    return {
+      events,
+      pid: null,
+      async abort() {
+        abortController.abort();
+      },
+      async send(message: string) {
+        // Codex SDK: start a new turn on the same thread
+        const nextStreamed = await thread.runStreamed(message, { signal: abortController.signal });
+        // Drain events (they'll be picked up by the main event loop if we chain iterators)
+        // For now, send() initiates a follow-up turn but events flow through the original stream
+        // TODO: implement proper multi-turn event chaining when needed
+        logger.info("Sent follow-up message to Codex thread");
+        void nextStreamed;
+      },
+    };
   },
 
   async getUsage(): Promise<UsageInfo | null> {
