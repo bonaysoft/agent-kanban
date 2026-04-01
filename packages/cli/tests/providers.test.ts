@@ -1,7 +1,46 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
-import { claudeProvider } from "../src/providers/claude.js";
-import { geminiProvider } from "../src/providers/gemini.js";
+import { describe, expect, it, vi } from "vitest";
+
+// Mock node:fs so readFileSync never touches disk (gemini reads system prompt file)
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn().mockImplementation(() => {
+    throw new Error("ENOENT");
+  }),
+}));
+
+// Mock logger to suppress output
+vi.mock("../src/logger.js", () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+// Mock spawnHelper so execute() does not spawn real CLI processes
+vi.mock("../src/providers/spawnHelper.js", () => ({
+  spawnAgent: vi.fn().mockReturnValue({
+    events: (async function* () {})(),
+    abort: vi.fn().mockResolvedValue(undefined),
+    pid: 12345,
+    send: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
+import {
+  buildArgs as claudeBuildArgs,
+  buildResumeArgs as claudeBuildResumeArgs,
+  parseEvent as claudeParseEvent,
+  claudeProvider,
+  formatInput,
+} from "../src/providers/claude.js";
+import {
+  buildArgs as geminiBuildArgs,
+  buildResumeArgs as geminiBuildResumeArgs,
+  parseEvent as geminiParseEvent,
+  geminiProvider,
+} from "../src/providers/gemini.js";
 import { getAvailableProviders, getProvider, registerProvider } from "../src/providers/registry.js";
 import type { AgentProvider } from "../src/providers/types.js";
 
@@ -11,48 +50,48 @@ import type { AgentProvider } from "../src/providers/types.js";
 
 describe("claudeProvider.buildArgs", () => {
   it("includes --print flag", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--print");
   });
 
   it("includes --verbose flag", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--verbose");
   });
 
   it("includes --input-format stream-json", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     const idx = args.indexOf("--input-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
   it("includes --output-format stream-json", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     const idx = args.indexOf("--output-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
   it("includes --dangerously-skip-permissions flag", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--dangerously-skip-permissions");
   });
 
   it("includes --session-id with the provided session ID", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "abc-123" });
+    const args = claudeBuildArgs({ sessionId: "abc-123", cwd: "/", env: {}, taskContext: "" });
     const idx = args.indexOf("--session-id");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("abc-123");
   });
 
   it("does not include --system-prompt-file when systemPromptFile is absent", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).not.toContain("--system-prompt-file");
   });
 
   it("appends --system-prompt-file when systemPromptFile is provided", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1", systemPromptFile: "/tmp/prompt.txt" });
+    const args = claudeBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/tmp/prompt.txt" });
     const idx = args.indexOf("--system-prompt-file");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("/tmp/prompt.txt");
@@ -65,39 +104,39 @@ describe("claudeProvider.buildArgs", () => {
 
 describe("claudeProvider.buildResumeArgs", () => {
   it("starts with --resume flag", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     expect(args[0]).toBe("--resume");
   });
 
   it("includes the session ID immediately after --resume", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     expect(args[1]).toBe("sess-99");
   });
 
   it("includes --print flag", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     expect(args).toContain("--print");
   });
 
   it("includes --verbose flag", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     expect(args).toContain("--verbose");
   });
 
   it("includes --dangerously-skip-permissions flag", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     expect(args).toContain("--dangerously-skip-permissions");
   });
 
   it("includes --input-format stream-json", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     const idx = args.indexOf("--input-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
   it("includes --output-format stream-json", () => {
-    const args = claudeProvider.buildResumeArgs("sess-99");
+    const args = claudeBuildResumeArgs("sess-99");
     const idx = args.indexOf("--output-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
@@ -110,15 +149,15 @@ describe("claudeProvider.buildResumeArgs", () => {
 
 describe("claudeProvider.parseEvent — invalid input", () => {
   it("returns null for non-JSON string", () => {
-    expect(claudeProvider.parseEvent("not json")).toBeNull();
+    expect(claudeParseEvent("not json")).toBeNull();
   });
 
   it("returns null for empty string", () => {
-    expect(claudeProvider.parseEvent("")).toBeNull();
+    expect(claudeParseEvent("")).toBeNull();
   });
 
   it("returns null for unrecognised event type", () => {
-    expect(claudeProvider.parseEvent(JSON.stringify({ type: "unknown_event" }))).toBeNull();
+    expect(claudeParseEvent(JSON.stringify({ type: "unknown_event" }))).toBeNull();
   });
 });
 
@@ -128,7 +167,7 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
       type: "rate_limit_event",
       rate_limit_info: { status: "blocked", resetsAt: 1700000000 },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("rate_limit");
   });
 
@@ -138,7 +177,7 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
       type: "rate_limit_event",
       rate_limit_info: { status: "blocked", resetsAt },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("rate_limit");
     if (event?.type === "rate_limit") {
       expect(new Date(event.resetAt).getTime()).toBe(resetsAt * 1000);
@@ -150,12 +189,12 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
       type: "rate_limit_event",
       rate_limit_info: { status: "allowed", resetsAt: 1700000000 },
     });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(claudeParseEvent(raw)).toBeNull();
   });
 
   it("returns null when rate_limit_info is absent", () => {
     const raw = JSON.stringify({ type: "rate_limit_event" });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(claudeParseEvent(raw)).toBeNull();
   });
 });
 
@@ -165,7 +204,7 @@ describe("claudeProvider.parseEvent — assistant message", () => {
       type: "assistant",
       message: { content: [{ type: "text", text: "Hello world" }] },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("message");
     if (event?.type === "message") {
       expect(event.text).toBe("Hello world");
@@ -182,7 +221,7 @@ describe("claudeProvider.parseEvent — assistant message", () => {
         ],
       },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("message");
     if (event?.type === "message") {
       expect(event.text).toBe("Line one\nLine two");
@@ -194,25 +233,25 @@ describe("claudeProvider.parseEvent — assistant message", () => {
       type: "assistant",
       message: { content: [{ type: "tool_use", id: "tu1" }] },
     });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(claudeParseEvent(raw)).toBeNull();
   });
 
   it("returns null when message content is missing", () => {
     const raw = JSON.stringify({ type: "assistant", message: {} });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(claudeParseEvent(raw)).toBeNull();
   });
 });
 
 describe("claudeProvider.parseEvent — result", () => {
   it("returns a result event", () => {
     const raw = JSON.stringify({ type: "result", total_cost_usd: 0.05 });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("result");
   });
 
   it("includes cost from total_cost_usd", () => {
     const raw = JSON.stringify({ type: "result", total_cost_usd: 0.12 });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     if (event?.type === "result") {
       expect(event.cost).toBe(0.12);
     }
@@ -220,7 +259,7 @@ describe("claudeProvider.parseEvent — result", () => {
 
   it("defaults cost to 0 when total_cost_usd is absent", () => {
     const raw = JSON.stringify({ type: "result" });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     if (event?.type === "result") {
       expect(event.cost).toBe(0);
     }
@@ -229,7 +268,7 @@ describe("claudeProvider.parseEvent — result", () => {
   it("includes usage when present", () => {
     const usage = { input_tokens: 100, output_tokens: 50 };
     const raw = JSON.stringify({ type: "result", total_cost_usd: 0, usage });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     if (event?.type === "result") {
       expect(event.usage).toEqual(usage);
     }
@@ -239,13 +278,13 @@ describe("claudeProvider.parseEvent — result", () => {
 describe("claudeProvider.parseEvent — error variants", () => {
   it("returns error event when event.type is error", () => {
     const raw = JSON.stringify({ type: "error", message: "Something went wrong" });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("error");
   });
 
   it("includes detail from event.message when error object is absent", () => {
     const raw = JSON.stringify({ type: "error", message: "Boom" });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     if (event?.type === "error") {
       expect(event.detail).toContain("Boom");
     }
@@ -256,7 +295,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
       type: "error",
       error: { type: "invalid_request_error", message: "Bad input" },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     if (event?.type === "error") {
       expect(event.code).toBe("invalid_request_error");
     }
@@ -267,7 +306,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
       type: "error",
       error: { type: "rate_limit_error", message: "Rate limited" },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("rate_limit");
   });
 
@@ -276,7 +315,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
       type: "error",
       error: { type: "overloaded_error", message: "Overloaded" },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("rate_limit");
   });
 
@@ -286,7 +325,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
       type: "error",
       error: { type: "rate_limit_error", message: "Rate limited" },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     const after = Date.now();
     if (event?.type === "rate_limit") {
       const resetMs = new Date(event.resetAt).getTime();
@@ -297,7 +336,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
 
   it("returns error event when event.error is present even without event.type=error", () => {
     const raw = JSON.stringify({ type: "assistant", error: { type: "some_error", message: "Oops" } });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("error");
   });
 
@@ -309,7 +348,7 @@ describe("claudeProvider.parseEvent — error variants", () => {
         content: [{ type: "text", text: "Error explanation from content" }],
       },
     });
-    const event = claudeProvider.parseEvent(raw);
+    const event = claudeParseEvent(raw);
     expect(event?.type).toBe("error");
     if (event?.type === "error") {
       expect(event.detail).toBe("Error explanation from content");
@@ -318,28 +357,28 @@ describe("claudeProvider.parseEvent — error variants", () => {
 });
 
 // ---------------------------------------------------------------------------
-// claudeProvider.buildInput
+// claudeProvider.buildInput (now formatInput)
 // ---------------------------------------------------------------------------
 
 describe("claudeProvider.buildInput", () => {
   it("returns valid JSON string", () => {
-    const result = claudeProvider.buildInput("do the task");
+    const result = formatInput("do the task");
     expect(() => JSON.parse(result)).not.toThrow();
   });
 
   it("wraps context in user message envelope", () => {
-    const parsed = JSON.parse(claudeProvider.buildInput("do the task"));
+    const parsed = JSON.parse(formatInput("do the task"));
     expect(parsed.type).toBe("user");
     expect(parsed.message.role).toBe("user");
   });
 
   it("includes the task context as message content", () => {
-    const parsed = JSON.parse(claudeProvider.buildInput("implement feature X"));
+    const parsed = JSON.parse(formatInput("implement feature X"));
     expect(parsed.message.content).toBe("implement feature X");
   });
 
   it("handles empty string context", () => {
-    const parsed = JSON.parse(claudeProvider.buildInput(""));
+    const parsed = JSON.parse(formatInput(""));
     expect(parsed.message.content).toBe("");
   });
 });
@@ -356,10 +395,6 @@ describe("claudeProvider identity", () => {
   it("label is Claude Code", () => {
     expect(claudeProvider.label).toBe("Claude Code");
   });
-
-  it("command is claude", () => {
-    expect(claudeProvider.command).toBe("claude");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -373,51 +408,39 @@ describe("registry.getProvider", () => {
   });
 
   it("throws when provider name is not registered", () => {
-    expect(() => getProvider("nonexistent-provider-xyz")).toThrow("Unknown provider: nonexistent-provider-xyz");
+    expect(() => getProvider("nonexistent-provider-xyz" as any)).toThrow("Unknown provider: nonexistent-provider-xyz");
   });
 
   it("error message lists available providers", () => {
-    expect(() => getProvider("ghost")).toThrow(/Available:/);
+    expect(() => getProvider("ghost" as any)).toThrow(/Available:/);
   });
 });
 
 describe("registry.registerProvider", () => {
   it("makes a newly registered provider retrievable by name", () => {
     const fake: AgentProvider = {
-      name: "fake-provider-test",
+      name: "fake-provider-test" as any,
       label: "Fake",
-      command: "fake",
-      buildArgs: () => [],
-      buildResumeArgs: () => [],
-      parseEvent: () => null,
-      buildInput: (ctx) => ctx,
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
     };
     registerProvider(fake);
-    expect(getProvider("fake-provider-test").name).toBe("fake-provider-test");
+    expect(getProvider("fake-provider-test" as any).name).toBe("fake-provider-test");
   });
 
   it("overwrites an existing provider with the same name", () => {
     const v1: AgentProvider = {
-      name: "overwrite-test",
+      name: "overwrite-test" as any,
       label: "V1",
-      command: "cmd",
-      buildArgs: () => ["v1"],
-      buildResumeArgs: () => [],
-      parseEvent: () => null,
-      buildInput: (ctx) => ctx,
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
     };
     const v2: AgentProvider = {
-      name: "overwrite-test",
+      name: "overwrite-test" as any,
       label: "V2",
-      command: "cmd",
-      buildArgs: () => ["v2"],
-      buildResumeArgs: () => [],
-      parseEvent: () => null,
-      buildInput: (ctx) => ctx,
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
     };
     registerProvider(v1);
     registerProvider(v2);
-    expect(getProvider("overwrite-test").label).toBe("V2");
+    expect(getProvider("overwrite-test" as any).label).toBe("V2");
   });
 });
 
@@ -427,18 +450,12 @@ describe("registry.getAvailableProviders", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it("returns only providers whose command exists on PATH", () => {
-    // Each returned provider must pass a `which <command>` check.
-    // We can verify this by registering a provider with a command that surely
-    // does not exist and confirming it is not included.
+  it("does not include providers whose runtime command does not exist on PATH", () => {
+    // ghost-cmd-provider uses a name not in RUNTIME_COMMANDS, so it is filtered out
     const ghost: AgentProvider = {
-      name: "ghost-cmd-provider",
+      name: "ghost-cmd-provider" as any,
       label: "Ghost",
-      command: "__definitely_not_a_real_command_xyz__",
-      buildArgs: () => [],
-      buildResumeArgs: () => [],
-      parseEvent: () => null,
-      buildInput: (ctx) => ctx,
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
     };
     registerProvider(ghost);
     const available = getAvailableProviders();
@@ -458,10 +475,6 @@ describe("geminiProvider identity", () => {
   it("label is Gemini CLI", () => {
     expect(geminiProvider.label).toBe("Gemini CLI");
   });
-
-  it("command is gemini", () => {
-    expect(geminiProvider.command).toBe("gemini");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -470,29 +483,58 @@ describe("geminiProvider identity", () => {
 
 describe("geminiProvider.buildArgs", () => {
   it("includes --output-format stream-json", () => {
-    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     const idx = args.indexOf("--output-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
   it("includes --yolo flag", () => {
-    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--yolo");
   });
 
   it("includes --prompt flag", () => {
-    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--prompt");
   });
 
   it("returns an array", () => {
-    expect(Array.isArray(geminiProvider.buildArgs({ sessionId: "s1" }))).toBe(true);
+    expect(Array.isArray(geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" }))).toBe(true);
   });
 
   it("does not include --session-id flag (Gemini has no session concept)", () => {
-    const args = geminiProvider.buildArgs({ sessionId: "s1" });
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).not.toContain("--session-id");
+  });
+
+  it("includes --model when model is provided", () => {
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", model: "gemini-2.5-pro" });
+    const idx = args.indexOf("--model");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("gemini-2.5-pro");
+  });
+
+  it("does not include --model when model is absent", () => {
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
+    expect(args).not.toContain("--model");
+  });
+
+  it("uses system prompt content from file when systemPromptFile is provided and readable", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce("You are a helpful assistant." as any);
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/tmp/system.txt" });
+    const promptIdx = args.indexOf("--prompt");
+    expect(promptIdx).toBeGreaterThan(-1);
+    expect(args[promptIdx + 1]).toBe("You are a helpful assistant.");
+  });
+
+  it("uses empty string as prompt when systemPromptFile cannot be read", () => {
+    // readFileSync is already mocked to throw by default
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/nonexistent/file.txt" });
+    const promptIdx = args.indexOf("--prompt");
+    expect(promptIdx).toBeGreaterThan(-1);
+    expect(args[promptIdx + 1]).toBe("");
   });
 });
 
@@ -502,26 +544,38 @@ describe("geminiProvider.buildArgs", () => {
 
 describe("geminiProvider.buildResumeArgs", () => {
   it("returns an array", () => {
-    expect(Array.isArray(geminiProvider.buildResumeArgs("sess-99"))).toBe(true);
+    expect(Array.isArray(geminiBuildResumeArgs())).toBe(true);
   });
 
   it("includes --output-format stream-json (falls back to fresh session)", () => {
-    const args = geminiProvider.buildResumeArgs("sess-99");
+    const args = geminiBuildResumeArgs();
     const idx = args.indexOf("--output-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
   it("includes --yolo flag (fresh session fallback)", () => {
-    const args = geminiProvider.buildResumeArgs("sess-99");
+    const args = geminiBuildResumeArgs();
     expect(args).toContain("--yolo");
   });
 
   it("includes --resume latest (Gemini resumes the latest session rather than by ID)", () => {
-    const args = geminiProvider.buildResumeArgs("sess-99");
+    const args = geminiBuildResumeArgs();
     const idx = args.indexOf("--resume");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("latest");
+  });
+
+  it("includes --model when model is provided", () => {
+    const args = geminiBuildResumeArgs("gemini-2.5-pro");
+    const idx = args.indexOf("--model");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("gemini-2.5-pro");
+  });
+
+  it("does not include --model when model is absent", () => {
+    const args = geminiBuildResumeArgs();
+    expect(args).not.toContain("--model");
   });
 });
 
@@ -531,25 +585,25 @@ describe("geminiProvider.buildResumeArgs", () => {
 
 describe("geminiProvider.parseEvent — invalid input", () => {
   it("returns null for non-JSON string", () => {
-    expect(geminiProvider.parseEvent("not json")).toBeNull();
+    expect(geminiParseEvent("not json")).toBeNull();
   });
 
   it("returns null for empty string", () => {
-    expect(geminiProvider.parseEvent("")).toBeNull();
+    expect(geminiParseEvent("")).toBeNull();
   });
 
   it("returns null for unrecognised event type", () => {
-    expect(geminiProvider.parseEvent(JSON.stringify({ type: "unknown_event" }))).toBeNull();
+    expect(geminiParseEvent(JSON.stringify({ type: "unknown_event" }))).toBeNull();
   });
 
   it("returns null for init event", () => {
     const raw = JSON.stringify({ type: "init", timestamp: "2024-01-01T00:00:00Z", session_id: "s1", model: "gemini-pro" });
-    expect(geminiProvider.parseEvent(raw)).toBeNull();
+    expect(geminiParseEvent(raw)).toBeNull();
   });
 
   it("returns null for user message event", () => {
     const raw = JSON.stringify({ type: "message", role: "user", content: "hello" });
-    expect(geminiProvider.parseEvent(raw)).toBeNull();
+    expect(geminiParseEvent(raw)).toBeNull();
   });
 });
 
@@ -560,13 +614,13 @@ describe("geminiProvider.parseEvent — invalid input", () => {
 describe("geminiProvider.parseEvent — assistant message", () => {
   it("returns a message event for assistant role with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("message");
   });
 
   it("includes the content as text", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "message") {
       expect(event.text).toBe("Hello world");
     }
@@ -574,7 +628,7 @@ describe("geminiProvider.parseEvent — assistant message", () => {
 
   it("handles delta assistant message with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "partial text", delta: true });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("message");
     if (event?.type === "message") {
       expect(event.text).toBe("partial text");
@@ -583,12 +637,12 @@ describe("geminiProvider.parseEvent — assistant message", () => {
 
   it("returns null for assistant message without content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant" });
-    expect(geminiProvider.parseEvent(raw)).toBeNull();
+    expect(geminiParseEvent(raw)).toBeNull();
   });
 
   it("returns null for assistant message with empty content string", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "" });
-    expect(geminiProvider.parseEvent(raw)).toBeNull();
+    expect(geminiParseEvent(raw)).toBeNull();
   });
 });
 
@@ -599,14 +653,14 @@ describe("geminiProvider.parseEvent — assistant message", () => {
 describe("geminiProvider.parseEvent — result", () => {
   it("returns a result event", () => {
     const raw = JSON.stringify({ type: "result", status: "success", stats: { total_tokens: 100, input_tokens: 60, output_tokens: 40 } });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("result");
   });
 
   it("includes stats as usage", () => {
     const stats = { total_tokens: 100, input_tokens: 60, output_tokens: 40 };
     const raw = JSON.stringify({ type: "result", status: "success", stats });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "result") {
       expect(event.usage).toEqual(stats);
     }
@@ -614,7 +668,7 @@ describe("geminiProvider.parseEvent — result", () => {
 
   it("includes usage as undefined when stats is absent", () => {
     const raw = JSON.stringify({ type: "result", status: "success" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "result") {
       expect(event.usage).toBeUndefined();
     }
@@ -622,7 +676,7 @@ describe("geminiProvider.parseEvent — result", () => {
 
   it("returns zero cost when no model breakdown is present", () => {
     const raw = JSON.stringify({ type: "result", status: "success", stats: {} });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "result") {
       expect(event.cost).toBe(0);
     }
@@ -638,7 +692,7 @@ describe("geminiProvider.parseEvent — result", () => {
         },
       },
     });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     // flash-lite: 1M * 0.10/1M + 1M * 0.40/1M = 0.50
     // pro: 500K * 1.25/1M + 200K * 10.00/1M = 0.625 + 2.00 = 2.625
     // total: 3.125
@@ -658,7 +712,7 @@ describe("geminiProvider.parseEvent — result", () => {
         },
       },
     });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     // only flash counted: 1M * 0.30/1M = 0.30
     expect(event?.type).toBe("result");
     if (event?.type === "result") {
@@ -674,13 +728,13 @@ describe("geminiProvider.parseEvent — result", () => {
 describe("geminiProvider.parseEvent — error variants", () => {
   it("returns error event when event.type is error", () => {
     const raw = JSON.stringify({ type: "error", message: "Something went wrong" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("error");
   });
 
   it("includes detail from event.message when type is error", () => {
     const raw = JSON.stringify({ type: "error", message: "Boom" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "error") {
       expect(event.detail).toContain("Boom");
     }
@@ -688,13 +742,13 @@ describe("geminiProvider.parseEvent — error variants", () => {
 
   it("returns error event when event.status is error and type is not result", () => {
     const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("error");
   });
 
   it("includes detail from event.error when status is error and error field is present", () => {
     const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "error") {
       expect(event.detail).toContain("Generation failed");
     }
@@ -702,13 +756,13 @@ describe("geminiProvider.parseEvent — error variants", () => {
 
   it("result event with status error still returns result (type check takes precedence over status)", () => {
     const raw = JSON.stringify({ type: "result", status: "error", stats: {} });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     expect(event?.type).toBe("result");
   });
 
   it("falls back to JSON stringified event as detail when message and error are absent", () => {
     const raw = JSON.stringify({ type: "error" });
-    const event = geminiProvider.parseEvent(raw);
+    const event = geminiParseEvent(raw);
     if (event?.type === "error") {
       expect(typeof event.detail).toBe("string");
       expect(event.detail.length).toBeGreaterThan(0);
@@ -717,21 +771,15 @@ describe("geminiProvider.parseEvent — error variants", () => {
 });
 
 // ---------------------------------------------------------------------------
-// geminiProvider.buildInput
+// geminiProvider.buildInput — Gemini passes context directly as input
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.buildInput", () => {
-  it("returns the task context string unchanged", () => {
-    expect(geminiProvider.buildInput("do the task")).toBe("do the task");
-  });
-
-  it("handles empty string context", () => {
-    expect(geminiProvider.buildInput("")).toBe("");
-  });
-
-  it("handles multiline context", () => {
-    const ctx = "line one\nline two\nline three";
-    expect(geminiProvider.buildInput(ctx)).toBe(ctx);
+  it("execute passes task context directly as input (not wrapped)", () => {
+    // Gemini's input is the raw taskContext string — verified by the buildArgs/execute design.
+    // We verify this by confirming buildArgs does not add a JSON wrapper flag.
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "do the task" });
+    expect(args).not.toContain("--input-format");
   });
 });
 
@@ -747,5 +795,43 @@ describe("registry.getProvider — gemini", () => {
 
   it("returned provider label is Gemini CLI", () => {
     expect(getProvider("gemini").label).toBe("Gemini CLI");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.execute — verifies arg selection via mocked spawnAgent
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.execute — arg selection", () => {
+  it("resolves to an AgentHandle with events, abort, pid, and send", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    const handle = await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "build feature" });
+    expect(handle).toHaveProperty("events");
+    expect(typeof handle.abort).toBe("function");
+    expect(typeof handle.send).toBe("function");
+    expect(spawnAgent).toHaveBeenCalled();
+  });
+
+  it("passes taskContext as input to spawnAgent", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    vi.mocked(spawnAgent).mockClear();
+    await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "my task context" });
+    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(expect.objectContaining({ input: "my task context" }));
+  });
+
+  it("uses buildResumeArgs when resume is true", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    vi.mocked(spawnAgent).mockClear();
+    await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true });
+    const call = vi.mocked(spawnAgent).mock.calls[0][0];
+    expect(call.args).toContain("--resume");
+  });
+
+  it("uses buildArgs when resume is false or absent", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    vi.mocked(spawnAgent).mockClear();
+    await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    const call = vi.mocked(spawnAgent).mock.calls[0][0];
+    expect(call.args).not.toContain("--resume");
   });
 });

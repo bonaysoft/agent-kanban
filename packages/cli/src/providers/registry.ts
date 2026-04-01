@@ -9,6 +9,13 @@ export { normalizeRuntime };
 
 const providers = new Map<AgentRuntime, AgentProvider>();
 
+/** Binary name used to detect availability per runtime */
+const RUNTIME_COMMANDS: Record<AgentRuntime, string> = {
+  claude: "claude",
+  codex: "codex",
+  gemini: "gemini",
+};
+
 export function registerProvider(provider: AgentProvider): void {
   providers.set(provider.name, provider);
 }
@@ -23,8 +30,9 @@ export function getProvider(name: AgentRuntime): AgentProvider {
 
 export function getAvailableProviders(): AgentProvider[] {
   return [...providers.values()].filter((p) => {
+    const command = RUNTIME_COMMANDS[p.name];
     try {
-      execSync(`which ${p.command}`, { stdio: "ignore" });
+      execSync(`which ${command}`, { stdio: "ignore" });
       return true;
     } catch {
       return false;

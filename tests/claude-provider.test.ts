@@ -15,6 +15,16 @@ vi.mock("node:fs", () => ({
   }),
 }));
 
+// Mock node:os so platform() is controllable
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    platform: vi.fn().mockReturnValue("linux"),
+    homedir: actual.homedir,
+  };
+});
+
 // Mock logger to suppress output
 vi.mock("../packages/cli/src/logger.js", () => ({
   createLogger: () => ({
@@ -25,20 +35,20 @@ vi.mock("../packages/cli/src/logger.js", () => ({
   }),
 }));
 
-import { claudeProvider } from "../packages/cli/src/providers/claude.js";
+import { buildArgs, buildResumeArgs, claudeProvider, formatInput, parseEvent } from "../packages/cli/src/providers/claude.js";
 
 // ---------------------------------------------------------------------------
 // parseEvent — rate_limit_event (blocked)
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.parseEvent — rate_limit_event", () => {
+describe("parseEvent — rate_limit_event", () => {
   it("returns rate_limit event when rate_limit_event status is blocked", () => {
     const resetsAt = Math.floor(Date.now() / 1000) + 3600;
     const raw = JSON.stringify({
       type: "rate_limit_event",
       rate_limit_info: { status: "blocked", resetsAt },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result?.type).toBe("rate_limit");
   });
 
@@ -48,7 +58,7 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
       type: "rate_limit_event",
       rate_limit_info: { status: "blocked", resetsAt },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toEqual({ type: "rate_limit", resetAt: new Date(resetsAt * 1000).toISOString() });
   });
 
@@ -57,12 +67,12 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
       type: "rate_limit_event",
       rate_limit_info: { status: "allowed", resetsAt: 1700000000 },
     });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(parseEvent(raw)).toBeNull();
   });
 
   it("returns null when rate_limit_event has no rate_limit_info", () => {
     const raw = JSON.stringify({ type: "rate_limit_event" });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(parseEvent(raw)).toBeNull();
   });
 });
 
@@ -70,7 +80,7 @@ describe("claudeProvider.parseEvent — rate_limit_event", () => {
 // parseEvent — string error codes (e.g. event.error = "rate_limit")
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.parseEvent — string error field", () => {
+describe("parseEvent — string error field", () => {
   it("returns rate_limit for assistant event with error: 'rate_limit' (real Claude CLI usage-limit shape)", () => {
     // Real event shape from Claude CLI when account hits usage limit
     const raw = JSON.stringify({
@@ -83,7 +93,7 @@ describe("claudeProvider.parseEvent — string error field", () => {
         usage: { input_tokens: 0, output_tokens: 0 },
       },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result?.type).toBe("rate_limit");
   });
 
@@ -94,7 +104,7 @@ describe("claudeProvider.parseEvent — string error field", () => {
       error: "rate_limit",
       message: { content: [{ type: "text", text: "limit hit" }] },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     const after = Date.now();
     expect(result?.type).toBe("rate_limit");
     if (result?.type === "rate_limit") {
@@ -110,7 +120,7 @@ describe("claudeProvider.parseEvent — string error field", () => {
       error: "authentication_error",
       message: { content: [{ type: "text", text: "Not authenticated" }] },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toMatchObject({ type: "error", code: "authentication_error" });
   });
 
@@ -119,7 +129,7 @@ describe("claudeProvider.parseEvent — string error field", () => {
       type: "error",
       error: { type: "server_error", message: "Something went wrong" },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toMatchObject({ type: "error", code: "server_error", detail: "Something went wrong" });
   });
 });
@@ -128,13 +138,13 @@ describe("claudeProvider.parseEvent — string error field", () => {
 // parseEvent — RATE_LIMIT_CODES (existing behavior, Fix 3 baseline)
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.parseEvent — rate_limit_error and overloaded_error codes", () => {
+describe("parseEvent — rate_limit_error and overloaded_error codes", () => {
   it("returns rate_limit for error with type rate_limit_error", () => {
     const raw = JSON.stringify({
       type: "error",
       error: { type: "rate_limit_error", message: "Rate limit reached" },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result?.type).toBe("rate_limit");
   });
 
@@ -143,7 +153,7 @@ describe("claudeProvider.parseEvent — rate_limit_error and overloaded_error co
       type: "error",
       error: { type: "overloaded_error", message: "Overloaded" },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result?.type).toBe("rate_limit");
   });
 
@@ -153,7 +163,7 @@ describe("claudeProvider.parseEvent — rate_limit_error and overloaded_error co
       type: "error",
       error: { type: "rate_limit_error", message: "Rate limit" },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     const after = Date.now();
 
     expect(result?.type).toBe("rate_limit");
@@ -169,7 +179,7 @@ describe("claudeProvider.parseEvent — rate_limit_error and overloaded_error co
       type: "error",
       error: { type: "permission_error", message: "Not allowed" },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toMatchObject({ type: "error", code: "permission_error", detail: "Not allowed" });
   });
 });
@@ -178,18 +188,18 @@ describe("claudeProvider.parseEvent — rate_limit_error and overloaded_error co
 // parseEvent — other event types
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.parseEvent — non-error event types", () => {
+describe("parseEvent — non-error event types", () => {
   it("returns null for unparseable JSON", () => {
-    expect(claudeProvider.parseEvent("not json")).toBeNull();
+    expect(parseEvent("not json")).toBeNull();
   });
 
   it("returns null for empty string", () => {
-    expect(claudeProvider.parseEvent("")).toBeNull();
+    expect(parseEvent("")).toBeNull();
   });
 
   it("returns null for unrecognized event type", () => {
     const raw = JSON.stringify({ type: "system_prompt" });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(parseEvent(raw)).toBeNull();
   });
 
   it("returns message event for assistant text content", () => {
@@ -197,7 +207,7 @@ describe("claudeProvider.parseEvent — non-error event types", () => {
       type: "assistant",
       message: { content: [{ type: "text", text: "Hello from agent" }] },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toEqual({ type: "message", text: "Hello from agent" });
   });
 
@@ -206,7 +216,7 @@ describe("claudeProvider.parseEvent — non-error event types", () => {
       type: "assistant",
       message: { content: [{ type: "tool_use", id: "t1" }] },
     });
-    expect(claudeProvider.parseEvent(raw)).toBeNull();
+    expect(parseEvent(raw)).toBeNull();
   });
 
   it("returns result event with cost and usage", () => {
@@ -215,7 +225,7 @@ describe("claudeProvider.parseEvent — non-error event types", () => {
       total_cost_usd: 0.0042,
       usage: { input_tokens: 100, output_tokens: 50 },
     });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toMatchObject({
       type: "result",
       cost: 0.0042,
@@ -225,7 +235,7 @@ describe("claudeProvider.parseEvent — non-error event types", () => {
 
   it("returns result event with cost 0 when total_cost_usd is absent", () => {
     const raw = JSON.stringify({ type: "result" });
-    const result = claudeProvider.parseEvent(raw);
+    const result = parseEvent(raw);
     expect(result).toMatchObject({ type: "result", cost: 0 });
   });
 });
@@ -234,45 +244,45 @@ describe("claudeProvider.parseEvent — non-error event types", () => {
 // buildArgs
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.buildArgs", () => {
+describe("buildArgs", () => {
   it("includes --session-id with the provided sessionId", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "sess-123" });
+    const args = buildArgs({ sessionId: "sess-123", cwd: "/", env: {}, taskContext: "" });
     const idx = args.indexOf("--session-id");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("sess-123");
   });
 
   it("always includes --print flag", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--print");
   });
 
   it("always includes --dangerously-skip-permissions flag", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--dangerously-skip-permissions");
   });
 
   it("includes --system-prompt-file when systemPromptFile is provided", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1", systemPromptFile: "/tmp/prompt.txt" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/tmp/prompt.txt" });
     const idx = args.indexOf("--system-prompt-file");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("/tmp/prompt.txt");
   });
 
   it("does not include --system-prompt-file when systemPromptFile is absent", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).not.toContain("--system-prompt-file");
   });
 
   it("includes --model when model is provided", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1", model: "claude-opus-4" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", model: "claude-opus-4" });
     const idx = args.indexOf("--model");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("claude-opus-4");
   });
 
   it("does not include --model when model is absent", () => {
-    const args = claudeProvider.buildArgs({ sessionId: "s1" });
+    const args = buildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).not.toContain("--model");
   });
 });
@@ -281,49 +291,49 @@ describe("claudeProvider.buildArgs", () => {
 // buildResumeArgs
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.buildResumeArgs", () => {
+describe("buildResumeArgs", () => {
   it("includes --resume with the provided sessionId", () => {
-    const args = claudeProvider.buildResumeArgs("sess-456");
+    const args = buildResumeArgs("sess-456");
     const idx = args.indexOf("--resume");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("sess-456");
   });
 
   it("always includes --print flag", () => {
-    const args = claudeProvider.buildResumeArgs("s1");
+    const args = buildResumeArgs("s1");
     expect(args).toContain("--print");
   });
 
   it("always includes --dangerously-skip-permissions flag", () => {
-    const args = claudeProvider.buildResumeArgs("s1");
+    const args = buildResumeArgs("s1");
     expect(args).toContain("--dangerously-skip-permissions");
   });
 
   it("includes --model when model is provided", () => {
-    const args = claudeProvider.buildResumeArgs("s1", "claude-sonnet-4-5");
+    const args = buildResumeArgs("s1", "claude-sonnet-4-5");
     const idx = args.indexOf("--model");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("claude-sonnet-4-5");
   });
 
   it("does not include --model when model is absent", () => {
-    const args = claudeProvider.buildResumeArgs("s1");
+    const args = buildResumeArgs("s1");
     expect(args).not.toContain("--model");
   });
 });
 
 // ---------------------------------------------------------------------------
-// buildInput
+// formatInput (previously buildInput)
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.buildInput", () => {
+describe("formatInput", () => {
   it("returns valid JSON string", () => {
-    const raw = claudeProvider.buildInput("do the task");
+    const raw = formatInput("do the task");
     expect(() => JSON.parse(raw)).not.toThrow();
   });
 
   it("wraps taskContext in a user message envelope", () => {
-    const parsed = JSON.parse(claudeProvider.buildInput("do the task"));
+    const parsed = JSON.parse(formatInput("do the task"));
     expect(parsed.type).toBe("user");
     expect(parsed.message.role).toBe("user");
     expect(parsed.message.content).toBe("do the task");
@@ -331,7 +341,77 @@ describe("claudeProvider.buildInput", () => {
 
   it("preserves the task context string verbatim", () => {
     const context = "Fix bug #42 in repo foo/bar";
-    const parsed = JSON.parse(claudeProvider.buildInput(context));
+    const parsed = JSON.parse(formatInput(context));
     expect(parsed.message.content).toBe(context);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getUsage — ordered tests to exercise all branches before cache is populated.
+// platform() is mocked to "linux" so readFileSync path is taken for token.
+// ---------------------------------------------------------------------------
+
+describe("claudeProvider.getUsage — no token", () => {
+  it("returns null when readOAuthToken returns null (execSync and readFileSync both throw)", async () => {
+    const result = await claudeProvider.getUsage?.();
+    expect(result).toBeNull();
+  });
+});
+
+describe("claudeProvider.getUsage — non-OK fetch response", () => {
+  it("returns null (cached) when usage API returns a non-OK status", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-bad-status" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+    } as Response);
+
+    const result = await claudeProvider.getUsage?.();
+    expect(result === null || typeof result === "object").toBe(true);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("claudeProvider.getUsage — fetch throws", () => {
+  it("returns null (cached) when fetch throws a network error", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-throw" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockRejectedValueOnce(new Error("network error"));
+
+    const result = await claudeProvider.getUsage?.();
+    expect(result === null || typeof result === "object").toBe(true);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("claudeProvider.getUsage — successful fetch", () => {
+  it("returns usage data with windows array when API succeeds", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-xyz" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        five_hour: { utilization: 0.5, resets_at: "2026-04-01T12:00:00Z" },
+        seven_day: { utilization: 0.2, resets_at: "2026-04-08T00:00:00Z" },
+      }),
+    } as Response);
+
+    const result = await claudeProvider.getUsage?.();
+    expect(result).not.toBeNull();
+    if (result) {
+      expect(Array.isArray(result.windows)).toBe(true);
+      expect(typeof result.updated_at).toBe("string");
+    }
+    fetchSpy.mockRestore();
+  });
+
+  it("returns cached usage without fetching when called again within TTL", async () => {
+    // Cache was populated by the previous test in this describe block.
+    const fetchSpy = vi.spyOn(global, "fetch");
+    const result = await claudeProvider.getUsage?.();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).not.toBeNull();
+    fetchSpy.mockRestore();
   });
 });

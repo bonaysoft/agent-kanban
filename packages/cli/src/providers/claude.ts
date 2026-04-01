@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentProvider, SpawnOpts, UsageInfo, UsageWindow } from "./types.js";
+import { spawnAgent } from "./spawnHelper.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("claude");
 
@@ -67,106 +68,116 @@ function detectError(event: any): { code?: string; detail: string } | null {
   return { code, detail: String(detail) };
 }
 
+export function parseEvent(raw: string): AgentEvent | null {
+  let event: any;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (event.type === "rate_limit_event") {
+    const info = event.rate_limit_info;
+    if (info?.status === "blocked" || info?.status === "rejected") {
+      const resetAt = new Date(info.resetsAt * 1000).toISOString();
+      return { type: "rate_limit", resetAt, rateLimitType: info.rateLimitType, utilization: info.utilization };
+    }
+    return null;
+  }
+
+  const err = detectError(event);
+  if (err) {
+    if (err.code && RATE_LIMIT_CODES.has(err.code)) {
+      const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      return { type: "rate_limit", resetAt };
+    }
+    return { type: "error", code: err.code, detail: err.detail };
+  }
+
+  if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+    const texts: string[] = [];
+    for (const block of event.message.content) {
+      if (block.type === "text" && block.text) texts.push(block.text);
+    }
+    if (texts.length > 0) {
+      return { type: "message", text: texts.join("\n") };
+    }
+  }
+
+  if (event.type === "result") {
+    return {
+      type: "result",
+      cost: event.total_cost_usd || 0,
+      usage: event.usage,
+    };
+  }
+
+  return null;
+}
+
+export function buildArgs(opts: ExecuteOpts): string[] {
+  const args = [
+    "--print",
+    "--verbose",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions",
+    "--session-id",
+    opts.sessionId,
+  ];
+  if (opts.systemPromptFile) {
+    args.push("--system-prompt-file", opts.systemPromptFile);
+  }
+  if (opts.model) {
+    args.push("--model", opts.model);
+  }
+  return args;
+}
+
+export function buildResumeArgs(sessionId: string, model?: string): string[] {
+  const args = [
+    "--resume",
+    sessionId,
+    "--print",
+    "--verbose",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions",
+  ];
+  if (model) {
+    args.push("--model", model);
+  }
+  return args;
+}
+
+export function formatInput(text: string): string {
+  return JSON.stringify({ type: "user", message: { role: "user", content: text } });
+}
+
 export const claudeProvider: AgentProvider = {
   name: "claude",
   label: "Claude Code",
-  command: "claude",
 
-  buildArgs(opts: SpawnOpts): string[] {
-    const args = [
-      "--print",
-      "--verbose",
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-      "--dangerously-skip-permissions",
-      "--session-id",
-      opts.sessionId,
-    ];
-    if (opts.systemPromptFile) {
-      args.push("--system-prompt-file", opts.systemPromptFile);
-    }
-    if (opts.model) {
-      args.push("--model", opts.model);
-    }
-    return args;
-  },
-
-  buildResumeArgs(sessionId: string, model?: string): string[] {
-    const args = [
-      "--resume",
-      sessionId,
-      "--print",
-      "--verbose",
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-      "--dangerously-skip-permissions",
-    ];
-    if (model) {
-      args.push("--model", model);
-    }
-    return args;
-  },
-
-  parseEvent(raw: string): AgentEvent | null {
-    let event: any;
-    try {
-      event = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-
-    // rate_limit_event — only "blocked" means actually rate-limited
-    if (event.type === "rate_limit_event") {
-      const info = event.rate_limit_info;
-      if (info?.status === "blocked") {
-        const resetAt = new Date(info.resetsAt * 1000).toISOString();
-        return { type: "rate_limit", resetAt };
-      }
-      return null;
-    }
-
-    // Error detection (covers all CLI error shapes)
-    const err = detectError(event);
-    if (err) {
-      if (err.code && RATE_LIMIT_CODES.has(err.code)) {
-        const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-        return { type: "rate_limit", resetAt };
-      }
-      return { type: "error", code: err.code, detail: err.detail };
-    }
-
-    // Assistant message
-    if (event.type === "assistant" && Array.isArray(event.message?.content)) {
-      const texts: string[] = [];
-      for (const block of event.message.content) {
-        if (block.type === "text" && block.text) texts.push(block.text);
-      }
-      if (texts.length > 0) {
-        return { type: "message", text: texts.join("\n") };
-      }
-    }
-
-    // Result
-    if (event.type === "result") {
-      return {
-        type: "result",
-        cost: event.total_cost_usd || 0,
-        usage: event.usage,
-      };
-    }
-
-    return null;
-  },
-
-  buildInput(taskContext: string): string {
-    return JSON.stringify({
-      type: "user",
-      message: { role: "user", content: taskContext },
+  execute(opts: ExecuteOpts): Promise<AgentHandle> {
+    const args = opts.resume ? buildResumeArgs(opts.sessionId, opts.model) : buildArgs(opts);
+    const handle = spawnAgent({
+      command: "claude",
+      args,
+      cwd: opts.cwd,
+      env: opts.env,
+      input: formatInput(opts.taskContext),
+      parseEvent,
     });
+
+    // Wrap send to format as stream-json user message
+    const originalSend = handle.send;
+    handle.send = (message: string) => originalSend(formatInput(message));
+
+    return Promise.resolve(handle);
   },
 
   async getUsage(): Promise<UsageInfo | null> {

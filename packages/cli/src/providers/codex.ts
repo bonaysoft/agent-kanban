@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentProvider, SpawnOpts, UsageInfo, UsageWindow } from "./types.js";
+import { spawnAgent } from "./spawnHelper.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("codex");
 
@@ -34,8 +35,6 @@ const CODEX_PRICING: Record<string, { input: number; cached_input: number; outpu
 
 let currentModel = "o3";
 
-// "try again at Apr 1st, 2026 6:11 PM" → ISO string
-// "Quota exceeded" → fallback 1h reset
 const RESET_RE = /try again at (.+)/i;
 const QUOTA_RE = /quota exceeded|usage limit/i;
 function parseRateLimitReset(msg: string): string | null {
@@ -43,7 +42,6 @@ function parseRateLimitReset(msg: string): string | null {
   if (!match) {
     return QUOTA_RE.test(msg) ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
   }
-  // Strip ordinal suffixes (1st, 2nd, 3rd, 4th) so Date.parse works
   const cleaned = match[1].replace(/(\d+)(st|nd|rd|th)/g, "$1").replace(/\.$/, "");
   const ms = Date.parse(cleaned);
   return Number.isNaN(ms) ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : new Date(ms).toISOString();
@@ -54,82 +52,89 @@ function calcCost(inputTokens: number, cachedInputTokens: number, outputTokens: 
   return (inputTokens * price.input + cachedInputTokens * price.cached_input + outputTokens * price.output) / 1_000_000;
 }
 
+function parseEvent(raw: string): AgentEvent | null {
+  let event: any;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item?.text) {
+    return { type: "message", text: event.item.text };
+  }
+
+  if (event.type === "turn.completed" && event.usage) {
+    const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
+    const cost = calcCost(input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
+    return {
+      type: "result",
+      cost,
+      usage: {
+        input_tokens: input_tokens ?? 0,
+        output_tokens: output_tokens ?? 0,
+        cache_read_input_tokens: cached_input_tokens ?? 0,
+        cache_creation_input_tokens: 0,
+      },
+    };
+  }
+
+  if (event.type === "turn.failed") {
+    const msg = String(event.error?.message || JSON.stringify(event));
+    const resetAt = parseRateLimitReset(msg);
+    if (resetAt) return { type: "rate_limit", resetAt };
+    return { type: "error", detail: msg };
+  }
+
+  if (event.type === "error") {
+    const detail = String(event.message || JSON.stringify(event));
+    const resetAt = parseRateLimitReset(detail);
+    if (resetAt) return { type: "rate_limit", resetAt };
+    return { type: "error", detail };
+  }
+
+  return null;
+}
+
+function buildArgs(opts: ExecuteOpts): string[] {
+  if (opts.model) currentModel = opts.model;
+  const args = ["exec", "--json", "--dangerously-bypass-approvals-and-sandbox"];
+  if (opts.systemPromptFile) {
+    args.push("-c", `model_instructions_file=${opts.systemPromptFile}`);
+  }
+  if (opts.model) {
+    args.push("-m", opts.model);
+  }
+  args.push("-");
+  return args;
+}
+
+function buildResumeArgs(sessionId: string, model?: string): string[] {
+  if (model) currentModel = model;
+  const args = ["exec", "resume", sessionId, "--json", "--dangerously-bypass-approvals-and-sandbox"];
+  if (model) {
+    args.push("-m", model);
+  }
+  args.push("-");
+  return args;
+}
+
 export const codexProvider: AgentProvider = {
   name: "codex",
   label: "Codex CLI",
-  command: "codex",
 
-  buildArgs(opts: SpawnOpts): string[] {
-    if (opts.model) currentModel = opts.model;
-    const args = ["exec", "--json", "--dangerously-bypass-approvals-and-sandbox"];
-    if (opts.systemPromptFile) {
-      args.push("-c", `model_instructions_file=${opts.systemPromptFile}`);
-    }
-    if (opts.model) {
-      args.push("-m", opts.model);
-    }
-    args.push("-");
-    return args;
-  },
-
-  buildResumeArgs(sessionId: string, model?: string): string[] {
-    if (model) currentModel = model;
-    const args = ["exec", "resume", sessionId, "--json", "--dangerously-bypass-approvals-and-sandbox"];
-    if (model) {
-      args.push("-m", model);
-    }
-    args.push("-");
-    return args;
-  },
-
-  parseEvent(raw: string): AgentEvent | null {
-    let event: any;
-    try {
-      event = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-
-    if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item?.text) {
-      return { type: "message", text: event.item.text };
-    }
-
-    // turn.completed is the terminal event — exec mode always produces exactly one turn
-    if (event.type === "turn.completed" && event.usage) {
-      const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
-      const cost = calcCost(input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
-      return {
-        type: "result",
-        cost,
-        usage: {
-          input_tokens: input_tokens ?? 0,
-          output_tokens: output_tokens ?? 0,
-          cache_read_input_tokens: cached_input_tokens ?? 0,
-          cache_creation_input_tokens: 0,
-        },
-      };
-    }
-
-    // turn.failed — API error or rate limit
-    if (event.type === "turn.failed") {
-      const msg = String(event.error?.message || JSON.stringify(event));
-      const resetAt = parseRateLimitReset(msg);
-      if (resetAt) return { type: "rate_limit", resetAt };
-      return { type: "error", detail: msg };
-    }
-
-    if (event.type === "error") {
-      const detail = String(event.message || JSON.stringify(event));
-      const resetAt = parseRateLimitReset(detail);
-      if (resetAt) return { type: "rate_limit", resetAt };
-      return { type: "error", detail };
-    }
-
-    return null;
-  },
-
-  buildInput(taskContext: string): string {
-    return taskContext;
+  execute(opts: ExecuteOpts): Promise<AgentHandle> {
+    const args = opts.resume ? buildResumeArgs(opts.sessionId, opts.model) : buildArgs(opts);
+    return Promise.resolve(
+      spawnAgent({
+        command: "codex",
+        args,
+        cwd: opts.cwd,
+        env: opts.env,
+        input: opts.taskContext,
+        parseEvent,
+      }),
+    );
   },
 
   async getUsage(): Promise<UsageInfo | null> {
