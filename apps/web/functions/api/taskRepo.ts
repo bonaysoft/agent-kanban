@@ -99,13 +99,15 @@ export async function createTask(
         now,
       ),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'created', NULL, ?)")
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'created', NULL, NULL, ?)",
+      )
       .bind(logId, taskId, actorType, actorId, now),
     ...(input.assigned_to
       ? [
           db
             .prepare(
-              "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, ?)",
+              "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, NULL, ?)",
             )
             .bind(newLongId(), taskId, actorType, actorId, now),
         ]
@@ -213,7 +215,7 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | n
     SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, a.fingerprint as agent_fingerprint,
       r.name as repository_name,
       (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count,
-      (SELECT s.id FROM agent_sessions s WHERE s.agent_id = t.assigned_to ORDER BY s.created_at DESC LIMIT 1) as active_session_id
+      (SELECT ta.session_id FROM task_actions ta WHERE ta.task_id = t.id AND ta.action = 'claimed' ORDER BY ta.created_at DESC LIMIT 1) as active_session_id
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
@@ -311,7 +313,13 @@ export async function deleteTask(db: D1, taskId: string): Promise<boolean> {
   return result.meta.changes > 0;
 }
 
-export async function claimTask(db: D1, taskId: string, agentId: string, identity: IdentityType): Promise<Task | null> {
+export async function claimTask(
+  db: D1,
+  taskId: string,
+  agentId: string,
+  identity: IdentityType,
+  sessionId: string | null = null,
+): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   if (task.assigned_to !== agentId) throw new HTTPException(409, { message: "Task is not assigned to this agent" });
@@ -323,14 +331,23 @@ export async function claimTask(db: D1, taskId: string, agentId: string, identit
   await db.batch([
     db.prepare("UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?").bind(now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'claimed', NULL, ?)")
-      .bind(logId, taskId, identity, agentId, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'claimed', NULL, ?, ?)",
+      )
+      .bind(logId, taskId, identity, agentId, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "in_progress" as const, updated_at: now });
 }
 
-export async function assignTask(db: D1, taskId: string, targetAgentId: string, actorType: string, actorId: string): Promise<Task | null> {
+export async function assignTask(
+  db: D1,
+  taskId: string,
+  targetAgentId: string,
+  actorType: string,
+  actorId: string,
+  sessionId: string | null = null,
+): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
@@ -344,8 +361,10 @@ export async function assignTask(db: D1, taskId: string, targetAgentId: string, 
   await db.batch([
     db.prepare("UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ? AND assigned_to IS NULL").bind(targetAgentId, now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, ?)")
-      .bind(logId, taskId, actorType, actorId, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'assigned', NULL, ?, ?)",
+      )
+      .bind(logId, taskId, actorType, actorId, sessionId, now),
   ]);
 
   return parseTask({ ...task, assigned_to: targetAgentId, updated_at: now } as Task);
@@ -359,6 +378,7 @@ export async function completeTask(
   result: string | null,
   prUrl: string | null,
   identity: IdentityType,
+  sessionId: string | null = null,
 ): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
@@ -370,14 +390,23 @@ export async function completeTask(
   await db.batch([
     db.prepare("UPDATE tasks SET status = 'done', result = ?, pr_url = ?, updated_at = ? WHERE id = ?").bind(result, prUrl, now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'completed', ?, ?)")
-      .bind(logId, taskId, actorType, actorId, result, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)",
+      )
+      .bind(logId, taskId, actorType, actorId, result, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "done" as const, result, pr_url: prUrl, updated_at: now });
 }
 
-export async function cancelTask(db: D1, taskId: string, actorType: string, actorId: string, identity: IdentityType): Promise<Task | null> {
+export async function cancelTask(
+  db: D1,
+  taskId: string,
+  actorType: string,
+  actorId: string,
+  identity: IdentityType,
+  sessionId: string | null = null,
+): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
   enforceTransition("cancel" as any, task.status as TaskStatus, identity);
@@ -388,8 +417,10 @@ export async function cancelTask(db: D1, taskId: string, actorType: string, acto
   await db.batch([
     db.prepare("UPDATE tasks SET status = 'cancelled', assigned_to = NULL, updated_at = ? WHERE id = ?").bind(now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'cancelled', NULL, ?)")
-      .bind(logId, taskId, actorType, actorId, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'cancelled', NULL, ?, ?)",
+      )
+      .bind(logId, taskId, actorType, actorId, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "cancelled" as const, assigned_to: null, updated_at: now });
@@ -402,6 +433,7 @@ export async function reviewTask(
   actorId: string,
   prUrl: string | null,
   identity: IdentityType,
+  sessionId: string | null = null,
 ): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
@@ -414,9 +446,9 @@ export async function reviewTask(
     db.prepare("UPDATE tasks SET status = 'in_review', pr_url = COALESCE(?, pr_url), updated_at = ? WHERE id = ?").bind(prUrl, now, taskId),
     db
       .prepare(
-        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'review_requested', NULL, ?)",
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'review_requested', NULL, ?, ?)",
       )
-      .bind(logId, taskId, actorType, actorId, now),
+      .bind(logId, taskId, actorType, actorId, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "in_review" as const, pr_url: prUrl || task.pr_url, updated_at: now });
@@ -429,6 +461,7 @@ export async function releaseTask(
   actorId: string,
   identity: IdentityType,
   action: "released" | "timed_out" = "released",
+  sessionId: string | null = null,
 ): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
@@ -440,8 +473,10 @@ export async function releaseTask(
   await db.batch([
     db.prepare("UPDATE tasks SET status = 'todo', scheduled_at = NULL, updated_at = ? WHERE id = ?").bind(now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)")
-      .bind(logId, taskId, actorType, actorId, action, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+      )
+      .bind(logId, taskId, actorType, actorId, action, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "todo" as const, updated_at: now });
@@ -454,6 +489,7 @@ export async function rejectTask(
   actorId: string,
   identity: IdentityType,
   reason?: string,
+  sessionId: string | null = null,
 ): Promise<Task | null> {
   const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
   if (!task) return null;
@@ -465,8 +501,10 @@ export async function rejectTask(
   await db.batch([
     db.prepare("UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?").bind(now, taskId),
     db
-      .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, 'rejected', ?, ?)")
-      .bind(logId, taskId, actorType, actorId, reason || null, now),
+      .prepare(
+        "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, 'rejected', ?, ?, ?)",
+      )
+      .bind(logId, taskId, actorType, actorId, reason || null, sessionId, now),
   ]);
 
   return parseTask({ ...task, status: "in_progress" as const, updated_at: now });
@@ -479,13 +517,14 @@ export async function addTaskAction(
   actorId: string,
   action: string,
   detail: string | null,
+  sessionId: string | null = null,
 ): Promise<TaskAction> {
   const actionId = newLongId();
   const now = new Date().toISOString();
 
   await db
-    .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(actionId, taskId, actorType, actorId, action, detail, now)
+    .prepare("INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(actionId, taskId, actorType, actorId, action, detail, sessionId, now)
     .run();
 
   return {
@@ -497,6 +536,7 @@ export async function addTaskAction(
     actor_public_key: null,
     action: action as any,
     detail,
+    session_id: sessionId,
     created_at: now,
   };
 }

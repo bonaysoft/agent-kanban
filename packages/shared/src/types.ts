@@ -89,6 +89,7 @@ export interface TaskAction {
   actor_public_key?: string | null;
   action: TaskActionType;
   detail: string | null;
+  session_id: string | null;
   created_at: string;
 }
 

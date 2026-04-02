@@ -48,13 +48,14 @@ import type { Env } from "./types";
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
 
-function resolveActor(c: { get: (key: string) => any }): { actorType: string; actorId: string } {
+function resolveActor(c: { get: (key: string) => any }): { actorType: string; actorId: string; sessionId: string | null } {
   const identity: string = c.get("identityType") || "machine";
   let actorId: string;
   if (identity === "user") actorId = c.get("ownerId") || "unknown";
   else if (identity === "machine") actorId = c.get("machineId") || c.get("apiKeyId") || "unknown";
   else actorId = c.get("agentId") || "unknown";
-  return { actorType: identity, actorId };
+  const sessionId: string | null = c.get("sessionId") || null;
+  return { actorType: identity, actorId, sessionId };
 }
 
 // Access log
@@ -528,21 +529,30 @@ api.post("/api/tasks/:id/claim", async (c) => {
   const agentId = c.get("agentId");
   if (!agentId) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const task = await claimTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"));
+  const task = await claimTask(c.env.DB, c.req.param("id"), agentId, c.get("identityType"), c.get("sessionId") || null);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/complete", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { result?: string; pr_url?: string };
-  const { actorType, actorId } = resolveActor(c);
+  const { actorType, actorId, sessionId } = resolveActor(c);
 
-  const task = await completeTask(c.env.DB, c.req.param("id"), actorType, actorId, body.result || null, body.pr_url || null, c.get("identityType"));
+  const task = await completeTask(
+    c.env.DB,
+    c.req.param("id"),
+    actorType,
+    actorId,
+    body.result || null,
+    body.pr_url || null,
+    c.get("identityType"),
+    sessionId,
+  );
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/release", async (c) => {
-  const { actorType, actorId } = resolveActor(c);
-  const task = await releaseTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"));
+  const { actorType, actorId, sessionId } = resolveActor(c);
+  const task = await releaseTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"), "released", sessionId);
   return c.json(task);
 });
 
@@ -556,29 +566,29 @@ api.post("/api/tasks/:id/assign", async (c) => {
     await detectAndReleaseStale(c.env.DB, existing.board_id);
   }
 
-  const { actorType, actorId } = resolveActor(c);
-  const task = await assignTask(c.env.DB, c.req.param("id"), targetAgentId, actorType, actorId);
+  const { actorType, actorId, sessionId } = resolveActor(c);
+  const task = await assignTask(c.env.DB, c.req.param("id"), targetAgentId, actorType, actorId, sessionId);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/cancel", async (c) => {
-  const { actorType, actorId } = resolveActor(c);
-  const task = await cancelTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"));
+  const { actorType, actorId, sessionId } = resolveActor(c);
+  const task = await cancelTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"), sessionId);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/review", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { pr_url?: string };
-  const { actorType, actorId } = resolveActor(c);
+  const { actorType, actorId, sessionId } = resolveActor(c);
 
-  const task = await reviewTask(c.env.DB, c.req.param("id"), actorType, actorId, body.pr_url || null, c.get("identityType"));
+  const task = await reviewTask(c.env.DB, c.req.param("id"), actorType, actorId, body.pr_url || null, c.get("identityType"), sessionId);
   return c.json(task);
 });
 
 api.post("/api/tasks/:id/reject", async (c) => {
-  const { actorType, actorId } = resolveActor(c);
+  const { actorType, actorId, sessionId } = resolveActor(c);
   const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
-  const task = await rejectTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"), body.reason);
+  const task = await rejectTask(c.env.DB, c.req.param("id"), actorType, actorId, c.get("identityType"), body.reason, sessionId);
   return c.json(task);
 });
 
@@ -591,8 +601,8 @@ api.post("/api/tasks/:id/notes", async (c) => {
   const task = await c.env.DB.prepare("SELECT id FROM tasks WHERE id = ?").bind(c.req.param("id")).first();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const { actorType, actorId } = resolveActor(c);
-  const action = await addTaskAction(c.env.DB, c.req.param("id"), actorType, actorId, "commented", body.detail);
+  const { actorType, actorId, sessionId } = resolveActor(c);
+  const action = await addTaskAction(c.env.DB, c.req.param("id"), actorType, actorId, "commented", body.detail, sessionId);
   return c.json(action, 201);
 });
 
