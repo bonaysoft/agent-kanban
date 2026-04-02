@@ -33,7 +33,7 @@ export function parseEvent(raw: string): AgentEvent | null {
   }
 
   if (event.type === "message" && event.role === "assistant" && event.content) {
-    return { type: "message", text: event.content };
+    return { type: "assistant", blocks: [{ type: "text", text: event.content }] };
   }
 
   if (event.type === "result") {
@@ -51,8 +51,8 @@ export function parseEvent(raw: string): AgentEvent | null {
   }
 
   if (event.type === "error" || event.status === "error") {
-    const raw = event.message || event.error;
-    const detail = typeof raw === "object" ? JSON.stringify(raw) : String(raw || JSON.stringify(event));
+    const source = event.message || event.error;
+    const detail = typeof source === "object" ? JSON.stringify(source) : String(source || JSON.stringify(event));
     return { type: "error", detail };
   }
 

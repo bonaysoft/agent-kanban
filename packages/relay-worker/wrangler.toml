@@ -1,0 +1,11 @@
+name = "agent-kanban-relay"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TunnelRelay"]

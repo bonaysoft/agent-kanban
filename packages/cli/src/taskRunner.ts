@@ -122,7 +122,7 @@ export class TaskRunner {
         .join("\n");
 
       // Persist session before spawning — crash-safe
-      writeSession({
+      const sessionFile: SessionFile = {
         type: "worker",
         agentId,
         sessionId,
@@ -138,7 +138,8 @@ export class TaskRunner {
         gpgSubkeyId,
         agentUsername: (agentDetails as any).username ?? agentId,
         agentName: agentDetails.name,
-      });
+      };
+      writeSession(sessionFile);
 
       await this.pm.spawnAgent({
         provider,

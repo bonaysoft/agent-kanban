@@ -150,7 +150,7 @@ describe("mapSDKMessage — rate_limit_event allowed_warning", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapSDKMessage — assistant message", () => {
-  it("returns message event with text from content block", () => {
+  it("returns assistant event with text block from content block", () => {
     const msg = {
       type: "assistant",
       message: { content: [{ type: "text", text: "hello" }] },
@@ -160,13 +160,13 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.text).toBe("hello");
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0]).toEqual({ type: "text", text: "hello" });
     }
   });
 
-  it("joins multiple text blocks with newline", () => {
+  it("includes both text blocks in blocks array for multiple text blocks", () => {
     const msg = {
       type: "assistant",
       message: {
@@ -181,28 +181,34 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.text).toBe("Line one\nLine two");
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks).toHaveLength(2);
+      expect(result.blocks[0]).toEqual({ type: "text", text: "Line one" });
+      expect(result.blocks[1]).toEqual({ type: "text", text: "Line two" });
     }
   });
 
-  it("returns null when content has no text blocks", () => {
+  it("returns assistant event with tool_use block when content has only tool_use blocks", () => {
     const msg = {
       type: "assistant",
-      message: { content: [{ type: "tool_use", id: "tu1" }] },
+      message: { content: [{ type: "tool_use", id: "tu1", name: "bash", input: { command: "ls" } }] },
       error: undefined,
       parent_tool_use_id: null,
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0].type).toBe("tool_use");
+    }
   });
 
-  it("returns null when message content is missing", () => {
+  it("returns null when message content is empty array", () => {
     const msg = {
       type: "assistant",
-      message: {},
+      message: { content: [] },
       error: undefined,
       parent_tool_use_id: null,
       uuid: "u1",
@@ -394,7 +400,7 @@ describe("claudeProvider.execute — handle shape", () => {
     const events: any[] = [];
     for await (const ev of handle.events) events.push(ev);
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "message", text: "SDK message" });
+    expect(events[0]).toEqual({ type: "assistant", blocks: [{ type: "text", text: "SDK message" }] });
   });
 
   it("abort() calls close() on the query object", async () => {

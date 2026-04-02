@@ -1,6 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
+import type { ContentBlock, RelayEvent } from "../hooks/useSessionRelay";
+import { useSessionRelay } from "../hooks/useSessionRelay";
 import { formatRelative } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -10,58 +10,108 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 interface ChatPanelProps {
   taskId: string;
   agentId: string | null;
+  sessionId: string | null;
   userId: string | null;
   taskDone: boolean;
-  initialMessages: any[];
-  sseMessages: any[];
 }
 
-export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, sseMessages }: ChatPanelProps) {
+function BlockView({ block }: { block: ContentBlock }) {
+  switch (block.type) {
+    case "thinking":
+      return (
+        <details className="text-xs text-content-tertiary">
+          <summary className="cursor-pointer font-mono uppercase tracking-wider">thinking</summary>
+          <pre className="mt-1 whitespace-pre-wrap break-words text-[11px] opacity-70">{block.text}</pre>
+        </details>
+      );
+    case "tool_use":
+      return (
+        <div className="flex items-center gap-1.5 text-xs font-mono text-content-secondary">
+          <span className="text-accent">▸</span>
+          <span>{block.name}</span>
+          {block.input && <span className="text-content-tertiary truncate max-w-[300px]">{JSON.stringify(block.input)}</span>}
+        </div>
+      );
+    case "tool_result":
+      if (!block.output) return null;
+      return (
+        <pre
+          className={`text-[11px] font-mono whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto ${block.error ? "text-error" : "text-content-tertiary"}`}
+        >
+          {block.output}
+        </pre>
+      );
+    case "text":
+      return <p className="text-[13px] whitespace-pre-wrap break-words text-content-primary">{block.text}</p>;
+  }
+}
+
+function EventView({ relayEvent }: { relayEvent: RelayEvent }) {
+  const { event, timestamp } = relayEvent;
+
+  if (event.type === "assistant") {
+    return (
+      <div className="flex gap-3 py-1.5 border-l-2 border-accent pl-4 ml-1">
+        <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(timestamp)}</span>
+        <div className="flex-1 min-w-0 space-y-1">
+          {event.blocks.map((block, i) => (
+            <BlockView key={i} block={block} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (event.type === "result") {
+    return (
+      <div className="flex gap-3 py-1.5 border-l-2 border-border pl-4 ml-1">
+        <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(timestamp)}</span>
+        <div className="flex items-center gap-2 text-xs text-content-tertiary font-mono">
+          <span>done</span>
+          {event.cost != null && <span>${event.cost.toFixed(4)}</span>}
+          {event.text && <span className="text-content-secondary">— {event.text.slice(0, 80)}</span>}
+        </div>
+      </div>
+    );
+  }
+
+  if (event.type === "error") {
+    return (
+      <div className="flex gap-3 py-1.5 border-l-2 border-error pl-4 ml-1">
+        <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(timestamp)}</span>
+        <span className="text-xs text-error">{event.detail}</span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+export function ChatPanel({ taskId, agentId, sessionId, userId, taskDone }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 
-  const sendMessage = useMutation({
-    mutationFn: (content: string) =>
-      api.messages.create(taskId, {
-        sender_type: "user",
-        sender_id: userId || "",
-        content,
-      }),
+  const { events, sendMessage, daemonConnected, wsConnected } = useSessionRelay({
+    sessionId,
+    enabled: !!sessionId,
   });
 
-  // Merge initial + SSE messages, dedup by ID
-  const allMessages = (() => {
-    const seen = new Set<string>();
-    const merged: any[] = [];
-    for (const msg of [...initialMessages, ...sseMessages]) {
-      if (!seen.has(msg.id)) {
-        seen.add(msg.id);
-        merged.push(msg);
-      }
-    }
-    return merged.sort((a: any, b: any) => a.created_at.localeCompare(b.created_at));
-  })();
-
-  // Track whether user is near the bottom
   function handleScroll() {
     const el = containerRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isNearBottomRef.current = distanceFromBottom < 80;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }
 
-  // Auto-scroll to bottom when messages arrive, only if user was already at bottom
   useEffect(() => {
     if (isNearBottomRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [allMessages]);
+  }, [events]);
 
-  async function handleSend() {
-    if (!input.trim() || !agentId) return;
-    const content = input.trim();
-    await sendMessage.mutateAsync(content);
+  function handleSend() {
+    if (!input.trim() || !userId) return;
+    sendMessage(input.trim(), userId);
     setInput("");
   }
 
@@ -82,56 +132,42 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
-      {/* Session ID for resume — subtle */}
+      {/* Connection status */}
       <div className="flex items-center gap-2 text-[11px] font-mono text-content-tertiary shrink-0 opacity-60">
-        <span>Session:</span>
-        <Badge variant="secondary" className="font-mono text-[10px] select-all">
-          {agentId}
-        </Badge>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" size="icon-xs" onClick={() => navigator.clipboard.writeText(`claude --resume ${agentId}`)} />}
-          >
-            ⎘
-          </TooltipTrigger>
-          <TooltipContent>Copy resume command</TooltipContent>
-        </Tooltip>
+        {sessionId && (
+          <>
+            <span>Session:</span>
+            <Badge variant="secondary" className="font-mono text-[10px] select-all">
+              {sessionId.slice(0, 8)}
+            </Badge>
+            <Tooltip>
+              <TooltipTrigger
+                render={<Button variant="ghost" size="icon-xs" onClick={() => navigator.clipboard.writeText(`claude --resume ${sessionId}`)} />}
+              >
+                ⎘
+              </TooltipTrigger>
+              <TooltipContent>Copy resume command</TooltipContent>
+            </Tooltip>
+          </>
+        )}
+        {wsConnected && (
+          <span className={daemonConnected ? "text-green-500" : "text-yellow-500"}>{daemonConnected ? "● live" : "● waiting for agent"}</span>
+        )}
       </div>
 
-      {/* Messages — fills available space */}
-      <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto space-y-2">
-        {allMessages.length === 0 && (
+      {/* Events stream */}
+      <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+        {events.length === 0 && (
           <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-content-tertiary">
-              {taskDone ? "No messages were exchanged." : "No messages yet. Send a message to the agent."}
-            </p>
+            <p className="text-sm text-content-tertiary">{taskDone ? "No activity recorded." : "Waiting for agent activity..."}</p>
           </div>
         )}
-        {allMessages.map((msg: any) => (
-          <div key={msg.id} className={`flex gap-3 py-2 border-l-2 pl-4 ml-1 ${msg.sender_type === "agent" ? "border-accent" : "border-border"}`}>
-            <span className="font-mono text-[11px] text-content-tertiary whitespace-nowrap min-w-[50px]">{formatRelative(msg.created_at)}</span>
-            <div className="flex-1 min-w-0">
-              <span
-                className={`text-[11px] font-mono uppercase tracking-wider ${msg.sender_type === "agent" ? "text-accent" : "text-content-tertiary"}`}
-              >
-                {msg.sender_type}
-              </span>
-              <p
-                className={`text-[13px] mt-0.5 whitespace-pre-wrap break-words ${
-                  msg.sender_type === "agent" ? "font-mono text-xs text-content-secondary" : "text-content-primary"
-                }`}
-              >
-                {msg.content}
-              </p>
-            </div>
-          </div>
+        {events.map((re) => (
+          <EventView key={re.id} relayEvent={re} />
         ))}
       </div>
 
-      {/* Send error */}
-      {sendMessage.isError && <p className="text-xs text-error shrink-0">Failed to send. Try again.</p>}
-
-      {/* Input — pinned at bottom, hidden when task is done */}
+      {/* Input */}
       {!taskDone && (
         <div className="flex gap-2 shrink-0">
           <Input
@@ -139,11 +175,11 @@ export function ChatPanel({ taskId, agentId, userId, taskDone, initialMessages, 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Message the agent..."
-            disabled={sendMessage.isPending}
+            placeholder={daemonConnected ? "Message the agent..." : "Agent not connected..."}
+            disabled={!daemonConnected}
           />
-          <Button onClick={handleSend} disabled={!input.trim() || sendMessage.isPending}>
-            {sendMessage.isPending ? "..." : "Send"}
+          <Button onClick={handleSend} disabled={!input.trim() || !daemonConnected}>
+            Send
           </Button>
         </div>
       )}

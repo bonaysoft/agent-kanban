@@ -113,7 +113,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
 });
 
 describe("mapSDKMessage — assistant message", () => {
-  it("returns message event with text content", () => {
+  it("returns assistant event with text block in blocks array", () => {
     const msg = {
       type: "assistant",
       message: { content: [{ type: "text", text: "Hello world" }] },
@@ -123,22 +123,26 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.text).toBe("Hello world");
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0]).toEqual({ type: "text", text: "Hello world" });
     }
   });
 
-  it("returns null when content has no text blocks", () => {
+  it("returns assistant event with tool_use block when content has only tool_use blocks", () => {
     const msg = {
       type: "assistant",
-      message: { content: [{ type: "tool_use", id: "tu1" }] },
+      message: { content: [{ type: "tool_use", id: "tu1", name: "bash", input: { command: "ls" } }] },
       error: undefined,
       parent_tool_use_id: null,
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0].type).toBe("tool_use");
+    }
   });
 
   it("returns rate_limit when error field is 'rate_limit'", () => {
@@ -251,24 +255,28 @@ describe("claudeProvider identity", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapThreadEvent — item.completed", () => {
-  it("returns message event when item is agent_message with text", () => {
+  it("returns assistant event with text block when item is agent_message with text", () => {
     const event = {
       type: "item.completed",
       item: { id: "i1", type: "agent_message", text: "Task done" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.text).toBe("Task done");
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0]).toEqual({ type: "text", text: "Task done" });
     }
   });
 
-  it("returns null when item type is not agent_message", () => {
+  it("returns assistant event with tool_use block when item is command_execution", () => {
     const event = {
       type: "item.completed",
       item: { id: "i1", type: "command_execution", command: "ls", aggregated_output: "", status: "completed" },
     } as unknown as ThreadEvent;
-    expect(mapThreadEvent(event)).toBeNull();
+    const result = mapThreadEvent(event);
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0]).toEqual({ type: "tool_use", name: "command", input: { command: "ls" } });
+    }
   });
 
   it("returns null when agent_message has no text", () => {
@@ -557,10 +565,10 @@ describe("codexProvider.execute — thread selection", () => {
     const events: any[] = [];
     for await (const ev of handle.events) events.push(ev);
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "message", text: "codex message" });
+    expect(events[0]).toEqual({ type: "assistant", blocks: [{ type: "text", text: "codex message" }] });
   });
 
-  it("send() calls runStreamed again on the thread for a follow-up turn", async () => {
+  it("send() throws not-implemented error", async () => {
     const { Codex } = await import("@openai/codex-sdk");
     const runStreamedSpy = vi.fn().mockResolvedValue({ events: (async function* () {})() });
     vi.mocked(Codex).mockImplementationOnce(
@@ -571,10 +579,7 @@ describe("codexProvider.execute — thread selection", () => {
         }) as any,
     );
     const handle = await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
-    await handle.send("follow up");
-    // runStreamed is called once for the initial taskContext, and once more for send()
-    expect(runStreamedSpy).toHaveBeenCalledTimes(2);
-    expect(runStreamedSpy).toHaveBeenLastCalledWith("follow up", expect.any(Object));
+    await expect(handle.send("follow up")).rejects.toThrow("not implemented");
   });
 
   it("abort() aborts the AbortController signal", async () => {
@@ -866,26 +871,26 @@ describe("geminiProvider.parseEvent — invalid input", () => {
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.parseEvent — assistant message", () => {
-  it("returns a message event for assistant role with content", () => {
+  it("returns an assistant event for assistant role with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("message");
+    expect(event?.type).toBe("assistant");
   });
 
-  it("includes the content as text", () => {
+  it("includes the content as a text block in blocks array", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "message") {
-      expect(event.text).toBe("Hello world");
+    if (event?.type === "assistant") {
+      expect(event.blocks[0]).toEqual({ type: "text", text: "Hello world" });
     }
   });
 
   it("handles delta assistant message with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "partial text", delta: true });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("message");
-    if (event?.type === "message") {
-      expect(event.text).toBe("partial text");
+    expect(event?.type).toBe("assistant");
+    if (event?.type === "assistant") {
+      expect(event.blocks[0]).toEqual({ type: "text", text: "partial text" });
     }
   });
 

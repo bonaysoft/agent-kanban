@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p .pages-dev && B=$(awk 'NF{printf \"-b %s \", $0}' .dev.vars) && concurrently -n vite,wrangler -c blue,green \"vite\" \"wrangler pages dev .pages-dev $B\"",
+    "dev": "mkdir -p .pages-dev && B=$(awk 'NF{printf \"-b %s \", $0}' .dev.vars) && concurrently -n relay,vite,wrangler -c yellow,blue,green \"wrangler dev --config ../../packages/relay-worker/wrangler.toml --port 8787\" \"vite\" \"sleep 3 && wrangler pages dev .pages-dev $B\"",
     "build": "vite build",
     "preview": "wrangler pages dev dist",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",

@@ -3,6 +3,7 @@ import { createLogger } from "./logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "./providers/types.js";
 import { removeSession, updateSession } from "./sessionStore.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
+import type { TunnelClient } from "./tunnelClient.js";
 
 const logger = createLogger("process");
 
@@ -52,11 +53,13 @@ export class ProcessManager {
   private client: ApiClient;
   private callbacks: ProcessManagerCallbacks;
   private taskTimeoutMs: number;
+  private tunnel: TunnelClient | null;
 
-  constructor(client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000) {
+  constructor(client: ApiClient, callbacks: ProcessManagerCallbacks, taskTimeoutMs = 2 * 60 * 60 * 1000, tunnel?: TunnelClient) {
     this.client = client;
     this.callbacks = callbacks;
     this.taskTimeoutMs = taskTimeoutMs;
+    this.tunnel = tunnel ?? null;
   }
 
   get activeCount(): number {
@@ -105,6 +108,8 @@ export class ProcessManager {
       this.callbacks.onProcessStarted?.(sessionId, handle.pid);
     }
 
+    this.tunnel?.sendStatus(sessionId, "working");
+
     if (this.taskTimeoutMs > 0) {
       agent.timeoutTimer = setTimeout(() => {
         logger.warn(`Agent for task ${taskId} exceeded timeout (${Math.round(this.taskTimeoutMs / 60000)}m), killing`);
@@ -121,6 +126,17 @@ export class ProcessManager {
     const agent = this.agents.get(taskId);
     if (!agent) return;
     await agent.handle.send(message);
+  }
+
+  /** Send message to a running agent by sessionId. Returns true if delivered. */
+  async sendToSession(sessionId: string, message: string): Promise<boolean> {
+    for (const agent of this.agents.values()) {
+      if (agent.sessionId === sessionId) {
+        await agent.handle.send(message);
+        return true;
+      }
+    }
+    return false;
   }
 
   async killTask(taskId: string): Promise<void> {
@@ -237,9 +253,13 @@ export class ProcessManager {
   }
 
   private async handleEvent(taskId: string, event: AgentEvent, agentClient: AgentClient): Promise<void> {
+    const agent = this.agents.get(taskId);
+
+    // Forward every event to the relay for real-time browser display
+    if (agent) this.tunnel?.sendEvent(agent.sessionId, event);
+
     switch (event.type) {
       case "rate_limit": {
-        const agent = this.agents.get(taskId);
         const runtime = agent?.provider.name ?? "unknown";
         logger.warn(`Rate limited on task ${taskId} (${runtime}), resets at ${event.resetAt}`);
         if (agent) agent.rateLimited = true;
@@ -248,26 +268,28 @@ export class ProcessManager {
       }
 
       case "error": {
-        const agent = this.agents.get(taskId);
         logger.warn(`Agent error on task ${taskId} (${agent?.provider.name}): ${event.detail}`);
         break;
       }
 
-      case "message": {
-        agentClient
-          .sendMessage(taskId, {
-            sender_type: "agent",
-            sender_id: agentClient.getAgentId(),
-            content: event.text,
-          })
-          .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
+      case "assistant": {
+        // Extract text blocks for D1 message archive
+        const texts = event.blocks.filter((b) => b.type === "text").map((b) => (b as { text: string }).text);
+        if (texts.length > 0) {
+          agentClient
+            .sendMessage(taskId, {
+              sender_type: "agent",
+              sender_id: agentClient.getAgentId(),
+              content: texts.join("\n"),
+            })
+            .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
+        }
         break;
       }
 
       case "result": {
         const cost = event.cost || 0;
         const usage = event.usage || {};
-        const agent = this.agents.get(taskId);
         logger.info(`Agent result for task ${taskId} (${agent?.provider.name}): cost=$${cost.toFixed(4)}`);
         agentClient
           .updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
@@ -292,10 +314,15 @@ export class ProcessManager {
         }
         break;
       }
+
+      // thinking, tool_use, tool_result — already forwarded to relay above
+      default:
+        break;
     }
   }
 
   private safeCleanup(agent: AgentProcess): void {
+    this.tunnel?.sendStatus(agent.sessionId, "done");
     try {
       agent.onCleanup?.();
     } catch (err: any) {

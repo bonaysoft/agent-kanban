@@ -239,6 +239,20 @@ export interface Repository {
   task_count?: number;
 }
 
+// ─── Agent Events (wire format for relay) ───
+
+export type ContentBlock =
+  | { type: "thinking"; text: string }
+  | { type: "tool_use"; name: string; input?: Record<string, unknown> }
+  | { type: "tool_result"; output?: string; error?: boolean }
+  | { type: "text"; text: string };
+
+export type AgentEvent =
+  | { type: "assistant"; blocks: ContentBlock[] }
+  | { type: "result"; text?: string; cost?: number; usage?: Record<string, number | undefined> }
+  | { type: "rate_limit"; resetAt: string; rateLimitType?: string; utilization?: number }
+  | { type: "error"; code?: string; detail: string };
+
 // ─── Message ───
 
 export type SenderType = "user" | "agent";

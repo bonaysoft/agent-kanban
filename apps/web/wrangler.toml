@@ -13,6 +13,10 @@ GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
 [observability]
 enabled = true
 
+[[services]]
+binding = "RELAY"
+service = "agent-kanban-relay"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"

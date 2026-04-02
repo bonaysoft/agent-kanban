@@ -85,16 +85,11 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const [chatOpen, setChatOpen] = useState(false);
-  const { notes: sseNotes, messages: sseMessages, reconnecting } = useSSE({ taskId, enabled: true });
+  const { notes: sseNotes, reconnecting } = useSSE({ taskId, enabled: true });
 
   const { data: task, isLoading: loading } = useQuery({
     queryKey: ["task", taskId],
     queryFn: () => api.tasks.get(taskId),
-  });
-
-  const { data: initialMessages = [] } = useQuery({
-    queryKey: ["task-messages", taskId],
-    queryFn: () => api.messages.list(taskId),
   });
 
   const { data: repositories = [] } = useQuery({
@@ -366,10 +361,9 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
               <ChatPanel
                 taskId={taskId}
                 agentId={task.assigned_to}
+                sessionId={task.active_session_id ?? null}
                 userId={session?.user?.id || null}
                 taskDone={task.status === "done" || task.status === "cancelled"}
-                initialMessages={initialMessages}
-                sseMessages={sseMessages}
               />
             </div>
           </SheetContent>

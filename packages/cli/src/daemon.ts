@@ -1,7 +1,9 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { arch, hostname, platform, release } from "node:os";
+import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
 import { MachineClient } from "./client.js";
+import { getCredentials } from "./config.js";
 import { generateDeviceId } from "./device.js";
 import { createLogger } from "./logger.js";
 import { PID_FILE, STATE_DIR } from "./paths.js";
@@ -12,6 +14,7 @@ import type { AgentProvider, UsageInfo } from "./providers/types.js";
 import { Scheduler } from "./scheduler.js";
 import { clearAllSessions, isPidAlive, listSessions, migrateLegacySessions, removeSession, updateSession } from "./sessionStore.js";
 import { TaskRunner } from "./taskRunner.js";
+import { TunnelClient } from "./tunnelClient.js";
 import { collectUsage as collectLeaderUsage } from "./usageCollector.js";
 import { getVersion } from "./version.js";
 
@@ -33,14 +36,12 @@ export interface DaemonOptions {
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<void> {
-  // Safety net — log but don't crash on stray rejections
   process.on("unhandledRejection", (err: any) => {
     logger.error(`Unhandled rejection: ${err?.message ?? err}`);
   });
 
   mkdirSync(STATE_DIR, { recursive: true });
 
-  // Preflight: gh auth check — warn if missing (repo-based tasks need it)
   try {
     execSync("gh auth status", { stdio: "pipe" });
   } catch {
@@ -49,7 +50,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const client = new MachineClient();
 
-  // Register machine (upsert by device_id on server)
   const machineInfo = getMachineInfo();
   const deviceId = generateDeviceId();
   const machine = await client.registerMachine({ ...machineInfo, device_id: deviceId });
@@ -69,6 +69,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const prMonitor = new PrMonitor(client);
   let scheduler: Scheduler;
 
+  const { apiUrl, apiKey } = getCredentials();
+  const tunnel = new TunnelClient(apiUrl, apiKey);
+  try {
+    await tunnel.connect();
+  } catch (err) {
+    logger.warn(`Tunnel connection failed: ${err instanceof Error ? err.message : err}`);
+  }
+
   const pm = new ProcessManager(
     client,
     {
@@ -79,7 +87,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       onProcessExited: () => {},
     },
     opts.taskTimeout,
+    tunnel,
   );
+
+  tunnel.onHistoryRequest((sessionId, requestId) => {
+    getSessionMessages(sessionId)
+      .then((messages) => tunnel.sendHistory(messages, requestId))
+      .catch((e) => logger.warn(`History fetch failed for ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`));
+  });
+
+  tunnel.onHumanMessage(async (sessionId, content) => {
+    const delivered = await pm.sendToSession(sessionId, content);
+    if (!delivered) {
+      const session = listSessions({ type: "worker" }).find((s) => s.sessionId === sessionId);
+      if (session) {
+        logger.info(`Resuming session ${sessionId.slice(0, 8)} for human message`);
+        runner.resumeSession(session, content).catch((e) => {
+          logger.warn(`Failed to resume session ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`);
+        });
+      }
+    }
+  });
 
   const runner = new TaskRunner(client, pm);
 
@@ -88,7 +116,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     pollInterval,
   });
 
-  // Heartbeat + leader session monitoring
   const heartbeatInterval = setInterval(() => {
     (async () => {
       const usageInfo = await collectUsage(availableProviders);
@@ -97,13 +124,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
 
-  // Shutdown
   const shutdown = async () => {
     logger.info("Shutting down daemon...");
     scheduler.stop();
     prMonitor.stop();
     clearInterval(heartbeatInterval);
     await pm.killAll();
+    tunnel.disconnect();
     await cleanupLeaderSessions(client);
     clearAllSessions();
     removePidFile();
@@ -124,7 +151,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 async function cleanupLeaderSessions(client: MachineClient): Promise<void> {
   for (const session of listSessions({ type: "leader" })) {
     if (isPidAlive(session.pid)) continue;
-    // PID dead — collect usage, close session, remove file
     const usage = await collectLeaderUsage(session.runtime, session.startedAt);
     if (usage) {
       await client.updateSessionUsage(session.agentId, session.sessionId, usage).catch((err: any) => {

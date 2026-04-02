@@ -21,6 +21,7 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: "http://localhost:8788",
+        ws: true,
       },
       "/.well-known": {
         target: "http://localhost:8788",

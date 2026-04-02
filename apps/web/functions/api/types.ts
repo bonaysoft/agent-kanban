@@ -2,6 +2,7 @@ import type { Session, User } from "better-auth";
 
 export interface Env {
   DB: D1Database;
+  RELAY: Fetcher;
   AUTH_SECRET: string;
   ALLOWED_HOSTS: string;
   GITHUB_CLIENT_ID: string;

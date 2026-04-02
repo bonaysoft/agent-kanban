@@ -635,6 +635,15 @@ api.get("/api/tasks/:id/messages", async (c) => {
   return c.json(messages);
 });
 
+// ─── WebSocket Relay ───
+
+api.get("/api/tunnel/ws", async (c) => {
+  const url = new URL(c.req.url);
+  url.hostname = "relay";
+  url.pathname = "/ws";
+  return c.env.RELAY.fetch(new Request(url.toString(), c.req.raw));
+});
+
 // ─── SSE Stream ───
 
 api.get("/api/tasks/:id/stream", async (c) => {

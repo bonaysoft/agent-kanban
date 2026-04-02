@@ -1,6 +1,6 @@
-import type { AgentRuntime, UsageInfo, UsageWindow } from "@agent-kanban/shared";
+import type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow } from "@agent-kanban/shared";
 
-export type { AgentRuntime, UsageInfo, UsageWindow };
+export type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow };
 
 export interface ExecuteOpts {
   sessionId: string;
@@ -11,12 +11,6 @@ export interface ExecuteOpts {
   model?: string;
   resume?: boolean;
 }
-
-export type AgentEvent =
-  | { type: "message"; text: string }
-  | { type: "result"; cost?: number; usage?: Record<string, any> }
-  | { type: "rate_limit"; resetAt: string; rateLimitType?: string; utilization?: number }
-  | { type: "error"; code?: string; detail: string };
 
 export interface AgentHandle {
   events: AsyncIterable<AgentEvent>;

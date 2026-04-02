@@ -212,14 +212,15 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | n
     .prepare(`
     SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, a.fingerprint as agent_fingerprint,
       r.name as repository_name,
-      (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count
+      (SELECT COUNT(*) FROM tasks sub WHERE sub.created_from = t.id) as subtask_count,
+      (SELECT s.id FROM agent_sessions s WHERE s.agent_id = t.assigned_to ORDER BY s.created_at DESC LIMIT 1) as active_session_id
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
     WHERE t.id = ?
   `)
     .bind(taskId)
-    .first<Task & { subtask_count: number }>();
+    .first<Task & { subtask_count: number; active_session_id: string | null }>();
   if (!task) return null;
   parseTask(task);
 

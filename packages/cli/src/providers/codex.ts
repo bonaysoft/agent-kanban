@@ -33,8 +33,6 @@ const CODEX_PRICING: Record<string, { input: number; cached_input: number; outpu
   "codex-mini-latest": { input: 1.5, cached_input: 0.375, output: 6.0 },
 };
 
-let currentModel = "o3";
-
 const RESET_RE = /try again at (.+)/i;
 const QUOTA_RE = /quota exceeded|usage limit/i;
 function parseRateLimitReset(msg: string): string | null {
@@ -47,24 +45,35 @@ function parseRateLimitReset(msg: string): string | null {
   return Number.isNaN(ms) ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : new Date(ms).toISOString();
 }
 
-function calcCost(inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
-  const price = CODEX_PRICING[currentModel] ?? CODEX_PRICING.o3;
+function calcCost(model: string, inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
+  const price = CODEX_PRICING[model] ?? CODEX_PRICING.o3;
   return (inputTokens * price.input + cachedInputTokens * price.cached_input + outputTokens * price.output) / 1_000_000;
 }
 
 /** Map a single Codex thread event to an AgentEvent (or null to skip). */
-export function mapThreadEvent(event: ThreadEvent): AgentEvent | null {
+export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | null {
   switch (event.type) {
     case "item.completed": {
-      if (event.item.type === "agent_message" && event.item.text) {
-        return { type: "message", text: event.item.text };
+      const item = event.item;
+      if (item.type === "agent_message" && item.text) {
+        return { type: "assistant", blocks: [{ type: "text", text: item.text }] };
+      }
+      if (item.type === "command_execution") {
+        return { type: "assistant", blocks: [{ type: "tool_use", name: "command", input: { command: item.command } }] };
+      }
+      if (item.type === "file_change") {
+        const files = item.changes.map((c) => `${c.kind} ${c.path}`).join(", ");
+        return { type: "assistant", blocks: [{ type: "tool_use", name: "file_change", input: { files } }] };
+      }
+      if (item.type === "reasoning" && item.text) {
+        return { type: "assistant", blocks: [{ type: "thinking", text: item.text }] };
       }
       return null;
     }
 
     case "turn.completed": {
       const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
-      const cost = calcCost(input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
+      const cost = calcCost(model, input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
       return {
         type: "result",
         cost,
@@ -101,29 +110,23 @@ export const codexProvider: AgentProvider = {
   label: "Codex CLI",
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    if (opts.model) currentModel = opts.model;
+    const model = opts.model ?? "o3";
 
     const codex = new Codex({ env: opts.env });
-    const thread = opts.resume
-      ? codex.resumeThread(opts.sessionId, {
-          model: opts.model,
-          workingDirectory: opts.cwd,
-          sandboxMode: "danger-full-access",
-          approvalPolicy: "never",
-        })
-      : codex.startThread({
-          model: opts.model,
-          workingDirectory: opts.cwd,
-          sandboxMode: "danger-full-access",
-          approvalPolicy: "never",
-        });
+    const threadOpts = {
+      model: opts.model,
+      workingDirectory: opts.cwd,
+      sandboxMode: "danger-full-access" as const,
+      approvalPolicy: "never" as const,
+    };
+    const thread = opts.resume ? codex.resumeThread(opts.sessionId, threadOpts) : codex.startThread(threadOpts);
 
     const abortController = new AbortController();
     const streamed = await thread.runStreamed(opts.taskContext, { signal: abortController.signal });
 
     const events = (async function* () {
       for await (const event of streamed.events) {
-        const mapped = mapThreadEvent(event);
+        const mapped = mapThreadEvent(event, model);
         if (mapped) yield mapped;
       }
     })();
@@ -134,14 +137,8 @@ export const codexProvider: AgentProvider = {
       async abort() {
         abortController.abort();
       },
-      async send(message: string) {
-        // Codex SDK: start a new turn on the same thread
-        const nextStreamed = await thread.runStreamed(message, { signal: abortController.signal });
-        // Drain events (they'll be picked up by the main event loop if we chain iterators)
-        // For now, send() initiates a follow-up turn but events flow through the original stream
-        // TODO: implement proper multi-turn event chaining when needed
-        logger.info("Sent follow-up message to Codex thread");
-        void nextStreamed;
+      async send() {
+        throw new Error("Codex multi-turn send not implemented");
       },
     };
   },

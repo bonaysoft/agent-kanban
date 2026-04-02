@@ -2,10 +2,10 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("claude");
 
@@ -47,6 +47,41 @@ function readOAuthToken(): string | null {
 }
 
 /** Map a single SDK message to an AgentEvent (or null to skip). */
+function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number]): ContentBlock | null {
+  switch (block.type) {
+    case "thinking":
+      return block.thinking ? { type: "thinking", text: block.thinking } : null;
+    case "tool_use":
+      return { type: "tool_use", name: block.name, input: block.input as Record<string, unknown> };
+    case "text":
+      return block.text ? { type: "text", text: block.text } : null;
+    default:
+      return null;
+  }
+}
+
+function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
+  const content = msg.message.content;
+  if (typeof content === "string") return [];
+  const blocks: ContentBlock[] = [];
+  for (const block of content) {
+    if (block.type === "tool_result") {
+      let output: string | undefined;
+      if (typeof block.content === "string") {
+        output = block.content;
+      } else if (Array.isArray(block.content)) {
+        output = block.content
+          .filter((c): c is { type: "text"; text: string } => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+      }
+      blocks.push({ type: "tool_result", output, error: block.is_error });
+    }
+  }
+  return blocks;
+}
+
+/** Map a single SDK message to an AgentEvent (1:1). */
 export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
   switch (msg.type) {
     case "rate_limit_event": {
@@ -63,30 +98,23 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
 
     case "assistant": {
       if (msg.error === "rate_limit") {
-        const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-        return { type: "rate_limit", resetAt };
+        return { type: "rate_limit", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
       }
       if (msg.error) {
         return { type: "error", code: msg.error, detail: msg.error };
       }
-      const texts: string[] = [];
-      if (Array.isArray(msg.message?.content)) {
-        for (const block of msg.message.content) {
-          if (block.type === "text" && block.text) texts.push(block.text);
-        }
-      }
-      if (texts.length > 0) {
-        return { type: "message", text: texts.join("\n") };
-      }
-      return null;
+      const blocks = (msg.message.content ?? []).map(mapContentBlock).filter((b): b is ContentBlock => b !== null);
+      return blocks.length > 0 ? { type: "assistant", blocks } : null;
+    }
+
+    case "user": {
+      const blocks = mapToolResult(msg);
+      return blocks.length > 0 ? { type: "assistant", blocks } : null;
     }
 
     case "result": {
-      return {
-        type: "result",
-        cost: msg.total_cost_usd || 0,
-        usage: msg.usage as Record<string, any>,
-      };
+      const text = msg.subtype === "success" ? msg.result : undefined;
+      return { type: "result", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> };
     }
 
     default:
