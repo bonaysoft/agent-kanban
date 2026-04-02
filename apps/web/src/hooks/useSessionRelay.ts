@@ -23,7 +23,7 @@ function parseHistoryMessages(messages: any[]): RelayEvent[] {
       const blocks: ContentBlock[] = [];
       for (const block of m.message.content) {
         if (block.type === "thinking" && block.thinking) blocks.push({ type: "thinking", text: block.thinking });
-        else if (block.type === "tool_use") blocks.push({ type: "tool_use", name: block.name, input: block.input });
+        else if (block.type === "tool_use") blocks.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
         else if (block.type === "text" && block.text) blocks.push({ type: "text", text: block.text });
       }
       if (blocks.length > 0) {
@@ -42,7 +42,7 @@ function parseHistoryMessages(messages: any[]): RelayEvent[] {
                     .map((c: any) => c.text)
                     .join("\n")
                 : undefined;
-          blocks.push({ type: "tool_result", output, error: block.is_error });
+          blocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
         }
       }
       if (blocks.length > 0) {

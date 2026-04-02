@@ -59,11 +59,14 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
         return { type: "assistant", blocks: [{ type: "text", text: item.text }] };
       }
       if (item.type === "command_execution") {
-        return { type: "assistant", blocks: [{ type: "tool_use", name: "command", input: { command: item.command } }] };
+        return {
+          type: "assistant",
+          blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "command", input: { command: item.command } }],
+        };
       }
       if (item.type === "file_change") {
         const files = item.changes.map((c) => `${c.kind} ${c.path}`).join(", ");
-        return { type: "assistant", blocks: [{ type: "tool_use", name: "file_change", input: { files } }] };
+        return { type: "assistant", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } }] };
       }
       if (item.type === "reasoning" && item.text) {
         return { type: "assistant", blocks: [{ type: "thinking", text: item.text }] };

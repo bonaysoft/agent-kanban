@@ -275,7 +275,7 @@ describe("mapThreadEvent — item.completed", () => {
     const result = mapThreadEvent(event);
     expect(result?.type).toBe("assistant");
     if (result?.type === "assistant") {
-      expect(result.blocks[0]).toEqual({ type: "tool_use", name: "command", input: { command: "ls" } });
+      expect(result.blocks[0]).toEqual({ type: "tool_use", id: "i1", name: "command", input: { command: "ls" } });
     }
   });
 

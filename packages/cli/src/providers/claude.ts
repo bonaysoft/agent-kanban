@@ -52,7 +52,7 @@ function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number
     case "thinking":
       return block.thinking ? { type: "thinking", text: block.thinking } : null;
     case "tool_use":
-      return { type: "tool_use", name: block.name, input: block.input as Record<string, unknown> };
+      return { type: "tool_use", id: block.id, name: block.name, input: block.input as Record<string, unknown> };
     case "text":
       return block.text ? { type: "text", text: block.text } : null;
     default:
@@ -75,7 +75,7 @@ function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
           .map((c) => c.text)
           .join("\n");
       }
-      blocks.push({ type: "tool_result", output, error: block.is_error });
+      blocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
     }
   }
   return blocks;
