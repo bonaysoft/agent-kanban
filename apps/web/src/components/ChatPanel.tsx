@@ -27,6 +27,14 @@ export function ChatPanel({ taskId, agentId, sessionId, userId, taskDone }: Chat
     );
   }
 
+  if (!sessionId) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-6">
+        <p className="text-sm text-content-tertiary text-center">Chat history is not available for this task.</p>
+      </div>
+    );
+  }
+
   return (
     <RelayRuntimeProvider sessionId={sessionId} userId={userId} taskDone={taskDone}>
       <AgentThread taskDone={taskDone} />

@@ -250,6 +250,7 @@ export type ContentBlock =
 
 export type AgentEvent =
   | { type: "assistant"; blocks: ContentBlock[] }
+  | { type: "user"; text: string }
   | { type: "result"; text?: string; cost?: number; usage?: Record<string, number | undefined> }
   | { type: "rate_limit"; resetAt: string; rateLimitType?: string; utilization?: number }
   | { type: "error"; code?: string; detail: string };

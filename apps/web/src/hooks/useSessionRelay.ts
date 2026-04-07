@@ -15,7 +15,7 @@ interface UseSessionRelayOptions {
   enabled?: boolean;
 }
 
-function parseHistoryMessages(messages: any[]): RelayEvent[] {
+export function parseHistoryMessages(messages: any[]): RelayEvent[] {
   const events: RelayEvent[] = [];
   let counter = 0;
   for (const m of messages) {
@@ -29,24 +29,49 @@ function parseHistoryMessages(messages: any[]): RelayEvent[] {
       if (blocks.length > 0) {
         events.push({ id: m.uuid || `hist-${++counter}`, event: { type: "assistant", blocks }, timestamp: new Date().toISOString() });
       }
-    } else if (m.type === "user" && Array.isArray(m.message?.content)) {
-      const blocks: ContentBlock[] = [];
-      for (const block of m.message.content) {
-        if (block.type === "tool_result") {
-          const output =
-            typeof block.content === "string"
-              ? block.content
-              : Array.isArray(block.content)
+    } else if (m.type === "user" && m.message?.content != null) {
+      // User messages from the Claude SDK come in two flavors:
+      //   - tool results (assistant attribution: blocks belong to a previous assistant turn)
+      //   - plain user input (human input: a real user message in the chat)
+      // Plain text content can be either a string or an array of `{type:"text"}` blocks.
+      const content = m.message.content;
+      const toolBlocks: ContentBlock[] = [];
+      const userTextParts: string[] = [];
+
+      if (typeof content === "string") {
+        if (content.trim()) userTextParts.push(content);
+      } else if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "tool_result") {
+            const output =
+              typeof block.content === "string"
                 ? block.content
-                    .filter((c: any) => c.type === "text")
-                    .map((c: any) => c.text)
-                    .join("\n")
-                : undefined;
-          blocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
+                : Array.isArray(block.content)
+                  ? block.content
+                      .filter((c: any) => c.type === "text")
+                      .map((c: any) => c.text)
+                      .join("\n")
+                  : undefined;
+            toolBlocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
+          } else if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+            userTextParts.push(block.text);
+          }
         }
       }
-      if (blocks.length > 0) {
-        events.push({ id: m.uuid || `hist-${++counter}`, event: { type: "assistant", blocks }, timestamp: new Date().toISOString() });
+
+      if (toolBlocks.length > 0) {
+        events.push({
+          id: m.uuid ? `${m.uuid}-tool` : `hist-${++counter}`,
+          event: { type: "assistant", blocks: toolBlocks },
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (userTextParts.length > 0) {
+        events.push({
+          id: m.uuid ? `${m.uuid}-user` : `hist-${++counter}`,
+          event: { type: "user", text: userTextParts.join("\n") },
+          timestamp: new Date().toISOString(),
+        });
       }
     }
   }

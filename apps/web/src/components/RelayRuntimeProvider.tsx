@@ -22,6 +22,16 @@ function convertEvents(events: RelayEvent[]): ThreadMessageLike[] {
   for (const re of events) {
     const { event } = re;
 
+    if (event.type === "user") {
+      messages.push({
+        id: re.id,
+        role: "user",
+        content: [{ type: "text", text: event.text }],
+        createdAt: new Date(re.timestamp),
+      });
+      continue;
+    }
+
     if (event.type === "assistant") {
       const parts: ContentPart[] = [];
 
