@@ -8,4 +8,4 @@ bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
 
 [[migrations]]
 tag = "v1"
-new_classes = ["TunnelRelay"]
+new_sqlite_classes = ["TunnelRelay"]
