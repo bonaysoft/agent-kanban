@@ -3,21 +3,25 @@ import type { AgentEvent } from "./providers/types.js";
 
 const logger = createLogger("tunnel");
 
-const RECONNECT_DELAY_MS = 3000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_DELAY_MS = 2000;
+const KEEPALIVE_INTERVAL_MS = 25_000;
 
 /**
  * Single WebSocket tunnel to the relay worker.
  * Daemon connects once on startup. All session events and history requests flow through this one connection.
+ *
+ * Reconnect policy: keep trying forever until disconnect() is called. The daemon is a long-lived
+ * process and the tunnel must always recover from transient failures (dev server restarts, network
+ * blips, idle timeouts). A keepalive ping prevents idle proxies from dropping the socket.
  */
 export class TunnelClient {
   private ws: WebSocket | null = null;
   private humanMessageHandler?: (sessionId: string, content: string) => void;
   private historyRequestHandler?: (sessionId: string, requestId: string) => void;
-  private reconnectAttempts = 0;
   private closed = false;
   private wsBaseUrl: string;
   private apiKey: string;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(apiUrl: string, apiKey: string) {
     this.wsBaseUrl = apiUrl.replace(/^https?/, (p) => (p === "https" ? "wss" : "ws"));
@@ -26,7 +30,6 @@ export class TunnelClient {
 
   async connect(): Promise<void> {
     this.closed = false;
-    this.reconnectAttempts = 0;
     await this.openSocket();
   }
 
@@ -34,40 +37,77 @@ export class TunnelClient {
     return new Promise((resolve, reject) => {
       const url = `${this.wsBaseUrl}/api/tunnel/ws?role=daemon&token=${encodeURIComponent(this.apiKey)}`;
 
+      let settled = false;
+      const settle = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve();
+      };
+
+      let ws: WebSocket;
       try {
-        this.ws = new WebSocket(url);
+        ws = new WebSocket(url);
       } catch (err) {
-        reject(new Error(`Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`));
+        settle(new Error(`Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`));
         return;
       }
+      this.ws = ws;
 
-      this.ws.addEventListener("open", () => {
-        this.reconnectAttempts = 0;
+      ws.addEventListener("open", () => {
         logger.info("Tunnel connected");
-        resolve();
+        this.startKeepalive();
+        settle();
       });
 
-      this.ws.addEventListener("message", (event) => {
+      ws.addEventListener("message", (event) => {
         this.handleMessage(String(event.data));
       });
 
-      this.ws.addEventListener("close", () => {
-        if (!this.closed && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          this.reconnectAttempts++;
-          logger.warn(`Tunnel disconnected, reconnecting (${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-          setTimeout(
-            () => this.openSocket().catch((e) => logger.warn(`Reconnect failed: ${e instanceof Error ? e.message : e}`)),
-            RECONNECT_DELAY_MS,
-          );
-        }
+      ws.addEventListener("close", () => {
+        this.stopKeepalive();
+        // Always settle the promise so callers never hang.
+        settle(new Error("Tunnel closed before open"));
+        if (this.closed) return;
+        logger.warn(`Tunnel disconnected, reconnecting in ${RECONNECT_DELAY_MS}ms...`);
+        setTimeout(() => {
+          this.openSocket().catch((e) => {
+            // Reconnect attempt couldn't even create the socket. Schedule another try
+            // — `close` will not fire when the WebSocket constructor itself throws.
+            logger.warn(`Reconnect failed: ${e instanceof Error ? e.message : e}`);
+            if (!this.closed) setTimeout(() => this.openSocket().catch(() => {}), RECONNECT_DELAY_MS);
+          });
+        }, RECONNECT_DELAY_MS);
       });
 
-      this.ws.addEventListener("error", () => {
-        if (this.reconnectAttempts === 0) {
-          reject(new Error("Tunnel connection failed"));
-        }
+      ws.addEventListener("error", () => {
+        // Don't settle here — `close` always follows and handles cleanup + reconnect.
       });
     });
+  }
+
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({ type: "ping" }));
+        } catch {
+          /* close handler will recover */
+        }
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+    // Don't keep the Node event loop alive just for the keepalive timer.
+    if (this.keepaliveTimer && typeof (this.keepaliveTimer as { unref?: () => void }).unref === "function") {
+      (this.keepaliveTimer as { unref: () => void }).unref();
+    }
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
   }
 
   private handleMessage(data: string): void {
@@ -110,6 +150,7 @@ export class TunnelClient {
 
   disconnect(): void {
     this.closed = true;
+    this.stopKeepalive();
     if (this.ws) {
       try {
         this.ws.close(1000, "daemon shutdown");

@@ -153,11 +153,13 @@ describe("TunnelClient — connect()", () => {
     await expect(p).resolves.toBeUndefined();
   });
 
-  it("rejects when WebSocket emits an error before open (first attempt)", async () => {
+  it("rejects when WebSocket closes before open (first attempt)", async () => {
     const client = new TunnelClient("https://api.example.com", "key");
     const p = client.connect();
+    // error alone is a no-op; the close handler is what settles + schedules reconnect
     lastCreatedWs!._error();
-    await expect(p).rejects.toThrow("Tunnel connection failed");
+    lastCreatedWs!._close();
+    await expect(p).rejects.toThrow("Tunnel closed before open");
   });
 
   it("isConnected returns true after successful connect", async () => {
