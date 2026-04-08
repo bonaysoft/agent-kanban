@@ -151,17 +151,24 @@ ak create agent --template <template> --name "<Name>"
 
 ## Phase 5: Monitor & Merge
 
-After assigning tasks, enter a monitoring loop until all tasks are done.
+**Block on `ak wait board` instead of writing polling loops.** It streams tasks one at a time as they reach the filter status. Exit codes: 0 condition met, 2 task cancelled, 124 timeout.
 
-### Poll task status
+### React to PRs as workers push them
 ```bash
-ak get task --label <version>
+# Stream in_review tasks one at a time, handle each, then wait for the next
+while ak wait board <board-id> --filter in_review --timeout 1h; do
+  # Latest in_review task is printed — review its PR, merge or reject
+  :
+done
+
+# Or wait until the entire board converges (0 = infinite)
+ak wait board <board-id> --until all-done --timeout 0
 ```
 
-Poll every 30-60 seconds. Track progress and report status changes to the user.
+Run `ak wait board --help` for the full flag list.
 
 ### When a task reaches `in_review` with a PR:
-1. Check CI status: `gh pr checks <pr-number> --repo <owner>/<repo>`
+1. Wait for CI green: `ak wait pr <pr-number> --timeout 10m` (exit 0 pass, 1 fail, 124 timeout)
 2. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
 3. The daemon's PR Monitor will automatically complete the task when it detects the PR was merged — do NOT manually `ak task complete`.
 4. If CI fails → check the failure, reject if needed: `ak task reject <task-id>`

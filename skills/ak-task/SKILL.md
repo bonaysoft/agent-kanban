@@ -74,16 +74,20 @@ Report to user: task ID, title, assigned agent.
 
 ### Step 5: Monitor
 
-Poll until the task reaches `in_review`:
+**Block on `ak wait` instead of writing polling loops.** Exit codes: 0 condition met, 2 task cancelled, 124 timeout.
+
 ```bash
-ak get task -o json | jq '.[] | select(.id == "<task-id>") | {status, pr_url}'
+ak wait task <task-id> --until in_review --timeout 1h
+case $? in
+  0)   ;;  # ready for review → Step 6
+  2)   echo "task cancelled — abort" ; exit 1 ;;
+  124) echo "timed out — investigate" ;;  # fall through to investigation
+esac
 ```
 
-Use `-o json` here because you need to extract fields programmatically.
+Run `ak wait task --help` for the full flag list.
 
-Poll every 30 seconds. When status becomes `in_review` and `pr_url` is set, proceed to Step 6.
-
-**If status stays `in_progress` for over 3 minutes, investigate immediately — don't just keep polling:**
+**On timeout (124) or if you suspect the agent is stuck, investigate immediately — don't just re-wait:**
 1. Check daemon logs: `ak logs --no-follow --lines 20`
 2. Check if agent process is alive: `ps aux | grep "claude.*session"`
 3. Check agent session log for what it's doing or where it's stuck
@@ -112,10 +116,10 @@ ak task reject <task-id> --reason "<all issues, specific and actionable>"
 ```
 After reject, go back to Step 5 and keep monitoring.
 
-**All good → Merge the PR, daemon auto-completes the task.**
+**All good → Wait for CI, merge the PR, daemon auto-completes the task.**
 ```bash
-gh pr checks <pr-number> --repo <owner>/<repo>
-gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
+ak wait pr <pr-number> --timeout 10m && \
+  gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
 ```
 The daemon's PR Monitor will mark the task done — do NOT manually `ak task complete`.
 
