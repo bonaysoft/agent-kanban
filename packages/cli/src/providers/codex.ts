@@ -136,7 +136,8 @@ export const codexProvider: AgentProvider = {
 
     return {
       events,
-      pid: null,
+      // In-process SDK — see claude.ts for rationale.
+      pid: process.pid,
       async abort() {
         abortController.abort();
       },

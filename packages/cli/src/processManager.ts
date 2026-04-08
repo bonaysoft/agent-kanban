@@ -201,11 +201,17 @@ export class ProcessManager {
         // Normal completion — possibly through overage retries, doesn't matter.
         // `in_review` was already written in handleEvent's result case; nothing to do here.
         logger.info(`Agent finished task ${taskId}`);
-        this.safeCleanup(agent);
         // Session already transitioned to `in_review` in the result handler if the
         // task was moved to review; otherwise it's still `active` and must be removed.
+        // CRITICAL: when status is `in_review`, we MUST NOT call safeCleanup —
+        // its onCleanup hook removes the worktree, breaking later resume on reject.
         const session = readSession(sessionId);
-        if (session?.status !== "in_review") removeSession(sessionId);
+        if (session?.status === "in_review") {
+          this.tunnel?.sendStatus(agent.sessionId, "done");
+        } else {
+          this.safeCleanup(agent);
+          removeSession(sessionId);
+        }
       } else if (agent.rateLimited) {
         // Agent exited without a result while main quota was still exhausted.
         // Keep the session around so the scheduler can resume it when the pause lifts.

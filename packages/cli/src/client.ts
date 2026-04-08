@@ -6,7 +6,7 @@ import { getCredentials } from "./config.js";
 import { loadIdentity, type StoredIdentity, saveIdentity } from "./identity.js";
 import { PID_FILE } from "./paths.js";
 import { detectRuntime, findRuntimeAncestorPid } from "./runtime.js";
-import { findSessionByPid, isPidAlive, writeSession } from "./sessionStore.js";
+import { findLeaderSession, isPidAlive, writeSession } from "./sessionStore.js";
 import type { UsageInfo } from "./types.js";
 
 export class ApiError extends Error {
@@ -332,8 +332,8 @@ export async function createClient(): Promise<ApiClient> {
     throw new Error(`Could not locate ${runtime} process in ancestry. ak must be invoked from inside a ${runtime} session.`);
   }
 
-  const existing = findSessionByPid(leaderPid);
-  if (existing?.type === "leader" && existing.runtime === runtime && isPidAlive(leaderPid)) {
+  const existing = findLeaderSession(leaderPid);
+  if (existing && existing.runtime === runtime && isPidAlive(leaderPid)) {
     const key = await crypto.subtle.importKey("jwk", existing.privateKeyJwk, { name: "Ed25519" } as any, false, ["sign"]);
     cachedLeaderClient = new AgentClient(existing.apiUrl, existing.agentId, existing.sessionId, key);
     return cachedLeaderClient;

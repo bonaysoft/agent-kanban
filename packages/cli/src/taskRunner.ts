@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BoardType } from "@agent-kanban/shared";
@@ -170,6 +170,17 @@ export class TaskRunner {
   async resumeSession(session: SessionFile, message: string): Promise<boolean> {
     const workspace = restoreWorkspace(session.workspace!);
     const taskId = session.taskId!;
+
+    // Worktree may have been wiped out from under us (e.g. by an earlier
+    // safeCleanup bug, or manual cleanup). Resuming `claude --resume` in a
+    // missing cwd crashes within ~200ms and the task gets re-dispatched as a
+    // brand-new agent with no rejection context. Bail out cleanly instead.
+    if (!existsSync(workspace.cwd)) {
+      logger.warn(`Workspace ${workspace.cwd} missing for session ${session.sessionId}, releasing task ${taskId}`);
+      removeSession(session.sessionId);
+      await this.client.releaseTask(taskId).catch(() => {});
+      return false;
+    }
 
     let task: any;
     try {

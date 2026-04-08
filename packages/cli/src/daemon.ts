@@ -12,7 +12,7 @@ import { ProcessManager } from "./processManager.js";
 import { getAvailableProviders } from "./providers/registry.js";
 import type { AgentProvider, UsageInfo } from "./providers/types.js";
 import { Scheduler } from "./scheduler.js";
-import { clearAllSessions, isPidAlive, listSessions, migrateLegacySessions, removeSession, updateSession } from "./sessionStore.js";
+import { isPidAlive, listSessions, migrateLegacySessions, removeSession, updateSession } from "./sessionStore.js";
 import { TaskRunner } from "./taskRunner.js";
 import { TunnelClient } from "./tunnelClient.js";
 import { collectUsage as collectLeaderUsage } from "./usageCollector.js";
@@ -132,7 +132,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     await pm.killAll();
     tunnel.disconnect();
     await cleanupLeaderSessions(client);
-    clearAllSessions();
+    // DO NOT clearAllSessions() here. Worker sessions in status=in_review
+    // represent tasks awaiting a review decision — their session file is the
+    // only entry point for reject-resume and must survive daemon restart.
+    // Leader sessions and active worker sessions are handled by killAll()
+    // and by cleanupStaleSessions() on next startup.
     removePidFile();
     logger.info("Daemon stopped.");
     process.exit(0);
@@ -165,7 +169,7 @@ async function cleanupLeaderSessions(client: MachineClient): Promise<void> {
   }
 }
 
-async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
+export async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
   try {
     const agents = (await client.listAgents()) as any[];
     let closedCount = 0;
@@ -174,6 +178,9 @@ async function cleanupStaleSessions(client: MachineClient, machineId: string): P
       for (const session of sessions) {
         if (session.status !== "active" || session.machine_id !== machineId) continue;
         const local = listSessions().find((s) => s.sessionId === session.id);
+        // NEVER wipe a session that's waiting on a review decision — its file
+        // is the only entry point for the reject-resume path.
+        if (local?.status === "in_review") continue;
         if (local && isPidAlive(local.pid)) continue;
         await client.closeSession(agent.id, session.id).catch(() => {});
         if (local) removeSession(local.sessionId);

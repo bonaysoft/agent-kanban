@@ -420,7 +420,7 @@ describe("claudeProvider.execute — handle shape", () => {
     expect(handle).toHaveProperty("events");
     expect(typeof handle.abort).toBe("function");
     expect(typeof handle.send).toBe("function");
-    expect(handle.pid).toBeNull();
+    expect(handle.pid).toBe(process.pid);
   });
 
   it("events is an async iterable", async () => {

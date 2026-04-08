@@ -56,9 +56,9 @@ export function readSession(sessionId: string): SessionFile | null {
   }
 }
 
-export function findSessionByPid(pid: number): SessionFile | null {
+export function findLeaderSession(pid: number): SessionFile | null {
   for (const session of listSessions()) {
-    if (session.pid === pid) return session;
+    if (session.type === "leader" && session.pid === pid) return session;
   }
   return null;
 }
