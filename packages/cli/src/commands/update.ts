@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { type ApiClient, createClient } from "../client.js";
+import { createClient } from "../agent/leader.js";
+import type { ApiClient } from "../client/index.js";
 import { getOutputFormat, output } from "../output.js";
 
 async function resolveRepoId(client: ApiClient, repoRef: string): Promise<string> {

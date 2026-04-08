@@ -1,9 +1,9 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ApiClient } from "./client.js";
-import { createLogger } from "./logger.js";
-import { TRACKED_TASKS_FILE } from "./paths.js";
+import type { ApiClient } from "../client/index.js";
+import { createLogger } from "../logger.js";
+import { TRACKED_TASKS_FILE } from "../paths.js";
 
 const logger = createLogger("pr-monitor");
 

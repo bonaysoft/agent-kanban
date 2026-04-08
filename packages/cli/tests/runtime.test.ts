@@ -17,7 +17,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 // Import after mocks are registered
-const { detectRuntime, findRuntimeAncestorPid } = await import("../src/runtime.js");
+const { detectRuntime, findRuntimeAncestorPid } = await import("../src/agent/runtime.js");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

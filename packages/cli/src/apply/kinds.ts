@@ -1,4 +1,4 @@
-import type { ApiClient } from "../client.js";
+import type { ApiClient } from "../client/index.js";
 import { type OutputFormat, output } from "../output.js";
 
 function isUrl(value: string): boolean {

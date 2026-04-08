@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { createClient } from "../client.js";
+import { createClient } from "../agent/leader.js";
 import { getOutputFormat, output } from "../output.js";
 
 function pad(label: string): string {

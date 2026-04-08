@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { Task, TaskStatus } from "@agent-kanban/shared";
 import type { Command } from "commander";
-import { createClient } from "../client.js";
+import { createClient } from "../agent/leader.js";
 
 const POLL_INTERVAL_MS = 5000;
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(["done", "cancelled"]);

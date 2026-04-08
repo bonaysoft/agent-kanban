@@ -1,13 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import type { Agent, AgentRuntime, BoardType } from "@agent-kanban/shared";
-import { SignJWT } from "jose";
-import { getCredentials } from "./config.js";
-import { loadIdentity, type StoredIdentity, saveIdentity } from "./identity.js";
-import { PID_FILE } from "./paths.js";
-import { detectRuntime, findRuntimeAncestorPid } from "./runtime.js";
-import { findLeaderSession, isPidAlive, writeSession } from "./sessionStore.js";
-import type { UsageInfo } from "./types.js";
+import type { UsageInfo } from "../types.js";
 
 export class ApiError extends Error {
   constructor(
@@ -158,7 +149,7 @@ export abstract class ApiClient {
     role?: string;
     kind?: "worker" | "leader";
     handoff_to?: string[];
-    runtime: AgentRuntime;
+    runtime: import("@agent-kanban/shared").AgentRuntime;
     model?: string;
     skills?: string[];
   }) {
@@ -166,7 +157,7 @@ export abstract class ApiClient {
   }
 
   // Boards
-  createBoard(input: { name: string; type: BoardType; description?: string }) {
+  createBoard(input: { name: string; type: import("@agent-kanban/shared").BoardType; description?: string }) {
     return this.request("POST", "/api/boards", input);
   }
   listBoards() {
@@ -219,152 +210,4 @@ export abstract class ApiClient {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
     return this.request<any[]>("GET", `/api/tasks/${taskId}/messages${qs}`);
   }
-}
-
-export class MachineClient extends ApiClient {
-  private apiKey: string;
-
-  constructor() {
-    const { apiUrl, apiKey } = getCredentials();
-    super(apiUrl);
-    this.apiKey = apiKey;
-  }
-
-  protected async authorize(): Promise<string> {
-    return `Bearer ${this.apiKey}`;
-  }
-}
-
-export class AgentClient extends ApiClient {
-  private agentId: string;
-  private sessionId: string;
-  private privateKey: CryptoKey;
-
-  constructor(baseUrl: string, agentId: string, sessionId: string, privateKey: CryptoKey) {
-    super(baseUrl);
-    this.agentId = agentId;
-    this.sessionId = sessionId;
-    this.privateKey = privateKey;
-  }
-
-  static async fromEnv(): Promise<AgentClient | null> {
-    const agentId = process.env.AK_AGENT_ID;
-    const sessionId = process.env.AK_SESSION_ID;
-    const keyJson = process.env.AK_AGENT_KEY;
-    const apiUrl = process.env.AK_API_URL;
-    if (!agentId || !sessionId || !keyJson || !apiUrl) return null;
-
-    const privateKey = await crypto.subtle.importKey("jwk", JSON.parse(keyJson), { name: "Ed25519" } as any, false, ["sign"]);
-    return new AgentClient(apiUrl, agentId, sessionId, privateKey);
-  }
-
-  protected async authorize(): Promise<string> {
-    const jwt = await new SignJWT({ sub: this.sessionId, aid: this.agentId, jti: randomUUID(), aud: this.baseUrl })
-      .setProtectedHeader({ alg: "EdDSA", typ: "agent+jwt" })
-      .setIssuedAt()
-      .setExpirationTime("60s")
-      .sign(this.privateKey);
-    return `Bearer ${jwt}`;
-  }
-
-  getAgentId(): string {
-    return this.agentId;
-  }
-  getSessionId(): string {
-    return this.sessionId;
-  }
-}
-
-// ─── Leader auto-init ───
-
-function isDaemonAlive(): boolean {
-  try {
-    const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function ensureIdentity(runtime: AgentRuntime, client: MachineClient): Promise<StoredIdentity> {
-  const existing = loadIdentity(runtime);
-  if (existing) return existing;
-
-  const agents = (await client.listAgents()) as Agent[];
-  const match = agents.find((a) => a.runtime === runtime && a.kind === "leader");
-  if (match) {
-    const identity: StoredIdentity = { agent_id: match.id, name: match.name, fingerprint: match.fingerprint };
-    saveIdentity(runtime, identity);
-    return identity;
-  }
-
-  const agent = (await client.createAgent({ name: runtime, runtime, kind: "leader" })) as Agent;
-  const identity: StoredIdentity = { agent_id: agent.id, name: agent.name, fingerprint: agent.fingerprint };
-  saveIdentity(runtime, identity);
-  return identity;
-}
-
-let cachedLeaderClient: AgentClient | null = null;
-
-/**
- * Returns AgentClient for the current identity.
- * - Daemon-spawned workers: reads AK_AGENT_* env vars
- * - Leader agents: auto-initializes from runtime detection + session file
- * - No runtime: throws (human in terminal)
- */
-export async function createClient(): Promise<ApiClient> {
-  const fromEnv = await AgentClient.fromEnv();
-  if (fromEnv) return fromEnv;
-
-  if (cachedLeaderClient) return cachedLeaderClient;
-
-  const runtime = detectRuntime() as AgentRuntime | null;
-  if (!runtime) {
-    throw new Error("This command requires agent identity. Run inside an agent runtime.");
-  }
-
-  // Anchor the leader session to the long-lived runtime process PID so it outlives
-  // the ephemeral shell that spawns `ak`. Without this, every ak invocation would
-  // create a fresh session that the daemon's heartbeat immediately reaps.
-  const leaderPid = findRuntimeAncestorPid(runtime);
-  if (leaderPid === null) {
-    throw new Error(`Could not locate ${runtime} process in ancestry. ak must be invoked from inside a ${runtime} session.`);
-  }
-
-  const existing = findLeaderSession(leaderPid);
-  if (existing && existing.runtime === runtime && isPidAlive(leaderPid)) {
-    const key = await crypto.subtle.importKey("jwk", existing.privateKeyJwk, { name: "Ed25519" } as any, false, ["sign"]);
-    cachedLeaderClient = new AgentClient(existing.apiUrl, existing.agentId, existing.sessionId, key);
-    return cachedLeaderClient;
-  }
-
-  if (!isDaemonAlive()) {
-    throw new Error("Daemon is not running. Start it with: ak start");
-  }
-
-  // First call — auto-init leader session
-  const machineClient = new MachineClient();
-  const identity = await ensureIdentity(runtime, machineClient);
-  const { publicKey, privateKey } = (await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"])) as CryptoKeyPair;
-  const pubJwk = await crypto.subtle.exportKey("jwk", publicKey);
-  const privJwk = await crypto.subtle.exportKey("jwk", privateKey);
-  if (!pubJwk.x) throw new Error("Ed25519 key export missing x component");
-  const sessionId = randomUUID();
-  const apiUrl = getCredentials().apiUrl;
-  await machineClient.createSession(identity.agent_id, sessionId, pubJwk.x);
-
-  writeSession({
-    type: "leader",
-    agentId: identity.agent_id,
-    sessionId,
-    pid: leaderPid,
-    runtime,
-    startedAt: Date.now(),
-    apiUrl,
-    privateKeyJwk: privJwk,
-  });
-
-  cachedLeaderClient = new AgentClient(apiUrl, identity.agent_id, sessionId, privateKey);
-  return cachedLeaderClient;
 }

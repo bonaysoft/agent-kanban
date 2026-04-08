@@ -43,16 +43,16 @@ vi.mock("../src/paths.js", async () => {
 
 // ── Import after mocks ────────────────────────────────────────────────────────
 // We import sessionStore directly to seed and inspect data.
-const { writeSession, listSessions, readSession, clearAllSessions } = await import("../src/sessionStore.js");
+const { writeSession, readSession, clearAllSessions } = await import("../src/session/store.js");
 
 // cleanupStaleSessions is not yet exported — import will return undefined.
 // The test asserts behavior through removeSession side-effects via readSession.
-const daemonModule = await import("../src/daemon.js").catch(() => null);
+const daemonModule = await import("../src/daemon/cleanup.js").catch(() => null);
 const cleanupStaleSessions = (daemonModule as any)?.cleanupStaleSessions as ((client: any, machineId: string) => Promise<void>) | undefined;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeWorkerSession(overrides: Partial<import("../src/sessionStore.js").SessionFile> = {}): import("../src/sessionStore.js").SessionFile {
+function makeWorkerSession(overrides: Partial<import("../src/session/store.js").SessionFile> = {}): import("../src/session/store.js").SessionFile {
   return {
     type: "worker",
     agentId: randomUUID(),

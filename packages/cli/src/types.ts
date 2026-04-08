@@ -10,3 +10,5 @@ export interface UsageInfo {
   seven_day_opus?: UsageWindow;
   updated_at: string;
 }
+
+export type WorkspaceInfo = { type: "repo"; cwd: string; repoDir: string; branchName: string } | { type: "temp"; cwd: string };

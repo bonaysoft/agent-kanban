@@ -18,7 +18,7 @@ vi.mock("../src/logger.js", () => ({
 }));
 
 // ── sessionStore mock ─────────────────────────────────────────────────────────
-vi.mock("../src/sessionStore.js", () => ({
+vi.mock("../src/session/store.js", () => ({
   listSessions: vi.fn().mockReturnValue([]),
   isPidAlive: vi.fn().mockReturnValue(false),
   removeSession: vi.fn(),
@@ -26,19 +26,19 @@ vi.mock("../src/sessionStore.js", () => ({
 }));
 
 // ── workspace mock ────────────────────────────────────────────────────────────
-vi.mock("../src/workspace.js", () => ({
+vi.mock("../src/workspace/workspace.js", () => ({
   cleanupWorkspace: vi.fn(),
 }));
 
 // ── repoOps mock ──────────────────────────────────────────────────────────────
-vi.mock("../src/repoOps.js", () => ({
+vi.mock("../src/workspace/repoOps.js", () => ({
   ensureCloned: vi.fn(),
   prepareRepo: vi.fn().mockReturnValue(true),
   repoDir: vi.fn().mockReturnValue(null),
 }));
 
 // ── skillManager mock ─────────────────────────────────────────────────────────
-vi.mock("../src/skillManager.js", () => ({
+vi.mock("../src/workspace/skills.js", () => ({
   ensureLefthookTask: vi.fn().mockResolvedValue(false),
 }));
 
@@ -49,9 +49,9 @@ vi.mock("@agent-kanban/shared", () => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { ApiError } from "../src/client.js";
-import { Scheduler } from "../src/scheduler.js";
-import { isPidAlive, listSessions, removeSession } from "../src/sessionStore.js";
+import { ApiError } from "../src/client/index.js";
+import { Scheduler } from "../src/daemon/scheduler.js";
+import { isPidAlive, listSessions, removeSession } from "../src/session/store.js";
 
 const mockListSessions = vi.mocked(listSessions);
 const mockIsPidAlive = vi.mocked(isPidAlive);

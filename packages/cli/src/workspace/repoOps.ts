@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createLogger } from "./logger.js";
-import { REPOS_DIR, WORKTREES_DIR } from "./paths.js";
+import { createLogger } from "../logger.js";
+import { REPOS_DIR, WORKTREES_DIR } from "../paths.js";
 
 const logger = createLogger("repo");
 

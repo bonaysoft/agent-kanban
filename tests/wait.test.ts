@@ -109,7 +109,7 @@ describe("waitForTasks", () => {
   });
 
   it("returns 0 immediately when task is already at target status", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => makeTask({ id: _id, status: "done" }),
       }),
@@ -122,7 +122,7 @@ describe("waitForTasks", () => {
 
   it("returns 0 when task transitions from todo to done across polls", async () => {
     let callCount = 0;
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => {
           callCount++;
@@ -141,7 +141,7 @@ describe("waitForTasks", () => {
   }, 30_000);
 
   it("returns 2 when a task is cancelled while waiting for done", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => makeTask({ id: _id, status: "cancelled" }),
       }),
@@ -153,7 +153,7 @@ describe("waitForTasks", () => {
   });
 
   it("returns 0 when waiting for cancelled and task is already cancelled", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => makeTask({ id: _id, status: "cancelled" }),
       }),
@@ -165,7 +165,7 @@ describe("waitForTasks", () => {
   });
 
   it("returns 124 on timeout when task never reaches target", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         // Always returns in_progress, never done
         getTask: async (_id: string) => makeTask({ id: _id, status: "in_progress" }),
@@ -179,7 +179,7 @@ describe("waitForTasks", () => {
   });
 
   it("returns 0 when all multiple tasks reach target", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => makeTask({ id: _id, status: "done" }),
       }),
@@ -191,7 +191,7 @@ describe("waitForTasks", () => {
   });
 
   it("returns 2 when one of many tasks is cancelled while waiting for done", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         getTask: async (_id: string) => {
           if (_id === "task-2") return makeTask({ id: _id, status: "cancelled" });
@@ -220,7 +220,7 @@ describe("waitForBoard", () => {
   });
 
   it("returns 0 when all tasks are done (--until all-done)", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "done" }), makeTask({ id: "t2", status: "cancelled" })],
       }),
@@ -238,7 +238,7 @@ describe("waitForBoard", () => {
   });
 
   it("returns 124 on timeout when tasks are never all done", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "in_progress" })],
       }),
@@ -257,7 +257,7 @@ describe("waitForBoard", () => {
 
   it("returns 0 on first task entering in_review with --filter in_review (transition, not initial)", async () => {
     let callCount = 0;
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => {
           callCount++;
@@ -284,7 +284,7 @@ describe("waitForBoard", () => {
   }, 30_000);
 
   it("does NOT exit on initial snapshot with in_review task when includeCurrent is false", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         // Always returns in_review — never a *transition* into it
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "in_review" })],
@@ -304,7 +304,7 @@ describe("waitForBoard", () => {
   });
 
   it("exits 0 on initial snapshot with in_review task when includeCurrent is true", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "in_review" })],
       }),
@@ -322,7 +322,7 @@ describe("waitForBoard", () => {
   });
 
   it("returns 0 on --until in_review when first snapshot already has in_review task", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "in_review" }), makeTask({ id: "t2", status: "todo" })],
       }),
@@ -341,7 +341,7 @@ describe("waitForBoard", () => {
   });
 
   it("returns 0 with --until all-done when only done tasks present", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "done" }), makeTask({ id: "t2", status: "done" })],
       }),
@@ -359,7 +359,7 @@ describe("waitForBoard", () => {
   });
 
   it("does not satisfy all-done predicate when task list is empty", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [],
       }),
@@ -378,7 +378,7 @@ describe("waitForBoard", () => {
   });
 
   it("returns 0 with --until all-in_progress once all tasks are in_progress", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [makeTask({ id: "t1", status: "in_progress" }), makeTask({ id: "t2", status: "in_progress" })],
       }),
@@ -397,7 +397,7 @@ describe("waitForBoard", () => {
 
   it("passes label and board_id params through to listTasks", async () => {
     let capturedParams: any;
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (params: any) => {
           capturedParams = params;
@@ -419,7 +419,7 @@ describe("waitForBoard", () => {
   });
 
   it("throws on invalid all-<status> predicate value", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [],
       }),
@@ -438,7 +438,7 @@ describe("waitForBoard", () => {
   });
 
   it("throws on completely unrecognised predicate string", async () => {
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => [],
       }),
@@ -458,7 +458,7 @@ describe("waitForBoard", () => {
 
   it("returns 0 with first-match mode when a filtered transition occurs", async () => {
     let callCount = 0;
-    vi.doMock("../packages/cli/src/client.js", () => ({
+    vi.doMock("../packages/cli/src/agent/leader.js", () => ({
       createClient: async () => ({
         listTasks: async (_params: any) => {
           callCount++;

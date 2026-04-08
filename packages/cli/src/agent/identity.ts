@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { IDENTITIES_DIR } from "./paths.js";
+import { IDENTITIES_DIR } from "../paths.js";
 
 export interface StoredIdentity {
   agent_id: string;

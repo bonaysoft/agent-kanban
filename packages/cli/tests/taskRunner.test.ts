@@ -22,7 +22,7 @@ vi.mock("../src/logger.js", () => ({
 }));
 
 // ── sessionStore mock ─────────────────────────────────────────────────────────
-vi.mock("../src/sessionStore.js", () => ({
+vi.mock("../src/session/store.js", () => ({
   removeSession: vi.fn(),
   writeSession: vi.fn(),
   updateSession: vi.fn(),
@@ -44,14 +44,14 @@ vi.mock("../src/providers/registry.js", () => ({
 }));
 
 // ── systemPrompt mock ─────────────────────────────────────────────────────────
-vi.mock("../src/systemPrompt.js", () => ({
+vi.mock("../src/agent/systemPrompt.js", () => ({
   generateSystemPrompt: vi.fn().mockResolvedValue("system prompt"),
   writePromptFile: vi.fn().mockReturnValue("/tmp/prompt.txt"),
   cleanupPromptFile: vi.fn(),
 }));
 
 // ── skillManager mock ─────────────────────────────────────────────────────────
-vi.mock("../src/skillManager.js", () => ({
+vi.mock("../src/workspace/skills.js", () => ({
   ensureSkills: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -60,8 +60,8 @@ const mockSpawnAgent = vi.fn().mockResolvedValue(undefined);
 const mockProcessManager = { spawnAgent: mockSpawnAgent } as any;
 
 // ── AgentClient mock ──────────────────────────────────────────────────────────
-vi.mock("../src/client.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/client.js")>("../src/client.js");
+vi.mock("../src/client/index.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/client/index.js")>("../src/client/index.js");
   return {
     ...actual,
     AgentClient: vi.fn().mockImplementation(() => ({
@@ -73,10 +73,10 @@ vi.mock("../src/client.js", async () => {
   };
 });
 
-import type { MachineClient } from "../src/client.js";
-import type { SessionFile } from "../src/sessionStore.js";
-import { removeSession } from "../src/sessionStore.js";
-import { TaskRunner } from "../src/taskRunner.js";
+import type { MachineClient } from "../src/client/index.js";
+import { TaskRunner } from "../src/daemon/taskRunner.js";
+import type { SessionFile } from "../src/session/store.js";
+import { removeSession } from "../src/session/store.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

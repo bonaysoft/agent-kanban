@@ -1,14 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLogger } from "./logger.js";
+import { createLogger } from "../logger.js";
+import type { WorkspaceInfo } from "../types.js";
 import { createWorktree, removeWorktree } from "./repoOps.js";
 
 const logger = createLogger("workspace");
 
-// ---- Persisted info (stored in SavedSession) ----
-
-export type WorkspaceInfo = { type: "repo"; cwd: string; repoDir: string; branchName: string } | { type: "temp"; cwd: string };
+export type { WorkspaceInfo };
 
 // ---- Runtime object ----
 

@@ -1,5 +1,7 @@
 import { Command } from "commander";
-import { createClient } from "./client.js";
+import { loadIdentity } from "./agent/identity.js";
+import { createClient } from "./agent/leader.js";
+import { detectRuntime } from "./agent/runtime.js";
 import { registerApplyCommand } from "./commands/apply.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
@@ -9,9 +11,7 @@ import { registerLogsCommand, registerStartCommand, registerStatusCommand, regis
 import { registerUpdateCommand } from "./commands/update.js";
 import { registerWaitCommand } from "./commands/wait.js";
 import { getCredentials, readConfig, saveCredentials } from "./config.js";
-import { loadIdentity } from "./identity.js";
 import { getOutputFormat, output } from "./output.js";
-import { detectRuntime } from "./runtime.js";
 import { getVersion } from "./version.js";
 
 const program = new Command();
@@ -232,7 +232,7 @@ program
   .option("--poll-interval <ms>", "", "10000")
   .option("--task-timeout <ms>", "", "7200000")
   .action(async (opts) => {
-    const { startDaemon } = await import("./daemon.js");
+    const { startDaemon } = await import("./daemon/index.js");
     await startDaemon({
       maxConcurrent: parseInt(opts.maxConcurrent, 10),
       pollInterval: parseInt(opts.pollInterval, 10),

@@ -20,22 +20,22 @@ vi.mock("../src/logger.js", () => ({
 }));
 
 // ── sessionStore mock ─────────────────────────────────────────────────────────
-vi.mock("../src/sessionStore.js", () => ({
+vi.mock("../src/session/store.js", () => ({
   removeSession: vi.fn(),
   updateSession: vi.fn(),
   readSession: vi.fn().mockReturnValue(null),
 }));
 
 // ── systemPrompt mock ─────────────────────────────────────────────────────────
-vi.mock("../src/systemPrompt.js", () => ({
+vi.mock("../src/agent/systemPrompt.js", () => ({
   cleanupPromptFile: vi.fn(),
 }));
 
-import type { AgentClient, ApiClient } from "../src/client.js";
-import { ProcessManager, type SpawnRequest } from "../src/processManager.js";
+import type { AgentClient, ApiClient } from "../src/client/index.js";
+import { ProcessManager, type SpawnRequest } from "../src/daemon/processManager.js";
+import type { TunnelClient } from "../src/daemon/tunnel.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "../src/providers/types.js";
-import { readSession, removeSession } from "../src/sessionStore.js";
-import type { TunnelClient } from "../src/tunnelClient.js";
+import { readSession, removeSession } from "../src/session/store.js";
 
 // ── Minimal fakes ─────────────────────────────────────────────────────────────
 

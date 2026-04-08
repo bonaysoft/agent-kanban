@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
 import { DAEMON_STATE_FILE, IDENTITIES_DIR, LOGS_DIR, PID_FILE, SESSIONS_DIR, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
-import { isPidAlive, listSessions } from "../sessionStore.js";
+import { isPidAlive, listSessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 
 const MAX_LOG_ARCHIVES = 5;

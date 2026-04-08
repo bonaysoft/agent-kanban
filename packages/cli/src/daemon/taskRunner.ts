@@ -4,15 +4,17 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BoardType } from "@agent-kanban/shared";
-import { AgentClient, ApiError, type MachineClient } from "./client.js";
-import { getCredentials } from "./config.js";
-import { createLogger } from "./logger.js";
+import { type AgentInfo, generateSystemPrompt, writePromptFile } from "../agent/systemPrompt.js";
+import { AgentClient, ApiError, type MachineClient } from "../client/index.js";
+import { getCredentials } from "../config.js";
+import { createLogger } from "../logger.js";
+import { getProvider, normalizeRuntime } from "../providers/registry.js";
+import { removeSession, updateSession, writeSession } from "../session/store.js";
+import type { SessionFile } from "../session/types.js";
+import { ensureSkills } from "../workspace/skills.js";
+import type { Workspace } from "../workspace/workspace.js";
+import { createRepoWorkspace, createTempWorkspace, restoreWorkspace } from "../workspace/workspace.js";
 import type { ProcessManager } from "./processManager.js";
-import { getProvider, normalizeRuntime } from "./providers/registry.js";
-import { removeSession, type SessionFile, updateSession, writeSession } from "./sessionStore.js";
-import { ensureSkills } from "./skillManager.js";
-import { type AgentInfo, generateSystemPrompt, writePromptFile } from "./systemPrompt.js";
-import { createRepoWorkspace, createTempWorkspace, restoreWorkspace, type Workspace } from "./workspace.js";
 
 const logger = createLogger("runner");
 

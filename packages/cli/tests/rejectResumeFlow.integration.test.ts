@@ -61,20 +61,20 @@ vi.mock("../src/config.js", () => ({
 }));
 
 // ── systemPrompt: avoid real filesystem writes ────────────────────────────────
-vi.mock("../src/systemPrompt.js", () => ({
+vi.mock("../src/agent/systemPrompt.js", () => ({
   generateSystemPrompt: vi.fn().mockReturnValue("system prompt"),
   writePromptFile: vi.fn().mockReturnValue(null),
   cleanupPromptFile: vi.fn(),
 }));
 
 // ── skillManager: no real skill installs ─────────────────────────────────────
-vi.mock("../src/skillManager.js", () => ({
+vi.mock("../src/workspace/skills.js", () => ({
   ensureSkills: vi.fn().mockReturnValue(true),
 }));
 
 // ── AgentClient: stub so no real HTTP calls are made ─────────────────────────
-vi.mock("../src/client.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/client.js")>("../src/client.js");
+vi.mock("../src/client/index.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/client/index.js")>("../src/client/index.js");
   return {
     ...actual,
     AgentClient: vi.fn().mockImplementation((_url: string, agentId: string, sessionId: string) => ({
@@ -101,13 +101,13 @@ vi.mock("../src/providers/registry.js", () => ({
 
 // ── Now import real modules (after mocks are registered) ─────────────────────
 
-import type { MachineClient } from "../src/client.js";
-import { cleanupStaleSessions } from "../src/daemon.js";
-import { ProcessManager } from "../src/processManager.js";
+import type { MachineClient } from "../src/client/index.js";
+import { cleanupStaleSessions } from "../src/daemon/cleanup.js";
+import { ProcessManager } from "../src/daemon/processManager.js";
+import { TaskRunner } from "../src/daemon/taskRunner.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts } from "../src/providers/types.js";
-import type { SessionFile } from "../src/sessionStore.js";
-import { clearAllSessions, listSessions, readSession, removeSession, writeSession } from "../src/sessionStore.js";
-import { TaskRunner } from "../src/taskRunner.js";
+import type { SessionFile } from "../src/session/store.js";
+import { clearAllSessions, listSessions, readSession, writeSession } from "../src/session/store.js";
 
 // ── FakeProvider ──────────────────────────────────────────────────────────────
 

@@ -27,7 +27,7 @@ vi.mock("fs", () => ({
 }));
 
 import { execSync } from "node:child_process";
-import { PrMonitor } from "../packages/cli/src/prMonitor.js";
+import { PrMonitor } from "../packages/cli/src/daemon/prMonitor.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

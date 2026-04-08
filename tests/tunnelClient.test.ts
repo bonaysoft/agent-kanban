@@ -96,7 +96,7 @@ function latestSocket(): FakeWebSocket {
 // Import after the mock is in place so the module picks up FakeWebSocket.
 vi.stubGlobal("WebSocket", FakeWebSocket);
 
-import { TunnelClient } from "../packages/cli/src/tunnelClient.js";
+import { TunnelClient } from "../packages/cli/src/daemon/tunnel.js";
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
 

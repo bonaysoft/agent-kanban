@@ -170,7 +170,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   }
 
   it("dispatches a task with null scheduled_at immediately", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-null-sched", scheduled_at: null });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
 
@@ -188,7 +188,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a task whose scheduled_at is in the future", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // +1 hour
     const task = makeTask({ id: "task-future", scheduled_at: futureDate });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
@@ -206,7 +206,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("dispatches a task whose scheduled_at is in the past", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const pastDate = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // -1 hour
     const task = makeTask({ id: "task-past", scheduled_at: pastDate });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
@@ -224,7 +224,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("dispatches a task whose scheduled_at equals now (boundary: not filtered)", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     // Use a timestamp that is guaranteed to be <= now when the filter runs
     const justNow = new Date(Date.now() - 1).toISOString();
     const task = makeTask({ id: "task-boundary", scheduled_at: justNow });
@@ -243,7 +243,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a future-scheduled task while dispatching a past-scheduled task in the same list", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const pastDate = new Date(Date.now() - 1000).toISOString();
     const futureDate = new Date(Date.now() + 3_600_000).toISOString();
     const tasks = [makeTask({ id: "task-ready", scheduled_at: pastDate }), makeTask({ id: "task-deferred", scheduled_at: futureDate })];
@@ -263,7 +263,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a task whose repository is not locally cloned", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-uncloned-repo", board_type: "dev", repository_id: "repo-1" });
     const dispatched: string[] = [];
     const client = {
@@ -304,7 +304,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a dev-board task that has no repository_id", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-dev-no-repo", board_type: "dev", repository_id: null });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
 
@@ -321,7 +321,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a blocked task even with no scheduled_at", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-blocked", blocked: true });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
 
@@ -338,7 +338,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch a task with no assigned_to", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-unassigned", assigned_to: null });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
 
@@ -355,7 +355,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("skips task when board_type is invalid", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-bad-board", board_type: "unknown_type" });
     const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
 
@@ -372,8 +372,8 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("backs off with rate-limit delay when client.listTasks throws ApiError 429", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
-    const { ApiError } = await import("../packages/cli/src/client");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { ApiError } = await import("../packages/cli/src/client/index");
     let callCount = 0;
     const client = {
       listTasks: async () => {
@@ -408,7 +408,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("backs off when client.listTasks throws a generic error", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     let callCount = 0;
     const client = {
       listTasks: async () => {
@@ -444,7 +444,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("does not dispatch when all available tasks have a paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const task = makeTask({ id: "task-paused-runtime", assigned_to: "agent-paused" });
     const dispatched: string[] = [];
     const client = {
@@ -487,7 +487,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("isRuntimePaused returns false when no runtimes are paused", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
       maxConcurrent: 5,
@@ -498,7 +498,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("pauseForRateLimit marks runtime as paused", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
       maxConcurrent: 5,
@@ -513,7 +513,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("resumeRateLimit unpauses a paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
       maxConcurrent: 5,
@@ -534,7 +534,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("onSlotFreed schedules another poll", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const dispatched: string[] = [];
     const task = makeTask({ id: "task-slot", scheduled_at: null });
     const { client, pm, runner, prMonitor } = makeStubs([task]);
@@ -559,7 +559,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("resumeRateLimit is a no-op on a non-paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
       maxConcurrent: 5,
@@ -575,7 +575,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("tick does not resume rate_limited sessions for unpaused runtimes (no automatic promotion)", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const resumed: string[] = [];
     const { client, pm, prMonitor } = makeStubs([]);
     const runner = {
@@ -600,7 +600,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
   });
 
   it("pauseForRateLimit ignores a newer pause that is earlier than the existing one", async () => {
-    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
       maxConcurrent: 5,

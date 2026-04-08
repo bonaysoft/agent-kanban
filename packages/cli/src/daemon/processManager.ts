@@ -1,9 +1,9 @@
-import type { AgentClient, ApiClient } from "./client.js";
-import { createLogger } from "./logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider } from "./providers/types.js";
-import { readSession, removeSession, updateSession } from "./sessionStore.js";
-import { cleanupPromptFile } from "./systemPrompt.js";
-import type { TunnelClient } from "./tunnelClient.js";
+import { cleanupPromptFile } from "../agent/systemPrompt.js";
+import type { AgentClient, ApiClient } from "../client/index.js";
+import { createLogger } from "../logger.js";
+import type { AgentEvent, AgentHandle, AgentProvider } from "../providers/types.js";
+import { readSession, removeSession, updateSession } from "../session/store.js";
+import type { TunnelClient } from "./tunnel.js";
 
 const logger = createLogger("process");
 

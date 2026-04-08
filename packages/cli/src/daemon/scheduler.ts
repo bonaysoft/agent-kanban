@@ -1,14 +1,14 @@
 import { isBoardType } from "@agent-kanban/shared";
-import { ApiError, type MachineClient } from "./client.js";
-import { createLogger } from "./logger.js";
+import { ApiError, type MachineClient } from "../client/index.js";
+import { createLogger } from "../logger.js";
+import { normalizeRuntime } from "../providers/registry.js";
+import { isPidAlive, listSessions, removeSession } from "../session/store.js";
+import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
+import { ensureLefthookTask } from "../workspace/skills.js";
+import { cleanupWorkspace } from "../workspace/workspace.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { ProcessManager } from "./processManager.js";
-import { normalizeRuntime } from "./providers/registry.js";
-import { ensureCloned, prepareRepo, repoDir } from "./repoOps.js";
-import { isPidAlive, listSessions, removeSession } from "./sessionStore.js";
-import { ensureLefthookTask } from "./skillManager.js";
 import type { TaskRunner } from "./taskRunner.js";
-import { cleanupWorkspace } from "./workspace.js";
 
 const logger = createLogger("scheduler");
 

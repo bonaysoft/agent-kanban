@@ -31,11 +31,11 @@ const {
   isPidAlive,
   clearAllSessions,
   migrateLegacySessions,
-} = await import("../src/sessionStore.js");
+} = await import("../src/session/store.js");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeSession(overrides: Partial<import("../src/sessionStore.js").SessionFile> = {}): import("../src/sessionStore.js").SessionFile {
+function makeSession(overrides: Partial<import("../src/session/store.js").SessionFile> = {}): import("../src/session/store.js").SessionFile {
   return {
     type: "worker",
     agentId: randomUUID(),

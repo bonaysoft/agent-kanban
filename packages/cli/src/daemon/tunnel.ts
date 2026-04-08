@@ -1,5 +1,5 @@
-import { createLogger } from "./logger.js";
-import type { AgentEvent } from "./providers/types.js";
+import { createLogger } from "../logger.js";
+import type { AgentEvent } from "../providers/types.js";
 
 const logger = createLogger("tunnel");
 

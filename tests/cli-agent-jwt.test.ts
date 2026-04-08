@@ -212,7 +212,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
       return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
     });
 
-    const { createClient } = await import("../packages/cli/src/client.js");
+    const { createClient } = await import("../packages/cli/src/agent/leader.js");
     const client = await createClient();
 
     const claimed = (await client.claimTask(taskId)) as any;
@@ -238,7 +238,7 @@ describe("CLI ApiClient agent JWT passthrough", () => {
       return honoRequest(init?.method || "GET", path, init?.body ? JSON.parse(init.body as string) : undefined, capturedToken!);
     });
 
-    const { createClient } = await import("../packages/cli/src/client.js");
+    const { createClient } = await import("../packages/cli/src/agent/leader.js");
     const client = await createClient();
 
     const reviewed = (await client.reviewTask(taskId, { pr_url: "https://github.com/test/pull/1" })) as any;

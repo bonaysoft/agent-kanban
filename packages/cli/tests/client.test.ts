@@ -31,9 +31,9 @@ const mockReadFileSync = vi.fn((path: unknown, ...args: unknown[]) => {
 
 function registerMocks() {
   vi.mock("../src/config.js", () => ({ getCredentials: mockGetCredentials }));
-  vi.mock("../src/identity.js", () => ({ loadIdentity: mockLoadIdentity, saveIdentity: mockSaveIdentity }));
-  vi.mock("../src/runtime.js", () => ({ detectRuntime: mockDetectRuntime, findRuntimeAncestorPid: mockFindRuntimeAncestorPid }));
-  vi.mock("../src/sessionStore.js", () => ({
+  vi.mock("../src/agent/identity.js", () => ({ loadIdentity: mockLoadIdentity, saveIdentity: mockSaveIdentity }));
+  vi.mock("../src/agent/runtime.js", () => ({ detectRuntime: mockDetectRuntime, findRuntimeAncestorPid: mockFindRuntimeAncestorPid }));
+  vi.mock("../src/session/store.js", () => ({
     readSession: mockReadSession,
     findLeaderSession: mockFindLeaderSession,
     isPidAlive: mockIsPidAlive,
@@ -54,11 +54,12 @@ async function makePrivKeyJwk(): Promise<JsonWebKey> {
   return crypto.subtle.exportKey("jwk", privateKey);
 }
 
-/** Import a fresh copy of client.ts (resetting module-level cache). */
+/** Import fresh copies of leader + client (resetting module-level cache). */
 async function freshClient() {
   await vi.resetModules();
   registerMocks();
-  return import("../src/client.js");
+  const [leader, client] = await Promise.all([import("../src/agent/leader.js"), import("../src/client/index.js")]);
+  return { ...client, ...leader };
 }
 
 // ── Global env cleanup ───────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ afterEach(() => {
 
 describe("AgentClient.fromEnv", () => {
   it("returns null when AK_AGENT_ID is missing", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     process.env.AK_SESSION_ID = randomUUID();
     process.env.AK_AGENT_KEY = "{}";
     process.env.AK_API_URL = "https://example.com";
@@ -105,7 +106,7 @@ describe("AgentClient.fromEnv", () => {
   });
 
   it("returns null when AK_SESSION_ID is missing", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     process.env.AK_AGENT_ID = randomUUID();
     process.env.AK_AGENT_KEY = "{}";
     process.env.AK_API_URL = "https://example.com";
@@ -113,7 +114,7 @@ describe("AgentClient.fromEnv", () => {
   });
 
   it("returns null when AK_AGENT_KEY is missing", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     process.env.AK_AGENT_ID = randomUUID();
     process.env.AK_SESSION_ID = randomUUID();
     process.env.AK_API_URL = "https://example.com";
@@ -121,7 +122,7 @@ describe("AgentClient.fromEnv", () => {
   });
 
   it("returns null when AK_API_URL is missing", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     process.env.AK_AGENT_ID = randomUUID();
     process.env.AK_SESSION_ID = randomUUID();
     process.env.AK_AGENT_KEY = "{}";
@@ -129,12 +130,12 @@ describe("AgentClient.fromEnv", () => {
   });
 
   it("returns null when no AK_* env vars are present", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     expect(await AgentClient.fromEnv()).toBeNull();
   });
 
   it("returns an AgentClient instance when all four env vars are present with a valid key", async () => {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     const privJwk = await makePrivKeyJwk();
     process.env.AK_AGENT_ID = randomUUID();
     process.env.AK_SESSION_ID = randomUUID();
@@ -170,7 +171,7 @@ describe("createClient — daemon-spawned worker (AK_* env vars)", () => {
     process.env.AK_AGENT_KEY = JSON.stringify(privJwk);
     process.env.AK_API_URL = "https://api.example.com";
 
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
     expect(client.getAgentId()).toBe(agentId);
   });
@@ -184,7 +185,7 @@ describe("createClient — daemon-spawned worker (AK_* env vars)", () => {
     process.env.AK_AGENT_KEY = JSON.stringify(privJwk);
     process.env.AK_API_URL = "https://api.example.com";
 
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
     expect(client.getSessionId()).toBe(sessionId);
   });
@@ -387,7 +388,7 @@ describe("createClient — daemon not running", () => {
 
 describe("AgentClient — authorize and messaging methods", () => {
   async function makeAgentClient() {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     const { privateKey } = (await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"])) as CryptoKeyPair;
     return new AgentClient("https://api.example.com", randomUUID(), randomUUID(), privateKey);
   }
@@ -612,7 +613,7 @@ describe("createClient — full leader auto-init", () => {
 
 describe("ApiClient method stubs", () => {
   async function makeAgentClient() {
-    const { AgentClient } = await import("../src/client.js");
+    const { AgentClient } = await import("../src/client/index.js");
     const { privateKey } = (await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"])) as CryptoKeyPair;
     return new AgentClient("https://api.example.com", randomUUID(), randomUUID(), privateKey);
   }
@@ -967,7 +968,7 @@ describe("ApiClient method stubs", () => {
   });
 
   it("throws ApiError when response status is not ok", async () => {
-    const { ApiError } = await import("../src/client.js");
+    const { ApiError } = await import("../src/client/index.js");
     const c = await makeAgentClient();
     vi.stubGlobal(
       "fetch",
@@ -982,7 +983,7 @@ describe("ApiClient method stubs", () => {
   });
 
   it("ApiError carries the HTTP status code", async () => {
-    const { ApiError } = await import("../src/client.js");
+    const { ApiError } = await import("../src/client/index.js");
     const c = await makeAgentClient();
     vi.stubGlobal(
       "fetch",

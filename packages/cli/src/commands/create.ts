@@ -1,6 +1,7 @@
 import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
-import { type ApiClient, createClient } from "../client.js";
+import { createClient } from "../agent/leader.js";
+import type { ApiClient } from "../client/index.js";
 import { getOutputFormat, output } from "../output.js";
 import { getAvailableProviders } from "../providers/registry.js";
 

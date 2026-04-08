@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MachineClient } from "./client.js";
-import { createLogger } from "./logger.js";
+import type { MachineClient } from "../client/index.js";
+import { createLogger } from "../logger.js";
 
 const logger = createLogger("skills");
 

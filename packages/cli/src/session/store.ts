@@ -2,35 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentRuntime } from "@agent-kanban/shared";
-import { LEGACY_SAVED_SESSIONS_FILE, LEGACY_SESSION_PIDS_FILE, SESSIONS_DIR } from "./paths.js";
-import type { WorkspaceInfo } from "./workspace.js";
+import { LEGACY_SAVED_SESSIONS_FILE, LEGACY_SESSION_PIDS_FILE, SESSIONS_DIR } from "../paths.js";
+import type { SessionFile, SessionFilter } from "./types.js";
 
-export type SessionStatus = "active" | "rate_limited" | "in_review";
-
-export interface SessionFile {
-  type: "worker" | "leader";
-  agentId: string;
-  sessionId: string;
-  pid: number;
-  runtime: AgentRuntime;
-  startedAt: number;
-  apiUrl: string;
-  privateKeyJwk: JsonWebKey;
-  // worker fields
-  taskId?: string;
-  workspace?: WorkspaceInfo;
-  status?: SessionStatus;
-  model?: string;
-  gpgSubkeyId?: string | null;
-  agentUsername?: string;
-  agentName?: string;
-}
-
-interface SessionFilter {
-  type?: "worker" | "leader";
-  status?: SessionStatus;
-}
+export type { SessionFile, SessionFilter, SessionStatus } from "./types.js";
 
 function sessionPath(sessionId: string): string {
   return join(SESSIONS_DIR, `${sessionId}.json`);

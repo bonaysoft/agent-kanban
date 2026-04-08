@@ -86,7 +86,7 @@ class MockWebSocket implements MockWsInstance {
 // Inject mock into global before imports
 (globalThis as any).WebSocket = MockWebSocket;
 
-import { TunnelClient } from "../src/tunnelClient.js";
+import { TunnelClient } from "../src/daemon/tunnel.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import type { Command } from "commander";
+import { createClient } from "../agent/leader.js";
 import { applyResource } from "../apply/kinds.js";
 import { parseResourceDocs } from "../apply/parser.js";
-import { createClient } from "../client.js";
 import { getOutputFormat } from "../output.js";
 
 export function registerApplyCommand(program: Command) {
