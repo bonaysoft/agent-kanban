@@ -85,6 +85,8 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
   const wsRef = useRef<WebSocket | null>(null);
   const idCounter = useRef(0);
   const historyLoaded = useRef(false);
+  const historyRetryTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const historyRetries = useRef(0);
 
   useEffect(() => {
     if (!enabled || !sessionId) return;
@@ -93,6 +95,21 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
 
     let closed = false;
     historyLoaded.current = false;
+    historyRetries.current = 0;
+
+    function requestHistory(ws: WebSocket) {
+      if (historyLoaded.current || closed) return;
+      ws.send(JSON.stringify({ type: "request:history" }));
+
+      clearTimeout(historyRetryTimer.current);
+      historyRetryTimer.current = setTimeout(() => {
+        if (historyLoaded.current || closed) return;
+        historyRetries.current++;
+        if (historyRetries.current <= 2 && ws.readyState === WebSocket.OPEN) {
+          requestHistory(ws);
+        }
+      }, 5000);
+    }
 
     const wsUrl = `${location.origin.replace(/^http/, "ws")}/api/tunnel/ws?role=browser&sessionId=${sessionId}&token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(wsUrl);
@@ -101,8 +118,7 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
     ws.onopen = () => {
       if (closed) return;
       setWsConnected(true);
-      // Request history through the same WS
-      ws.send(JSON.stringify({ type: "request:history" }));
+      requestHistory(ws);
     };
 
     ws.onmessage = (rawEvent) => {
@@ -116,15 +132,15 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
 
       switch (msg.type) {
         case "session:history": {
+          historyLoaded.current = true;
+          clearTimeout(historyRetryTimer.current);
           const messages = msg.messages as any[];
           if (Array.isArray(messages)) {
             const history = parseHistoryMessages(messages);
-            // Merge: history as base, keep any live events that arrived before history
             setEvents((prev) => {
               const liveEvents = prev.filter((e) => e.id.startsWith("live-"));
               return [...history, ...liveEvents];
             });
-            historyLoaded.current = true;
           }
           break;
         }
@@ -150,6 +166,7 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
 
     return () => {
       closed = true;
+      clearTimeout(historyRetryTimer.current);
       ws.close();
       if (wsRef.current === ws) wsRef.current = null;
     };

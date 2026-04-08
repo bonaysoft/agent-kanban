@@ -88,14 +88,23 @@ export class TunnelRelay implements DurableObject {
 
     const daemon = this.getDaemonWs();
     if (ws === daemon) {
-      this.handleDaemonMessage(msg);
+      this.handleDaemonMessage(ws, msg);
     } else {
       this.handleBrowserMessage(ws, msg);
     }
   }
 
-  private handleDaemonMessage(msg: Record<string, unknown>): void {
+  private handleDaemonMessage(ws: WebSocket, msg: Record<string, unknown>): void {
     const type = msg.type as string;
+
+    if (type === "ping") {
+      try {
+        ws.send(JSON.stringify({ type: "pong" }));
+      } catch {
+        /* daemon gone */
+      }
+      return;
+    }
 
     // History response — send back to the requesting browser
     if (type === "session:history" && msg.requestId) {
