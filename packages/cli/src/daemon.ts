@@ -59,6 +59,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
   migrateLegacySessions();
   await cleanupStaleSessions(client, machineId);
+  await auditOrphanedTasks(client, machineId);
   logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
 
   const MIN_POLL_INTERVAL = 5000;
@@ -190,6 +191,53 @@ export async function cleanupStaleSessions(client: MachineClient, machineId: str
     if (closedCount > 0) logger.info(`Cleaned up ${closedCount} stale session(s) from previous run`);
   } catch (err: any) {
     logger.warn(`Session cleanup failed: ${err.message}`);
+  }
+}
+
+// Startup health check — cross-reference local worker sessions against server
+// task state and log any divergence loudly. Catches the "silent orphan" class
+// of bugs where a reject-resume entry point (in_review session file) was lost
+// for any reason: previous daemon crash, manual cleanup, bugs in shutdown/
+// cleanup code paths, disk corruption, etc.
+//
+// Non-destructive by design: only logs. Recovery is left to the operator because
+// the right action depends on context (release vs cancel vs manual merge).
+export async function auditOrphanedTasks(client: MachineClient, _machineId: string): Promise<void> {
+  try {
+    const workers = listSessions({ type: "worker" });
+    let resumeQueued = 0;
+    let diverged = 0;
+
+    for (const s of workers) {
+      if (!s.taskId) continue;
+      let task: any;
+      try {
+        task = await client.getTask(s.taskId);
+      } catch (err: any) {
+        logger.warn(`Startup audit: failed to fetch task ${s.taskId}: ${err.message}`);
+        continue;
+      }
+      if (!task) {
+        logger.warn(`Startup audit: local session ${s.sessionId.slice(0, 8)} references missing task ${s.taskId}`);
+        continue;
+      }
+
+      if (s.status === "in_review" && task.status === "in_progress") {
+        logger.info(`Startup audit: task ${s.taskId} was rejected while daemon was down — will resume on next tick`);
+        resumeQueued++;
+      } else if (s.status === "in_review" && task.status !== "in_review") {
+        logger.warn(
+          `Startup audit: local session ${s.sessionId.slice(0, 8)} is in_review but server task ${s.taskId} is ${task.status} — session is stale`,
+        );
+        diverged++;
+      }
+    }
+
+    if (resumeQueued > 0 || diverged > 0) {
+      logger.info(`Startup audit: ${resumeQueued} task(s) queued for resume, ${diverged} session(s) diverged`);
+    }
+  } catch (err: any) {
+    logger.warn(`Startup audit failed: ${err.message}`);
   }
 }
 

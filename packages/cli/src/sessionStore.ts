@@ -95,6 +95,28 @@ export function updateSession(sessionId: string, updates: Partial<SessionFile>):
   return true;
 }
 
+/**
+ * DANGEROUS — wipes the entire sessions directory.
+ *
+ * Only legitimate caller: test setup/teardown.
+ *
+ * Do NOT call from daemon shutdown, scheduler cleanup, or any production code
+ * path. Worker sessions with `status: "in_review"` are reject-resume entry
+ * points and MUST survive every kind of restart. Bulk-wiping them leaves
+ * tasks stuck in `in_progress` with no way to resume.
+ *
+ * The only non-test use is `commands/start.ts` when the `apiUrl` changes, and
+ * that site inlines `rmSync(SESSIONS_DIR)` on purpose so it can't accidentally
+ * share this helper.
+ */
+export function clearAllSessions(): void {
+  try {
+    rmSync(SESSIONS_DIR, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
+}
+
 export function isPidAlive(pid: number): boolean {
   if (pid <= 0) return false;
   try {
@@ -102,14 +124,6 @@ export function isPidAlive(pid: number): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-export function clearAllSessions(): void {
-  try {
-    rmSync(SESSIONS_DIR, { recursive: true, force: true });
-  } catch {
-    /* ignore */
   }
 }
 
