@@ -45,14 +45,12 @@ function makeExecSync(returnValue: string | Error) {
 
 function makeClient(
   overrides: Partial<{
-    listTasks: () => Promise<unknown>;
     completeTask: () => Promise<unknown>;
     cancelTask: () => Promise<unknown>;
     getTask: () => Promise<unknown>;
   }> = {},
 ) {
   return {
-    listTasks: vi.fn().mockResolvedValue([]),
     completeTask: vi.fn().mockResolvedValue({}),
     cancelTask: vi.fn().mockResolvedValue({}),
     getTask: vi.fn().mockResolvedValue(null),
@@ -89,9 +87,15 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("PrMonitor — consecutive failure counter (failureCount)", () => {
-  it("logs [WARN] on the first error from listTasks", async () => {
+  it("logs [WARN] on the first error from completeTask", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValue(new Error("network error")),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValue(new Error("network error")),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -104,8 +108,14 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
   });
 
   it("does not log [ERROR] for failures below 10", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValue(new Error("fail")),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValue(new Error("fail")),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -122,8 +132,14 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
   });
 
   it("logs [ERROR] exactly at failure count 10", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValue(new Error("fail")),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValue(new Error("fail")),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -141,8 +157,14 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
   });
 
   it("logs [ERROR] again at failure count 20 (every 10th after 10)", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValue(new Error("fail")),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValue(new Error("fail")),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -160,8 +182,14 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
   });
 
   it("does not log [ERROR] at count 11 (between multiples of 10)", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValue(new Error("fail")),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValue(new Error("fail")),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -179,8 +207,14 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
   });
 
   it("resets failureCount to 0 on a successful check", async () => {
+    makeExecSync("MERGED");
+
     const client = makeClient({
-      listTasks: vi.fn().mockRejectedValueOnce(new Error("fail")).mockRejectedValueOnce(new Error("fail")).mockResolvedValue([]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask: vi.fn().mockRejectedValueOnce(new Error("fail")).mockRejectedValueOnce(new Error("fail")).mockResolvedValue({}), // Success
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -194,6 +228,7 @@ describe("PrMonitor — consecutive failure counter (failureCount)", () => {
 
     // Now fail 9 more times — should NOT hit [ERROR] at count=10 because
     // the counter was reset
+    client.completeTask = vi.fn().mockRejectedValue(new Error("fail"));
     for (let i = 0; i < 9; i++) {
       await runCheck(monitor);
     }
@@ -212,9 +247,11 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
   it("does not warn for fewer than 20 consecutive getPrState failures on a task", async () => {
     makeExecSync(new Error("gh: not found"));
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -233,9 +270,11 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
   it("logs [WARN] for a task at exactly 20 consecutive getPrState failures", async () => {
     makeExecSync(new Error("gh: not found"));
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -254,9 +293,11 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
   it("logs the [WARN] message only once, not on the 21st failure", async () => {
     makeExecSync(new Error("gh: not found"));
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -273,9 +314,11 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
   });
 
   it("clears per-task failure count on successful getPrState (task stays OPEN)", async () => {
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -306,9 +349,11 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
   it("clears per-task failure count when task is untracked", async () => {
     makeExecSync(new Error("gh: not found"));
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -337,16 +382,25 @@ describe("PrMonitor — per-task failure tracking (taskFailures)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Stuck task detection (tracked but not in API response)
+// Task status detection (done/cancelled/deleted)
 // ---------------------------------------------------------------------------
 
-describe("PrMonitor — stuck task detection", () => {
-  it("untracks a task not present in the in_review API response", async () => {
-    makeExecSync("OPEN");
-
-    // listTasks returns an empty list — task-1 is tracked but not in_review
+describe("PrMonitor — task status detection", () => {
+  it("untracks task when getTask throws (task deleted)", async () => {
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([]),
+      getTask: vi.fn().mockRejectedValue(new Error("Task not found")),
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+
+    await runCheck(monitor);
+
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(false);
+  });
+
+  it("untracks task when status is done", async () => {
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue({ status: "done", pr_url: "https://github.com/org/repo/pull/1" }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -354,35 +408,14 @@ describe("PrMonitor — stuck task detection", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCheck(monitor);
 
-    const infoCalls = spy.mock.calls.filter((args) => String(args[0]).includes("[INFO]") && String(args[0]).includes("task-1"));
-    expect(infoCalls).toHaveLength(1);
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(false);
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/\[INFO\].*task-1.*done.*untracking/));
     spy.mockRestore();
   });
 
-  it("logs [INFO] when untracking a stuck task", async () => {
-    makeExecSync("OPEN");
-
+  it("untracks task when status is cancelled", async () => {
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([]),
-    });
-    const monitor = new PrMonitor(client);
-    monitor.track("task-stuck");
-
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await runCheck(monitor);
-
-    const infoCall = spy.mock.calls.find((args) => String(args[0]).includes("[INFO]") && String(args[0]).includes("task-stuck"));
-    expect(infoCall).toBeDefined();
-    expect(String(infoCall![0])).toContain("untracking");
-    spy.mockRestore();
-  });
-
-  it("does not untrack a task that is still in the in_review response", async () => {
-    makeExecSync("OPEN");
-
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
-    const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({ status: "cancelled" }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -390,22 +423,46 @@ describe("PrMonitor — stuck task detection", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCheck(monitor);
 
-    const untrackCalls = spy.mock.calls.filter((args) => String(args[0]).includes("no longer in_review"));
-    expect(untrackCalls).toHaveLength(0);
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(false);
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/\[INFO\].*task-1.*cancelled.*untracking/));
     spy.mockRestore();
   });
 
-  it("untracks multiple stuck tasks in a single check", async () => {
-    makeExecSync("OPEN");
+  it("untracks task when getTask returns null", async () => {
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue(null),
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
 
-    // API returns only task-3 as in_review; task-1 and task-2 are done/cancelled
-    const task3 = { id: "task-3", pr_url: "https://github.com/org/repo/pull/3", assigned_to: null };
-    const listTasks = vi.fn().mockResolvedValue([task3]); // only in_review call now
-    const getTask = vi
-      .fn()
-      .mockResolvedValueOnce({ status: "done" }) // task-1 is done → untrack
-      .mockResolvedValueOnce({ status: "cancelled" }); // task-2 is cancelled → untrack
-    const client = makeClient({ listTasks, getTask });
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runCheck(monitor);
+
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(false);
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/\[INFO\].*task-1.*unknown.*untracking/));
+    spy.mockRestore();
+  });
+
+  it("keeps tracking task with active status", async () => {
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue({ status: "in_progress" }),
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+
+    await runCheck(monitor);
+
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(true);
+  });
+
+  it("untracks multiple done/cancelled tasks in a single check", async () => {
+    const client = makeClient({
+      getTask: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "done" }) // task-1 done → untrack
+        .mockResolvedValueOnce({ status: "cancelled" }) // task-2 cancelled → untrack
+        .mockResolvedValueOnce({ status: "in_progress" }), // task-3 active → keep
+    });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
     monitor.track("task-2");
@@ -413,6 +470,10 @@ describe("PrMonitor — stuck task detection", () => {
 
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCheck(monitor);
+
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(false);
+    expect((monitor as any).trackedTasks.has("task-2")).toBe(false);
+    expect((monitor as any).trackedTasks.has("task-3")).toBe(true);
 
     const untrackCalls = spy.mock.calls.filter((args) => String(args[0]).includes("untracking"));
     expect(untrackCalls).toHaveLength(2);
@@ -428,10 +489,12 @@ describe("PrMonitor — PR state transitions", () => {
   it("calls completeTask when PR state is MERGED", async () => {
     makeExecSync("MERGED");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const completeTask = vi.fn().mockResolvedValue({});
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
       completeTask,
     });
     const monitor = new PrMonitor(client);
@@ -445,10 +508,12 @@ describe("PrMonitor — PR state transitions", () => {
   it("calls cancelTask when PR state is CLOSED", async () => {
     makeExecSync("CLOSED");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const cancelTask = vi.fn().mockResolvedValue({});
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
       cancelTask,
     });
     const monitor = new PrMonitor(client);
@@ -459,14 +524,57 @@ describe("PrMonitor — PR state transitions", () => {
     expect(cancelTask).toHaveBeenCalledWith("task-1");
   });
 
-  it("does not call completeTask or cancelTask when PR state is OPEN", async () => {
-    makeExecSync("OPEN");
+  it("checks PR state for tasks in any status with pr_url (not just in_review)", async () => {
+    makeExecSync("MERGED");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
+    const completeTask = vi.fn().mockResolvedValue({});
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_progress", // Not in_review, but has pr_url
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+      completeTask,
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+
+    await runCheck(monitor);
+
+    expect(completeTask).toHaveBeenCalledWith("task-1", { result: "PR merged" });
+  });
+
+  it("skips PR check for tasks without pr_url", async () => {
     const completeTask = vi.fn().mockResolvedValue({});
     const cancelTask = vi.fn().mockResolvedValue({});
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        // No pr_url
+      }),
+      completeTask,
+      cancelTask,
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+
+    await runCheck(monitor);
+
+    // PR check should be skipped entirely
+    expect(vi.mocked(execSync)).not.toHaveBeenCalled();
+    expect(completeTask).not.toHaveBeenCalled();
+    expect(cancelTask).not.toHaveBeenCalled();
+  });
+
+  it("does not call completeTask or cancelTask when PR state is OPEN", async () => {
+    makeExecSync("OPEN");
+
+    const completeTask = vi.fn().mockResolvedValue({});
+    const cancelTask = vi.fn().mockResolvedValue({});
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
       completeTask,
       cancelTask,
     });
@@ -482,9 +590,11 @@ describe("PrMonitor — PR state transitions", () => {
   it("untracks the task after a MERGED PR", async () => {
     makeExecSync("MERGED");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -497,9 +607,11 @@ describe("PrMonitor — PR state transitions", () => {
   it("untracks the task after a CLOSED PR", async () => {
     makeExecSync("CLOSED");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null };
     const client = makeClient({
-      listTasks: vi.fn().mockResolvedValue([task]),
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
     });
     const monitor = new PrMonitor(client);
     monitor.track("task-1");
@@ -515,28 +627,26 @@ describe("PrMonitor — PR state transitions", () => {
 // ---------------------------------------------------------------------------
 
 describe("PrMonitor — check guard conditions", () => {
-  it("does not call listTasks when no tasks are tracked", async () => {
-    const listTasks = vi.fn().mockResolvedValue([]);
-    const monitor = new PrMonitor(makeClient({ listTasks }));
+  it("does not call getTask when no tasks are tracked", async () => {
+    const getTask = vi.fn().mockResolvedValue(null);
+    const monitor = new PrMonitor(makeClient({ getTask }));
 
     await runCheck(monitor);
 
-    expect(listTasks).not.toHaveBeenCalled();
+    expect(getTask).not.toHaveBeenCalled();
   });
 
-  it("does not call listTasks on a concurrent overlapping check", async () => {
+  it("does not call getTask on a concurrent overlapping check", async () => {
     makeExecSync("OPEN");
 
-    const task = { id: "task-1", pr_url: "https://github.com/org/repo/pull/1", assigned_to: null, status: "in_review" };
-    // listTasks resolves on the next tick to allow overlap simulation
+    // getTask resolves on the next tick to allow overlap simulation
     let resolveFirst!: () => void;
-    const firstCall = new Promise<any[]>((res) => {
-      resolveFirst = () => res([task]);
+    const firstCall = new Promise<any>((res) => {
+      resolveFirst = () => res({ status: "in_progress", pr_url: "https://github.com/org/repo/pull/1" });
     });
-    // check() now calls listTasks once per run (only for in_review)
-    const listTasks = vi.fn().mockReturnValueOnce(firstCall).mockResolvedValue([task]);
+    const getTask = vi.fn().mockReturnValueOnce(firstCall).mockResolvedValue({ status: "in_progress" });
 
-    const monitor = new PrMonitor(makeClient({ listTasks }));
+    const monitor = new PrMonitor(makeClient({ getTask }));
     monitor.track("task-1");
 
     // Start first check but don't await yet
@@ -547,7 +657,139 @@ describe("PrMonitor — check guard conditions", () => {
     resolveFirst();
     await Promise.all([first, second]);
 
-    // check() calls listTasks once per run; second check should be skipped entirely
-    expect(listTasks).toHaveBeenCalledTimes(1);
+    // Second check should be skipped entirely because checking flag was set
+    expect(getTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("processes all tracked tasks in a single check", async () => {
+    makeExecSync("OPEN");
+
+    const getTask = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "in_progress", pr_url: "https://github.com/org/repo/pull/1" })
+      .mockResolvedValueOnce({ status: "in_review", pr_url: "https://github.com/org/repo/pull/2" })
+      .mockResolvedValueOnce({ status: "todo" }); // No pr_url
+
+    const monitor = new PrMonitor(makeClient({ getTask }));
+    monitor.track("task-1");
+    monitor.track("task-2");
+    monitor.track("task-3");
+
+    await runCheck(monitor);
+
+    expect(getTask).toHaveBeenCalledTimes(3);
+    expect(getTask).toHaveBeenCalledWith("task-1");
+    expect(getTask).toHaveBeenCalledWith("task-2");
+    expect(getTask).toHaveBeenCalledWith("task-3");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New simplified behavior tests
+// ---------------------------------------------------------------------------
+
+describe("PrMonitor — simplified one-pass behavior", () => {
+  it("handles mixed task states and PR outcomes in one pass", async () => {
+    const getTask = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "done" }) // task-1: done → untrack
+      .mockRejectedValueOnce(new Error("Not found")) // task-2: deleted → untrack
+      .mockResolvedValueOnce({ status: "in_progress", pr_url: "https://github.com/org/repo/pull/3" }) // task-3: MERGED → complete + untrack
+      .mockResolvedValueOnce({ status: "in_review", pr_url: "https://github.com/org/repo/pull/4" }) // task-4: CLOSED → cancel + untrack
+      .mockResolvedValueOnce({ status: "in_review", pr_url: "https://github.com/org/repo/pull/5" }) // task-5: OPEN → continue tracking
+      .mockResolvedValueOnce({ status: "todo" }); // task-6: no pr_url → continue tracking
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce(Buffer.from("MERGED")) // task-3
+      .mockReturnValueOnce(Buffer.from("CLOSED")) // task-4
+      .mockReturnValueOnce(Buffer.from("OPEN")); // task-5
+
+    const completeTask = vi.fn().mockResolvedValue({});
+    const cancelTask = vi.fn().mockResolvedValue({});
+    const client = makeClient({ getTask, completeTask, cancelTask });
+
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+    monitor.track("task-2");
+    monitor.track("task-3");
+    monitor.track("task-4");
+    monitor.track("task-5");
+    monitor.track("task-6");
+
+    await runCheck(monitor);
+
+    // Verify API calls
+    expect(getTask).toHaveBeenCalledTimes(6);
+    expect(completeTask).toHaveBeenCalledWith("task-3", { result: "PR merged" });
+    expect(cancelTask).toHaveBeenCalledWith("task-4");
+
+    // Verify tracking state
+    const trackedTasks = (monitor as any).trackedTasks;
+    expect(trackedTasks.has("task-1")).toBe(false); // done → untracked
+    expect(trackedTasks.has("task-2")).toBe(false); // deleted → untracked
+    expect(trackedTasks.has("task-3")).toBe(false); // merged → untracked
+    expect(trackedTasks.has("task-4")).toBe(false); // closed → untracked
+    expect(trackedTasks.has("task-5")).toBe(true); // open → still tracked
+    expect(trackedTasks.has("task-6")).toBe(true); // no pr_url → still tracked
+  });
+
+  it("increments task failure count when getPrState fails but task is still active", async () => {
+    const client = makeClient({
+      getTask: vi.fn().mockResolvedValue({
+        status: "in_review",
+        pr_url: "https://github.com/org/repo/pull/1",
+      }),
+    });
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+
+    // First check: gh command fails
+    makeExecSync(new Error("gh auth required"));
+    await runCheck(monitor);
+
+    // Task should still be tracked
+    expect((monitor as any).trackedTasks.has("task-1")).toBe(true);
+    expect((monitor as any).taskFailures.get("task-1")).toBe(1);
+
+    // Second check: gh command succeeds
+    makeExecSync("OPEN");
+    await runCheck(monitor);
+
+    // Task failure count should be cleared
+    expect((monitor as any).taskFailures.has("task-1")).toBe(false);
+  });
+
+  it("handles tasks in any status with pr_url correctly", async () => {
+    const getTask = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "todo", pr_url: "https://github.com/org/repo/pull/1" })
+      .mockResolvedValueOnce({ status: "in_progress", pr_url: "https://github.com/org/repo/pull/2" })
+      .mockResolvedValueOnce({ status: "in_review", pr_url: "https://github.com/org/repo/pull/3" });
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce(Buffer.from("MERGED")) // todo with merged PR
+      .mockReturnValueOnce(Buffer.from("CLOSED")) // in_progress with closed PR
+      .mockReturnValueOnce(Buffer.from("OPEN")); // in_review with open PR
+
+    const completeTask = vi.fn().mockResolvedValue({});
+    const cancelTask = vi.fn().mockResolvedValue({});
+    const client = makeClient({ getTask, completeTask, cancelTask });
+
+    const monitor = new PrMonitor(client);
+    monitor.track("task-1");
+    monitor.track("task-2");
+    monitor.track("task-3");
+
+    await runCheck(monitor);
+
+    // All PR states should be checked regardless of task status
+    expect(completeTask).toHaveBeenCalledWith("task-1", { result: "PR merged" });
+    expect(cancelTask).toHaveBeenCalledWith("task-2");
+
+    // Verify tracking state
+    const trackedTasks = (monitor as any).trackedTasks;
+    expect(trackedTasks.has("task-1")).toBe(false); // merged → untracked
+    expect(trackedTasks.has("task-2")).toBe(false); // closed → untracked
+    expect(trackedTasks.has("task-3")).toBe(true); // open → still tracked
   });
 });

@@ -13,12 +13,6 @@ const logger = createLogger("pr-monitor");
 
 const PR_CHECK_INTERVAL = 30_000; // 30s
 
-interface ReviewTask {
-  id: string;
-  pr_url: string;
-  assigned_to: string | null;
-}
-
 export class PrMonitor {
   private client: ApiClient;
   private trackedTasks: Set<string>;
@@ -60,46 +54,42 @@ export class PrMonitor {
     this.checking = true;
 
     try {
-      const tasks = (await this.client.listTasks({ status: "in_review" })) as ReviewTask[];
-      const inReviewIds = new Set(tasks.map((t) => t.id));
-      const monitored = tasks.filter((t) => t.pr_url && this.trackedTasks.has(t.id));
+      for (const taskId of [...this.trackedTasks]) {
+        let task: { status: string; pr_url?: string } | null;
+        try {
+          task = (await this.client.getTask(taskId)) as { status: string; pr_url?: string } | null;
+        } catch {
+          this.untrack(taskId);
+          continue;
+        }
 
-      for (const task of monitored) {
+        if (!task || task.status === "done" || task.status === "cancelled") {
+          logger.info(`Task ${taskId} is ${task?.status ?? "unknown"}, untracking`);
+          this.untrack(taskId);
+          continue;
+        }
+
+        if (!task.pr_url) continue;
+
         const state = getPrState(task.pr_url);
         if (!state) {
-          const count = (this.taskFailures.get(task.id) ?? 0) + 1;
-          this.taskFailures.set(task.id, count);
+          const count = (this.taskFailures.get(taskId) ?? 0) + 1;
+          this.taskFailures.set(taskId, count);
           if (count === 20) {
-            logger.warn(`Cannot check PR status for task ${task.id} (${task.pr_url}), gh may need re-auth`);
+            logger.warn(`Cannot check PR status for task ${taskId} (${task.pr_url}), gh may need re-auth`);
           }
           continue;
         }
 
-        this.taskFailures.delete(task.id);
+        this.taskFailures.delete(taskId);
 
         if (state === "MERGED") {
-          logger.info(`PR merged for task ${task.id}, marking done`);
-          await this.client.completeTask(task.id, { result: "PR merged" });
-          this.untrack(task.id);
+          logger.info(`PR merged for task ${taskId}, marking done`);
+          await this.client.completeTask(taskId, { result: "PR merged" });
+          this.untrack(taskId);
         } else if (state === "CLOSED") {
-          logger.info(`PR closed for task ${task.id}, marking cancelled`);
-          await this.client.cancelTask(task.id);
-          this.untrack(task.id);
-        }
-      }
-
-      // Untrack tasks that are done/cancelled by checking individually
-      for (const taskId of [...this.trackedTasks]) {
-        if (inReviewIds.has(taskId)) continue;
-        try {
-          const task = (await this.client.getTask(taskId)) as { status: string } | null;
-          const status = task?.status;
-          if (status === "done" || status === "cancelled" || !status) {
-            logger.info(`Task ${taskId} is ${status ?? "unknown"}, untracking`);
-            this.untrack(taskId);
-          }
-        } catch {
-          // Task may have been deleted
+          logger.info(`PR closed for task ${taskId}, marking cancelled`);
+          await this.client.cancelTask(taskId);
           this.untrack(taskId);
         }
       }
