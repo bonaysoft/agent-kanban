@@ -302,14 +302,14 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
 
   it("forwards assistant event to tunnel", async () => {
     const tunnel = makeTunnel();
-    const event: AgentEvent = { type: "assistant", blocks: [{ type: "text", text: "hello" }] };
+    const event: AgentEvent = { type: "message", blocks: [{ type: "text", text: "hello" }] };
     await spawnWithEvents([event], tunnel);
     expect(tunnel.sendEvent).toHaveBeenCalledWith("sess-ev", event);
   });
 
   it("forwards rate_limit event to tunnel", async () => {
     const tunnel = makeTunnel();
-    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt: "2025-01-01T00:00:00Z" };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt: "2025-01-01T00:00:00Z" };
     await spawnWithEvents([event], tunnel);
     expect(tunnel.sendEvent).toHaveBeenCalledWith("sess-ev", event);
   });
@@ -323,7 +323,7 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
 
   it("forwards result event to tunnel", async () => {
     const tunnel = makeTunnel();
-    const event: AgentEvent = { type: "result", cost: 0.0012 };
+    const event: AgentEvent = { type: "turn.end", cost: 0.0012 };
     await spawnWithEvents([event], tunnel);
     expect(tunnel.sendEvent).toHaveBeenCalledWith("sess-ev", event);
   });
@@ -599,7 +599,7 @@ describe("ProcessManager — onProcessStarted callback", () => {
 describe("ProcessManager — handleEvent rate_limit rejected", () => {
   it("calls onRateLimited when a rejected rate_limit event is received", async () => {
     const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -612,7 +612,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
   });
 
   it("does not call onRateLimitResumed when a rejected rate_limit event is received", async () => {
-    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt: new Date(Date.now() + 3600_000).toISOString() };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 3600_000).toISOString() };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -628,7 +628,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     const mainResetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const overageResetAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
     const event: AgentEvent = {
-      type: "rate_limit",
+      type: "turn.rate_limit",
       status: "rejected",
       resetAt: mainResetAt,
       overage: { status: "rejected", resetAt: overageResetAt },
@@ -649,7 +649,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     const mainResetAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
     const overageResetAt = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
     const event: AgentEvent = {
-      type: "rate_limit",
+      type: "turn.rate_limit",
       status: "rejected",
       resetAt: mainResetAt,
       overage: { status: "rejected", resetAt: overageResetAt },
@@ -667,7 +667,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
 
   it("falls back to 1-hour pauseUntil when rejected event has no resetAt", async () => {
     const before = Date.now();
-    const event: AgentEvent = { type: "rate_limit", status: "rejected" };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "rejected" };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -685,7 +685,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
 
 describe("ProcessManager — handleEvent rate_limit allowed", () => {
   it("calls onRateLimitResumed when allowed event with isUsingOverage false", async () => {
-    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: false };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: false };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -698,7 +698,7 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
   });
 
   it("does not call onRateLimitResumed when allowed event with isUsingOverage true", async () => {
-    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: true };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: true };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -711,7 +711,7 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
   });
 
   it("does not call onRateLimited when allowed event is received", async () => {
-    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: false };
+    const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: false };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
     const pm = new ProcessManager(makeApiClient(), callbacks, 0);
@@ -727,11 +727,11 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
 describe("ProcessManager — result event does not call onRateLimitResumed", () => {
   it("does not call onRateLimitResumed when a result event is received after a rejected rate_limit", async () => {
     const rejectedEvent: AgentEvent = {
-      type: "rate_limit",
+      type: "turn.rate_limit",
       status: "rejected",
       resetAt: new Date(Date.now() + 3600_000).toISOString(),
     };
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([rejectedEvent, resultEvent]);
     const callbacks = makeCallbacks();
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
@@ -753,7 +753,7 @@ describe("ProcessManager — result event does not call onRateLimitResumed", () 
 describe("ProcessManager — onComplete skips cleanup when session is in_review", () => {
   it("does NOT invoke onCleanup when the local session status is in_review", async () => {
     const tunnel = makeTunnel();
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const onCleanup = vi.fn();
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
@@ -781,7 +781,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
 
   it("sends tunnel done status when the local session status is in_review", async () => {
     const tunnel = makeTunnel();
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
 
@@ -806,7 +806,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
 
   it("does NOT call removeSession when the local session status is in_review", async () => {
     const tunnel = makeTunnel();
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
 
@@ -834,7 +834,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
 describe("ProcessManager — onComplete normal completion invokes cleanup", () => {
   it("invokes onCleanup when session is NOT in_review (normal completion)", async () => {
     const tunnel = makeTunnel();
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const onCleanup = vi.fn();
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
@@ -862,7 +862,7 @@ describe("ProcessManager — onComplete normal completion invokes cleanup", () =
 
   it("calls removeSession when session is NOT in_review (normal completion)", async () => {
     const tunnel = makeTunnel();
-    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
 

@@ -249,18 +249,24 @@ export type ContentBlock =
   | { type: "text"; text: string };
 
 export type AgentEvent =
-  | { type: "assistant"; blocks: ContentBlock[] }
-  | { type: "user"; text: string }
-  | { type: "result"; text?: string; cost?: number; usage?: Record<string, number | undefined> }
+  // ── Turn lifecycle ──
+  | { type: "turn.start" }
+  | { type: "turn.end"; text?: string; cost?: number; usage?: Record<string, number | undefined> }
+  | { type: "turn.error"; code?: string; detail: string }
   | {
-      type: "rate_limit";
+      type: "turn.rate_limit";
       status: "rejected" | "allowed";
       resetAt?: string;
       rateLimitType?: string;
       isUsingOverage?: boolean;
       overage?: { status: "allowed" | "rejected"; resetAt?: string };
     }
-  | { type: "error"; code?: string; detail: string };
+  // ── Block lifecycle (streaming) ──
+  | { type: "block.start"; block: ContentBlock }
+  | { type: "block.done"; block: ContentBlock }
+  // ── Legacy / history ──
+  | { type: "message"; blocks: ContentBlock[] }
+  | { type: "message.user"; text: string };
 
 // ─── Message ───
 

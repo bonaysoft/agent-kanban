@@ -1,9 +1,10 @@
-import { AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, ThreadPrimitive } from "@assistant-ui/react";
+import { AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, ThreadPrimitive, type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ArrowDownIcon, ArrowUpIcon, SquareIcon } from "lucide-react";
 import type { FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
-import { Reasoning } from "@/components/assistant-ui/reasoning";
+import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { cn } from "@/lib/utils";
 import { RelayRuntimeProvider } from "./RelayRuntimeProvider";
 
 // ─── Props ───
@@ -72,17 +73,35 @@ const AgentThread: FC<{ taskDone: boolean }> = ({ taskDone }) => {
   );
 };
 
+// ─── Chat-Scoped Tool Fallback ───
+
+const ChatToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result, status }) => {
+  const isCancelled = status?.type === "incomplete" && status.reason === "cancelled";
+
+  return (
+    <ToolFallback.Root className={cn("border-0 rounded-none py-1.5", isCancelled && "bg-muted/30")}>
+      <ToolFallback.Trigger toolName={toolName} status={status} className="px-0 text-xs" />
+      <ToolFallback.Content>
+        <ToolFallback.Error status={status} className="px-0" />
+        <ToolFallback.Args argsText={argsText} className={cn("px-0 text-xs [&_pre]:max-h-32 [&_pre]:overflow-auto", isCancelled && "opacity-60")} />
+        {!isCancelled && <ToolFallback.Result result={result} className="px-0 text-xs [&_pre]:max-h-32 [&_pre]:overflow-auto" />}
+      </ToolFallback.Content>
+    </ToolFallback.Root>
+  );
+};
+
 // ─── Assistant Message ───
 
 const AgentMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="aui-assistant-message-root relative w-full py-1.5">
-      <div className="text-sm text-content-primary leading-relaxed">
+    <MessagePrimitive.Root className="aui-assistant-message-root relative w-full py-1">
+      <div className="border-l-2 border-accent/40 pl-3 text-sm text-content-primary leading-relaxed [&_.aui-reasoning-root]:mb-1 [&_.aui-reasoning-root]:border-0 [&_.aui-reasoning-root]:px-0 [&_.aui-reasoning-root]:py-0">
         <MessagePrimitive.Parts
           components={{
             Text: MarkdownText,
             Reasoning: Reasoning,
-            tools: { Fallback: ToolFallback },
+            ReasoningGroup: ReasoningGroup,
+            tools: { Fallback: ChatToolFallback },
           }}
         />
         <MessagePrimitive.Error>

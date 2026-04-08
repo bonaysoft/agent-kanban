@@ -407,7 +407,7 @@ describe("Scenario 1: agent completes normally → session preserved as in_revie
 
     // Emit a result event — task is in_review on server
     const [call] = fake.executeCalls;
-    call.controller.pushEvent({ type: "result", cost: 0.001 });
+    call.controller.pushEvent({ type: "turn.end", cost: 0.001 });
     call.controller.end();
 
     await flushPromises(8);
@@ -634,7 +634,7 @@ describe("Scenario 5: full end-to-end reject-resume", () => {
     // (e) emit another result event — task now back in_review again on server
     client._tasks[taskId] = { ...taskState, status: "in_review" };
     const [call] = fake.executeCalls;
-    call.controller.pushEvent({ type: "result", cost: 0.002 });
+    call.controller.pushEvent({ type: "turn.end", cost: 0.002 });
     call.controller.end();
 
     await flushPromises(8);
@@ -760,7 +760,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
     });
 
     const [call] = fake.executeCalls;
-    call.controller.pushEvent({ type: "result", cost: 0 });
+    call.controller.pushEvent({ type: "turn.end", cost: 0 });
     call.controller.end();
 
     await flushPromises(8);
@@ -827,7 +827,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
     });
 
     const [call] = fake.executeCalls;
-    call.controller.pushEvent({ type: "result", cost: 0 });
+    call.controller.pushEvent({ type: "turn.end", cost: 0 });
     call.controller.end();
 
     await flushPromises(8);

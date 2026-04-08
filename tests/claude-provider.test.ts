@@ -60,7 +60,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
+    expect(result?.type).toBe("turn.rate_limit");
   });
 
   it("includes resetAt as ISO string derived from resetsAt epoch", () => {
@@ -72,8 +72,8 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.resetAt).toBeDefined();
       expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
     }
@@ -87,7 +87,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.rateLimitType).toBe("five_hour");
     }
   });
@@ -100,7 +100,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("rejected");
     }
   });
@@ -113,8 +113,8 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.resetAt).toBeUndefined();
     }
   });
@@ -133,7 +133,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.overage).toEqual({
         status: "rejected",
         resetAt: new Date(1700003600 * 1000).toISOString(),
@@ -151,8 +151,8 @@ describe("mapSDKMessage — rate_limit_event allowed", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("allowed");
       expect(result.isUsingOverage).toBe(true);
     }
@@ -166,8 +166,8 @@ describe("mapSDKMessage — rate_limit_event allowed", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("allowed");
       expect(result.isUsingOverage).toBe(false);
     }
@@ -209,8 +209,8 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0]).toEqual({ type: "text", text: "hello" });
     }
   });
@@ -230,8 +230,8 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks).toHaveLength(2);
       expect(result.blocks[0]).toEqual({ type: "text", text: "Line one" });
       expect(result.blocks[1]).toEqual({ type: "text", text: "Line two" });
@@ -248,8 +248,8 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0].type).toBe("tool_use");
     }
   });
@@ -282,7 +282,7 @@ describe("mapSDKMessage — assistant with error field", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
+    expect(result?.type).toBe("turn.rate_limit");
   });
 
   it("rate_limit resetAt for string error is roughly 1 hour from now", () => {
@@ -297,8 +297,8 @@ describe("mapSDKMessage — assistant with error field", () => {
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
     const after = Date.now();
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       const resetMs = new Date(result.resetAt).getTime();
       expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
       expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
@@ -315,8 +315,8 @@ describe("mapSDKMessage — assistant with error field", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("error");
-    if (result?.type === "error") {
+    expect(result?.type).toBe("turn.error");
+    if (result?.type === "turn.error") {
       expect(result.code).toBe("authentication_error");
     }
   });
@@ -327,7 +327,7 @@ describe("mapSDKMessage — assistant with error field", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapSDKMessage — result", () => {
-  it("returns result event", () => {
+  it("returns turn.end event", () => {
     const msg = {
       type: "result",
       subtype: "success",
@@ -336,7 +336,7 @@ describe("mapSDKMessage — result", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("result");
+    expect(mapSDKMessage(msg)?.type).toBe("turn.end");
   });
 
   it("includes cost from total_cost_usd", () => {
@@ -349,7 +349,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.cost).toBe(0.12);
     }
   });
@@ -363,7 +363,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.cost).toBe(0);
     }
   });
@@ -379,7 +379,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.usage).toEqual(usage);
     }
   });
@@ -448,8 +448,10 @@ describe("claudeProvider.execute — handle shape", () => {
     const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     const events: any[] = [];
     for await (const ev of handle.events) events.push(ev);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "assistant", blocks: [{ type: "text", text: "SDK message" }] });
+    // Streaming mapper yields turn_start + content_block_done for an assistant message
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ type: "turn.start" });
+    expect(events[1]).toEqual({ type: "block.done", block: { type: "text", text: "SDK message" } });
   });
 
   it("abort() calls close() on the query object", async () => {

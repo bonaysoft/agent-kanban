@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
-import type { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
@@ -81,7 +81,7 @@ function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
   return blocks;
 }
 
-/** Map a single SDK message to an AgentEvent (1:1). */
+/** Map a single SDK message to an AgentEvent (1:1, used for history fallback). */
 export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
   switch (msg.type) {
     case "rate_limit_event": {
@@ -95,7 +95,7 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
             }
           : undefined;
         return {
-          type: "rate_limit",
+          type: "turn.rate_limit",
           status: info.status,
           resetAt,
           rateLimitType: info.rateLimitType,
@@ -111,28 +111,111 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
 
     case "assistant": {
       if (msg.error === "rate_limit") {
-        return { type: "rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+        return { type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
       }
       if (msg.error) {
-        return { type: "error", code: msg.error, detail: msg.error };
+        return { type: "turn.error", code: msg.error, detail: msg.error };
       }
       const blocks = (msg.message.content ?? []).map(mapContentBlock).filter((b): b is ContentBlock => b !== null);
-      return blocks.length > 0 ? { type: "assistant", blocks } : null;
+      return blocks.length > 0 ? { type: "message", blocks } : null;
     }
 
     case "user": {
       const blocks = mapToolResult(msg);
-      return blocks.length > 0 ? { type: "assistant", blocks } : null;
+      return blocks.length > 0 ? { type: "message", blocks } : null;
     }
 
     case "result": {
       const text = msg.subtype === "success" ? msg.result : undefined;
-      return { type: "result", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> };
+      return { type: "turn.end", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> };
     }
 
     default:
       return null;
   }
+}
+
+/** Map a stream_event's content_block to a ContentBlock (or null to skip). */
+function mapStreamBlock(block: { type: string; [k: string]: unknown }): ContentBlock | null {
+  switch (block.type) {
+    case "tool_use":
+      return { type: "tool_use", id: block.id as string, name: block.name as string, input: block.input as Record<string, unknown> };
+    case "thinking":
+      return block.thinking ? { type: "thinking", text: block.thinking as string } : null;
+    case "text":
+      return block.text ? { type: "text", text: block.text as string } : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Streaming mapper: yields fine-grained events for real-time UI.
+ * One turn.start per query() call. Blocks stream in between.
+ * turn.end emitted when SDK yields `result`.
+ */
+export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean }): Generator<AgentEvent> {
+  if (msg.type === "stream_event") {
+    const partial = msg as SDKPartialAssistantMessage;
+    const evt = partial.event;
+    if (evt.type === "content_block_start") {
+      const block = mapStreamBlock(evt.content_block as unknown as { type: string; [k: string]: unknown });
+      if (!block) return;
+
+      if (!turnOpen.value) {
+        yield { type: "turn.start" };
+        turnOpen.value = true;
+      }
+      yield { type: "block.start", block };
+    }
+    return;
+  }
+
+  if (msg.type === "assistant") {
+    const assistantMsg = msg as SDKAssistantMessage;
+    if (assistantMsg.error) {
+      if (turnOpen.value) {
+        turnOpen.value = false;
+      }
+      const event = mapSDKMessage(msg);
+      if (event) yield event;
+      return;
+    }
+
+    // Internal API round-trip complete — emit block.done for each finalized block
+    const blocks = (assistantMsg.message.content ?? []).map(mapContentBlock).filter((b): b is ContentBlock => b !== null);
+
+    if (!turnOpen.value && blocks.length > 0) {
+      yield { type: "turn.start" };
+      turnOpen.value = true;
+    }
+
+    for (const block of blocks) {
+      yield { type: "block.done", block };
+    }
+    return;
+  }
+
+  if (msg.type === "user") {
+    // Tool results — emit block.done, turn stays open (more API calls may follow)
+    const blocks = mapToolResult(msg as SDKUserMessage);
+    for (const block of blocks) {
+      yield { type: "block.done", block };
+    }
+    return;
+  }
+
+  if (msg.type === "result") {
+    // Turn complete — emit turn.end with cost
+    turnOpen.value = false;
+    const text = (msg as any).subtype === "success" ? (msg as any).result : undefined;
+    yield { type: "turn.end", text, cost: (msg as any).total_cost_usd || 0, usage: (msg as any).usage };
+    return;
+  }
+
+  // Everything else (rate_limit_event, etc.) — delegate
+  const event = mapSDKMessage(msg);
+  if (event) yield event;
 }
 
 export const claudeProvider: AgentProvider = {
@@ -155,13 +238,14 @@ export const claudeProvider: AgentProvider = {
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         abortController,
+        includePartialMessages: true,
       },
     });
 
     const events = (async function* () {
+      const turnOpen = { value: false };
       for await (const msg of q) {
-        const event = mapSDKMessage(msg);
-        if (event) yield event;
+        yield* mapSDKMessageStream(msg, turnOpen);
       }
     })();
 

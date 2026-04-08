@@ -25,7 +25,7 @@ describe("parseHistoryMessages — assistant messages", () => {
     ];
     const events = parseHistoryMessages(messages);
     expect(events).toHaveLength(1);
-    expect(events[0].event.type).toBe("assistant");
+    expect(events[0].event.type).toBe("message");
   });
 
   it("uses the message uuid as the event id", () => {
@@ -60,7 +60,7 @@ describe("parseHistoryMessages — assistant messages", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const textBlock = evt.blocks.find((b: any) => b.type === "text");
     expect(textBlock?.text).toBe("response text");
   });
@@ -74,7 +74,7 @@ describe("parseHistoryMessages — assistant messages", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const thinkBlock = evt.blocks.find((b: any) => b.type === "thinking");
     expect(thinkBlock?.text).toBe("I think...");
   });
@@ -90,7 +90,7 @@ describe("parseHistoryMessages — assistant messages", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const toolBlock = evt.blocks.find((b: any) => b.type === "tool_use");
     expect(toolBlock?.name).toBe("bash");
   });
@@ -109,13 +109,13 @@ describe("parseHistoryMessages — user messages with string content", () => {
     const messages = [{ type: "user", uuid: "u1", message: { content: "hello" } }];
     const events = parseHistoryMessages(messages);
     expect(events).toHaveLength(1);
-    expect(events[0].event.type).toBe("user");
+    expect(events[0].event.type).toBe("message.user");
   });
 
   it("carries the string text on the user event", () => {
     const messages = [{ type: "user", uuid: "u2", message: { content: "hello there" } }];
     const events = parseHistoryMessages(messages);
-    expect((events[0].event as { type: "user"; text: string }).text).toBe("hello there");
+    expect((events[0].event as { type: "message.user"; text: string }).text).toBe("hello there");
   });
 
   it("uses uuid-user as event id when uuid is present", () => {
@@ -144,7 +144,7 @@ describe("parseHistoryMessages — user messages with array text blocks", () => 
     ];
     const events = parseHistoryMessages(messages);
     expect(events).toHaveLength(1);
-    expect(events[0].event.type).toBe("user");
+    expect(events[0].event.type).toBe("message.user");
   });
 
   it("carries the text value from the text block", () => {
@@ -156,7 +156,7 @@ describe("parseHistoryMessages — user messages with array text blocks", () => 
       },
     ];
     const events = parseHistoryMessages(messages);
-    expect((events[0].event as { type: "user"; text: string }).text).toBe("array text");
+    expect((events[0].event as { type: "message.user"; text: string }).text).toBe("array text");
   });
 
   it("joins multiple text blocks with newline", () => {
@@ -173,7 +173,7 @@ describe("parseHistoryMessages — user messages with array text blocks", () => 
       },
     ];
     const events = parseHistoryMessages(messages);
-    expect((events[0].event as { type: "user"; text: string }).text).toBe("line one\nline two");
+    expect((events[0].event as { type: "message.user"; text: string }).text).toBe("line one\nline two");
   });
 
   it("skips whitespace-only text blocks in arrays", () => {
@@ -204,7 +204,7 @@ describe("parseHistoryMessages — user messages with tool_result only", () => {
     ];
     const events = parseHistoryMessages(messages);
     expect(events).toHaveLength(1);
-    expect(events[0].event.type).toBe("assistant");
+    expect(events[0].event.type).toBe("message");
   });
 
   it("uses uuid-tool as event id for the tool_result event", () => {
@@ -232,7 +232,7 @@ describe("parseHistoryMessages — user messages with tool_result only", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const toolResult = evt.blocks.find((b: any) => b.type === "tool_result");
     expect(toolResult?.tool_use_id).toBe("tool-id-5");
   });
@@ -257,7 +257,7 @@ describe("parseHistoryMessages — user messages with tool_result only", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const toolResult = evt.blocks.find((b: any) => b.type === "tool_result");
     expect(toolResult?.output).toBe("part 1\npart 2");
   });
@@ -273,7 +273,7 @@ describe("parseHistoryMessages — user messages with tool_result only", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const toolResult = evt.blocks.find((b: any) => b.type === "tool_result");
     expect(toolResult?.output).toBeUndefined();
   });
@@ -289,7 +289,7 @@ describe("parseHistoryMessages — user messages with tool_result only", () => {
       },
     ];
     const events = parseHistoryMessages(messages);
-    const evt = events[0].event as { type: "assistant"; blocks: any[] };
+    const evt = events[0].event as { type: "message"; blocks: any[] };
     const toolResult = evt.blocks.find((b: any) => b.type === "tool_result");
     expect(toolResult?.error).toBe(true);
   });
@@ -320,12 +320,12 @@ describe("parseHistoryMessages — user messages with both tool_result and text"
 
   it("first event has type assistant (the tool_result)", () => {
     const events = parseHistoryMessages(mixedMessage());
-    expect(events[0].event.type).toBe("assistant");
+    expect(events[0].event.type).toBe("message");
   });
 
   it("second event has type user (the plain text)", () => {
     const events = parseHistoryMessages(mixedMessage());
-    expect(events[1].event.type).toBe("user");
+    expect(events[1].event.type).toBe("message.user");
   });
 
   it("tool_result event id ends with -tool suffix", () => {
@@ -345,7 +345,7 @@ describe("parseHistoryMessages — user messages with both tool_result and text"
 
   it("user text event carries the correct text", () => {
     const events = parseHistoryMessages(mixedMessage());
-    const userEvt = events[1].event as { type: "user"; text: string };
+    const userEvt = events[1].event as { type: "message.user"; text: string };
     expect(userEvt.text).toBe("user follow-up");
   });
 });
@@ -378,8 +378,8 @@ describe("parseHistoryMessages — edge cases", () => {
     ];
     const events = parseHistoryMessages(messages);
     expect(events).toHaveLength(3);
-    expect(events[0].event.type).toBe("assistant");
-    expect(events[1].event.type).toBe("user");
-    expect(events[2].event.type).toBe("assistant");
+    expect(events[0].event.type).toBe("message");
+    expect(events[1].event.type).toBe("message.user");
+    expect(events[2].event.type).toBe("message");
   });
 });

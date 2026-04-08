@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
 
 const logger = createLogger("codex");
 
@@ -56,20 +56,20 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
     case "item.completed": {
       const item = event.item;
       if (item.type === "agent_message" && item.text) {
-        return { type: "assistant", blocks: [{ type: "text", text: item.text }] };
+        return { type: "message", blocks: [{ type: "text", text: item.text }] };
       }
       if (item.type === "command_execution") {
         return {
-          type: "assistant",
+          type: "message",
           blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "command", input: { command: item.command } }],
         };
       }
       if (item.type === "file_change") {
         const files = item.changes.map((c) => `${c.kind} ${c.path}`).join(", ");
-        return { type: "assistant", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } }] };
+        return { type: "message", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } }] };
       }
       if (item.type === "reasoning" && item.text) {
-        return { type: "assistant", blocks: [{ type: "thinking", text: item.text }] };
+        return { type: "message", blocks: [{ type: "thinking", text: item.text }] };
       }
       return null;
     }
@@ -78,7 +78,7 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
       const { input_tokens, cached_input_tokens, output_tokens } = event.usage;
       const cost = calcCost(model, input_tokens ?? 0, cached_input_tokens ?? 0, output_tokens ?? 0);
       return {
-        type: "result",
+        type: "turn.end",
         cost,
         usage: {
           input_tokens: input_tokens ?? 0,
@@ -92,19 +92,86 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
     case "turn.failed": {
       const msg = String(event.error?.message || JSON.stringify(event));
       const resetAt = parseRateLimitReset(msg);
-      if (resetAt) return { type: "rate_limit", status: "rejected", resetAt };
-      return { type: "error", detail: msg };
+      if (resetAt) return { type: "turn.rate_limit", status: "rejected", resetAt };
+      return { type: "turn.error", detail: msg };
     }
 
     case "error": {
       const detail = String(event.message || JSON.stringify(event));
       const resetAt = parseRateLimitReset(detail);
-      if (resetAt) return { type: "rate_limit", status: "rejected", resetAt };
-      return { type: "error", detail };
+      if (resetAt) return { type: "turn.rate_limit", status: "rejected", resetAt };
+      return { type: "turn.error", detail };
     }
 
     default:
       return null;
+  }
+}
+
+/** Map a Codex ThreadItem to a ContentBlock. */
+function mapItemToBlock(item: { id?: string; type: string; [k: string]: any }): ContentBlock | null {
+  switch (item.type) {
+    case "agent_message":
+      return item.text ? { type: "text", text: item.text } : null;
+    case "command_execution":
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "command", input: { command: item.command } };
+    case "file_change": {
+      const files = item.changes?.map((c: any) => `${c.kind} ${c.path}`).join(", ") ?? "";
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } };
+    }
+    case "mcp_tool_call":
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: item.name ?? "mcp_tool", input: item.arguments ?? {} };
+    case "web_search":
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "web_search", input: { query: item.query ?? "" } };
+    case "reasoning":
+      return item.text ? { type: "thinking", text: item.text } : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Streaming mapper for Codex: uses native turn/item lifecycle events.
+ * - turn.started → turn.start
+ * - item.started → block.start (tool shows loading)
+ * - item.completed → block.done (result fills in)
+ * - turn.completed → turn.end { cost }
+ * - turn.failed/error → turn.error / turn.rate_limit
+ */
+export function* mapThreadEventStream(event: ThreadEvent, model: string, turnOpen: { value: boolean }): Generator<AgentEvent> {
+  if (event.type === "turn.started") {
+    if (!turnOpen.value) {
+      yield { type: "turn.start" };
+      turnOpen.value = true;
+    }
+    return;
+  }
+
+  if (event.type === "item.started") {
+    if (!turnOpen.value) {
+      yield { type: "turn.start" };
+      turnOpen.value = true;
+    }
+    const block = mapItemToBlock(event.item);
+    if (block) yield { type: "block.start", block };
+    return;
+  }
+
+  if (event.type === "item.completed") {
+    if (!turnOpen.value) {
+      yield { type: "turn.start" };
+      turnOpen.value = true;
+    }
+    const block = mapItemToBlock(event.item);
+    if (block) yield { type: "block.done", block };
+    return;
+  }
+
+  if (event.type === "turn.completed" || event.type === "turn.failed" || event.type === "error") {
+    turnOpen.value = false;
+    const mapped = mapThreadEvent(event, model);
+    if (mapped) yield mapped;
+    return;
   }
 }
 
@@ -128,9 +195,9 @@ export const codexProvider: AgentProvider = {
     const streamed = await thread.runStreamed(opts.taskContext, { signal: abortController.signal });
 
     const events = (async function* () {
+      const turnOpen = { value: false };
       for await (const event of streamed.events) {
-        const mapped = mapThreadEvent(event, model);
-        if (mapped) yield mapped;
+        yield* mapThreadEventStream(event, model, turnOpen);
       }
     })();
 

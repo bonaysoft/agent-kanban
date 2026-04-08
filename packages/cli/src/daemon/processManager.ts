@@ -265,7 +265,7 @@ export class ProcessManager {
     if (agent) this.tunnel?.sendEvent(agent.sessionId, event);
 
     switch (event.type) {
-      case "rate_limit": {
+      case "turn.rate_limit": {
         const runtime = agent?.provider.name ?? "unknown";
         if (event.status === "rejected") {
           // Pause until the latest known resetAt: take both main and overage
@@ -302,13 +302,13 @@ export class ProcessManager {
         break;
       }
 
-      case "error": {
+      case "turn.error": {
         logger.warn(`Agent error on task ${taskId} (${agent?.provider.name}): ${event.detail}`);
         break;
       }
 
-      case "assistant": {
-        // Extract text blocks for D1 message archive
+      case "message": {
+        // Extract text blocks for D1 message archive (legacy/history path)
         const texts = event.blocks.filter((b) => b.type === "text").map((b) => (b as { text: string }).text);
         if (texts.length > 0) {
           agentClient
@@ -322,7 +322,21 @@ export class ProcessManager {
         break;
       }
 
-      case "result": {
+      case "block.done": {
+        // Streaming path — archive text blocks as they finalize
+        if (event.block.type === "text" && event.block.text) {
+          agentClient
+            .sendMessage(taskId, {
+              sender_type: "agent",
+              sender_id: agentClient.getAgentId(),
+              content: event.block.text,
+            })
+            .catch((e: any) => logger.error(`Failed to send message for task ${taskId}: ${e.message}`));
+        }
+        break;
+      }
+
+      case "turn.end": {
         const cost = event.cost || 0;
         const usage = event.usage || {};
         logger.info(`Agent result for task ${taskId} (${agent?.provider.name}): cost=$${cost.toFixed(4)}`);

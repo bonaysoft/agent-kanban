@@ -27,7 +27,7 @@ export function parseHistoryMessages(messages: any[]): RelayEvent[] {
         else if (block.type === "text" && block.text) blocks.push({ type: "text", text: block.text });
       }
       if (blocks.length > 0) {
-        events.push({ id: m.uuid || `hist-${++counter}`, event: { type: "assistant", blocks }, timestamp: new Date().toISOString() });
+        events.push({ id: m.uuid || `hist-${++counter}`, event: { type: "message", blocks }, timestamp: new Date().toISOString() });
       }
     } else if (m.type === "user" && m.message?.content != null) {
       // User messages from the Claude SDK come in two flavors:
@@ -62,14 +62,14 @@ export function parseHistoryMessages(messages: any[]): RelayEvent[] {
       if (toolBlocks.length > 0) {
         events.push({
           id: m.uuid ? `${m.uuid}-tool` : `hist-${++counter}`,
-          event: { type: "assistant", blocks: toolBlocks },
+          event: { type: "message", blocks: toolBlocks },
           timestamp: new Date().toISOString(),
         });
       }
       if (userTextParts.length > 0) {
         events.push({
           id: m.uuid ? `${m.uuid}-user` : `hist-${++counter}`,
-          event: { type: "user", text: userTextParts.join("\n") },
+          event: { type: "message.user", text: userTextParts.join("\n") },
           timestamp: new Date().toISOString(),
         });
       }
@@ -78,10 +78,13 @@ export function parseHistoryMessages(messages: any[]): RelayEvent[] {
   return events;
 }
 
+export type AgentStatus = "idle" | "working" | "done" | "rate_limited";
+
 export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOptions) {
   const [events, setEvents] = useState<RelayEvent[]>([]);
   const [daemonConnected, setDaemonConnected] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
   const wsRef = useRef<WebSocket | null>(null);
   const idCounter = useRef(0);
   const historyLoaded = useRef(false);
@@ -149,11 +152,19 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
           setEvents((prev) => [...prev, { id, event: msg.event as AgentEvent, timestamp: new Date().toISOString() }]);
           break;
         }
+        case "agent:status": {
+          const status = msg.status as string;
+          if (status === "working" || status === "done" || status === "rate_limited") {
+            setAgentStatus(status);
+          }
+          break;
+        }
         case "daemon:connected":
           setDaemonConnected(true);
           break;
         case "daemon:disconnected":
           setDaemonConnected(false);
+          setAgentStatus("idle");
           break;
       }
     };
@@ -177,5 +188,5 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
     wsRef.current.send(JSON.stringify({ type: "human:message", content, senderId }));
   }, []);
 
-  return { events, sendMessage, daemonConnected, wsConnected };
+  return { events, sendMessage, daemonConnected, wsConnected, agentStatus };
 }

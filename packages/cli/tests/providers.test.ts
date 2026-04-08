@@ -67,14 +67,14 @@ import type { AgentProvider } from "../src/providers/types.js";
 // ---------------------------------------------------------------------------
 
 describe("mapSDKMessage — rate_limit_event rejected", () => {
-  it("returns rate_limit when status is rejected", () => {
+  it("returns turn.rate_limit when status is rejected", () => {
     const msg = {
       type: "rate_limit_event",
       rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("rate_limit");
+    expect(mapSDKMessage(msg)?.type).toBe("turn.rate_limit");
   });
 
   it("includes resetAt derived from resetsAt epoch", () => {
@@ -86,7 +86,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.resetAt).toBeDefined();
       expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
     }
@@ -102,7 +102,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
     expect(mapSDKMessage(msg)).toBeNull();
   });
 
-  it("returns rate_limit event when status is allowed", () => {
+  it("returns turn.rate_limit event when status is allowed", () => {
     const msg = {
       type: "rate_limit_event",
       rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", isUsingOverage: false },
@@ -110,15 +110,15 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("allowed");
     }
   });
 });
 
 describe("mapSDKMessage — user message (tool_result)", () => {
-  it("returns assistant event with tool_result block from user message with tool_result content", () => {
+  it("returns message event with tool_result block from user message with tool_result content", () => {
     const msg = {
       type: "user",
       message: {
@@ -129,13 +129,13 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0].type).toBe("tool_result");
     }
   });
 
-  it("returns null for user message with tool_result whose content is array of text blocks", () => {
+  it("returns message event for user message with tool_result whose content is array of text blocks", () => {
     const msg = {
       type: "user",
       message: {
@@ -153,7 +153,7 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
+    expect(result?.type).toBe("message");
   });
 
   it("returns null for user message with no tool_result blocks", () => {
@@ -183,7 +183,7 @@ describe("mapSDKMessage — user message (tool_result)", () => {
 });
 
 describe("mapSDKMessage — assistant message", () => {
-  it("returns assistant event with text block in blocks array", () => {
+  it("returns message event with text block in blocks array", () => {
     const msg = {
       type: "assistant",
       message: { content: [{ type: "text", text: "Hello world" }] },
@@ -193,13 +193,13 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0]).toEqual({ type: "text", text: "Hello world" });
     }
   });
 
-  it("returns assistant event with tool_use block when content has only tool_use blocks", () => {
+  it("returns message event with tool_use block when content has only tool_use blocks", () => {
     const msg = {
       type: "assistant",
       message: { content: [{ type: "tool_use", id: "tu1", name: "bash", input: { command: "ls" } }] },
@@ -209,13 +209,13 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0].type).toBe("tool_use");
     }
   });
 
-  it("returns rate_limit when error field is 'rate_limit'", () => {
+  it("returns turn.rate_limit when error field is 'rate_limit'", () => {
     const msg = {
       type: "assistant",
       error: "rate_limit",
@@ -224,10 +224,10 @@ describe("mapSDKMessage — assistant message", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("rate_limit");
+    expect(mapSDKMessage(msg)?.type).toBe("turn.rate_limit");
   });
 
-  it("returns error event for non-rate-limit string error", () => {
+  it("returns turn.error event for non-rate-limit string error", () => {
     const msg = {
       type: "assistant",
       error: "authentication_error",
@@ -236,12 +236,12 @@ describe("mapSDKMessage — assistant message", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("error");
+    expect(mapSDKMessage(msg)?.type).toBe("turn.error");
   });
 });
 
 describe("mapSDKMessage — result", () => {
-  it("returns result event", () => {
+  it("returns turn.end event", () => {
     const msg = {
       type: "result",
       subtype: "success",
@@ -250,7 +250,7 @@ describe("mapSDKMessage — result", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("result");
+    expect(mapSDKMessage(msg)?.type).toBe("turn.end");
   });
 
   it("includes cost from total_cost_usd", () => {
@@ -263,7 +263,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.cost).toBe(0.12);
     }
   });
@@ -277,7 +277,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.cost).toBe(0);
     }
   });
@@ -293,7 +293,7 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.usage).toEqual(usage);
     }
   });
@@ -325,26 +325,26 @@ describe("claudeProvider identity", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapThreadEvent — item.completed", () => {
-  it("returns assistant event with text block when item is agent_message with text", () => {
+  it("returns message event with text block when item is agent_message with text", () => {
     const event = {
       type: "item.completed",
       item: { id: "i1", type: "agent_message", text: "Task done" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0]).toEqual({ type: "text", text: "Task done" });
     }
   });
 
-  it("returns assistant event with tool_use block when item is command_execution", () => {
+  it("returns message event with tool_use block when item is command_execution", () => {
     const event = {
       type: "item.completed",
       item: { id: "i1", type: "command_execution", command: "ls", aggregated_output: "", status: "completed" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("assistant");
-    if (result?.type === "assistant") {
+    expect(result?.type).toBe("message");
+    if (result?.type === "message") {
       expect(result.blocks[0]).toEqual({ type: "tool_use", id: "i1", name: "command", input: { command: "ls" } });
     }
   });
@@ -363,12 +363,12 @@ describe("mapThreadEvent — item.completed", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapThreadEvent — turn.completed", () => {
-  it("returns result event", () => {
+  it("returns turn.end event", () => {
     const event = {
       type: "turn.completed",
       usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 50 },
     } as unknown as ThreadEvent;
-    expect(mapThreadEvent(event)?.type).toBe("result");
+    expect(mapThreadEvent(event)?.type).toBe("turn.end");
   });
 
   it("includes usage with input_tokens and output_tokens", () => {
@@ -377,7 +377,7 @@ describe("mapThreadEvent — turn.completed", () => {
       usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 50 },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.usage?.input_tokens).toBe(100);
       expect(result.usage?.output_tokens).toBe(50);
     }
@@ -390,7 +390,7 @@ describe("mapThreadEvent — turn.completed", () => {
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
     // o3: 2.0/1M input + 8.0/1M output = 10.0
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.cost).toBeCloseTo(10.0, 5);
     }
   });
@@ -401,7 +401,7 @@ describe("mapThreadEvent — turn.completed", () => {
       usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 50 },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    if (result?.type === "result") {
+    if (result?.type === "turn.end") {
       expect(result.usage?.cache_read_input_tokens).toBe(20);
     }
   });
@@ -412,40 +412,40 @@ describe("mapThreadEvent — turn.completed", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapThreadEvent — turn.failed", () => {
-  it("returns rate_limit event when error message matches rate limit pattern", () => {
+  it("returns turn.rate_limit event when error message matches rate limit pattern", () => {
     const event = {
       type: "turn.failed",
       error: { message: "Rate limit exceeded, try again at 2026-04-01T15:00:00Z" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("rate_limit");
+    expect(result?.type).toBe("turn.rate_limit");
   });
 
-  it("returns rate_limit event when error message matches quota exceeded pattern", () => {
+  it("returns turn.rate_limit event when error message matches quota exceeded pattern", () => {
     const event = {
       type: "turn.failed",
       error: { message: "quota exceeded for this model" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("rate_limit");
+    expect(result?.type).toBe("turn.rate_limit");
   });
 
-  it("returns error event when error message does not match rate limit pattern", () => {
+  it("returns turn.error event when error message does not match rate limit pattern", () => {
     const event = {
       type: "turn.failed",
       error: { message: "Internal server error" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("error");
-    if (result?.type === "error") {
+    expect(result?.type).toBe("turn.error");
+    if (result?.type === "turn.error") {
       expect(result.detail).toContain("Internal server error");
     }
   });
 
-  it("returns error event when error is absent", () => {
+  it("returns turn.error event when error is absent", () => {
     const event = { type: "turn.failed" } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("error");
+    expect(result?.type).toBe("turn.error");
   });
 });
 
@@ -454,23 +454,23 @@ describe("mapThreadEvent — turn.failed", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapThreadEvent — error event", () => {
-  it("returns rate_limit when message matches rate limit pattern", () => {
+  it("returns turn.rate_limit when message matches rate limit pattern", () => {
     const event = {
       type: "error",
       message: "usage limit exceeded, please try again at tomorrow",
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("rate_limit");
+    expect(result?.type).toBe("turn.rate_limit");
   });
 
-  it("returns error when message does not match rate limit", () => {
+  it("returns turn.error when message does not match rate limit", () => {
     const event = {
       type: "error",
       message: "Connection reset by peer",
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("error");
-    if (result?.type === "error") {
+    expect(result?.type).toBe("turn.error");
+    if (result?.type === "turn.error") {
       expect(result.detail).toContain("Connection reset by peer");
     }
   });
@@ -654,8 +654,10 @@ describe("codexProvider.execute — thread selection", () => {
     const handle = await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     const events: any[] = [];
     for await (const ev of handle.events) events.push(ev);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "assistant", blocks: [{ type: "text", text: "codex message" }] });
+    // Mock only yields item.completed (no item.started), so: turn.start + block.done
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ type: "turn.start" });
+    expect(events[1]).toEqual({ type: "block.done", block: { type: "text", text: "codex message" } });
   });
 
   it("send() throws not-implemented error", async () => {
@@ -961,16 +963,16 @@ describe("geminiProvider.parseEvent — invalid input", () => {
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.parseEvent — assistant message", () => {
-  it("returns an assistant event for assistant role with content", () => {
+  it("returns a message event for assistant role with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("assistant");
+    expect(event?.type).toBe("message");
   });
 
   it("includes the content as a text block in blocks array", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "Hello world" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "assistant") {
+    if (event?.type === "message") {
       expect(event.blocks[0]).toEqual({ type: "text", text: "Hello world" });
     }
   });
@@ -978,8 +980,8 @@ describe("geminiProvider.parseEvent — assistant message", () => {
   it("handles delta assistant message with content", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "partial text", delta: true });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("assistant");
-    if (event?.type === "assistant") {
+    expect(event?.type).toBe("message");
+    if (event?.type === "message") {
       expect(event.blocks[0]).toEqual({ type: "text", text: "partial text" });
     }
   });
@@ -1000,17 +1002,17 @@ describe("geminiProvider.parseEvent — assistant message", () => {
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.parseEvent — result", () => {
-  it("returns a result event", () => {
+  it("returns a turn.end event", () => {
     const raw = JSON.stringify({ type: "result", status: "success", stats: { total_tokens: 100, input_tokens: 60, output_tokens: 40 } });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("result");
+    expect(event?.type).toBe("turn.end");
   });
 
   it("includes stats as usage", () => {
     const stats = { total_tokens: 100, input_tokens: 60, output_tokens: 40 };
     const raw = JSON.stringify({ type: "result", status: "success", stats });
     const event = geminiParseEvent(raw);
-    if (event?.type === "result") {
+    if (event?.type === "turn.end") {
       expect(event.usage).toEqual(stats);
     }
   });
@@ -1018,7 +1020,7 @@ describe("geminiProvider.parseEvent — result", () => {
   it("includes usage as undefined when stats is absent", () => {
     const raw = JSON.stringify({ type: "result", status: "success" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "result") {
+    if (event?.type === "turn.end") {
       expect(event.usage).toBeUndefined();
     }
   });
@@ -1026,7 +1028,7 @@ describe("geminiProvider.parseEvent — result", () => {
   it("returns zero cost when no model breakdown is present", () => {
     const raw = JSON.stringify({ type: "result", status: "success", stats: {} });
     const event = geminiParseEvent(raw);
-    if (event?.type === "result") {
+    if (event?.type === "turn.end") {
       expect(event.cost).toBe(0);
     }
   });
@@ -1045,8 +1047,8 @@ describe("geminiProvider.parseEvent — result", () => {
     // flash-lite: 1M * 0.10/1M + 1M * 0.40/1M = 0.50
     // pro: 500K * 1.25/1M + 200K * 10.00/1M = 0.625 + 2.00 = 2.625
     // total: 3.125
-    expect(event?.type).toBe("result");
-    if (event?.type === "result") {
+    expect(event?.type).toBe("turn.end");
+    if (event?.type === "turn.end") {
       expect(event.cost).toBeCloseTo(3.125, 6);
     }
   });
@@ -1063,8 +1065,8 @@ describe("geminiProvider.parseEvent — result", () => {
     });
     const event = geminiParseEvent(raw);
     // only flash counted: 1M * 0.30/1M = 0.30
-    expect(event?.type).toBe("result");
-    if (event?.type === "result") {
+    expect(event?.type).toBe("turn.end");
+    if (event?.type === "turn.end") {
       expect(event.cost).toBeCloseTo(0.3, 6);
     }
   });
@@ -1075,44 +1077,44 @@ describe("geminiProvider.parseEvent — result", () => {
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.parseEvent — error variants", () => {
-  it("returns error event when event.type is error", () => {
+  it("returns turn.error event when event.type is error", () => {
     const raw = JSON.stringify({ type: "error", message: "Something went wrong" });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("error");
+    expect(event?.type).toBe("turn.error");
   });
 
   it("includes detail from event.message when type is error", () => {
     const raw = JSON.stringify({ type: "error", message: "Boom" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "error") {
+    if (event?.type === "turn.error") {
       expect(event.detail).toContain("Boom");
     }
   });
 
-  it("returns error event when event.status is error and type is not result", () => {
+  it("returns turn.error event when event.status is error and type is not result", () => {
     const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("error");
+    expect(event?.type).toBe("turn.error");
   });
 
   it("includes detail from event.error when status is error and error field is present", () => {
     const raw = JSON.stringify({ type: "message", role: "system", status: "error", error: "Generation failed" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "error") {
+    if (event?.type === "turn.error") {
       expect(event.detail).toContain("Generation failed");
     }
   });
 
-  it("result event with status error still returns result (type check takes precedence over status)", () => {
+  it("result event with status error still returns turn.end (type check takes precedence over status)", () => {
     const raw = JSON.stringify({ type: "result", status: "error", stats: {} });
     const event = geminiParseEvent(raw);
-    expect(event?.type).toBe("result");
+    expect(event?.type).toBe("turn.end");
   });
 
   it("falls back to JSON stringified event as detail when message and error are absent", () => {
     const raw = JSON.stringify({ type: "error" });
     const event = geminiParseEvent(raw);
-    if (event?.type === "error") {
+    if (event?.type === "turn.error") {
       expect(typeof event.detail).toBe("string");
       expect(event.detail.length).toBeGreaterThan(0);
     }
@@ -1198,8 +1200,8 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("allowed");
       expect(result.isUsingOverage).toBe(true);
       expect(result.resetAt).toBeUndefined();
@@ -1214,8 +1216,8 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("allowed");
       expect(result.isUsingOverage).toBe(false);
     }
@@ -1229,8 +1231,8 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.resetAt).toBeUndefined();
     }
   });
@@ -1249,7 +1251,7 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.overage?.status).toBe("rejected");
       expect(result.overage?.resetAt).toBe(new Date(1700003600 * 1000).toISOString());
     }
@@ -1263,7 +1265,7 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "rate_limit") {
+    if (result?.type === "turn.rate_limit") {
       expect(result.overage).toBeUndefined();
     }
   });
@@ -1280,8 +1282,8 @@ describe("mapThreadEvent — codex rate_limit status field", () => {
       error: { message: "Rate limit exceeded, try again at 2026-04-01T15:00:00Z" },
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("rejected");
     }
   });
@@ -1292,8 +1294,8 @@ describe("mapThreadEvent — codex rate_limit status field", () => {
       message: "usage limit exceeded, please try again at tomorrow",
     } as unknown as ThreadEvent;
     const result = mapThreadEvent(event);
-    expect(result?.type).toBe("rate_limit");
-    if (result?.type === "rate_limit") {
+    expect(result?.type).toBe("turn.rate_limit");
+    if (result?.type === "turn.rate_limit") {
       expect(result.status).toBe("rejected");
     }
   });
