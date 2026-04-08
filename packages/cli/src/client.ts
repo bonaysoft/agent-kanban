@@ -5,8 +5,8 @@ import { SignJWT } from "jose";
 import { getCredentials } from "./config.js";
 import { loadIdentity, type StoredIdentity, saveIdentity } from "./identity.js";
 import { PID_FILE } from "./paths.js";
-import { detectRuntime } from "./runtime.js";
-import { readSession, writeSession } from "./sessionStore.js";
+import { detectRuntime, findRuntimeAncestorPid } from "./runtime.js";
+import { findSessionByPid, isPidAlive, writeSession } from "./sessionStore.js";
 import type { UsageInfo } from "./types.js";
 
 export class ApiError extends Error {
@@ -324,15 +324,19 @@ export async function createClient(): Promise<ApiClient> {
     throw new Error("This command requires agent identity. Run inside an agent runtime.");
   }
 
-  // Check for existing session (previous ak call wrote the session ID to env)
-  const leaderSessionId = process.env.AK_LEADER_SESSION_ID;
-  if (leaderSessionId) {
-    const existing = readSession(leaderSessionId);
-    if (existing?.type === "leader") {
-      const key = await crypto.subtle.importKey("jwk", existing.privateKeyJwk, { name: "Ed25519" } as any, false, ["sign"]);
-      cachedLeaderClient = new AgentClient(existing.apiUrl, existing.agentId, existing.sessionId, key);
-      return cachedLeaderClient;
-    }
+  // Anchor the leader session to the long-lived runtime process PID so it outlives
+  // the ephemeral shell that spawns `ak`. Without this, every ak invocation would
+  // create a fresh session that the daemon's heartbeat immediately reaps.
+  const leaderPid = findRuntimeAncestorPid(runtime);
+  if (leaderPid === null) {
+    throw new Error(`Could not locate ${runtime} process in ancestry. ak must be invoked from inside a ${runtime} session.`);
+  }
+
+  const existing = findSessionByPid(leaderPid);
+  if (existing?.type === "leader" && existing.runtime === runtime && isPidAlive(leaderPid)) {
+    const key = await crypto.subtle.importKey("jwk", existing.privateKeyJwk, { name: "Ed25519" } as any, false, ["sign"]);
+    cachedLeaderClient = new AgentClient(existing.apiUrl, existing.agentId, existing.sessionId, key);
+    return cachedLeaderClient;
   }
 
   if (!isDaemonAlive()) {
@@ -354,15 +358,12 @@ export async function createClient(): Promise<ApiClient> {
     type: "leader",
     agentId: identity.agent_id,
     sessionId,
-    pid: process.ppid,
+    pid: leaderPid,
     runtime,
     startedAt: Date.now(),
     apiUrl,
     privateKeyJwk: privJwk,
   });
-
-  // Persist session ID in env so subsequent ak calls in this agent process find it
-  process.env.AK_LEADER_SESSION_ID = sessionId;
 
   cachedLeaderClient = new AgentClient(apiUrl, identity.agent_id, sessionId, privateKey);
   return cachedLeaderClient;

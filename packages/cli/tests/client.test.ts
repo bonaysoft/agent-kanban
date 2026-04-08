@@ -14,7 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetCredentials = vi.fn(() => ({ apiUrl: "https://api.example.com", apiKey: "test-key" }));
 const mockDetectRuntime = vi.fn<[], string | null>(() => null);
+const mockFindRuntimeAncestorPid = vi.fn<[string], number | null>(() => null);
 const mockReadSession = vi.fn(() => null as any);
+const mockFindSessionByPid = vi.fn(() => null as any);
+const mockIsPidAlive = vi.fn(() => false);
 const mockWriteSession = vi.fn();
 const mockLoadIdentity = vi.fn(() => null);
 const mockSaveIdentity = vi.fn();
@@ -29,8 +32,13 @@ const mockReadFileSync = vi.fn((path: unknown, ...args: unknown[]) => {
 function registerMocks() {
   vi.mock("../src/config.js", () => ({ getCredentials: mockGetCredentials }));
   vi.mock("../src/identity.js", () => ({ loadIdentity: mockLoadIdentity, saveIdentity: mockSaveIdentity }));
-  vi.mock("../src/runtime.js", () => ({ detectRuntime: mockDetectRuntime }));
-  vi.mock("../src/sessionStore.js", () => ({ readSession: mockReadSession, writeSession: mockWriteSession }));
+  vi.mock("../src/runtime.js", () => ({ detectRuntime: mockDetectRuntime, findRuntimeAncestorPid: mockFindRuntimeAncestorPid }));
+  vi.mock("../src/sessionStore.js", () => ({
+    readSession: mockReadSession,
+    findSessionByPid: mockFindSessionByPid,
+    isPidAlive: mockIsPidAlive,
+    writeSession: mockWriteSession,
+  }));
   vi.mock("node:fs", async () => {
     const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
     return { ...actual, existsSync: vi.fn(() => false), readFileSync: mockReadFileSync };
@@ -69,7 +77,10 @@ beforeEach(() => {
   // Restore defaults after clearAllMocks
   mockGetCredentials.mockReturnValue({ apiUrl: "https://api.example.com", apiKey: "test-key" });
   mockDetectRuntime.mockReturnValue(null);
+  mockFindRuntimeAncestorPid.mockReturnValue(null);
   mockReadSession.mockReturnValue(null);
+  mockFindSessionByPid.mockReturnValue(null);
+  mockIsPidAlive.mockReturnValue(false);
   mockReadFileSync.mockImplementation((path: unknown) => {
     if (typeof path === "string" && path.endsWith("daemon.pid")) return DEAD_PID;
     throw new Error(`Unexpected readFileSync: ${path}`);
@@ -214,25 +225,31 @@ describe("createClient — no runtime (human in terminal)", () => {
   });
 });
 
-// ── createClient: runtime detected + existing leader session in file ─────────
+// ── createClient: runtime detected + existing leader session found by PID ─────
 
 describe("createClient — leader session restored from session file", () => {
-  it("returns an AgentClient built from the stored session", async () => {
-    const { createClient, AgentClient } = await freshClient();
-    const privJwk = await makePrivKeyJwk();
-    const storedSessionId = randomUUID();
-    process.env.AK_LEADER_SESSION_ID = storedSessionId;
-    mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue({
+  function makeStoredSession(privJwk: JsonWebKey, overrides: Partial<Record<string, unknown>> = {}) {
+    return {
       type: "leader",
       agentId: randomUUID(),
-      sessionId: storedSessionId,
+      sessionId: randomUUID(),
       pid: process.ppid,
       runtime: "claude",
       startedAt: Date.now(),
       apiUrl: "https://api.example.com",
       privateKeyJwk: privJwk,
-    });
+      ...overrides,
+    };
+  }
+
+  it("returns an AgentClient built from the stored session", async () => {
+    const { createClient, AgentClient } = await freshClient();
+    const privJwk = await makePrivKeyJwk();
+    const session = makeStoredSession(privJwk);
+    mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
+    mockFindSessionByPid.mockReturnValue(session);
+    mockIsPidAlive.mockReturnValue(true);
 
     const client = await createClient();
     expect(client).toBeInstanceOf(AgentClient);
@@ -242,19 +259,11 @@ describe("createClient — leader session restored from session file", () => {
     const { createClient, AgentClient } = await freshClient();
     const privJwk = await makePrivKeyJwk();
     const storedAgentId = randomUUID();
-    const storedSessionId = randomUUID();
-    process.env.AK_LEADER_SESSION_ID = storedSessionId;
+    const session = makeStoredSession(privJwk, { agentId: storedAgentId });
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue({
-      type: "leader",
-      agentId: storedAgentId,
-      sessionId: storedSessionId,
-      pid: process.ppid,
-      runtime: "claude",
-      startedAt: Date.now(),
-      apiUrl: "https://api.example.com",
-      privateKeyJwk: privJwk,
-    });
+    mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
+    mockFindSessionByPid.mockReturnValue(session);
+    mockIsPidAlive.mockReturnValue(true);
 
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
     expect(client.getAgentId()).toBe(storedAgentId);
@@ -264,18 +273,11 @@ describe("createClient — leader session restored from session file", () => {
     const { createClient, AgentClient } = await freshClient();
     const privJwk = await makePrivKeyJwk();
     const storedSessionId = randomUUID();
-    process.env.AK_LEADER_SESSION_ID = storedSessionId;
+    const session = makeStoredSession(privJwk, { sessionId: storedSessionId });
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue({
-      type: "leader",
-      agentId: randomUUID(),
-      sessionId: storedSessionId,
-      pid: process.ppid,
-      runtime: "claude",
-      startedAt: Date.now(),
-      apiUrl: "https://api.example.com",
-      privateKeyJwk: privJwk,
-    });
+    mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
+    mockFindSessionByPid.mockReturnValue(session);
+    mockIsPidAlive.mockReturnValue(true);
 
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
     expect(client.getSessionId()).toBe(storedSessionId);
@@ -284,19 +286,11 @@ describe("createClient — leader session restored from session file", () => {
   it("does not call the daemon PID file path when a stored session exists", async () => {
     const { createClient } = await freshClient();
     const privJwk = await makePrivKeyJwk();
-    const storedSessionId = randomUUID();
-    process.env.AK_LEADER_SESSION_ID = storedSessionId;
+    const session = makeStoredSession(privJwk);
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue({
-      type: "leader",
-      agentId: randomUUID(),
-      sessionId: storedSessionId,
-      pid: process.ppid,
-      runtime: "claude",
-      startedAt: Date.now(),
-      apiUrl: "https://api.example.com",
-      privateKeyJwk: privJwk,
-    });
+    mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
+    mockFindSessionByPid.mockReturnValue(session);
+    mockIsPidAlive.mockReturnValue(true);
 
     await createClient();
     // isDaemonAlive reads PID_FILE — should not be called when session is restored
@@ -310,7 +304,8 @@ describe("createClient — daemon not running", () => {
   it("throws when runtime is detected but daemon PID is dead", async () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue(null);
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    mockFindSessionByPid.mockReturnValue(null);
     // DEAD_PID (4194304) is beyond kernel pid_max — process.kill will throw
     await expect(createClient()).rejects.toThrow(/daemon/i);
   });
@@ -318,17 +313,79 @@ describe("createClient — daemon not running", () => {
   it("error message mentions ak start", async () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue(null);
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    mockFindSessionByPid.mockReturnValue(null);
     await expect(createClient()).rejects.toThrow(/ak start/i);
   });
 
   it("throws when the PID file does not exist (readFileSync throws)", async () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue(null);
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    mockFindSessionByPid.mockReturnValue(null);
     mockReadFileSync.mockImplementation(() => {
       throw new Error("ENOENT");
     });
+    await expect(createClient()).rejects.toThrow(/daemon/i);
+  });
+
+  it("falls through to daemon check when session runtime does not match current runtime", async () => {
+    const { createClient } = await freshClient();
+    const privJwk = await makePrivKeyJwk();
+    mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    // Session exists but has wrong runtime
+    mockFindSessionByPid.mockReturnValue({
+      type: "leader",
+      agentId: randomUUID(),
+      sessionId: randomUUID(),
+      pid: process.ppid,
+      runtime: "codex", // mismatch
+      startedAt: Date.now(),
+      apiUrl: "https://api.example.com",
+      privateKeyJwk: privJwk,
+    });
+    mockIsPidAlive.mockReturnValue(true);
+    // DEAD_PID daemon
+    await expect(createClient()).rejects.toThrow(/daemon/i);
+  });
+
+  it("falls through to daemon check when session pid is not alive", async () => {
+    const { createClient } = await freshClient();
+    const privJwk = await makePrivKeyJwk();
+    mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    mockFindSessionByPid.mockReturnValue({
+      type: "leader",
+      agentId: randomUUID(),
+      sessionId: randomUUID(),
+      pid: process.ppid,
+      runtime: "claude",
+      startedAt: Date.now(),
+      apiUrl: "https://api.example.com",
+      privateKeyJwk: privJwk,
+    });
+    mockIsPidAlive.mockReturnValue(false); // pid is dead
+    // DEAD_PID daemon
+    await expect(createClient()).rejects.toThrow(/daemon/i);
+  });
+
+  it("falls through to daemon check when session type is not leader", async () => {
+    const { createClient } = await freshClient();
+    const privJwk = await makePrivKeyJwk();
+    mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
+    mockFindSessionByPid.mockReturnValue({
+      type: "worker", // not leader
+      agentId: randomUUID(),
+      sessionId: randomUUID(),
+      pid: process.ppid,
+      runtime: "claude",
+      startedAt: Date.now(),
+      apiUrl: "https://api.example.com",
+      privateKeyJwk: privJwk,
+    });
+    mockIsPidAlive.mockReturnValue(true);
     await expect(createClient()).rejects.toThrow(/daemon/i);
   });
 });
@@ -432,6 +489,7 @@ describe("createClient — full leader auto-init", () => {
   it("returns an AgentClient when daemon is alive and no pre-existing identity", async () => {
     const { createClient, AgentClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
     mockReadSession.mockReturnValue(null);
     mockLoadIdentity.mockReturnValue(null);
     // Make daemon appear alive by returning the current PID
@@ -454,6 +512,7 @@ describe("createClient — full leader auto-init", () => {
   it("calls writeSession to persist the new leader session", async () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
     mockReadSession.mockReturnValue(null);
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
@@ -477,6 +536,7 @@ describe("createClient — full leader auto-init", () => {
     const { createClient } = await freshClient();
     const existingAgentId = randomUUID();
     mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
     mockReadSession.mockReturnValue(null);
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
@@ -499,6 +559,7 @@ describe("createClient — full leader auto-init", () => {
   it("uses a pre-stored identity without calling listAgents", async () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(99999);
     mockReadSession.mockReturnValue(null);
     // loadIdentity returns an already-saved identity
     mockLoadIdentity.mockReturnValue({ agent_id: randomUUID(), name: "claude", fingerprint: "fp" });
@@ -522,10 +583,12 @@ describe("createClient — full leader auto-init", () => {
     }
   });
 
-  it("sets AK_LEADER_SESSION_ID env var after auto-init so subsequent calls can restore the session", async () => {
+  it("writes the new session with the leaderPid returned by findRuntimeAncestorPid", async () => {
     const { createClient } = await freshClient();
+    const runtimePid = 12345;
     mockDetectRuntime.mockReturnValue("claude");
-    mockReadSession.mockReturnValue(null);
+    mockFindRuntimeAncestorPid.mockReturnValue(runtimePid);
+    mockFindSessionByPid.mockReturnValue(null);
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
@@ -537,11 +600,18 @@ describe("createClient — full leader auto-init", () => {
 
     try {
       await createClient();
-      expect(process.env.AK_LEADER_SESSION_ID).toBeDefined();
-      expect(typeof process.env.AK_LEADER_SESSION_ID).toBe("string");
+      expect(mockWriteSession).toHaveBeenCalledWith(expect.objectContaining({ pid: runtimePid }));
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("throws with diagnostic message when findRuntimeAncestorPid returns null", async () => {
+    const { createClient } = await freshClient();
+    mockDetectRuntime.mockReturnValue("claude");
+    mockFindRuntimeAncestorPid.mockReturnValue(null); // no ancestor found
+
+    await expect(createClient()).rejects.toThrow(/Could not locate claude process in ancestry\. ak must be invoked from inside a claude session\./);
   });
 });
 
