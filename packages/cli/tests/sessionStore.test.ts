@@ -24,7 +24,7 @@ vi.mock("../src/paths.js", async () => {
 const {
   writeSession,
   readSession,
-  findSessionByPid,
+  findLeaderSession,
   removeSession,
   listSessions,
   updateSession,
@@ -103,24 +103,42 @@ describe("readSession", () => {
   });
 });
 
-// ── findSessionByPid ─────────────────────────────────────────────────────────
+// ── findLeaderSession ─────────────────────────────────────────────────────────
 
-describe("findSessionByPid", () => {
-  it("returns the session whose pid matches", () => {
-    const s = makeSession({ pid: 99991 });
+describe("findLeaderSession", () => {
+  it("returns the leader session whose pid matches", () => {
+    const s = makeSession({ type: "leader", pid: 99991 });
     writeSession(s);
-    const found = findSessionByPid(99991);
+    const found = findLeaderSession(99991);
     expect(found).not.toBeNull();
     expect(found!.sessionId).toBe(s.sessionId);
   });
 
+  it("returns null when only a worker session has that pid (does NOT return the worker)", () => {
+    const worker = makeSession({ type: "worker", pid: 88881 });
+    writeSession(worker);
+    expect(findLeaderSession(88881)).toBeNull();
+  });
+
   it("returns null when no session matches the given pid", () => {
-    writeSession(makeSession({ pid: 11111 }));
-    expect(findSessionByPid(99999)).toBeNull();
+    writeSession(makeSession({ type: "leader", pid: 11111 }));
+    expect(findLeaderSession(99999)).toBeNull();
   });
 
   it("returns null when there are no sessions at all", () => {
-    expect(findSessionByPid(process.pid)).toBeNull();
+    expect(findLeaderSession(process.pid)).toBeNull();
+  });
+
+  it("returns the leader session even when a worker with the same pid also exists", () => {
+    const sharedPid = 77771;
+    const worker = makeSession({ type: "worker", pid: sharedPid });
+    const leader = makeSession({ type: "leader", pid: sharedPid });
+    writeSession(worker);
+    writeSession(leader);
+    const found = findLeaderSession(sharedPid);
+    expect(found).not.toBeNull();
+    expect(found!.type).toBe("leader");
+    expect(found!.sessionId).toBe(leader.sessionId);
   });
 });
 

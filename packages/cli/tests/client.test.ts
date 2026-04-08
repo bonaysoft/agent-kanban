@@ -16,7 +16,7 @@ const mockGetCredentials = vi.fn(() => ({ apiUrl: "https://api.example.com", api
 const mockDetectRuntime = vi.fn<[], string | null>(() => null);
 const mockFindRuntimeAncestorPid = vi.fn<[string], number | null>(() => null);
 const mockReadSession = vi.fn(() => null as any);
-const mockFindSessionByPid = vi.fn(() => null as any);
+const mockFindLeaderSession = vi.fn(() => null as any);
 const mockIsPidAlive = vi.fn(() => false);
 const mockWriteSession = vi.fn();
 const mockLoadIdentity = vi.fn(() => null);
@@ -35,7 +35,7 @@ function registerMocks() {
   vi.mock("../src/runtime.js", () => ({ detectRuntime: mockDetectRuntime, findRuntimeAncestorPid: mockFindRuntimeAncestorPid }));
   vi.mock("../src/sessionStore.js", () => ({
     readSession: mockReadSession,
-    findSessionByPid: mockFindSessionByPid,
+    findLeaderSession: mockFindLeaderSession,
     isPidAlive: mockIsPidAlive,
     writeSession: mockWriteSession,
   }));
@@ -79,7 +79,7 @@ beforeEach(() => {
   mockDetectRuntime.mockReturnValue(null);
   mockFindRuntimeAncestorPid.mockReturnValue(null);
   mockReadSession.mockReturnValue(null);
-  mockFindSessionByPid.mockReturnValue(null);
+  mockFindLeaderSession.mockReturnValue(null);
   mockIsPidAlive.mockReturnValue(false);
   mockReadFileSync.mockImplementation((path: unknown) => {
     if (typeof path === "string" && path.endsWith("daemon.pid")) return DEAD_PID;
@@ -248,7 +248,7 @@ describe("createClient — leader session restored from session file", () => {
     const session = makeStoredSession(privJwk);
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
-    mockFindSessionByPid.mockReturnValue(session);
+    mockFindLeaderSession.mockReturnValue(session);
     mockIsPidAlive.mockReturnValue(true);
 
     const client = await createClient();
@@ -262,7 +262,7 @@ describe("createClient — leader session restored from session file", () => {
     const session = makeStoredSession(privJwk, { agentId: storedAgentId });
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
-    mockFindSessionByPid.mockReturnValue(session);
+    mockFindLeaderSession.mockReturnValue(session);
     mockIsPidAlive.mockReturnValue(true);
 
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
@@ -276,7 +276,7 @@ describe("createClient — leader session restored from session file", () => {
     const session = makeStoredSession(privJwk, { sessionId: storedSessionId });
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
-    mockFindSessionByPid.mockReturnValue(session);
+    mockFindLeaderSession.mockReturnValue(session);
     mockIsPidAlive.mockReturnValue(true);
 
     const client = (await createClient()) as InstanceType<typeof AgentClient>;
@@ -289,7 +289,7 @@ describe("createClient — leader session restored from session file", () => {
     const session = makeStoredSession(privJwk);
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(session.pid as number);
-    mockFindSessionByPid.mockReturnValue(session);
+    mockFindLeaderSession.mockReturnValue(session);
     mockIsPidAlive.mockReturnValue(true);
 
     await createClient();
@@ -305,7 +305,7 @@ describe("createClient — daemon not running", () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
-    mockFindSessionByPid.mockReturnValue(null);
+    mockFindLeaderSession.mockReturnValue(null);
     // DEAD_PID (4194304) is beyond kernel pid_max — process.kill will throw
     await expect(createClient()).rejects.toThrow(/daemon/i);
   });
@@ -314,7 +314,7 @@ describe("createClient — daemon not running", () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
-    mockFindSessionByPid.mockReturnValue(null);
+    mockFindLeaderSession.mockReturnValue(null);
     await expect(createClient()).rejects.toThrow(/ak start/i);
   });
 
@@ -322,7 +322,7 @@ describe("createClient — daemon not running", () => {
     const { createClient } = await freshClient();
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
-    mockFindSessionByPid.mockReturnValue(null);
+    mockFindLeaderSession.mockReturnValue(null);
     mockReadFileSync.mockImplementation(() => {
       throw new Error("ENOENT");
     });
@@ -335,7 +335,7 @@ describe("createClient — daemon not running", () => {
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
     // Session exists but has wrong runtime
-    mockFindSessionByPid.mockReturnValue({
+    mockFindLeaderSession.mockReturnValue({
       type: "leader",
       agentId: randomUUID(),
       sessionId: randomUUID(),
@@ -355,7 +355,7 @@ describe("createClient — daemon not running", () => {
     const privJwk = await makePrivKeyJwk();
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
-    mockFindSessionByPid.mockReturnValue({
+    mockFindLeaderSession.mockReturnValue({
       type: "leader",
       agentId: randomUUID(),
       sessionId: randomUUID(),
@@ -370,22 +370,13 @@ describe("createClient — daemon not running", () => {
     await expect(createClient()).rejects.toThrow(/daemon/i);
   });
 
-  it("falls through to daemon check when session type is not leader", async () => {
+  it("falls through to daemon check when findLeaderSession returns null (no matching leader session)", async () => {
     const { createClient } = await freshClient();
-    const privJwk = await makePrivKeyJwk();
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(99999);
-    mockFindSessionByPid.mockReturnValue({
-      type: "worker", // not leader
-      agentId: randomUUID(),
-      sessionId: randomUUID(),
-      pid: process.ppid,
-      runtime: "claude",
-      startedAt: Date.now(),
-      apiUrl: "https://api.example.com",
-      privateKeyJwk: privJwk,
-    });
-    mockIsPidAlive.mockReturnValue(true);
+    // findLeaderSession never returns worker sessions by design; null means no leader cached
+    mockFindLeaderSession.mockReturnValue(null);
+    mockIsPidAlive.mockReturnValue(false); // daemon not running
     await expect(createClient()).rejects.toThrow(/daemon/i);
   });
 });
@@ -588,7 +579,7 @@ describe("createClient — full leader auto-init", () => {
     const runtimePid = 12345;
     mockDetectRuntime.mockReturnValue("claude");
     mockFindRuntimeAncestorPid.mockReturnValue(runtimePid);
-    mockFindSessionByPid.mockReturnValue(null);
+    mockFindLeaderSession.mockReturnValue(null);
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);

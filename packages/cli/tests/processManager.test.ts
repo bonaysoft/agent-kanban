@@ -23,6 +23,7 @@ vi.mock("../src/logger.js", () => ({
 vi.mock("../src/sessionStore.js", () => ({
   removeSession: vi.fn(),
   updateSession: vi.fn(),
+  readSession: vi.fn().mockReturnValue(null),
 }));
 
 // ── systemPrompt mock ─────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ vi.mock("../src/systemPrompt.js", () => ({
 import type { AgentClient, ApiClient } from "../src/client.js";
 import { ProcessManager, type SpawnRequest } from "../src/processManager.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "../src/providers/types.js";
+import { readSession, removeSession } from "../src/sessionStore.js";
 import type { TunnelClient } from "../src/tunnelClient.js";
 
 // ── Minimal fakes ─────────────────────────────────────────────────────────────
@@ -743,5 +745,144 @@ describe("ProcessManager — result event does not call onRateLimitResumed", () 
     expect(callbacks.onRateLimitResumed).not.toHaveBeenCalled();
     // but onRateLimited was called for the rejected event
     expect(callbacks.onRateLimited).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Fix 2: onComplete — in_review branch skips safeCleanup ───────────────────
+
+describe("ProcessManager — onComplete skips cleanup when session is in_review", () => {
+  it("does NOT invoke onCleanup when the local session status is in_review", async () => {
+    const tunnel = makeTunnel();
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([resultEvent]);
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
+
+    // Make readSession return a session with status in_review
+    vi.mocked(readSession).mockReturnValue({ status: "in_review" } as any);
+
+    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-review",
+      sessionId: "sess-review",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-review"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).not.toHaveBeenCalled();
+  });
+
+  it("sends tunnel done status when the local session status is in_review", async () => {
+    const tunnel = makeTunnel();
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([resultEvent]);
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
+
+    vi.mocked(readSession).mockReturnValue({ status: "in_review" } as any);
+
+    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-review-done",
+      sessionId: "sess-review-done",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-review-done"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(tunnel.sendStatus).toHaveBeenCalledWith("sess-review-done", "done");
+  });
+
+  it("does NOT call removeSession when the local session status is in_review", async () => {
+    const tunnel = makeTunnel();
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([resultEvent]);
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
+
+    vi.mocked(readSession).mockReturnValue({ status: "in_review" } as any);
+    vi.mocked(removeSession).mockClear();
+
+    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-review-no-remove",
+      sessionId: "sess-review-no-remove",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-review-no-remove"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(removeSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProcessManager — onComplete normal completion invokes cleanup", () => {
+  it("invokes onCleanup when session is NOT in_review (normal completion)", async () => {
+    const tunnel = makeTunnel();
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([resultEvent]);
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
+
+    // Local session is active (not in_review)
+    vi.mocked(readSession).mockReturnValue({ status: "active" } as any);
+
+    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-normal",
+      sessionId: "sess-normal",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-normal"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).toHaveBeenCalled();
+  });
+
+  it("calls removeSession when session is NOT in_review (normal completion)", async () => {
+    const tunnel = makeTunnel();
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([resultEvent]);
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
+
+    vi.mocked(readSession).mockReturnValue({ status: "active" } as any);
+    vi.mocked(removeSession).mockClear();
+
+    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-normal-remove",
+      sessionId: "sess-normal-remove",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-normal-remove"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(removeSession).toHaveBeenCalledWith("sess-normal-remove");
   });
 });

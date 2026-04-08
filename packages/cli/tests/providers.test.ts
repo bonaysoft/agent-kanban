@@ -564,6 +564,17 @@ describe("claudeProvider.execute — abort and send", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Fix 1: claudeProvider.execute() returns handle.pid === process.pid
+// ---------------------------------------------------------------------------
+
+describe("claudeProvider.execute — pid equals daemon process.pid", () => {
+  it("handle.pid equals process.pid so isPidAlive never falsely reports the session as a stale orphan", async () => {
+    const handle = await claudeProvider.execute({ sessionId: "s-pid", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    expect(handle.pid).toBe(process.pid);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // codexProvider.execute — handle shape and thread selection
 // ---------------------------------------------------------------------------
 
@@ -573,12 +584,21 @@ describe("codexProvider.execute — handle shape", () => {
     expect(handle).toHaveProperty("events");
     expect(typeof handle.abort).toBe("function");
     expect(typeof handle.send).toBe("function");
-    expect(handle.pid).toBeNull();
+    // pid must equal the daemon process pid so liveness checks work correctly
+    expect(handle.pid).toBe(process.pid);
   });
 
   it("events is an async iterable", async () => {
     const handle = await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     expect(typeof handle.events[Symbol.asyncIterator]).toBe("function");
+  });
+});
+
+// Fix 1: codexProvider.execute() returns handle.pid === process.pid
+describe("codexProvider.execute — pid equals daemon process.pid", () => {
+  it("handle.pid equals process.pid so liveness checks treat session as alive while daemon runs", async () => {
+    const handle = await codexProvider.execute({ sessionId: "s-pid", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    expect(handle.pid).toBe(process.pid);
   });
 });
 
