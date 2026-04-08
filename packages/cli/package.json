@@ -18,18 +18,18 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.89",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.96",
     "@auth/agent": "^0.3.0",
     "@openai/codex-sdk": "^0.118.0",
-    "commander": "^13.0.0",
+    "commander": "^13.1.0",
     "jose": "^6.2.2",
-    "pino": "^9.6.0",
+    "pino": "^9.14.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@agent-kanban/shared": "workspace:*",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.5.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }

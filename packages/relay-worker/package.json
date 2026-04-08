@@ -9,8 +9,8 @@
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250313.0",
-    "typescript": "^5.7.0",
-    "wrangler": "^4.76.0"
+    "@cloudflare/workers-types": "^4.20260408.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.81.0"
   }
 }
