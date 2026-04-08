@@ -16,7 +16,9 @@ export class TunnelRelay implements DurableObject {
 
   private getDaemonWs(): WebSocket | null {
     const sockets = this.state.getWebSockets("daemon");
-    return sockets.length > 0 ? sockets[0] : null;
+    // Take the last socket — most recently accepted. Stale sockets from prior
+    // connections may linger in the list under Hibernation API.
+    return sockets.length > 0 ? sockets[sockets.length - 1] : null;
   }
 
   private getBrowserSockets(sessionId?: string): WebSocket[] {
@@ -51,14 +53,10 @@ export class TunnelRelay implements DurableObject {
   }
 
   private connectDaemon(): Response {
-    for (const ws of this.state.getWebSockets("daemon")) {
-      try {
-        ws.close(1000, "replaced");
-      } catch {
-        /* already closed */
-      }
-    }
-
+    // Don't close stale daemon sockets with ws.close() — under Hibernation API,
+    // the close frame can be routed to the new client connection, causing an
+    // immediate disconnect loop. Instead, just accept the new socket; stale
+    // sockets will be garbage-collected by the runtime.
     const pair = new WebSocketPair();
     this.state.acceptWebSocket(pair[1], ["daemon"]);
     this.broadcastToBrowsers({ type: "daemon:connected" });

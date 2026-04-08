@@ -218,15 +218,18 @@ describe("TunnelRelay — connectDaemon()", () => {
     expect(b2Msgs.some((m: any) => m.type === "daemon:connected")).toBe(true);
   });
 
-  it("closes the existing daemon socket when a new daemon connects", async () => {
+  it("does not close the existing daemon socket when a new daemon connects (avoids close-frame misrouting)", async () => {
     const { relay, state } = makeRelay();
     // First daemon connects
     await relay.fetch(makeRequest("daemon"));
     const firstDaemon = state.getWebSockets("daemon")[0];
     // Second daemon connects
     await relay.fetch(makeRequest("daemon"));
-    expect(firstDaemon.closedWith?.code).toBe(1000);
-    expect(firstDaemon.closedWith?.reason).toBe("replaced");
+    // Stale socket is left open — closing it under Hibernation API can
+    // misroute the close frame to the new client connection.
+    expect(firstDaemon.closedWith).toBeNull();
+    // Both sockets are tagged "daemon"; getDaemonWs returns the latest
+    expect(state.getWebSockets("daemon")).toHaveLength(2);
   });
 });
 

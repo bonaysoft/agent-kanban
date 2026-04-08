@@ -64,12 +64,12 @@ export class TunnelClient {
         this.handleMessage(String(event.data));
       });
 
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", (ev) => {
         this.stopKeepalive();
         // Always settle the promise so callers never hang.
         settle(new Error("Tunnel closed before open"));
         if (this.closed) return;
-        logger.warn(`Tunnel disconnected, reconnecting in ${RECONNECT_DELAY_MS}ms...`);
+        logger.warn(`Tunnel disconnected (code=${ev.code} reason=${ev.reason || "none"}), reconnecting in ${RECONNECT_DELAY_MS}ms...`);
         setTimeout(() => {
           this.openSocket().catch((e) => {
             // Reconnect attempt couldn't even create the socket. Schedule another try
