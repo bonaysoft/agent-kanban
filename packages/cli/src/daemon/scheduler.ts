@@ -200,6 +200,7 @@ export class Scheduler {
       }
 
       if (!task || task.status === "done" || task.status === "cancelled") {
+        cleanupWorkspace(s.workspace!);
         removeSession(s.sessionId);
         continue;
       }
