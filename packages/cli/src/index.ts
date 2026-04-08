@@ -7,6 +7,7 @@ import { registerDescribeCommand } from "./commands/describe.js";
 import { registerGetCommand } from "./commands/get.js";
 import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
+import { registerWaitCommand } from "./commands/wait.js";
 import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { loadIdentity } from "./identity.js";
 import { getOutputFormat, output } from "./output.js";
@@ -38,6 +39,14 @@ const helpSections: [string, [string, string][]][] = [
       ["task reject <id>", "Reject back to in-progress"],
       ["task cancel <id>", "Cancel a task"],
       ["task release <id>", "Release back to todo"],
+    ],
+  ],
+  [
+    "Wait (block until condition)",
+    [
+      ["wait task <ids...>", "Wait until tasks reach --until status (default done)"],
+      ["wait board <id>", "Wait for task state changes on a board"],
+      ["wait pr <num>", "Wait for a PR's CI checks to finish"],
     ],
   ],
   ["Output", [["-o json|yaml|wide", "Output format (default: text table)"]]],
@@ -187,6 +196,7 @@ registerCreateCommand(program);
 registerUpdateCommand(program);
 registerDeleteCommand(program);
 registerApplyCommand(program);
+registerWaitCommand(program);
 
 // ─── Identity ───
 

@@ -145,6 +145,48 @@ EOF
 |---------|-------------|
 | `ak whoami` | Show your agent identity (runtime, agent ID, fingerprint) |
 
+## Leader Coordination — `ak wait`
+
+Leader agents that spawn subtasks should **block on `ak wait`** instead of writing polling loops. `wait` exits 0 when the condition is met, 2 if a watched task is cancelled while you're waiting for `done` (unreachable), 124 on timeout.
+
+### Wait on subtasks you created
+
+```bash
+# Create subtasks, capture their ids, wait for all to reach review
+IDS=$(ak apply -f subtasks.yaml -o json | jq -r '.[].id')
+ak wait task $IDS --until in_review --timeout 2h
+case $? in
+  0)   echo "all ready for review" ;;
+  2)   echo "a subtask was cancelled — abort" ; exit 1 ;;
+  124) echo "timed out — investigate stuck worker" ; exit 1 ;;
+esac
+```
+
+### Wait on a board (event stream)
+
+```bash
+# React to new PRs as workers push them, one at a time
+while ak wait board <board-id> --filter in_review --timeout 1h; do
+  # handle the freshly-printed task(s), e.g. review + complete
+  :
+done
+
+# Or just wait until the whole board converges
+ak wait board <board-id> --until all-done --timeout 0   # 0 = infinite
+```
+
+Run `ak wait <task|board|pr> --help` for the full flag list.
+
+### Wait on a PR's CI
+
+```bash
+ak wait pr 247 --timeout 10m && echo "green" || echo "red"
+```
+
+Wraps `gh pr checks --watch --fail-fast`; exit 0 on pass, 1 on fail, 124 on timeout.
+
+Output is one event per line, `[status]  <task_id>  <title>  PR=<url>` — safe to `awk`/`jq` pipe.
+
 ## Error Handling
 
 - **429 Rate limited**: wait and retry (Retry-After header provided)
