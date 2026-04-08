@@ -106,7 +106,7 @@ function makeCallbacks() {
   return {
     onSlotFreed: vi.fn(),
     onRateLimited: vi.fn(),
-    onRateLimitCleared: vi.fn(),
+    onRateLimitResumed: vi.fn(),
     onProcessStarted: vi.fn(),
     onProcessExited: vi.fn(),
   };
@@ -307,7 +307,7 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
 
   it("forwards rate_limit event to tunnel", async () => {
     const tunnel = makeTunnel();
-    const event: AgentEvent = { type: "rate_limit", resetAt: "2025-01-01T00:00:00Z" };
+    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt: "2025-01-01T00:00:00Z" };
     await spawnWithEvents([event], tunnel);
     expect(tunnel.sendEvent).toHaveBeenCalledWith("sess-ev", event);
   });
@@ -589,5 +589,159 @@ describe("ProcessManager — onProcessStarted callback", () => {
 
     resolveAbort?.();
     expect(callbacks.onProcessStarted).toHaveBeenCalledWith("sess-pid", 9999);
+  });
+});
+
+// ── handleEvent — rate_limit branching ───────────────────────────────────────
+
+describe("ProcessManager — handleEvent rate_limit rejected", () => {
+  it("calls onRateLimited when a rejected rate_limit event is received", async () => {
+    const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimited).toHaveBeenCalledWith("claude", resetAt);
+  });
+
+  it("does not call onRateLimitResumed when a rejected rate_limit event is received", async () => {
+    const event: AgentEvent = { type: "rate_limit", status: "rejected", resetAt: new Date(Date.now() + 3600_000).toISOString() };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-no-resume" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimitResumed).not.toHaveBeenCalled();
+  });
+
+  it("uses overage resetAt as pauseUntil when both main and overage are rejected and overage is later", async () => {
+    const mainResetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const overageResetAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const event: AgentEvent = {
+      type: "rate_limit",
+      status: "rejected",
+      resetAt: mainResetAt,
+      overage: { status: "rejected", resetAt: overageResetAt },
+    };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-overage" }));
+    await flushPromises();
+    await flushPromises();
+
+    // overage is later, so onRateLimited should be called with the overage resetAt
+    expect(callbacks.onRateLimited).toHaveBeenCalledWith("claude", overageResetAt);
+  });
+
+  it("uses main resetAt when main is later than overage", async () => {
+    const mainResetAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const overageResetAt = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
+    const event: AgentEvent = {
+      type: "rate_limit",
+      status: "rejected",
+      resetAt: mainResetAt,
+      overage: { status: "rejected", resetAt: overageResetAt },
+    };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-main-later" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimited).toHaveBeenCalledWith("claude", mainResetAt);
+  });
+
+  it("falls back to 1-hour pauseUntil when rejected event has no resetAt", async () => {
+    const before = Date.now();
+    const event: AgentEvent = { type: "rate_limit", status: "rejected" };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-no-reset" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimited).toHaveBeenCalledOnce();
+    const pauseUntil = callbacks.onRateLimited.mock.calls[0][1] as string;
+    const pauseMs = new Date(pauseUntil).getTime();
+    expect(pauseMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
+  });
+});
+
+describe("ProcessManager — handleEvent rate_limit allowed", () => {
+  it("calls onRateLimitResumed when allowed event with isUsingOverage false", async () => {
+    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: false };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-cleared" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimitResumed).toHaveBeenCalledWith("claude");
+  });
+
+  it("does not call onRateLimitResumed when allowed event with isUsingOverage true", async () => {
+    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: true };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-overage-running" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimitResumed).not.toHaveBeenCalled();
+  });
+
+  it("does not call onRateLimited when allowed event is received", async () => {
+    const event: AgentEvent = { type: "rate_limit", status: "allowed", isUsingOverage: false };
+    const handle = makeHandle([event]);
+    const callbacks = makeCallbacks();
+    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-allowed-no-limited" }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimited).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProcessManager — result event does not call onRateLimitResumed", () => {
+  it("does not call onRateLimitResumed when a result event is received after a rejected rate_limit", async () => {
+    const rejectedEvent: AgentEvent = {
+      type: "rate_limit",
+      status: "rejected",
+      resetAt: new Date(Date.now() + 3600_000).toISOString(),
+    };
+    const resultEvent: AgentEvent = { type: "result", cost: 0.001 };
+    const handle = makeHandle([rejectedEvent, resultEvent]);
+    const callbacks = makeCallbacks();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = new ProcessManager(apiClient, callbacks, 0);
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-result-no-resume" }));
+    await flushPromises();
+    await flushPromises();
+
+    // result event alone must NOT clear the rate limit
+    expect(callbacks.onRateLimitResumed).not.toHaveBeenCalled();
+    // but onRateLimited was called for the rejected event
+    expect(callbacks.onRateLimited).toHaveBeenCalledOnce();
   });
 });

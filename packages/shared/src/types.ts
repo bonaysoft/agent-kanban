@@ -252,7 +252,14 @@ export type AgentEvent =
   | { type: "assistant"; blocks: ContentBlock[] }
   | { type: "user"; text: string }
   | { type: "result"; text?: string; cost?: number; usage?: Record<string, number | undefined> }
-  | { type: "rate_limit"; resetAt: string; rateLimitType?: string; utilization?: number }
+  | {
+      type: "rate_limit";
+      status: "rejected" | "allowed";
+      resetAt?: string;
+      rateLimitType?: string;
+      isUsingOverage?: boolean;
+      overage?: { status: "allowed" | "rejected"; resetAt?: string };
+    }
   | { type: "error"; code?: string; detail: string };
 
 // ─── Message ───

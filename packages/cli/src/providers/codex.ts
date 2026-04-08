@@ -92,14 +92,14 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
     case "turn.failed": {
       const msg = String(event.error?.message || JSON.stringify(event));
       const resetAt = parseRateLimitReset(msg);
-      if (resetAt) return { type: "rate_limit", resetAt };
+      if (resetAt) return { type: "rate_limit", status: "rejected", resetAt };
       return { type: "error", detail: msg };
     }
 
     case "error": {
       const detail = String(event.message || JSON.stringify(event));
       const resetAt = parseRateLimitReset(detail);
-      if (resetAt) return { type: "rate_limit", resetAt };
+      if (resetAt) return { type: "rate_limit", status: "rejected", resetAt };
       return { type: "error", detail };
     }
 

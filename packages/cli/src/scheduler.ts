@@ -65,13 +65,17 @@ export class Scheduler {
     this.schedulePoll(this.opts.pollInterval);
   }
 
-  clearRateLimit(runtime: string): void {
+  /**
+   * Called when a live agent's SDK reports that the runtime's main quota has
+   * recovered (rate_limit event with status=allowed, isUsingOverage=false).
+   * Cancels the pending pause timer and resumes saved rate-limited sessions
+   * through the same code path used when the timer naturally expires.
+   */
+  resumeRateLimit(runtime: string): void {
     const existing = this.pausedRuntimes.get(runtime);
     if (!existing) return;
-    logger.info(`Rate limit cleared for "${runtime}" — agent completed despite warning, resuming`);
     clearTimeout(existing.timer);
-    this.pausedRuntimes.delete(runtime);
-    this.schedulePoll(0);
+    this.resumeRuntime(runtime).catch((e) => logger.error(`Resume error: ${e.message}`));
   }
 
   isRuntimePaused(runtime: string): boolean {
@@ -88,8 +92,39 @@ export class Scheduler {
     if (!this.running) return;
     logger.info(`Rate limit window reset for "${runtime}", resuming`);
     this.pausedRuntimes.delete(runtime);
-    await this.resumeSavedSessions();
+    await this.resumeRateLimitedSessions(runtime);
     this.schedulePoll(0);
+  }
+
+  /**
+   * Resume rate-limited sessions for a specific runtime. Called only from
+   * `resumeRuntime`, which is itself the single exit point for a paused
+   * runtime (timer expiry or `resumeRateLimit` event).
+   *
+   * Assumes `runtime` is already in canonical AgentRuntime form — all current
+   * providers use names that match their runtime key, but a new provider with
+   * a non-canonical `name` would silently be skipped here.
+   */
+  private async resumeRateLimitedSessions(runtime: string): Promise<void> {
+    for (const s of listSessions({ type: "worker", status: "rate_limited" })) {
+      if (this.pm.activeCount >= this.opts.maxConcurrent) return;
+      if (s.runtime !== runtime) continue;
+      if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
+
+      // Drop sessions for tasks that moved past in_progress while we were paused.
+      // Without this, a done/cancelled task would get a redundant agent spawn
+      // that fails at claim-time and leaves a zombie session on disk.
+      const task = await this.client.getTask(s.taskId).catch(() => null);
+      if (!task || (task as { status: string }).status !== "in_progress") {
+        logger.info(
+          `Discarding stale rate_limited session for task ${s.taskId} (status=${(task as { status: string } | null)?.status ?? "missing"})`,
+        );
+        removeSession(s.sessionId);
+        continue;
+      }
+
+      await this.runner.resumeSession(s, "");
+    }
   }
 
   private async tick(): Promise<void> {
@@ -142,13 +177,10 @@ export class Scheduler {
       }
     }
 
-    // Resume rate-limited sessions whose runtime is no longer paused
-    for (const s of listSessions({ type: "worker", status: "rate_limited" })) {
-      if (this.pm.activeCount >= this.opts.maxConcurrent) return;
-      if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
-      if (this.isRuntimePaused(s.runtime)) continue;
-      await this.runner.resumeSession(s, "");
-    }
+    // Note: rate-limited session resume is NOT done here. It happens exclusively
+    // in `resumeRuntime` (triggered by the pause timer or by an SDK "allowed"
+    // event via resumeRateLimit). Tick-level scanning would race with those
+    // signals and resurrect sessions the wrong runtime state.
 
     // Resume rejected review sessions
     for (const s of listSessions({ type: "worker", status: "in_review" })) {

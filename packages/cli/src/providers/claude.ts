@@ -86,9 +86,22 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
   switch (msg.type) {
     case "rate_limit_event": {
       const info = msg.rate_limit_info;
-      if (info.status === "rejected") {
-        const resetAt = info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : new Date(Date.now() + 60 * 60 * 1000).toISOString();
-        return { type: "rate_limit", resetAt, rateLimitType: info.rateLimitType, utilization: info.utilization };
+      if (info.status === "rejected" || info.status === "allowed") {
+        const resetAt = info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : undefined;
+        const overage = info.overageStatus
+          ? {
+              status: info.overageStatus as "allowed" | "rejected",
+              resetAt: info.overageResetsAt ? new Date(info.overageResetsAt * 1000).toISOString() : undefined,
+            }
+          : undefined;
+        return {
+          type: "rate_limit",
+          status: info.status,
+          resetAt,
+          rateLimitType: info.rateLimitType,
+          isUsingOverage: info.isUsingOverage,
+          overage,
+        };
       }
       if (info.status === "allowed_warning") {
         logger.warn(`Rate limit warning: ${info.rateLimitType} at ${((info.utilization ?? 0) * 100).toFixed(0)}%`);
@@ -98,7 +111,7 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
 
     case "assistant": {
       if (msg.error === "rate_limit") {
-        return { type: "rate_limit", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+        return { type: "rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
       }
       if (msg.error) {
         return { type: "error", code: msg.error, detail: msg.error };

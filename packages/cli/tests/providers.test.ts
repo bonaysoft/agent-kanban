@@ -70,7 +70,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
   it("returns rate_limit when status is rejected", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
@@ -81,34 +81,104 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
     const resetsAt = 1700000000;
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
     if (result?.type === "rate_limit") {
-      expect(new Date(result.resetAt).getTime()).toBe(resetsAt * 1000);
+      expect(result.resetAt).toBeDefined();
+      expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
     }
   });
 
   it("returns null when status is allowed_warning", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.8 },
+      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     expect(mapSDKMessage(msg)).toBeNull();
   });
 
-  it("returns null when status is not rejected", () => {
+  it("returns rate_limit event when status is allowed", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.5 },
+      rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", isUsingOverage: false },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("allowed");
+    }
+  });
+});
+
+describe("mapSDKMessage — user message (tool_result)", () => {
+  it("returns assistant event with tool_result block from user message with tool_result content", () => {
+    const msg = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tu1", content: "output text", is_error: false }],
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("assistant");
+    if (result?.type === "assistant") {
+      expect(result.blocks[0].type).toBe("tool_result");
+    }
+  });
+
+  it("returns null for user message with tool_result whose content is array of text blocks", () => {
+    const msg = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tu1",
+            content: [{ type: "text", text: "result text" }],
+            is_error: false,
+          },
+        ],
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("assistant");
+  });
+
+  it("returns null for user message with no tool_result blocks", () => {
+    const msg = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "not a tool result" }],
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result).toBeNull();
+  });
+
+  it("returns null for user message where content is a string", () => {
+    const msg = {
+      type: "user",
+      message: { role: "user", content: "plain string content" },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result).toBeNull();
   });
 });
 
@@ -1092,5 +1162,119 @@ describe("geminiProvider.execute — arg selection", () => {
     await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     const call = vi.mocked(spawnAgent).mock.calls[0][0];
     expect(call.args).not.toContain("--resume");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mapSDKMessage — rate_limit allowed shape (new behavior)
+// ---------------------------------------------------------------------------
+
+describe("mapSDKMessage — rate_limit allowed shape", () => {
+  it("returns rate_limit with status allowed and isUsingOverage true", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed", resetsAt: null, rateLimitType: "five_hour", isUsingOverage: true },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("allowed");
+      expect(result.isUsingOverage).toBe(true);
+      expect(result.resetAt).toBeUndefined();
+    }
+  });
+
+  it("returns rate_limit with status allowed and isUsingOverage false", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed", resetsAt: null, rateLimitType: "five_hour", isUsingOverage: false },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("allowed");
+      expect(result.isUsingOverage).toBe(false);
+    }
+  });
+
+  it("leaves resetAt undefined when resetsAt is absent for rejected events", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "rejected", resetsAt: null, rateLimitType: "five_hour" },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.resetAt).toBeUndefined();
+    }
+  });
+
+  it("builds overage object with rejected status and resetAt when overageStatus is rejected", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "rejected",
+        resetsAt: 1700000000,
+        rateLimitType: "five_hour",
+        overageStatus: "rejected",
+        overageResetsAt: 1700003600,
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "rate_limit") {
+      expect(result.overage?.status).toBe("rejected");
+      expect(result.overage?.resetAt).toBe(new Date(1700003600 * 1000).toISOString());
+    }
+  });
+
+  it("overage is undefined when overageStatus is absent", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "rate_limit") {
+      expect(result.overage).toBeUndefined();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mapThreadEvent — codex rate_limit event includes status: "rejected"
+// ---------------------------------------------------------------------------
+
+describe("mapThreadEvent — codex rate_limit status field", () => {
+  it("includes status: rejected when turn.failed is a rate limit", () => {
+    const event = {
+      type: "turn.failed",
+      error: { message: "Rate limit exceeded, try again at 2026-04-01T15:00:00Z" },
+    } as unknown as ThreadEvent;
+    const result = mapThreadEvent(event);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("rejected");
+    }
+  });
+
+  it("includes status: rejected when error event is a rate limit", () => {
+    const event = {
+      type: "error",
+      message: "usage limit exceeded, please try again at tomorrow",
+    } as unknown as ThreadEvent;
+    const result = mapThreadEvent(event);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("rejected");
+    }
   });
 });

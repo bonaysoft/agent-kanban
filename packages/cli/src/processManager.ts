@@ -1,7 +1,7 @@
 import type { AgentClient, ApiClient } from "./client.js";
 import { createLogger } from "./logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "./providers/types.js";
-import { removeSession, updateSession } from "./sessionStore.js";
+import { readSession, removeSession, updateSession } from "./sessionStore.js";
 import { cleanupPromptFile } from "./systemPrompt.js";
 import type { TunnelClient } from "./tunnelClient.js";
 
@@ -43,7 +43,7 @@ interface AgentProcess {
 export interface ProcessManagerCallbacks {
   onSlotFreed: () => void;
   onRateLimited: (runtime: string, resetAt: string) => void;
-  onRateLimitCleared?: (runtime: string) => void;
+  onRateLimitResumed: (runtime: string) => void;
   onProcessStarted?: (sessionId: string, pid: number) => void;
   onProcessExited?: (sessionId: string) => void;
 }
@@ -198,23 +198,23 @@ export class ProcessManager {
       await this.closeSession(agent.agentClient);
 
       if (agent.resultReceived) {
-        if (agent.rateLimited) {
-          logger.warn(`Agent for task ${taskId} (${agent.provider.name}) hit usage limit (cost=$0), suspending`);
-          updateSession(sessionId, { status: "rate_limited" });
-        }
+        // Normal completion — possibly through overage retries, doesn't matter.
+        // `in_review` was already written in handleEvent's result case; nothing to do here.
+        logger.info(`Agent finished task ${taskId}`);
+        this.safeCleanup(agent);
+        // Session already transitioned to `in_review` in the result handler if the
+        // task was moved to review; otherwise it's still `active` and must be removed.
+        const session = readSession(sessionId);
+        if (session?.status !== "in_review") removeSession(sessionId);
+      } else if (agent.rateLimited) {
+        // Agent exited without a result while main quota was still exhausted.
+        // Keep the session around so the scheduler can resume it when the pause lifts.
+        logger.warn(`Agent for task ${taskId} (${agent.provider.name}) exited while rate-limited, suspending`);
+        updateSession(sessionId, { status: "rate_limited" });
       } else {
-        const task = (await this.client.getTask(taskId)) as any;
-        if (task?.status === "in_review") {
-          updateSession(sessionId, { status: "in_review" });
-          logger.info(`Task ${taskId} in review, preserving worktree`);
-        } else if (agent.rateLimited) {
-          logger.warn(`Agent for task ${taskId} (${agent.provider.name}) exited due to rate limit, suspending`);
-          updateSession(sessionId, { status: "rate_limited" });
-        } else {
-          logger.info(`Agent finished task ${taskId}`);
-          this.safeCleanup(agent);
-          removeSession(sessionId);
-        }
+        logger.info(`Agent finished task ${taskId}`);
+        this.safeCleanup(agent);
+        removeSession(sessionId);
       }
     } finally {
       this.agents.delete(taskId);
@@ -261,9 +261,38 @@ export class ProcessManager {
     switch (event.type) {
       case "rate_limit": {
         const runtime = agent?.provider.name ?? "unknown";
-        logger.warn(`Rate limited on task ${taskId} (${runtime}), resets at ${event.resetAt}`);
-        if (agent) agent.rateLimited = true;
-        this.callbacks.onRateLimited(runtime, event.resetAt);
+        if (event.status === "rejected") {
+          // Pause until the latest known resetAt: take both main and overage
+          // (when overage is also rejected) and pick whichever is further out.
+          // If neither is known, fall back to an hour — we cannot unblock on
+          // an unknown window.
+          const mainReset = event.resetAt;
+          const overageReset = event.overage?.status === "rejected" ? event.overage.resetAt : undefined;
+          const candidates = [mainReset, overageReset].filter((x): x is string => !!x);
+          const pauseUntil =
+            candidates.length > 0
+              ? candidates.reduce((a, b) => (new Date(a).getTime() >= new Date(b).getTime() ? a : b))
+              : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+          logger.warn(
+            `Rate limited on task ${taskId} (${runtime}), pausing until ${pauseUntil}${event.isUsingOverage ? " — agent continues via overage" : ""}`,
+          );
+          if (agent) agent.rateLimited = true;
+          this.callbacks.onRateLimited(runtime, pauseUntil);
+        } else {
+          // status === "allowed"
+          if (event.isUsingOverage) {
+            // Main quota still empty; agent is running on overage. Do NOT unpause —
+            // strategy: let in-flight work finish on overage, keep scheduler paused
+            // so we don't dispatch fresh tasks into the overage pool.
+            logger.info(`Task ${taskId} (${runtime}) now running on overage, scheduler stays paused`);
+            // agent.rateLimited stays true — main quota not yet recovered.
+          } else {
+            // Main quota fully recovered.
+            logger.info(`Rate limit cleared for ${runtime}`);
+            if (agent) agent.rateLimited = false;
+            this.callbacks.onRateLimitResumed(runtime);
+          }
+        }
         break;
       }
 
@@ -302,9 +331,11 @@ export class ProcessManager {
           .catch((e: any) => logger.error(`Failed to report usage for task ${taskId}: ${e.message}`));
         if (agent) {
           agent.resultReceived = true;
-          if (agent.rateLimited && cost > 0) {
-            this.callbacks.onRateLimitCleared?.(agent.provider.name);
-          }
+          // Note: do NOT touch scheduler pause state here. Rate-limit recovery
+          // is driven by subsequent `rate_limit` events (status=allowed) or by
+          // the pauseForRateLimit timer — never inferred from a successful result.
+          // The result may have been produced via overage while main quota is
+          // still exhausted, so unpausing here would flood the cap.
           const task = (await this.client.getTask(taskId)) as any;
           if (task?.status === "in_review") {
             updateSession(agent.sessionId, { status: "in_review" });

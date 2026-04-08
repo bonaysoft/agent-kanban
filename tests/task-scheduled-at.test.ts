@@ -512,7 +512,7 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
     scheduler.stop();
   });
 
-  it("clearRateLimit unpauses a paused runtime", async () => {
+  it("resumeRateLimit unpauses a paused runtime", async () => {
     const { Scheduler } = await import("../packages/cli/src/scheduler");
     const { client, pm, runner, prMonitor } = makeStubs([]);
     const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
@@ -520,10 +520,15 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
       pollInterval: 60000,
     });
 
+    // start() is required so resumeRuntime's `!this.running` guard does not bail out early
+    scheduler.start();
+
     const futureReset = new Date(Date.now() + 120_000).toISOString();
     scheduler.pauseForRateLimit("claude", futureReset);
-    scheduler.clearRateLimit("claude");
+    scheduler.resumeRateLimit("claude");
 
+    // resumeRateLimit calls resumeRuntime (async) — wait for microtasks to settle
+    await new Promise((r) => setTimeout(r, 50));
     expect(scheduler.isRuntimePaused("claude")).toBe(false);
     scheduler.stop();
   });
@@ -551,5 +556,66 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
 
     // Task should have been dispatched at least once
     expect(dispatched.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("resumeRateLimit is a no-op on a non-paused runtime", async () => {
+    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { client, pm, runner, prMonitor } = makeStubs([]);
+    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+      maxConcurrent: 5,
+      pollInterval: 60000,
+    });
+
+    scheduler.start();
+    // calling resumeRateLimit when not paused should not throw
+    expect(() => scheduler.resumeRateLimit("claude")).not.toThrow();
+    // and runtime stays unpaused
+    expect(scheduler.isRuntimePaused("claude")).toBe(false);
+    scheduler.stop();
+  });
+
+  it("tick does not resume rate_limited sessions for unpaused runtimes (no automatic promotion)", async () => {
+    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const resumed: string[] = [];
+    const { client, pm, prMonitor } = makeStubs([]);
+    const runner = {
+      dispatch: async (_t: any) => true,
+      resumeSession: async (s: any) => {
+        resumed.push(s.sessionId ?? "unknown");
+      },
+    };
+
+    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+      maxConcurrent: 5,
+      pollInterval: 60000,
+    });
+
+    scheduler.start();
+    await new Promise((r) => setTimeout(r, 50));
+    scheduler.stop();
+
+    // tick should NOT have resumed any rate_limited sessions on its own
+    // (resumeRateLimitedSessions is only triggered via resumeRuntime)
+    expect(resumed).toHaveLength(0);
+  });
+
+  it("pauseForRateLimit ignores a newer pause that is earlier than the existing one", async () => {
+    const { Scheduler } = await import("../packages/cli/src/scheduler");
+    const { client, pm, runner, prMonitor } = makeStubs([]);
+    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+      maxConcurrent: 5,
+      pollInterval: 60000,
+    });
+
+    const laterReset = new Date(Date.now() + 120_000).toISOString();
+    const earlierReset = new Date(Date.now() + 30_000).toISOString();
+
+    scheduler.pauseForRateLimit("claude", laterReset);
+    // This earlier reset should NOT replace the existing later one
+    scheduler.pauseForRateLimit("claude", earlierReset);
+
+    // Runtime must still be paused
+    expect(scheduler.isRuntimePaused("claude")).toBe(true);
+    scheduler.stop();
   });
 });

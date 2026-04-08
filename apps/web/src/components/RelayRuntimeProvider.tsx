@@ -105,16 +105,16 @@ function convertEvents(events: RelayEvent[]): ThreadMessageLike[] {
       continue;
     }
 
-    if (event.type === "rate_limit") {
+    if (event.type === "rate_limit" && event.status === "rejected") {
+      const detail = event.isUsingOverage
+        ? "continuing on extra usage"
+        : event.resetAt
+          ? `resets at ${new Date(event.resetAt).toLocaleTimeString()}`
+          : "reset time unknown";
       messages.push({
         id: re.id,
         role: "assistant",
-        content: [
-          {
-            type: "text",
-            text: `Rate limited — resets at ${new Date(event.resetAt).toLocaleTimeString()}`,
-          },
-        ],
+        content: [{ type: "text", text: `Rate limited — ${detail}` }],
         createdAt: new Date(re.timestamp),
         status: { type: "incomplete", reason: "error" },
       });

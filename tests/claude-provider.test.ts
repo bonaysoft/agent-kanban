@@ -55,7 +55,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
   it("returns rate_limit event when status is rejected", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
@@ -67,21 +67,22 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
     const resetsAt = 1700000000;
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
     expect(result?.type).toBe("rate_limit");
     if (result?.type === "rate_limit") {
-      expect(new Date(result.resetAt).getTime()).toBe(resetsAt * 1000);
+      expect(result.resetAt).toBeDefined();
+      expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
     }
   });
 
   it("includes rateLimitType from rate_limit_info", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
@@ -91,53 +92,101 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
     }
   });
 
-  it("includes utilization from rate_limit_info", () => {
+  it("includes status: rejected in the event", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.95 },
+      rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
     if (result?.type === "rate_limit") {
-      expect(result.utilization).toBe(0.95);
+      expect(result.status).toBe("rejected");
     }
   });
 
-  it("uses 1-hour fallback resetAt when resetsAt is absent", () => {
-    const before = Date.now();
+  it("leaves resetAt undefined when resetsAt is absent", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "rejected", resetsAt: null, rateLimitType: "five_hour", utilization: 0.9 },
+      rate_limit_info: { status: "rejected", resetsAt: null, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    const after = Date.now();
     expect(result?.type).toBe("rate_limit");
     if (result?.type === "rate_limit") {
-      const resetMs = new Date(result.resetAt).getTime();
-      expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
-      expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+      expect(result.resetAt).toBeUndefined();
+    }
+  });
+
+  it("builds overage object when overageStatus is present", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "rejected",
+        resetsAt: 1700000000,
+        rateLimitType: "five_hour",
+        overageStatus: "rejected",
+        overageResetsAt: 1700003600,
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    if (result?.type === "rate_limit") {
+      expect(result.overage).toEqual({
+        status: "rejected",
+        resetAt: new Date(1700003600 * 1000).toISOString(),
+      });
     }
   });
 });
 
-describe("mapSDKMessage — rate_limit_event allowed_warning", () => {
-  it("returns null when status is allowed_warning", () => {
+describe("mapSDKMessage — rate_limit_event allowed", () => {
+  it("returns rate_limit event with status allowed when status is allowed with isUsingOverage true", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.8 },
+      rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", isUsingOverage: true },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("allowed");
+      expect(result.isUsingOverage).toBe(true);
+    }
+  });
+
+  it("returns rate_limit event with status allowed when status is allowed with isUsingOverage false", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed", resetsAt: null, rateLimitType: "five_hour", isUsingOverage: false },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result?.type).toBe("rate_limit");
+    if (result?.type === "rate_limit") {
+      expect(result.status).toBe("allowed");
+      expect(result.isUsingOverage).toBe(false);
+    }
+  });
+
+  it("returns null when status is allowed_warning (regression check)", () => {
+    const msg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
     expect(mapSDKMessage(msg)).toBeNull();
   });
 
-  it("returns null for any other non-rejected status", () => {
+  it("returns null for unrecognised status values", () => {
     const msg = {
       type: "rate_limit_event",
-      rate_limit_info: { status: "allowed", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.5 },
+      rate_limit_info: { status: "unknown_status", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
