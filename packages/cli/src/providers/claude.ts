@@ -160,7 +160,13 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
         return { type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
       }
       if (msg.error) {
-        return { type: "turn.error", code: msg.error, detail: msg.error };
+        const contentText = (msg.message?.content ?? [])
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text)
+          .join(" ")
+          .slice(0, 500);
+        const detail = contentText || msg.error;
+        return { type: "turn.error", code: msg.error, detail };
       }
       const parentId = msg.parent_tool_use_id;
       const blocks = (msg.message.content ?? []).map((b) => mapContentBlock(b, parentId)).filter((b): b is ContentBlock => b !== null);
