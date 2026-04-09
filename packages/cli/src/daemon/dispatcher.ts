@@ -1,12 +1,16 @@
 /**
- * Dispatcher — full task dispatch pipeline.
+ * Dispatcher — full task dispatch pipeline + agent environment/GPG helpers.
  *
- * Merges scheduler's dispatchTasks() with taskRunner's dispatch().
  * Fetches todo tasks, filters by availability and rate-limit state,
- * resolves runtime, prepares repo, and spawns the agent.
+ * resolves runtime, prepares repo, and spawns the agent. Also provides
+ * buildAgentEnv / setupGnupgHome / cleanupGnupgHome used by resumer.
  */
 
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type BoardType, isBoardType } from "@agent-kanban/shared";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "../agent/systemPrompt.js";
 import { AgentClient, type ApiClient } from "../client/index.js";
@@ -18,13 +22,71 @@ import type { SessionFile } from "../session/types.js";
 import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
 import { ensureLefthookTask, ensureSkills } from "../workspace/skills.js";
 import { createRepoWorkspace, createTempWorkspace } from "../workspace/workspace.js";
-import { buildAgentEnv, cleanupGnupgHome, setupGnupgHome } from "./agentEnv.js";
-import { apiCall, apiCallIdempotent, apiCallOptional, cryptoBoundary, fsSync } from "./boundaries.js";
+import { apiCall, apiCallIdempotent, apiCallOptional, cryptoBoundary, execBoundary, fsSync } from "./boundaries.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { RateLimiter } from "./rateLimiter.js";
 import type { RuntimePool } from "./runtimePool.js";
 
 const logger = createLogger("dispatcher");
+
+// ---- Agent environment / GPG helpers ----
+
+export interface BuildEnvOpts {
+  agentId: string;
+  sessionId: string;
+  privateKeyJwk: JsonWebKey;
+  agentName: string;
+  agentUsername: string;
+  gpgSubkeyId: string | null;
+  gnupgHome: string | null;
+}
+
+export function buildAgentEnv(opts: BuildEnvOpts): Record<string, string> {
+  const { agentId, sessionId, privateKeyJwk, agentName, agentUsername, gpgSubkeyId, gnupgHome } = opts;
+  const email = `${agentUsername}@mails.agent-kanban.dev`;
+  const env: Record<string, string> = {
+    AK_AGENT_ID: agentId,
+    AK_SESSION_ID: sessionId,
+    AK_AGENT_KEY: JSON.stringify(privateKeyJwk),
+    AK_API_URL: getCredentials().apiUrl,
+    GIT_AUTHOR_NAME: agentName,
+    GIT_AUTHOR_EMAIL: email,
+    GIT_COMMITTER_NAME: agentName,
+    GIT_COMMITTER_EMAIL: email,
+  };
+  if (gnupgHome && gpgSubkeyId) {
+    env.GNUPGHOME = gnupgHome;
+    env.GIT_CONFIG_COUNT = "3";
+    env.GIT_CONFIG_KEY_0 = "gpg.format";
+    env.GIT_CONFIG_VALUE_0 = "openpgp";
+    env.GIT_CONFIG_KEY_1 = "user.signingkey";
+    env.GIT_CONFIG_VALUE_1 = `${gpgSubkeyId}!`;
+    env.GIT_CONFIG_KEY_2 = "commit.gpgsign";
+    env.GIT_CONFIG_VALUE_2 = "true";
+  }
+  return env;
+}
+
+export function setupGnupgHome(armoredPrivateKey: string): string {
+  const gnupgHome = fsSync("mkdtemp-gpg", () => mkdtempSync(join(tmpdir(), "ak-gpg-")));
+  const keyFile = join(gnupgHome, "key.asc");
+  fsSync("write-gpg-key", () => writeFileSync(keyFile, armoredPrivateKey, { mode: 0o600 }));
+  execBoundary("gpg-import", () =>
+    execFileSync("gpg", ["--batch", "--import", keyFile], {
+      env: { ...process.env, GNUPGHOME: gnupgHome },
+      stdio: "pipe",
+    }),
+  );
+  fsSync("rm-gpg-keyfile", () => rmSync(keyFile));
+  return gnupgHome;
+}
+
+export function cleanupGnupgHome(gnupgHome: string | null): void {
+  if (!gnupgHome) return;
+  fsSync("rm-gnupghome", () => rmSync(gnupgHome, { recursive: true, force: true }));
+}
+
+// ---- Dispatch pipeline ----
 
 export interface DispatchOpts {
   maxConcurrent: number;

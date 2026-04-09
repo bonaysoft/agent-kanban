@@ -15,7 +15,7 @@ import { getProvider, normalizeRuntime } from "../providers/registry.js";
 import { getSessionManager } from "../session/manager.js";
 import type { SessionFile } from "../session/types.js";
 import { restoreWorkspace } from "../workspace/workspace.js";
-import { buildAgentEnv, cleanupGnupgHome, setupGnupgHome } from "./agentEnv.js";
+import { buildAgentEnv, cleanupGnupgHome, setupGnupgHome } from "./dispatcher.js";
 import { apiCall, apiCallOptional, cryptoBoundary } from "./boundaries.js";
 import type { RuntimePool } from "./runtimePool.js";
 

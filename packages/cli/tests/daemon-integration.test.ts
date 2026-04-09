@@ -99,8 +99,7 @@ import { cleanupWorkspace } from "../src/workspace/workspace.js";
 import { CleanupError as WorkspaceCleanupError } from "../src/daemon/errors.js";
 import { SessionManager, _setSessionManagerForTest } from "../src/session/manager.js";
 import { applyTransition, classifyIteratorEnd, TransitionError } from "../src/session/stateMachine.js";
-import { reapCleanupPending, reapOrphanWorkerSessions } from "../src/daemon/orphanReaper.js";
-import { checkRejectedReviews } from "../src/daemon/reviewWatcher.js";
+import { reapCleanupPending, reapOrphanWorkerSessions, checkRejectedReviews } from "../src/daemon/loop.js";
 import { resumeOneSession } from "../src/daemon/resumer.js";
 import { RateLimiter } from "../src/daemon/rateLimiter.js";
 import {
