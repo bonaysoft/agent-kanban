@@ -15,6 +15,7 @@ import { BoardRedirect } from "./routes/BoardRedirect";
 import { LandingPage } from "./routes/LandingPage";
 import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { MachinesPage } from "./routes/MachinesPage";
+import { MockChatPage } from "./routes/MockChatPage";
 import { NewBoardPage } from "./routes/NewBoardPage";
 import { OnboardingPage } from "./routes/OnboardingPage";
 import { RepositoriesPage } from "./routes/RepositoriesPage";
@@ -52,6 +53,7 @@ export function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/landing" element={<LandingPage />} />
+        <Route path="/mock/chat" element={<MockChatPage />} />
         <Route path="/share/:slug" element={<SharePage />} />
         <Route path="/" element={<RootRoute />} />
         <Route
