@@ -1,8 +1,27 @@
+/**
+ * Scheduler — owns the tick loop and makes dispatch decisions.
+ *
+ * Key invariants (replacing the previous fragile design):
+ *   1. Scheduler never writes session files directly. All session mutations
+ *      go through SessionManager (which owns the mutex + state machine).
+ *   2. Orphan detection for worker sessions is purely in-memory: any session
+ *      not held by ProcessManager (via `hasTask`) is orphaned by definition.
+ *      No pid check, no ps scan.
+ *   3. Resume paths are unified through TaskRunner.resumeSession. The three
+ *      triggers (rate-limit window expiry, in_review→in_progress reject,
+ *      post-crash recovery) all call the same method with the same contract.
+ *   4. Transient errors during resume do NOT tight-loop. SessionManager's
+ *      persisted resumeBackoffMs + resumeAfter gate retries.
+ *   5. pauseForRateLimit never overwrites a longer-lived pause. "Last one
+ *      wins" was a bug; the max wins.
+ */
+
 import { isBoardType } from "@agent-kanban/shared";
 import { ApiError, type MachineClient } from "../client/index.js";
 import { createLogger } from "../logger.js";
 import { normalizeRuntime } from "../providers/registry.js";
-import { isPidAlive, listSessions, removeSession } from "../session/store.js";
+import { getSessionManager } from "../session/manager.js";
+import type { SessionFile } from "../session/types.js";
 import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
 import { ensureLefthookTask } from "../workspace/skills.js";
 import { cleanupWorkspace } from "../workspace/workspace.js";
@@ -23,6 +42,7 @@ interface RuntimePause {
 }
 
 export class Scheduler {
+  private sessions = getSessionManager();
   private running = false;
   private pausedRuntimes = new Map<string, RuntimePause>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,10 +70,15 @@ export class Scheduler {
     this.pausedRuntimes.clear();
   }
 
+  /**
+   * Pause a runtime until `resetAt`. If a longer-lived pause is already
+   * active for this runtime, the existing window wins — "last one wins"
+   * was a bug that caused scheduler to resume too early.
+   */
   pauseForRateLimit(runtime: string, resetAt: string): void {
     const resetTime = new Date(resetAt).getTime();
     const existing = this.pausedRuntimes.get(runtime);
-    if (existing && resetTime <= existing.resumeMs) return;
+    if (existing && existing.resumeMs >= resetTime) return; // keep the longer one
     if (existing) clearTimeout(existing.timer);
     const waitMs = Math.max(resetTime - Date.now(), 60_000);
     logger.warn(`Runtime "${runtime}" rate limited — pausing until ${resetAt} (${Math.round(waitMs / 60_000)}min)`);
@@ -66,10 +91,9 @@ export class Scheduler {
   }
 
   /**
-   * Called when a live agent's SDK reports that the runtime's main quota has
-   * recovered (rate_limit event with status=allowed, isUsingOverage=false).
-   * Cancels the pending pause timer and resumes saved rate-limited sessions
-   * through the same code path used when the timer naturally expires.
+   * SDK reported that the runtime's main quota has recovered. Clear the pause
+   * window and resume saved rate-limited sessions through the same path as
+   * natural timer expiry.
    */
   resumeRateLimit(runtime: string): void {
     const existing = this.pausedRuntimes.get(runtime);
@@ -96,34 +120,15 @@ export class Scheduler {
     this.schedulePoll(0);
   }
 
-  /**
-   * Resume rate-limited sessions for a specific runtime. Called only from
-   * `resumeRuntime`, which is itself the single exit point for a paused
-   * runtime (timer expiry or `resumeRateLimit` event).
-   *
-   * Assumes `runtime` is already in canonical AgentRuntime form — all current
-   * providers use names that match their runtime key, but a new provider with
-   * a non-canonical `name` would silently be skipped here.
-   */
   private async resumeRateLimitedSessions(runtime: string): Promise<void> {
-    for (const s of listSessions({ type: "worker", status: "rate_limited" })) {
+    const now = Date.now();
+    for (const s of this.sessions.list({ type: "worker", status: "rate_limited" })) {
       if (this.pm.activeCount >= this.opts.maxConcurrent) return;
       if (s.runtime !== runtime) continue;
       if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
+      if (s.resumeAfter && s.resumeAfter > now) continue; // honor persisted backoff
 
-      // Drop sessions for tasks that moved past in_progress while we were paused.
-      // Without this, a done/cancelled task would get a redundant agent spawn
-      // that fails at claim-time and leaves a zombie session on disk.
-      const task = await this.client.getTask(s.taskId).catch(() => null);
-      if (!task || (task as { status: string }).status !== "in_progress") {
-        logger.info(
-          `Discarding stale rate_limited session for task ${s.taskId} (status=${(task as { status: string } | null)?.status ?? "missing"})`,
-        );
-        removeSession(s.sessionId);
-        continue;
-      }
-
-      await this.runner.resumeSession(s, "");
+      await this.resumeOneSession(s, "");
     }
   }
 
@@ -131,7 +136,8 @@ export class Scheduler {
     if (!this.running) return;
 
     await this.killCancelledTasks();
-    await this.resumeSavedSessions();
+    await this.reapOrphanWorkerSessions();
+    await this.resumeRejectedReviewSessions();
 
     if (this.pm.activeCount >= this.opts.maxConcurrent) {
       this.schedulePoll(this.opts.pollInterval);
@@ -143,58 +149,68 @@ export class Scheduler {
 
   private async killCancelledTasks(): Promise<void> {
     for (const taskId of this.pm.getActiveTaskIds()) {
-      const task = (await this.client.getTask(taskId)) as any;
+      const task = (await this.client.getTask(taskId)) as { status?: string } | null;
       if (task?.status === "cancelled") await this.pm.killTask(taskId);
     }
   }
 
-  private async resumeSavedSessions(): Promise<void> {
-    // Clean up orphaned active worker sessions (crash recovery)
-    for (const s of listSessions({ type: "worker", status: "active" })) {
+  /**
+   * Worker sessions with status="active" but NOT held by ProcessManager are
+   * orphans from a previous daemon incarnation. There is no valid reason for
+   * an active worker session to exist without an in-memory handle — any such
+   * session is leftover state from a crash.
+   *
+   * Decision tree per orphan:
+   *   - task deleted (404)        → cleanup workspace + remove session
+   *   - task done / cancelled     → cleanup workspace + remove session
+   *   - task still viable         → release task + cleanup + remove session
+   *
+   * Transitions go through the state machine so an in_review session can
+   * never be silently reaped here (the state machine refuses it).
+   */
+  private async reapOrphanWorkerSessions(): Promise<void> {
+    for (const s of this.sessions.list({ type: "worker", status: "active" })) {
       if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
-      if (isPidAlive(s.pid)) continue;
-      let task: any;
+
+      let task: { status?: string } | null = null;
       try {
-        task = await this.client.getTask(s.taskId);
-      } catch (err: any) {
+        task = (await this.client.getTask(s.taskId)) as { status?: string } | null;
+      } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
-          logger.warn(`Task ${s.taskId} not found (deleted), cleaning up orphaned session`);
-          cleanupWorkspace(s.workspace!);
-          removeSession(s.sessionId);
+          logger.warn(`Task ${s.taskId} not found (deleted), reaping orphan session`);
+          await this.completeTerminal(s);
           continue;
         }
         throw err;
       }
+
       if (!task || task.status === "done" || task.status === "cancelled") {
-        logger.info(`Cleaning up orphaned active session for task ${s.taskId} (task status=${task?.status ?? "missing"})`);
-        cleanupWorkspace(s.workspace!);
-        removeSession(s.sessionId);
-      } else {
-        // Task still viable — release and let it be re-dispatched
-        await this.client.releaseTask(s.taskId).catch(() => {});
-        cleanupWorkspace(s.workspace!);
-        removeSession(s.sessionId);
-        logger.info(`Cleaned up orphaned session for task ${s.taskId}`);
+        logger.info(`Reaping orphan worker session for task ${s.taskId} (status=${task?.status ?? "missing"})`);
+        await this.completeTerminal(s);
+        continue;
       }
+
+      // Task still viable — release it on the server so someone can re-dispatch
+      await this.client.releaseTask(s.taskId).catch(() => {});
+      logger.info(`Released orphan task ${s.taskId} and reaped its session`);
+      await this.completeTerminal(s);
     }
+  }
 
-    // Note: rate-limited session resume is NOT done here. It happens exclusively
-    // in `resumeRuntime` (triggered by the pause timer or by an SDK "allowed"
-    // event via resumeRateLimit). Tick-level scanning would race with those
-    // signals and resurrect sessions the wrong runtime state.
-
-    // Resume rejected review sessions
-    for (const s of listSessions({ type: "worker", status: "in_review" })) {
+  private async resumeRejectedReviewSessions(): Promise<void> {
+    const now = Date.now();
+    for (const s of this.sessions.list({ type: "worker", status: "in_review" })) {
       if (this.pm.activeCount >= this.opts.maxConcurrent) return;
       if (!s.taskId || this.pm.hasTask(s.taskId)) continue;
-      let task: any;
+      if (s.resumeAfter && s.resumeAfter > now) continue;
+
+      let task: { status?: string } | null = null;
       try {
-        task = await this.client.getTask(s.taskId);
-      } catch (err: any) {
+        task = (await this.client.getTask(s.taskId)) as { status?: string } | null;
+      } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           logger.warn(`Task ${s.taskId} not found (deleted), cleaning up review session`);
-          cleanupWorkspace(s.workspace!);
-          removeSession(s.sessionId);
+          await this.completeTerminalFromReview(s, { type: "task_deleted" });
           continue;
         }
         throw err;
@@ -202,18 +218,59 @@ export class Scheduler {
 
       if (!task || task.status === "done" || task.status === "cancelled") {
         logger.info(`Cleaning up review session for task ${s.taskId} (task status=${task?.status ?? "missing"})`);
-        cleanupWorkspace(s.workspace!);
-        removeSession(s.sessionId);
+        await this.completeTerminalFromReview(s, { type: "task_cancelled" });
         continue;
       }
 
       if (task.status === "in_progress") {
-        const notes = (await this.client.getTaskNotes(s.taskId)) as any[];
-        const rejectLog = [...notes].reverse().find((l: any) => l.action === "rejected");
+        const notes = (await this.client.getTaskNotes(s.taskId)) as Array<{ action?: string; detail?: string }>;
+        const rejectLog = [...notes].reverse().find((l) => l.action === "rejected");
         const reason = rejectLog?.detail || "No reason provided";
         const message = `Task rejected. Reason: ${reason}\n\nPlease fix the issues and submit for review again.`;
-        await this.runner.resumeSession(s, message);
+        await this.resumeOneSession(s, message);
       }
+    }
+  }
+
+  /**
+   * Single resume entry point. Routes through TaskRunner.resumeSession and
+   * handles transient failures by setting persisted backoff so the next tick
+   * doesn't tight-loop retry.
+   */
+  private async resumeOneSession(s: SessionFile, message: string): Promise<void> {
+    const ok = await this.runner.resumeSession(s, message);
+    if (ok) {
+      // Clear backoff on success.
+      await this.sessions.patch(s.sessionId, { resumeBackoffMs: undefined, resumeAfter: undefined }).catch(() => {});
+      return;
+    }
+    // Transient — exponential backoff, cap at 5 min.
+    const prev = s.resumeBackoffMs ?? 5000;
+    const next = Math.min(prev * 2, 5 * 60_000);
+    const resumeAfter = Date.now() + next;
+    await this.sessions.patch(s.sessionId, { resumeBackoffMs: next, resumeAfter }).catch(() => {});
+    logger.warn(`Resume backoff for session ${s.sessionId.slice(0, 8)} → ${Math.round(next / 1000)}s`);
+  }
+
+  /** Drive an active orphan session through the state machine to terminal. */
+  private async completeTerminal(s: SessionFile): Promise<void> {
+    try {
+      await this.sessions.applyEvent(s.sessionId, { type: "orphan_detected" });
+      if (s.workspace) cleanupWorkspace(s.workspace);
+      await this.sessions.applyEvent(s.sessionId, { type: "cleanup_done" });
+    } catch (err) {
+      logger.warn(`Orphan reap failed for ${s.sessionId}: ${(err as Error).message}`);
+    }
+  }
+
+  /** Drive an in_review session through the state machine to terminal. */
+  private async completeTerminalFromReview(s: SessionFile, event: { type: "task_cancelled" | "task_deleted" }): Promise<void> {
+    try {
+      await this.sessions.applyEvent(s.sessionId, event);
+      if (s.workspace) cleanupWorkspace(s.workspace);
+      await this.sessions.applyEvent(s.sessionId, { type: "cleanup_done" });
+    } catch (err) {
+      logger.warn(`Review session cleanup failed for ${s.sessionId}: ${(err as Error).message}`);
     }
   }
 
@@ -222,7 +279,7 @@ export class Scheduler {
     const repos = await this.client.listRepositories();
     const repoById = new Map(repos.map((r: any) => [r.id, r]));
 
-    // Ensure repos are cloned
+    // Ensure repos are cloned for any assigned task
     for (const t of tasks) {
       if (t.blocked || !t.assigned_to || this.pm.hasTask(t.id) || !t.repository_id) continue;
       const repo = repoById.get(t.repository_id);
@@ -250,7 +307,7 @@ export class Scheduler {
       return;
     }
 
-    // Resolve agent runtimes and skip tasks whose runtime is paused
+    // Resolve agent runtimes and skip tasks whose runtime is paused.
     const agentCache = new Map<string, string>();
     let task: any = null;
     for (const t of available) {

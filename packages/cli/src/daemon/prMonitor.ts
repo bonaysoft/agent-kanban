@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import type { ApiClient } from "../client/index.js";
 import { createLogger } from "../logger.js";
 import { TRACKED_TASKS_FILE } from "../paths.js";
+import { getSessionManager } from "../session/manager.js";
 
 const logger = createLogger("pr-monitor");
 
@@ -27,6 +28,15 @@ export class PrMonitor {
   }
 
   start(): void {
+    // Seed tracked tasks from any worker session still on disk. This closes
+    // the "in_progress blind spot" — if a PR state change happens before the
+    // scheduler tracks the task (e.g. agent opened a draft PR while still in
+    // in_progress), we still observe it.
+    const sm = getSessionManager();
+    for (const s of sm.list({ type: "worker" })) {
+      if (s.taskId) this.trackedTasks.add(s.taskId);
+    }
+    saveTrackedTasks(this.trackedTasks);
     this.timer = setInterval(() => this.check(), PR_CHECK_INTERVAL);
     logger.info(`PR monitor started (tracking=${this.trackedTasks.size}, interval=30s)`);
   }

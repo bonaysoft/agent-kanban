@@ -10,7 +10,21 @@ export interface SpawnAgentOpts {
   parseEvent: (raw: string) => AgentEvent | null;
 }
 
+/**
+ * Spawn a process-backed agent. Returns a uniform AgentHandle whose
+ * internals encapsulate all process management:
+ *   - SIGTERM → 5s grace → SIGKILL escalation
+ *   - abort() is idempotent; a second call is a no-op
+ *   - when abort() has been called, a subsequent SIGTERM-induced exit is
+ *     NOT thrown as a crash — the iterator ends cleanly
+ *   - stderr is buffered (bounded) and attached to any thrown exit error
+ *
+ * No `pid` is exposed on the handle — the daemon layer doesn't know or care
+ * that there is a child process underneath.
+ */
 export function spawnAgent(opts: SpawnAgentOpts): AgentHandle {
+  const state: SpawnState = { aborted: false };
+
   const proc = spawn(opts.command, opts.args, {
     cwd: opts.cwd,
     stdio: ["pipe", "pipe", "pipe"],
@@ -28,12 +42,11 @@ export function spawnAgent(opts: SpawnAgentOpts): AgentHandle {
     if (stderrBuffer.length > 50000) stderrBuffer = stderrBuffer.slice(-25000);
   });
 
-  const events = createEventStream(proc, opts.parseEvent, () => stderrBuffer);
+  const events = createEventStream(proc, opts.parseEvent, () => stderrBuffer, state);
 
   return {
     events,
-    pid: proc.pid ?? null,
-    abort: () => terminateProcess(proc),
+    abort: () => terminateProcess(proc, state),
     send: async (message: string) => {
       if (proc.stdin && !proc.stdin.destroyed) {
         proc.stdin.write(`${message}\n`);
@@ -42,10 +55,15 @@ export function spawnAgent(opts: SpawnAgentOpts): AgentHandle {
   };
 }
 
+interface SpawnState {
+  aborted: boolean;
+}
+
 async function* createEventStream(
   proc: ChildProcess,
   parseEvent: (raw: string) => AgentEvent | null,
   getStderr: () => string,
+  state: SpawnState,
 ): AsyncGenerator<AgentEvent> {
   let buffer = "";
   const queue: AgentEvent[] = [];
@@ -71,7 +89,6 @@ async function* createEventStream(
   });
 
   proc.on("close", (code) => {
-    // Flush remaining buffer
     if (buffer.trim()) {
       const event = parseEvent(buffer);
       if (event) queue.push(event);
@@ -91,30 +108,36 @@ async function* createEventStream(
     while (queue.length > 0) {
       yield queue.shift()!;
     }
-
     if (done) break;
-
     await new Promise<void>((r) => {
       resolve = r;
     });
     resolve = null;
   }
 
-  if (exitError) {
-    throw exitError;
-  }
+  // Aborted: swallow any exit code / error. The iterator ends cleanly so the
+  // daemon treats it as a normal termination rather than a crash.
+  if (state.aborted) return;
+
+  if (exitError) throw exitError;
 
   if (exitCode !== null && exitCode !== 0) {
     const stderr = getStderr().trim().split("\n").slice(-10).join("\n");
     const err = new Error(`Process exited with code ${exitCode}`);
-    (err as any).exitCode = exitCode;
-    (err as any).stderr = stderr;
+    (err as { exitCode?: number }).exitCode = exitCode;
+    (err as { stderr?: string }).stderr = stderr;
     throw err;
   }
 }
 
-function terminateProcess(proc: ChildProcess): Promise<void> {
+function terminateProcess(proc: ChildProcess, state: SpawnState): Promise<void> {
   return new Promise((resolve) => {
+    if (state.aborted) {
+      resolve();
+      return;
+    }
+    state.aborted = true;
+
     if (!proc.pid || proc.killed) {
       resolve();
       return;

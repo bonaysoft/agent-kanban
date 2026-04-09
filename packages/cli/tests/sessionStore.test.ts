@@ -340,20 +340,16 @@ describe("migrateLegacySessions", () => {
     expect(sessions[0].sessionId).toBe(id);
   });
 
-  it("populates pid from legacy pids file when present", () => {
+  it("does not populate worker pid field after migration (obsolete)", () => {
+    // Worker sessions no longer carry pid — liveness is tracked in-memory
+    // by AgentRuntimePool. The legacy pids file is consumed (and deleted) but
+    // its values are discarded.
     const id = randomUUID();
     writeLegacyFiles([{ agentId: randomUUID(), sessionId: id, runtime: "claude", privateKeyJwk: {} }], { [id]: 12345 });
     migrateLegacySessions();
     const s = readSession(id);
     expect(s).not.toBeNull();
-    expect(s!.pid).toBe(12345);
-  });
-
-  it("uses pid=0 when the session ID is absent from the pids file", () => {
-    const id = randomUUID();
-    writeLegacyFiles([{ agentId: randomUUID(), sessionId: id, runtime: "claude", privateKeyJwk: {} }], {});
-    migrateLegacySessions();
-    expect(readSession(id)!.pid).toBe(0);
+    expect(s!.pid).toBeUndefined();
   });
 
   it("defaults status to active when the legacy entry has no status field", () => {

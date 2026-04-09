@@ -1118,12 +1118,13 @@ describe("claudeProvider identity", () => {
 // ---------------------------------------------------------------------------
 
 describe("claudeProvider.execute — handle shape", () => {
-  it("resolves to a handle with events, abort, pid, and send", async () => {
+  it("resolves to a handle with events, abort, and send", async () => {
     const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "build feature" });
     expect(handle).toHaveProperty("events");
     expect(typeof handle.abort).toBe("function");
     expect(typeof handle.send).toBe("function");
-    expect(handle.pid).toBe(process.pid);
+    // handle.pid was removed — provider internals own all process concerns.
+    expect((handle as { pid?: unknown }).pid).toBeUndefined();
   });
 
   it("events is an async iterable", async () => {

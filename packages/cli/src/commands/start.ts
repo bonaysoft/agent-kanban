@@ -1,11 +1,11 @@
-import { execSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
 import { DAEMON_STATE_FILE, IDENTITIES_DIR, LOGS_DIR, PID_FILE, SESSIONS_DIR, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
-import { isPidAlive, listSessions } from "../session/store.js";
+import { listSessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 
 const MAX_LOG_ARCHIVES = 5;
@@ -72,7 +72,10 @@ function formatUptime(startMs: number): string {
 }
 
 function countActiveSessions(): number {
-  return listSessions().filter((s) => isPidAlive(s.pid)).length;
+  // Count worker sessions in any non-terminal status. Terminal sessions have
+  // their files removed by SessionManager, so anything still on disk is
+  // either active / rate_limited / in_review / completing.
+  return listSessions({ type: "worker" }).length;
 }
 
 function formatProviders(all: string[]): string {
@@ -139,22 +142,6 @@ export function registerStartCommand(program: Command) {
         rmSync(SESSIONS_DIR, { recursive: true, force: true });
       }
       if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
-
-      // Check for orphaned daemon (PID file gone but process alive)
-      try {
-        const psOut = execSync("ps axo pid,command", { stdio: "pipe" }).toString();
-        for (const line of psOut.split("\n")) {
-          if (line.includes("__daemon") && line.includes("--max-concurrent")) {
-            const orphanPid = parseInt(line.trim(), 10);
-            if (orphanPid && orphanPid !== process.pid) {
-              console.error(`Orphaned daemon found (PID ${orphanPid}). Killing it before starting.`);
-              process.kill(orphanPid, "SIGKILL");
-            }
-          }
-        }
-      } catch {
-        // ps failed — proceed anyway
-      }
 
       // Rotate logs
       rotateLogs();

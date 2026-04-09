@@ -564,28 +564,20 @@ describe("claudeProvider.execute — abort and send", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Fix 1: claudeProvider.execute() returns handle.pid === process.pid
+// claudeProvider.execute — pid field removed; provider internals own process concerns
+// (tests that asserted handle.pid === process.pid were deleted in daemon refactor)
 // ---------------------------------------------------------------------------
-
-describe("claudeProvider.execute — pid equals daemon process.pid", () => {
-  it("handle.pid equals process.pid so isPidAlive never falsely reports the session as a stale orphan", async () => {
-    const handle = await claudeProvider.execute({ sessionId: "s-pid", cwd: "/tmp", env: {}, taskContext: "ctx" });
-    expect(handle.pid).toBe(process.pid);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // codexProvider.execute — handle shape and thread selection
 // ---------------------------------------------------------------------------
 
 describe("codexProvider.execute — handle shape", () => {
-  it("resolves to a handle with events, abort, pid, and send", async () => {
+  it("resolves to a handle with events, abort, and send", async () => {
     const handle = await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "build feature" });
     expect(handle).toHaveProperty("events");
     expect(typeof handle.abort).toBe("function");
     expect(typeof handle.send).toBe("function");
-    // pid must equal the daemon process pid so liveness checks work correctly
-    expect(handle.pid).toBe(process.pid);
   });
 
   it("events is an async iterable", async () => {
@@ -594,13 +586,7 @@ describe("codexProvider.execute — handle shape", () => {
   });
 });
 
-// Fix 1: codexProvider.execute() returns handle.pid === process.pid
-describe("codexProvider.execute — pid equals daemon process.pid", () => {
-  it("handle.pid equals process.pid so liveness checks treat session as alive while daemon runs", async () => {
-    const handle = await codexProvider.execute({ sessionId: "s-pid", cwd: "/tmp", env: {}, taskContext: "ctx" });
-    expect(handle.pid).toBe(process.pid);
-  });
-});
+// pid field removed from AgentHandle — provider internals own process concerns
 
 describe("codexProvider.execute — thread selection", () => {
   it("calls startThread when resume is false or absent", async () => {
@@ -773,7 +759,7 @@ describe("registry.registerProvider", () => {
     const fake: AgentProvider = {
       name: "fake-provider-test" as any,
       label: "Fake",
-      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, send: async () => {} }),
     };
     registerProvider(fake);
     expect(getProvider("fake-provider-test" as any).name).toBe("fake-provider-test");
@@ -783,12 +769,12 @@ describe("registry.registerProvider", () => {
     const v1: AgentProvider = {
       name: "overwrite-test" as any,
       label: "V1",
-      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, send: async () => {} }),
     };
     const v2: AgentProvider = {
       name: "overwrite-test" as any,
       label: "V2",
-      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, send: async () => {} }),
     };
     registerProvider(v1);
     registerProvider(v2);
@@ -806,7 +792,7 @@ describe("registry.getAvailableProviders", () => {
     const ghost: AgentProvider = {
       name: "ghost-cmd-provider" as any,
       label: "Ghost",
-      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, pid: null, send: async () => {} }),
+      execute: async () => ({ events: (async function* () {})(), abort: async () => {}, send: async () => {} }),
     };
     registerProvider(ghost);
     const available = getAvailableProviders();

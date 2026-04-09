@@ -295,13 +295,6 @@ function makeCallbacks(scheduler?: { onSlotFreed(): void }) {
     onSlotFreed: vi.fn().mockImplementation(() => scheduler?.onSlotFreed()),
     onRateLimited: vi.fn(),
     onRateLimitResumed: vi.fn(),
-    onProcessStarted: vi.fn().mockImplementation((sessionId: string, pid: number) => {
-      // Mirror what daemon.ts does: update session pid
-      const sessions = listSessions({ type: "worker" });
-      const s = sessions.find((s) => s.sessionId === sessionId);
-      if (s) writeSession({ ...s, pid });
-    }),
-    onProcessExited: vi.fn(),
   };
 }
 
@@ -648,64 +641,8 @@ describe("Scenario 5: full end-to-end reject-resume", () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Scenario 6 (Fix 1): provider pid must be process.pid
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe("Scenario 6 (Fix 1): provider handle.pid must equal process.pid", () => {
-  it("FakeProvider.execute() returns pid === process.pid", async () => {
-    const fake = new FakeProvider();
-    const handle = await fake.execute({
-      sessionId: randomUUID(),
-      cwd: tmpdir(),
-      env: {},
-      taskContext: "test",
-    });
-    expect(handle.pid).toBe(process.pid);
-    handle.abort();
-  });
-
-  it("claudeProvider.execute() returns pid === process.pid", async () => {
-    // Import claudeProvider directly to verify Fix 1 at source level
-    const { claudeProvider } = await import("../src/providers/claude.js");
-    const sessionId = randomUUID();
-    const workDir = mkdtempSync(join(tmpdir(), "ak-claude-pid-"));
-    let handle: AgentHandle | undefined;
-    try {
-      handle = await claudeProvider.execute({
-        sessionId,
-        cwd: workDir,
-        env: process.env as Record<string, string>,
-        taskContext: "test",
-        resume: false,
-      });
-      expect(handle.pid).toBe(process.pid);
-    } finally {
-      handle?.abort();
-      rmSync(workDir, { recursive: true, force: true });
-    }
-  });
-
-  it("codexProvider.execute() returns pid === process.pid", async () => {
-    const { codexProvider } = await import("../src/providers/codex.ts");
-    const sessionId = randomUUID();
-    const workDir = mkdtempSync(join(tmpdir(), "ak-codex-pid-"));
-    let handle: AgentHandle | undefined;
-    try {
-      handle = await codexProvider.execute({
-        sessionId,
-        cwd: workDir,
-        env: process.env as Record<string, string>,
-        taskContext: "test",
-        resume: false,
-      });
-      expect(handle.pid).toBe(process.pid);
-    } finally {
-      handle?.abort();
-      rmSync(workDir, { recursive: true, force: true });
-    }
-  });
-});
+// Scenario 6 (Fix 1): provider handle.pid tests deleted — pid field removed from AgentHandle.
+// Provider internals own all process concerns; the daemon layer does not access pid.
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Scenario 7 (Fix 2): onComplete does not call onCleanup when session is in_review

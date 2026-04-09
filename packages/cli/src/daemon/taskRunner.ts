@@ -123,12 +123,12 @@ export class TaskRunner {
         .filter(Boolean)
         .join("\n");
 
-      // Persist session before spawning — crash-safe
+      // Persist session before spawning — crash-safe. Worker sessions have
+      // no pid; liveness is tracked in-memory by AgentRuntimePool.
       const sessionFile: SessionFile = {
         type: "worker",
         agentId,
         sessionId,
-        pid: 0, // updated by onProcessStarted callback
         runtime: providerName,
         startedAt: Date.now(),
         apiUrl: getCredentials().apiUrl,

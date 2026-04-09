@@ -22,6 +22,20 @@ export async function cleanupLeaderSessions(client: MachineClient): Promise<void
   }
 }
 
+/**
+ * Startup-time stale session cleanup. Runs on daemon boot, before any
+ * ProcessManager exists. At this point, ANY worker session on disk is
+ * orphaned from a previous daemon incarnation — the old daemon is gone,
+ * the in-memory AgentRuntimePool is empty, so there's no live handle for
+ * any of them.
+ *
+ * Exception: sessions in `in_review` must survive every restart. They're
+ * the reject-resume entry point.
+ *
+ * For leader sessions we still use pid liveness, because leaders are
+ * anchored to a long-lived external runtime (e.g. GH Actions step) whose
+ * lifetime is independent of the daemon.
+ */
 export async function cleanupStaleSessions(client: MachineClient, machineId: string): Promise<void> {
   try {
     const agents = (await client.listAgents()) as any[];
@@ -31,10 +45,16 @@ export async function cleanupStaleSessions(client: MachineClient, machineId: str
       for (const session of sessions) {
         if (session.status !== "active" || session.machine_id !== machineId) continue;
         const local = listSessions().find((s) => s.sessionId === session.id);
-        // NEVER wipe a session that's waiting on a review decision — its file
-        // is the only entry point for the reject-resume path.
-        if (local?.status === "in_review") continue;
-        if (local && isPidAlive(local.pid)) continue;
+
+        // Worker sessions: in_review survives forever; everything else is
+        // orphaned at boot time (no live handle can exist yet).
+        // Leader sessions: pid liveness.
+        if (local?.type === "worker") {
+          if (local.status === "in_review") continue;
+        } else if (local?.type === "leader") {
+          if (isPidAlive(local.pid)) continue;
+        }
+
         await client.closeSession(agent.id, session.id).catch(() => {});
         if (local) {
           logger.info(`Closing stale session ${session.id.slice(0, 8)} for agent ${agent.id.slice(0, 8)}`);

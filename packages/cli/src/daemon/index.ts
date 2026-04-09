@@ -9,7 +9,7 @@ import { createLogger } from "../logger.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 import type { AgentProvider, UsageInfo } from "../providers/types.js";
-import { migrateLegacySessions, updateSession } from "../session/store.js";
+import { migrateLegacySessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 import { auditOrphanedTasks, cleanupLeaderSessions, cleanupStaleSessions } from "./cleanup.js";
 import { PrMonitor } from "./prMonitor.js";
@@ -84,8 +84,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       onSlotFreed: () => scheduler.onSlotFreed(),
       onRateLimited: (runtime, resetAt) => scheduler.pauseForRateLimit(runtime, resetAt),
       onRateLimitResumed: (runtime) => scheduler.resumeRateLimit(runtime),
-      onProcessStarted: (sessionId, pid) => updateSession(sessionId, { pid }),
-      onProcessExited: () => {},
     },
     opts.taskTimeout,
     tunnel,
@@ -97,17 +95,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       .catch((e) => logger.warn(`History fetch failed for ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`));
   });
 
+  // Human → agent messages are fail-fast: if no live agent holds the session
+  // we log and drop. The frontend surfaces an error to the human, who resends.
+  // Previously this silently tried to resume-from-disk, which was a hidden
+  // fallback that masked bugs.
   tunnel.onHumanMessage(async (sessionId, content) => {
     const delivered = await pm.sendToSession(sessionId, content);
     if (!delivered) {
-      const { listSessions } = await import("../session/store.js");
-      const session = listSessions({ type: "worker" }).find((s) => s.sessionId === sessionId);
-      if (session) {
-        logger.info(`Resuming session ${sessionId.slice(0, 8)} for human message`);
-        runner.resumeSession(session, content).catch((e) => {
-          logger.warn(`Failed to resume session ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`);
-        });
-      }
+      logger.warn(`Human message for session ${sessionId.slice(0, 8)} dropped: no live agent`);
     }
   });
 

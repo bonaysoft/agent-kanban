@@ -312,13 +312,12 @@ export const claudeProvider: AgentProvider = {
       }
     })();
 
+    let aborted = false;
     return Promise.resolve({
       events,
-      // In-process SDK — no child process. Report daemon pid so liveness checks
-      // (isPidAlive) treat sessions as alive while this daemon is running, and
-      // correctly identify them as stale only after a daemon restart.
-      pid: process.pid,
       async abort() {
+        if (aborted) return;
+        aborted = true;
         q.close();
       },
       async send(message: string) {

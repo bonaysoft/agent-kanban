@@ -152,33 +152,14 @@ describe("cleanupStaleSessions — active session with dead pid IS removed", () 
   });
 });
 
-// ── Fix 3: active session with live pid is NOT removed ───────────────────────
-
-describe("cleanupStaleSessions — active session with live pid is NOT removed", () => {
-  it("preserves the session file when status is active and pid is alive", async () => {
-    if (typeof cleanupStaleSessions !== "function") return;
-
-    const session = makeWorkerSession({ pid: process.pid, status: "active" });
-    writeSession(session);
-
-    const client = makeMachineClient(session.agentId, session.sessionId);
-    await cleanupStaleSessions(client, MACHINE_ID);
-
-    expect(readSession(session.sessionId)).not.toBeNull();
-  });
-
-  it("does not call client.closeSession when the session pid is alive", async () => {
-    if (typeof cleanupStaleSessions !== "function") return;
-
-    const session = makeWorkerSession({ pid: process.pid, status: "active" });
-    writeSession(session);
-
-    const client = makeMachineClient(session.agentId, session.sessionId);
-    await cleanupStaleSessions(client, MACHINE_ID);
-
-    expect(client.closeSession).not.toHaveBeenCalled();
-  });
-});
+// NOTE: at startup-time, ANY active worker session on disk is orphaned —
+// the previous daemon incarnation is gone and the in-memory AgentRuntimePool
+// is empty. The old "live pid = preserve" behavior no longer applies because
+// worker sessions no longer carry a pid. See cleanup.ts for rationale.
+//
+// For `in_review` worker sessions the preserve-on-restart behavior is covered
+// by the Fix 2 tests above (the rejectResumeFlow integration test also
+// exercises this).
 
 // ── Fix 3: sessions belonging to a different machine are not touched ──────────
 

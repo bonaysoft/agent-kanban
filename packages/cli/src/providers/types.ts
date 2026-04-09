@@ -12,10 +12,21 @@ export interface ExecuteOpts {
   resume?: boolean;
 }
 
+/**
+ * Uniform contract for every agent provider — SDK-based or process-based.
+ *
+ * Iterator termination semantics (both providers must conform):
+ *   - Normal completion: iterator ends cleanly, no throw
+ *   - Crash / internal failure: iterator throws (classified at boundary)
+ *   - External abort(): iterator ends cleanly (abort is idempotent)
+ *
+ * Provider internals (process spawning, pipes, signals, zombie reaping,
+ * abort idempotency) are fully encapsulated inside the provider. The daemon
+ * layer never touches OS process concepts.
+ */
 export interface AgentHandle {
   events: AsyncIterable<AgentEvent>;
   abort(): Promise<void>;
-  pid: number | null;
   send(message: string): Promise<void>;
 }
 

@@ -1,3 +1,18 @@
+/**
+ * Low-level session file I/O.
+ *
+ * THIS MODULE IS INTERNAL. Prefer `SessionManager` in manager.ts for all
+ * session state changes. Direct callers of this module bypass the mutex and
+ * the state machine, and are the historical source of the worktree leak and
+ * lost-update bugs. New code MUST use SessionManager.
+ *
+ * The only legitimate direct callers are:
+ *   - SessionManager itself (implementation)
+ *   - leader.ts (leader sessions, which have a different lifecycle)
+ *   - cleanup.ts (leader cleanup only)
+ *   - commands/start.ts legacy URL-change wipe path
+ */
+
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -71,18 +86,10 @@ export function updateSession(sessionId: string, updates: Partial<SessionFile>):
 }
 
 /**
- * DANGEROUS — wipes the entire sessions directory.
- *
- * Only legitimate caller: test setup/teardown.
- *
- * Do NOT call from daemon shutdown, scheduler cleanup, or any production code
- * path. Worker sessions with `status: "in_review"` are reject-resume entry
- * points and MUST survive every kind of restart. Bulk-wiping them leaves
- * tasks stuck in `in_progress` with no way to resume.
- *
- * The only non-test use is `commands/start.ts` when the `apiUrl` changes, and
- * that site inlines `rmSync(SESSIONS_DIR)` on purpose so it can't accidentally
- * share this helper.
+ * TEST ONLY — wipes the sessions directory. Do NOT call from daemon code;
+ * in_review session files are reject-resume entry points and must survive
+ * every kind of restart. The only non-test caller is commands/start.ts when
+ * the apiUrl changes, and that site inlines rmSync on purpose.
  */
 export function clearAllSessions(): void {
   try {
@@ -92,8 +99,13 @@ export function clearAllSessions(): void {
   }
 }
 
-export function isPidAlive(pid: number): boolean {
-  if (pid <= 0) return false;
+/**
+ * PID liveness check. Only meaningful for LEADER sessions, whose `pid` is a
+ * long-lived external runtime (e.g. a CI step). Worker sessions no longer
+ * carry a pid — their liveness is tracked in-memory by AgentRuntimePool.
+ */
+export function isPidAlive(pid: number | undefined): boolean {
+  if (!pid || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -111,9 +123,10 @@ export function migrateLegacySessions(): void {
     return; // No legacy file — nothing to migrate
   }
 
-  let legacyPids: Record<string, number> = {};
   try {
-    legacyPids = JSON.parse(readFileSync(LEGACY_SESSION_PIDS_FILE, "utf-8"));
+    // Legacy pid file existed for back-compat; no longer needed since worker
+    // sessions have no pid, but we still consume and delete the file.
+    JSON.parse(readFileSync(LEGACY_SESSION_PIDS_FILE, "utf-8"));
   } catch {
     /* no PID file — fine */
   }
@@ -123,7 +136,6 @@ export function migrateLegacySessions(): void {
       type: "worker",
       agentId: s.agentId,
       sessionId: s.sessionId,
-      pid: legacyPids[s.sessionId] ?? 0,
       runtime: s.runtime,
       startedAt: 0,
       apiUrl: "",
@@ -138,7 +150,6 @@ export function migrateLegacySessions(): void {
     });
   }
 
-  // Remove legacy files
   try {
     unlinkSync(LEGACY_SAVED_SESSIONS_FILE);
   } catch {

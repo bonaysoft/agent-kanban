@@ -201,11 +201,12 @@ export const codexProvider: AgentProvider = {
       }
     })();
 
+    let aborted = false;
     return {
       events,
-      // In-process SDK — see claude.ts for rationale.
-      pid: process.pid,
       async abort() {
+        if (aborted) return;
+        aborted = true;
         abortController.abort();
       },
       async send() {
