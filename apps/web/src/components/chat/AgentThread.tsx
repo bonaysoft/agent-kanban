@@ -100,7 +100,7 @@ const HumanMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="aui-user-message-root flex justify-end w-full py-2">
       <div className="max-w-[80%] rounded-2xl bg-accent/10 border border-accent/20 px-4 py-2.5 text-sm text-content-primary">
-        <MessagePrimitive.Parts />
+        <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
       </div>
     </MessagePrimitive.Root>
   );

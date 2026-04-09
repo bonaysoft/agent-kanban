@@ -309,6 +309,21 @@ describe("convertEvents — rate limit events", () => {
     const messages = convertEvents(events, "idle");
     expect(messages).toHaveLength(0);
   });
+
+  it("shows 'reset time unknown' when resetAt is absent and not overage", () => {
+    const events: RelayEvent[] = [
+      {
+        id: "rate-4",
+        event: { type: "turn.rate_limit", status: "rejected" },
+        timestamp: "2026-04-08T10:00:00.000Z",
+      },
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    expect(messages).toHaveLength(1);
+    expect((messages[0].content as any[])[0].text).toBe("Rate limited — reset time unknown");
+  });
 });
 
 // ── Edge cases ────────────────────────────────────────────────────────────────
@@ -440,5 +455,395 @@ describe("convertEvents — streaming turn lifecycle", () => {
     expect(messages[1].role).toBe("user");
     expect(messages[2].role).toBe("assistant");
     expect((messages[2].content as any[])[0].text).toBe("Live response");
+  });
+});
+
+// ── Subtask routing — block.done with parent_id ────────────────────────────
+
+describe("convertEvents — subtask routing via block.done", () => {
+  it("routes subtask thinking block into Task tool's result.children, not main parts", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      // Main agent emits a Task tool_use
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: { description: "do something" } } }),
+      // Subagent emits a thinking block with parent_id
+      re("e3", { type: "block.done", block: { type: "thinking", text: "subagent thinking", parent_id: "toolu_task1" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // Main parts should have only the Task tool-call, no thinking part from subagent
+    expect(messages).toHaveLength(1);
+    const parts = messages[0].content as any[];
+    const tc = parts.find((p: any) => p.type === "tool-call");
+    expect(tc).toBeDefined();
+    expect(tc.toolName).toBe("Task");
+    // No standalone reasoning part in main parts
+    expect(parts.filter((p: any) => p.type === "reasoning")).toHaveLength(0);
+    // Thinking block routed into children
+    const result = tc.result as any;
+    expect(result.children).toHaveLength(1);
+    expect(result.children[0]).toEqual({ kind: "thinking", text: "subagent thinking" });
+  });
+
+  it("routes subtask tool_use block into Task tool's result.children", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", {
+        type: "block.done",
+        block: { type: "tool_use", id: "inner_tool1", name: "bash", input: { command: "ls" }, parent_id: "toolu_task1" },
+      }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.children).toHaveLength(1);
+    expect(tc.result.children[0]).toEqual({ kind: "tool_use", id: "inner_tool1", name: "bash", input: { command: "ls" } });
+  });
+
+  it("routes subtask text block into Task tool's result.children", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "block.done", block: { type: "text", text: "subtask output", parent_id: "toolu_task1" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.children).toHaveLength(1);
+    expect(tc.result.children[0]).toEqual({ kind: "text", text: "subtask output" });
+  });
+
+  it("routes subtask tool_result block into Task tool's result.children", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", {
+        type: "block.done",
+        block: { type: "tool_result", tool_use_id: "inner_tool1", output: "result text", error: false, parent_id: "toolu_task1" },
+      }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.children[0]).toEqual({ kind: "tool_result", tool_use_id: "inner_tool1", output: "result text", error: false });
+  });
+
+  it("accumulates multiple subtask children in order", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "block.done", block: { type: "thinking", text: "thinking first", parent_id: "toolu_task1" } }),
+      re("e4", { type: "block.done", block: { type: "tool_use", id: "t2", name: "read", input: {}, parent_id: "toolu_task1" } }),
+      re("e5", { type: "block.done", block: { type: "text", text: "final text", parent_id: "toolu_task1" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.children).toHaveLength(3);
+    expect(tc.result.children[0].kind).toBe("thinking");
+    expect(tc.result.children[1].kind).toBe("tool_use");
+    expect(tc.result.children[2].kind).toBe("text");
+  });
+
+  it("outer tool_result for Task populates result.text without overwriting children", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "block.done", block: { type: "text", text: "child text", parent_id: "toolu_task1" } }),
+      // Outer tool_result closes the Task tool call on the main turn (no parent_id)
+      re("e4", { type: "block.done", block: { type: "tool_result", tool_use_id: "toolu_task1", output: "Task summary markdown" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBe("Task summary markdown");
+    // children must survive the outer tool_result update
+    expect(tc.result.children).toHaveLength(1);
+    expect(tc.result.children[0]).toEqual({ kind: "text", text: "child text" });
+  });
+
+  it("unknown subtask block type with parent_id is silently dropped (default branch)", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      // An unknown block type with parent_id — should be dropped, not leak into main stream
+      re("e3", { type: "block.done", block: { type: "image", url: "http://example.com/img.png", parent_id: "toolu_task1" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // Only the Task tool-call in main parts, nothing from the unknown subtask block
+    const parts = messages[0].content as any[];
+    expect(parts).toHaveLength(1);
+    expect(parts[0].type).toBe("tool-call");
+    // Children are empty (image type has no handler in routeSubtaskBlock known branches — hits default)
+    const tc = parts[0] as any;
+    expect(tc.result?.children ?? []).toHaveLength(0);
+  });
+
+  it("drops orphan subtask blocks silently — parent_id refers to unknown tool_use_id", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "text", text: "main text" } }),
+      // Orphan — no matching tool_use in toolCallMap
+      re("e3", { type: "block.done", block: { type: "text", text: "orphan subtask", parent_id: "unknown_id" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // Orphan must not appear in main parts
+    const parts = messages[0].content as any[];
+    const textParts = parts.filter((p: any) => p.type === "text");
+    expect(textParts).toHaveLength(1);
+    expect(textParts[0].text).toBe("main text");
+  });
+});
+
+// ── mapBlock default branch (unknown block type) ──────────────────────────
+
+describe("convertEvents — unknown block type in message event is ignored", () => {
+  it("unknown block type produces no content part", () => {
+    const events = [
+      re("e1", {
+        type: "message",
+        blocks: [
+          { type: "image", url: "http://example.com/img.png" },
+          { type: "text", text: "after image" },
+        ],
+      }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // Only the text part should appear; image (unknown) is dropped via mapBlock returning null
+    expect(messages).toHaveLength(1);
+    const parts = messages[0].content as any[];
+    expect(parts).toHaveLength(1);
+    expect(parts[0].text).toBe("after image");
+  });
+});
+
+// ── updateOrAppend backward-search break ──────────────────────────────────
+
+describe("convertEvents — updateOrAppend backward search breaks on type mismatch", () => {
+  it("appends new text part when last parts are of a different type (no stale empty match)", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      // A tool_use block — adds a tool-call part
+      re("e2", { type: "block.start", block: { type: "tool_use", id: "t1", name: "bash" } }),
+      // A block.done for text — backwards search hits tool-call (different type) and breaks, then appends
+      re("e3", { type: "block.done", block: { type: "text", text: "appended text" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const parts = messages[0].content as any[];
+    const textPart = parts.find((p: any) => p.type === "text");
+    expect(textPart).toBeDefined();
+    expect(textPart.text).toBe("appended text");
+  });
+});
+
+// ── Subtask routing via block.start ────────────────────────────────────────
+
+describe("convertEvents — subtask routing via block.start", () => {
+  it("subtask block.start with parent_id is not added to main parts", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "block.start", block: { type: "thinking", text: "", parent_id: "toolu_task1" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const parts = messages[0].content as any[];
+    expect(parts.filter((p: any) => p.type === "reasoning")).toHaveLength(0);
+  });
+});
+
+// ── Subtask lifecycle events ───────────────────────────────────────────────
+
+describe("convertEvents — subtask lifecycle events", () => {
+  it("subtask.start sets meta.status to running and records description", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.start", tool_use_id: "toolu_task1", description: "Run linter", kind: "worker" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.meta.status).toBe("running");
+    expect(tc.result.meta.description).toBe("Run linter");
+  });
+
+  it("subtask.progress records tokens, duration_ms, and last_tool", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.progress", tool_use_id: "toolu_task1", last_tool: "bash", tokens: 500, duration_ms: 1200 }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.meta.status).toBe("running");
+    expect(tc.result.meta.last_tool).toBe("bash");
+    expect(tc.result.meta.tokens).toBe(500);
+    expect(tc.result.meta.duration_ms).toBe(1200);
+  });
+
+  it("subtask.end with status completed updates meta.status", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "completed", summary: "All done", tokens: 800, duration_ms: 5000 }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.meta.status).toBe("completed");
+    expect(tc.result.meta.tokens).toBe(800);
+    expect(tc.result.meta.duration_ms).toBe(5000);
+  });
+
+  it("subtask.end with status completed does not seed result.text from summary (tool_result arrives separately)", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "completed", summary: "Summary from subagent" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBeUndefined();
+  });
+
+  it("subtask.end with status failed seeds result.text from summary", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "failed", summary: "Failure summary" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBe("Failure summary");
+  });
+
+  it("subtask.end with status stopped seeds result.text from summary", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "stopped", summary: "Stopped summary" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBe("Stopped summary");
+  });
+
+  it("subtask.end with status completed followed by block.done tool_result sets result.text from tool_result output", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "completed", summary: "Summary ignored" }),
+      re("e4", { type: "block.done", block: { type: "tool_result", tool_use_id: "toolu_task1", output: "Final output from tool_result" } }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBe("Final output from tool_result");
+  });
+
+  it("subtask.end does not overwrite result.text when already set by outer tool_result", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      // Outer tool_result sets text first
+      re("e3", { type: "block.done", block: { type: "tool_result", tool_use_id: "toolu_task1", output: "Outer text wins" } }),
+      re("e4", { type: "subtask.end", tool_use_id: "toolu_task1", status: "completed", summary: "Should not overwrite" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.text).toBe("Outer text wins");
+  });
+
+  it("subtask lifecycle events for unknown tool_use_id are silently ignored", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "text", text: "main" } }),
+      re("e3", { type: "subtask.start", tool_use_id: "unknown_id", description: "ghost task" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // No crash, main message intact
+    expect(messages).toHaveLength(1);
+    const parts = messages[0].content as any[];
+    expect(parts[0]).toEqual({ type: "text", text: "main" });
+  });
+
+  it("subtask.end with status failed sets meta.status to failed", () => {
+    const events = [
+      re("e1", { type: "turn.start" }),
+      re("e2", { type: "block.done", block: { type: "tool_use", id: "toolu_task1", name: "Task", input: {} } }),
+      re("e3", { type: "subtask.end", tool_use_id: "toolu_task1", status: "failed" }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    const tc = (messages[0].content as any[]).find((p: any) => p.type === "tool-call");
+    expect(tc.result.meta.status).toBe("failed");
+  });
+});
+
+// ── Subtask routing via legacy message event ──────────────────────────────
+
+describe("convertEvents — legacy message event with mixed blocks", () => {
+  it("routes subtask block to children, main block to parts", () => {
+    const events = [
+      // First establish the Task tool_use via a previous event
+      re("e1", { type: "message", blocks: [{ type: "tool_use", id: "toolu_task1", name: "Task", input: {} }] }),
+      // A message event with both a main-agent text block and a subtask text block
+      re("e2", {
+        type: "message",
+        blocks: [
+          { type: "text", text: "main agent text" },
+          { type: "text", text: "subtask text", parent_id: "toolu_task1" },
+        ],
+      }),
+    ];
+
+    const messages = convertEvents(events, "idle");
+
+    // Should produce a single accumulated assistant message
+    expect(messages).toHaveLength(1);
+    const parts = messages[0].content as any[];
+
+    // Main text goes to parts
+    const textParts = parts.filter((p: any) => p.type === "text");
+    expect(textParts).toHaveLength(1);
+    expect(textParts[0].text).toBe("main agent text");
+
+    // Subtask text goes to Task tool's children
+    const tc = parts.find((p: any) => p.type === "tool-call");
+    expect(tc.result.children).toHaveLength(1);
+    expect(tc.result.children[0]).toEqual({ kind: "text", text: "subtask text" });
   });
 });

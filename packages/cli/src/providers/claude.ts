@@ -2,10 +2,17 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import type { SubtaskStatus } from "@agent-kanban/shared";
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+
+const SUBTASK_STATUSES: readonly SubtaskStatus[] = ["completed", "failed", "stopped"] as const;
+
+function coerceSubtaskStatus(raw: unknown): SubtaskStatus {
+  return (SUBTASK_STATUSES as readonly string[]).includes(raw as string) ? (raw as SubtaskStatus) : "stopped";
+}
 
 const logger = createLogger("claude");
 
@@ -46,15 +53,20 @@ function readOAuthToken(): string | null {
   }
 }
 
+/** Stamp `parent_id` onto a block only when set, to keep wire format clean. */
+function withParent<T extends ContentBlock>(block: T, parentId: string | null | undefined): T {
+  return parentId ? ({ ...block, parent_id: parentId } as T) : block;
+}
+
 /** Map a single SDK message to an AgentEvent (or null to skip). */
-function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number]): ContentBlock | null {
+function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number], parentId: string | null | undefined): ContentBlock | null {
   switch (block.type) {
     case "thinking":
-      return block.thinking ? { type: "thinking", text: block.thinking } : null;
+      return block.thinking ? withParent({ type: "thinking", text: block.thinking }, parentId) : null;
     case "tool_use":
-      return { type: "tool_use", id: block.id, name: block.name, input: block.input as Record<string, unknown> };
+      return withParent({ type: "tool_use", id: block.id, name: block.name, input: block.input as Record<string, unknown> }, parentId);
     case "text":
-      return block.text ? { type: "text", text: block.text } : null;
+      return block.text ? withParent({ type: "text", text: block.text }, parentId) : null;
     default:
       return null;
   }
@@ -63,6 +75,7 @@ function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number
 function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
   const content = msg.message.content;
   if (typeof content === "string") return [];
+  const parentId = msg.parent_tool_use_id;
   const blocks: ContentBlock[] = [];
   for (const block of content) {
     if (block.type === "tool_result") {
@@ -75,10 +88,43 @@ function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
           .map((c) => c.text)
           .join("\n");
       }
-      blocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
+      blocks.push(withParent({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error }, parentId));
     }
   }
   return blocks;
+}
+
+/**
+ * Map SDK system task_* messages → our subtask.* events.
+ * SDK subtypes: task_started | task_progress | task_notification.
+ */
+function mapTaskSystemMessage(msg: any): AgentEvent | null {
+  const tid = msg.tool_use_id;
+  if (!tid) return null;
+  switch (msg.subtype) {
+    case "task_started":
+      return { type: "subtask.start", tool_use_id: tid, description: msg.description, kind: msg.task_type };
+    case "task_progress":
+      return {
+        type: "subtask.progress",
+        tool_use_id: tid,
+        summary: msg.summary,
+        last_tool: msg.last_tool_name,
+        tokens: msg.usage?.total_tokens,
+        duration_ms: msg.usage?.duration_ms,
+      };
+    case "task_notification":
+      return {
+        type: "subtask.end",
+        tool_use_id: tid,
+        status: coerceSubtaskStatus(msg.status),
+        summary: msg.summary,
+        tokens: msg.usage?.total_tokens,
+        duration_ms: msg.usage?.duration_ms,
+      };
+    default:
+      return null;
+  }
 }
 
 /** Map a single SDK message to an AgentEvent (1:1, used for history fallback). */
@@ -116,7 +162,8 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
       if (msg.error) {
         return { type: "turn.error", code: msg.error, detail: msg.error };
       }
-      const blocks = (msg.message.content ?? []).map(mapContentBlock).filter((b): b is ContentBlock => b !== null);
+      const parentId = msg.parent_tool_use_id;
+      const blocks = (msg.message.content ?? []).map((b) => mapContentBlock(b, parentId)).filter((b): b is ContentBlock => b !== null);
       return blocks.length > 0 ? { type: "message", blocks } : null;
     }
 
@@ -130,20 +177,26 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
       return { type: "turn.end", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> };
     }
 
+    case "system":
+      return mapTaskSystemMessage(msg);
+
     default:
       return null;
   }
 }
 
 /** Map a stream_event's content_block to a ContentBlock (or null to skip). */
-function mapStreamBlock(block: { type: string; [k: string]: unknown }): ContentBlock | null {
+function mapStreamBlock(block: { type: string; [k: string]: unknown }, parentId: string | null | undefined): ContentBlock | null {
   switch (block.type) {
     case "tool_use":
-      return { type: "tool_use", id: block.id as string, name: block.name as string, input: block.input as Record<string, unknown> };
+      return withParent(
+        { type: "tool_use", id: block.id as string, name: block.name as string, input: block.input as Record<string, unknown> },
+        parentId,
+      );
     case "thinking":
-      return block.thinking ? { type: "thinking", text: block.thinking as string } : null;
+      return block.thinking ? withParent({ type: "thinking", text: block.thinking as string }, parentId) : null;
     case "text":
-      return block.text ? { type: "text", text: block.text as string } : null;
+      return block.text ? withParent({ type: "text", text: block.text as string }, parentId) : null;
     default:
       return null;
   }
@@ -159,10 +212,12 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
     const partial = msg as SDKPartialAssistantMessage;
     const evt = partial.event;
     if (evt.type === "content_block_start") {
-      const block = mapStreamBlock(evt.content_block as unknown as { type: string; [k: string]: unknown });
+      const block = mapStreamBlock(evt.content_block as unknown as { type: string; [k: string]: unknown }, partial.parent_tool_use_id);
       if (!block) return;
 
-      if (!turnOpen.value) {
+      // Only open a main turn for non-subtask blocks. Subtask blocks belong to
+      // their parent Task tool card, not the main agent stream.
+      if (!block.parent_id && !turnOpen.value) {
         yield { type: "turn.start" };
         turnOpen.value = true;
       }
@@ -183,9 +238,11 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
     }
 
     // Internal API round-trip complete — emit block.done for each finalized block
-    const blocks = (assistantMsg.message.content ?? []).map(mapContentBlock).filter((b): b is ContentBlock => b !== null);
+    const parentId = assistantMsg.parent_tool_use_id;
+    const blocks = (assistantMsg.message.content ?? []).map((b) => mapContentBlock(b, parentId)).filter((b): b is ContentBlock => b !== null);
 
-    if (!turnOpen.value && blocks.length > 0) {
+    const hasMainBlock = blocks.some((b) => !b.parent_id);
+    if (!turnOpen.value && hasMainBlock) {
       yield { type: "turn.start" };
       turnOpen.value = true;
     }

@@ -7,6 +7,27 @@ import { useSessionRelay } from "../hooks/useSessionRelay";
 
 type ContentPart = { type: "text"; text: string } | { type: "reasoning"; text: string } | ToolCallPart;
 
+// Subtask (subagent) child events captured inside a Task tool call. Not assistant-ui
+// parts — just a serializable summary rendered by TaskToolUI.
+export type SubtaskChild =
+  | { kind: "text"; text: string }
+  | { kind: "thinking"; text: string }
+  | { kind: "tool_use"; id: string; name: string; input?: Record<string, unknown> }
+  | { kind: "tool_result"; tool_use_id: string; output?: string; error?: boolean };
+
+export interface TaskToolResult {
+  text?: string; // final summary (from tool_result on the outer turn)
+  error?: boolean;
+  children: SubtaskChild[]; // streamed inner events from the subagent
+  meta?: {
+    description?: string;
+    status?: "running" | "completed" | "failed" | "stopped";
+    last_tool?: string;
+    tokens?: number;
+    duration_ms?: number;
+  };
+}
+
 type ToolCallPart = {
   type: "tool-call";
   toolCallId: string;
@@ -18,12 +39,50 @@ type ToolCallPart = {
 export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): ThreadMessageLike[] {
   const messages: ThreadMessageLike[] = [];
   const toolCallMap = new Map<string, ToolCallPart>();
+  // Nested subtasks: when a subagent spawns another subagent, the inner Task's
+  // tool_use lives inside the outer Task's children (not in toolCallMap). Map
+  // any nested tool_use_id we observe → its top-level Task id, so subsequent
+  // descendant blocks can still be routed to the outermost Task card.
+  const subtaskRoot = new Map<string, string>();
+
+  function resolveTaskRoot(parentId: string): string | undefined {
+    if (toolCallMap.has(parentId)) return parentId;
+    const redirect = subtaskRoot.get(parentId);
+    if (redirect && toolCallMap.has(redirect)) return redirect;
+    return undefined;
+  }
 
   // Current assistant message being built (streaming turn or legacy accumulation)
   let currentParts: ContentPart[] = [];
   let currentId: string | null = null;
   let currentTimestamp: string | null = null;
   let turnRunning = false;
+
+  function ensureTaskResult(tc: ToolCallPart): TaskToolResult {
+    if (!tc.result || typeof tc.result !== "object" || !("children" in (tc.result as object))) {
+      tc.result = { children: [] } as TaskToolResult;
+    }
+    return tc.result as TaskToolResult;
+  }
+
+  function appendSubtaskChild(parentId: string, child: SubtaskChild) {
+    const rootId = resolveTaskRoot(parentId);
+    if (!rootId) {
+      // Parent Task tool_use is unknown. Shouldn't happen in a well-ordered
+      // stream (block.done for the Task arrives before its subagent's blocks),
+      // but log so data loss is diagnosable rather than silent.
+      console.warn("[convertEvents] subtask block dropped — unknown parent", parentId, child.kind);
+      return;
+    }
+    const tc = toolCallMap.get(rootId)!;
+    const r = ensureTaskResult(tc);
+    r.children.push(child);
+    // If this child is itself a tool_use (potentially another Task), record a
+    // redirect so its descendants flatten into the same top-level Task card.
+    if (child.kind === "tool_use") {
+      subtaskRoot.set(child.id, rootId);
+    }
+  }
 
   function flushAssistant(status: ThreadMessageLike["status"]) {
     // Only create a message if there are content parts to flush
@@ -52,6 +111,34 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     }
   }
 
+  // If a block belongs to a subtask (parent_id set), route it into the parent
+  // Task tool card's `children` instead of the main turn. Returns true if handled.
+  function routeSubtaskBlock(block: { type: string; [k: string]: any }): boolean {
+    const parentId: string | undefined = block.parent_id;
+    if (!parentId) return false;
+    switch (block.type) {
+      case "thinking":
+        if (block.text) appendSubtaskChild(parentId, { kind: "thinking", text: block.text });
+        return true;
+      case "text":
+        if (block.text) appendSubtaskChild(parentId, { kind: "text", text: block.text });
+        return true;
+      case "tool_use":
+        appendSubtaskChild(parentId, { kind: "tool_use", id: block.id, name: block.name, input: block.input ?? {} });
+        return true;
+      case "tool_result":
+        appendSubtaskChild(parentId, {
+          kind: "tool_result",
+          tool_use_id: block.tool_use_id,
+          output: block.output,
+          error: block.error,
+        });
+        return true;
+      default:
+        return true; // unknown subtask block — drop, don't leak into main stream
+    }
+  }
+
   function mapBlock(block: { type: string; [k: string]: any }): ContentPart | null {
     switch (block.type) {
       case "thinking":
@@ -77,7 +164,14 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     if (block.type === "tool_result") {
       const tc = toolCallMap.get(block.tool_use_id);
       if (tc) {
-        tc.result = block.error ? { error: block.output ?? "Unknown error" } : (block.output ?? "Done");
+        // For Task tool: stamp the subagent's final text into result.text (keep children/meta)
+        if (tc.toolName === "Task") {
+          const r = ensureTaskResult(tc);
+          r.text = block.output;
+          r.error = block.error;
+        } else {
+          tc.result = block.error ? { error: block.output ?? "Unknown error" } : (block.output ?? "Done");
+        }
       }
       return;
     }
@@ -126,6 +220,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     }
 
     if (event.type === "block.start") {
+      if (routeSubtaskBlock(event.block as any)) continue;
       ensureCurrentTurn(re);
       turnRunning = true;
       const part = mapBlock(event.block);
@@ -134,8 +229,38 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     }
 
     if (event.type === "block.done") {
+      if (routeSubtaskBlock(event.block as any)) continue;
       ensureCurrentTurn(re);
       updateOrAppend(event.block);
+      continue;
+    }
+
+    // ── Subtask lifecycle (attach meta to parent Task tool card) ──
+    if (event.type === "subtask.start" || event.type === "subtask.progress" || event.type === "subtask.end") {
+      const tc = toolCallMap.get(event.tool_use_id);
+      if (tc) {
+        const r = ensureTaskResult(tc);
+        r.meta = { ...(r.meta ?? {}) };
+        if (event.type === "subtask.start") {
+          r.meta.status = "running";
+          if (event.description) r.meta.description = event.description;
+        } else if (event.type === "subtask.progress") {
+          r.meta.status = "running";
+          if (event.last_tool) r.meta.last_tool = event.last_tool;
+          if (event.tokens != null) r.meta.tokens = event.tokens;
+          if (event.duration_ms != null) r.meta.duration_ms = event.duration_ms;
+        } else {
+          // subtask.end — the canonical final text arrives separately via the
+          // outer Task's tool_result. Only fall back to `summary` for non-success
+          // terminations (failed/stopped) where no tool_result will follow.
+          r.meta.status = event.status;
+          if (event.tokens != null) r.meta.tokens = event.tokens;
+          if (event.duration_ms != null) r.meta.duration_ms = event.duration_ms;
+          if (event.status !== "completed" && event.summary && !r.text) {
+            r.text = event.summary;
+          }
+        }
+      }
       continue;
     }
 
@@ -153,13 +278,11 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     }
 
     if (event.type === "message") {
-      ensureCurrentTurn(re);
       for (const block of event.blocks) {
+        if (routeSubtaskBlock(block as any)) continue;
+        ensureCurrentTurn(re);
         if (block.type === "tool_result") {
-          const tc = toolCallMap.get(block.tool_use_id);
-          if (tc) {
-            tc.result = block.error ? { error: block.output ?? "Unknown error" } : (block.output ?? "Done");
-          }
+          updateOrAppend(block as any);
         } else {
           const part = mapBlock(block);
           if (part) currentParts.push(part);

@@ -242,11 +242,15 @@ export interface Repository {
 
 // ─── Agent Events (wire format for relay) ───
 
+// `parent_id` attributes a block to a parent tool_use (e.g. subagent spawned via Task).
+// When set, the block belongs to that subtask's internal stream, not the main agent's turn.
 export type ContentBlock =
-  | { type: "thinking"; text: string }
-  | { type: "tool_use"; id: string; name: string; input?: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; output?: string; error?: boolean }
-  | { type: "text"; text: string };
+  | { type: "thinking"; text: string; parent_id?: string }
+  | { type: "tool_use"; id: string; name: string; input?: Record<string, unknown>; parent_id?: string }
+  | { type: "tool_result"; tool_use_id: string; output?: string; error?: boolean; parent_id?: string }
+  | { type: "text"; text: string; parent_id?: string };
+
+export type SubtaskStatus = "completed" | "failed" | "stopped";
 
 export type AgentEvent =
   // ── Turn lifecycle ──
@@ -264,6 +268,25 @@ export type AgentEvent =
   // ── Block lifecycle (streaming) ──
   | { type: "block.start"; block: ContentBlock }
   | { type: "block.done"; block: ContentBlock }
+  // ── Subtask lifecycle (subagent spawned via Task tool) ──
+  // `tool_use_id` links back to the parent Task tool_use on the main agent's turn.
+  | { type: "subtask.start"; tool_use_id: string; description?: string; kind?: string }
+  | {
+      type: "subtask.progress";
+      tool_use_id: string;
+      summary?: string;
+      last_tool?: string;
+      tokens?: number;
+      duration_ms?: number;
+    }
+  | {
+      type: "subtask.end";
+      tool_use_id: string;
+      status: SubtaskStatus;
+      summary?: string;
+      tokens?: number;
+      duration_ms?: number;
+    }
   // ── Legacy / history ──
   | { type: "message"; blocks: ContentBlock[] }
   | { type: "message.user"; text: string };

@@ -24,6 +24,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import type { SubtaskChild, TaskToolResult } from "../RelayRuntimeProvider";
 
 // ─── Shared shell ───────────────────────────────────────────────────────────
 // Compact collapsible row: [chevron] [status icon] [tool-icon] LABEL summary…
@@ -483,10 +484,68 @@ export const GlobToolUI = makeAssistantToolUI<GlobArgs, string>({
 
 type TaskArgs = { description: string; prompt: string; subagent_type?: string };
 
-export const TaskToolUI = makeAssistantToolUI<TaskArgs, string>({
+type TaskToolResultShape = Partial<TaskToolResult>;
+
+// Normalize result: may be legacy string or rich TaskToolResult.
+function coerceTaskResult(result: unknown): TaskToolResultShape {
+  if (result == null) return {};
+  if (typeof result === "string") return { text: result };
+  if (typeof result === "object") return result as TaskToolResultShape;
+  return {};
+}
+
+const SubtaskChildren: FC<{ items: SubtaskChild[] }> = ({ items: children }) => {
+  if (!children.length) return null;
+  return (
+    <Collapsible className="group/subchildren mt-2">
+      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-[11px] text-content-tertiary transition-colors hover:text-content-secondary">
+        <ChevronRight className="size-3 transition-transform group-data-[state=open]/subchildren:rotate-90" />
+        <span>subagent steps ({children.length})</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+        <div className="mt-1 flex flex-col gap-1 border-l border-border/60 pl-2">
+          {children.map((c, i) => {
+            if (c.kind === "text") return <Markdown key={i} text={c.text} />;
+            if (c.kind === "thinking")
+              return (
+                <div key={i} className="italic text-content-tertiary text-[11px]">
+                  {c.text}
+                </div>
+              );
+            if (c.kind === "tool_use") {
+              const inputPreview = c.input ? JSON.stringify(c.input).slice(0, 120) : "";
+              return (
+                <div key={i} className="flex items-baseline gap-1.5 text-[11px]">
+                  <Wrench className="size-3 shrink-0 text-content-tertiary" />
+                  <span className="font-mono text-content-secondary">{c.name}</span>
+                  {inputPreview && <span className="min-w-0 truncate font-mono text-content-tertiary">{inputPreview}</span>}
+                </div>
+              );
+            }
+            // tool_result
+            if (c.output) {
+              return (
+                <div key={i} className={cn("text-[11px]", c.error && "text-destructive")}>
+                  <Mono>{c.output.slice(0, 400)}</Mono>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
+export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | string>({
   toolName: "Task",
   render: ({ args, result, status }) => {
-    const out = resultText(result);
+    const r = coerceTaskResult(result);
+    const metaParts: string[] = [];
+    if (r.meta?.tokens != null) metaParts.push(`${r.meta.tokens} tok`);
+    if (r.meta?.duration_ms != null) metaParts.push(`${Math.round(r.meta.duration_ms / 1000)}s`);
+    if (r.meta?.last_tool) metaParts.push(r.meta.last_tool);
     return (
       <ToolShell
         icon={<Brain className="size-3.5" />}
@@ -496,12 +555,14 @@ export const TaskToolUI = makeAssistantToolUI<TaskArgs, string>({
       >
         <div className="mb-1 text-[11px] text-content-tertiary">prompt:</div>
         <Mono>{args?.prompt}</Mono>
-        {out && (
+        {r.children && r.children.length > 0 && <SubtaskChildren items={r.children} />}
+        {r.text && (
           <>
-            <div className="mt-1.5 mb-1 text-[11px] text-content-tertiary">result:</div>
-            <Mono>{out}</Mono>
+            <div className="mt-2 mb-1 text-[11px] text-content-tertiary">report:</div>
+            <Markdown text={r.text} />
           </>
         )}
+        {metaParts.length > 0 && <div className="mt-2 text-[10px] font-mono text-content-tertiary">{metaParts.join(" · ")}</div>}
       </ToolShell>
     );
   },
