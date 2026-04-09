@@ -1,12 +1,12 @@
 // @vitest-environment node
 /**
- * Unit tests for Scheduler — focused on paths that require mocked session store,
- * workspace ops, and repo ops, which cannot be exercised in the root test suite
- * without real filesystem access.
+ * Unit tests for DaemonLoop + RateLimiter — focused on paths that require mocked
+ * session store, workspace ops, and repo ops, which cannot be exercised in the
+ * root test suite without real filesystem access.
  *
- * The Scheduler uses SessionManager (singleton) which reads from SESSIONS_DIR.
+ * DaemonLoop uses SessionManager (singleton) which reads from SESSIONS_DIR.
  * We redirect SESSIONS_DIR to a temp dir so real session files work correctly.
- * Orphan detection is purely in-memory: pm.hasTask(taskId) returning false means
+ * Orphan detection is purely in-memory: pool.hasTask(taskId) returning false means
  * the session is orphaned — no pid check is performed on worker sessions.
  */
 
@@ -63,10 +63,26 @@ vi.mock("@agent-kanban/shared", () => ({
   isBoardType: vi.fn().mockReturnValue(true),
 }));
 
+// ── resumer + dispatcher mocks — hoisted so factory closures work ─────────────
+const { mockResumeOneSession, mockDispatchTasks } = vi.hoisted(() => ({
+  mockResumeOneSession: vi.fn().mockResolvedValue(undefined),
+  mockDispatchTasks: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("../src/daemon/resumer.js", () => ({
+  resumeSession: vi.fn().mockResolvedValue(true),
+  resumeOneSession: mockResumeOneSession,
+}));
+
+vi.mock("../src/daemon/dispatcher.js", () => ({
+  dispatchTasks: mockDispatchTasks,
+}));
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { ApiError } from "../src/client/index.js";
-import { Scheduler } from "../src/daemon/scheduler.js";
+import { DaemonLoop } from "../src/daemon/loop.js";
+import { RateLimiter } from "../src/daemon/rateLimiter.js";
 import { SessionManager, _setSessionManagerForTest } from "../src/session/manager.js";
 import { writeSession } from "../src/session/store.js";
 import type { SessionFile } from "../src/session/types.js";
@@ -94,6 +110,8 @@ let sm: SessionManager;
 beforeEach(() => {
   sm = new SessionManager();
   _setSessionManagerForTest(sm);
+  mockResumeOneSession.mockClear();
+  mockDispatchTasks.mockClear();
 });
 
 afterEach(() => {
@@ -112,128 +130,152 @@ function makeStubs(tasks: Record<string, unknown>[] = []) {
     releaseTask: vi.fn().mockResolvedValue(undefined),
     getTaskNotes: vi.fn().mockResolvedValue([]),
   };
-  const pm = {
+  const pool = {
     activeCount: 0,
     getActiveTaskIds: vi.fn().mockReturnValue([]),
     hasTask: vi.fn().mockReturnValue(false),
     killTask: vi.fn().mockResolvedValue(undefined),
   };
-  const runner = {
-    dispatch: vi.fn().mockResolvedValue(false),
-    resumeSession: vi.fn().mockResolvedValue(undefined),
-  };
   const prMonitor = {
     track: vi.fn(),
   };
-  return { client, pm, runner, prMonitor };
+  return { client, pool, prMonitor };
 }
 
-function makeScheduler(stubs = makeStubs()) {
+function makeRateLimiter(onResumed?: (runtime: string) => void) {
+  return new RateLimiter({ onResumed: onResumed ?? vi.fn() });
+}
+
+function makeLoop(stubs = makeStubs(), rateLimiter?: RateLimiter) {
+  const rl = rateLimiter ?? makeRateLimiter();
   return {
     ...stubs,
-    scheduler: new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
+    rateLimiter: rl,
+    loop: new DaemonLoop(stubs.client as any, stubs.pool as any, rl, stubs.prMonitor as any, {
       maxConcurrent: 5,
       pollInterval: 60000,
     }),
   };
 }
 
-// ── resumeRateLimit ───────────────────────────────────────────────────────────
+// ── RateLimiter — pause/resume ────────────────────────────────────────────────
 
-describe("Scheduler.resumeRateLimit()", () => {
-  it("unpauses a paused runtime after being started", async () => {
-    const { scheduler } = makeScheduler();
-    scheduler.start();
-
+describe("RateLimiter.resumeRateLimit()", () => {
+  it("unpauses a paused runtime", () => {
+    const rl = makeRateLimiter();
     const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-    expect(scheduler.isRuntimePaused("claude")).toBe(true);
+    rl.pause("claude", futureReset);
+    expect(rl.isRuntimePaused("claude")).toBe(true);
 
-    scheduler.resumeRateLimit("claude");
-    await new Promise((r) => setTimeout(r, 50));
+    rl.resumeRateLimit("claude");
 
-    expect(scheduler.isRuntimePaused("claude")).toBe(false);
-    scheduler.stop();
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    rl.stop();
   });
 
-  it("is a no-op when the runtime is not paused", async () => {
-    const { scheduler } = makeScheduler();
-    scheduler.start();
-
-    expect(() => scheduler.resumeRateLimit("claude")).not.toThrow();
-    expect(scheduler.isRuntimePaused("claude")).toBe(false);
-    scheduler.stop();
+  it("is a no-op when the runtime is not paused", () => {
+    const rl = makeRateLimiter();
+    expect(() => rl.resumeRateLimit("claude")).not.toThrow();
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    rl.stop();
   });
 
-  it("calls resumeSession for rate_limited sessions matching the runtime", async () => {
-    // Write a real rate_limited session file so SessionManager.list() returns it
+  it("calls onResumed callback when resumeRateLimit is called", () => {
+    const onResumed = vi.fn();
+    const rl = new RateLimiter({ onResumed });
+    const futureReset = new Date(Date.now() + 120_000).toISOString();
+    rl.pause("claude", futureReset);
+    rl.resumeRateLimit("claude");
+
+    expect(onResumed).toHaveBeenCalledWith("claude");
+    rl.stop();
+  });
+
+  it("does not call onResumed on an unpaused runtime", () => {
+    const onResumed = vi.fn();
+    const rl = new RateLimiter({ onResumed });
+    rl.resumeRateLimit("claude"); // not paused — no-op
+    expect(onResumed).not.toHaveBeenCalled();
+    rl.stop();
+  });
+});
+
+// ── DaemonLoop — resumeRateLimitedSessions ────────────────────────────────────
+
+describe("DaemonLoop.resumeRateLimitedSessions()", () => {
+  it("calls resumeOneSession for rate_limited sessions matching the runtime", async () => {
     writeSession(makeWorkerSession("sess-rl", "task-rl", "rate_limited", { runtime: "claude" as any }));
 
     const stubs = makeStubs();
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
+    const onResumedCallback = vi.fn();
+    const rl = new RateLimiter({ onResumed: (runtime) => { onResumedCallback(runtime); loop.resumeRateLimitedSessions(runtime); } });
+    const loop = new DaemonLoop(stubs.client as any, stubs.pool as any, rl, stubs.prMonitor as any, {
       maxConcurrent: 5,
       pollInterval: 60000,
     });
 
-    scheduler.start();
+    loop.start();
     const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-    scheduler.resumeRateLimit("claude");
+    rl.pause("claude", futureReset);
+    rl.resumeRateLimit("claude");
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(stubs.runner.resumeSession).toHaveBeenCalledWith(
+    expect(mockResumeOneSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "sess-rl" }),
       "",
+      expect.anything(),
+      expect.anything(),
     );
-    scheduler.stop();
+    loop.stop();
+    rl.stop();
   });
 
-  it("does not call resumeSession for rate_limited sessions with a different runtime", async () => {
-    // Write a rate_limited session for "gemini" runtime
+  it("does not call resumeOneSession for rate_limited sessions with a different runtime", async () => {
     writeSession(makeWorkerSession("sess-rl-other", "task-rl-other", "rate_limited", { runtime: "gemini" as any }));
 
     const stubs = makeStubs();
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
+    const rl = new RateLimiter({ onResumed: (runtime) => loop.resumeRateLimitedSessions(runtime) });
+    const loop = new DaemonLoop(stubs.client as any, stubs.pool as any, rl, stubs.prMonitor as any, {
       maxConcurrent: 5,
       pollInterval: 60000,
     });
 
-    scheduler.start();
+    loop.start();
     const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-    scheduler.resumeRateLimit("claude");
+    rl.pause("claude", futureReset);
+    rl.resumeRateLimit("claude");
 
     await new Promise((r) => setTimeout(r, 50));
 
     // session is for "gemini" not "claude" — should not be resumed
-    expect(stubs.runner.resumeSession).not.toHaveBeenCalled();
-    scheduler.stop();
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
+    loop.stop();
+    rl.stop();
   });
 });
 
 // ── tick — resumeSavedSessions for in_review sessions ────────────────────────
 
-describe("Scheduler tick — in_review session resumption", () => {
-  it("calls runner.resumeSession for an in_review session whose task is in_progress and rejected", async () => {
+describe("DaemonLoop tick — in_review session resumption", () => {
+  it("calls resumeOneSession for an in_review session whose task is in_progress and rejected", async () => {
     writeSession(makeWorkerSession("sess-review", "task-review", "in_review"));
 
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "in_progress" });
     stubs.client.getTaskNotes.mockResolvedValue([{ action: "rejected", detail: "needs rework" }]);
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
-    expect(stubs.runner.resumeSession).toHaveBeenCalledWith(
+    expect(mockResumeOneSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "sess-review" }),
       expect.stringContaining("needs rework"),
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -245,18 +287,15 @@ describe("Scheduler tick — in_review session resumption", () => {
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "done" });
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     // State machine transitions in_review → task_cancelled → terminal → file removed
     expect(sm.read("sess-done")).toBeNull();
-    expect(stubs.runner.resumeSession).not.toHaveBeenCalled();
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
   });
 
   it("removes session when task is cancelled", async () => {
@@ -267,14 +306,11 @@ describe("Scheduler tick — in_review session resumption", () => {
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "cancelled" });
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     expect(sm.read("sess-cancelled")).toBeNull();
   });
@@ -287,14 +323,11 @@ describe("Scheduler tick — in_review session resumption", () => {
     const stubs = makeStubs();
     stubs.client.getTask.mockRejectedValue(new ApiError(404, "not found"));
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     expect(sm.read("sess-notfound")).toBeNull();
   });
@@ -306,45 +339,38 @@ describe("Scheduler tick — in_review session resumption", () => {
     stubs.client.getTask.mockResolvedValue({ status: "in_progress" });
     stubs.client.getTaskNotes.mockResolvedValue([]);
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
-    expect(stubs.runner.resumeSession).toHaveBeenCalledWith(
+    expect(mockResumeOneSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "sess-noreason" }),
       expect.stringContaining("No reason provided"),
+      expect.anything(),
+      expect.anything(),
     );
   });
 });
 
 // ── tick — orphaned active session cleanup ────────────────────────────────────
-// Orphan detection: session.status="active" + pm.hasTask(taskId)=false → orphan.
-// No pid check is performed on worker sessions (pid removed from worker sessions).
 
-describe("Scheduler tick — orphaned active session cleanup", () => {
+describe("DaemonLoop tick — orphaned active session cleanup", () => {
   it("releases and cleans up an orphaned active session whose task is still viable", async () => {
-    // Write a real "active" session — not held by ProcessManager (pm.hasTask returns false)
     writeSession(makeWorkerSession("sess-orphan", "task-orphan", "active", {
       workspace: { type: "temp", cwd: "/tmp/orphan", branch: "task-orphan" },
     }));
 
     const stubs = makeStubs();
-    // pm.hasTask returns false (default) — this session is an orphan
+    // pool.hasTask returns false (default) — this session is an orphan
     stubs.client.getTask.mockResolvedValue({ status: "in_progress" });
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     expect(stubs.client.releaseTask).toHaveBeenCalledWith("task-orphan");
     // Session file must be gone after terminal cleanup
@@ -359,14 +385,11 @@ describe("Scheduler tick — orphaned active session cleanup", () => {
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "done" });
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     expect(sm.read("sess-orphan-done")).toBeNull();
     // releaseTask should NOT be called for done tasks
@@ -381,14 +404,11 @@ describe("Scheduler tick — orphaned active session cleanup", () => {
     const stubs = makeStubs();
     stubs.client.getTask.mockRejectedValue(new ApiError(404, "not found"));
 
-    const scheduler = new Scheduler(stubs.client as any, stubs.pm as any, stubs.runner as any, stubs.prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const { loop } = makeLoop(stubs);
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 100));
-    scheduler.stop();
+    loop.stop();
 
     expect(sm.read("sess-orphan-404")).toBeNull();
   });

@@ -1,8 +1,12 @@
 // @vitest-environment node
 /**
- * Tests for TaskRunner — focused on Fix 5:
+ * Tests for resumeSession() from resumer.ts — focused on Fix 5:
  *   resumeSession() bails out cleanly when workspace.cwd does not exist,
- *   calling removeSession + releaseTask and returning false.
+ *   calling forceRemove (via SessionManager) + releaseTask and returning false.
+ *
+ * The function signature changed from the old TaskRunner class:
+ *   old: new TaskRunner(client, pm).resumeSession(session, msg)
+ *   new: resumeSession(session, msg, client, pool)  — free function from resumer.ts
  */
 
 import { randomUUID } from "node:crypto";
@@ -21,11 +25,15 @@ vi.mock("../src/logger.js", () => ({
   }),
 }));
 
-// ── sessionStore mock ─────────────────────────────────────────────────────────
+// ── sessionStore mock — raw store functions ───────────────────────────────────
+// SessionManager uses these internally via rawRemoveSession alias.
+const { mockRemoveSession } = vi.hoisted(() => ({ mockRemoveSession: vi.fn() }));
 vi.mock("../src/session/store.js", () => ({
-  removeSession: vi.fn(),
+  removeSession: mockRemoveSession,
   writeSession: vi.fn(),
   updateSession: vi.fn(),
+  readSession: vi.fn().mockReturnValue(null),
+  listSessions: vi.fn().mockReturnValue([]),
 }));
 
 // ── config mock ───────────────────────────────────────────────────────────────
@@ -55,9 +63,27 @@ vi.mock("../src/workspace/skills.js", () => ({
   ensureSkills: vi.fn().mockResolvedValue(undefined),
 }));
 
-// ── processManager mock ───────────────────────────────────────────────────────
+// ── workspace mock ────────────────────────────────────────────────────────────
+vi.mock("../src/workspace/workspace.js", () => ({
+  restoreWorkspace: vi.fn().mockImplementation((info: any) => ({
+    cwd: info?.cwd ?? "/tmp/test",
+    cleanup: vi.fn(),
+  })),
+  cleanupWorkspace: vi.fn(),
+}));
+
+// ── pool mock ─────────────────────────────────────────────────────────────────
 const mockSpawnAgent = vi.fn().mockResolvedValue(undefined);
-const mockProcessManager = { spawnAgent: mockSpawnAgent } as any;
+const mockPool = {
+  spawnAgent: mockSpawnAgent,
+  hasTask: vi.fn().mockReturnValue(false),
+  activeCount: 0,
+  getActiveTaskIds: vi.fn().mockReturnValue([]),
+  killTask: vi.fn().mockResolvedValue(undefined),
+  killAll: vi.fn().mockResolvedValue(undefined),
+  sendToAgent: vi.fn().mockResolvedValue(undefined),
+  sendToSession: vi.fn().mockResolvedValue(false),
+} as any;
 
 // ── AgentClient mock ──────────────────────────────────────────────────────────
 vi.mock("../src/client/index.js", async () => {
@@ -73,23 +99,20 @@ vi.mock("../src/client/index.js", async () => {
   };
 });
 
-import type { MachineClient } from "../src/client/index.js";
-import { TaskRunner } from "../src/daemon/taskRunner.js";
-import type { SessionFile } from "../src/session/store.js";
-import { removeSession } from "../src/session/store.js";
+import type { ApiClient } from "../src/client/index.js";
+import { resumeSession } from "../src/daemon/resumer.js";
+import type { SessionFile } from "../src/session/types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeMachineClient(overrides: Partial<MachineClient> = {}): MachineClient {
+function makeApiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     releaseTask: vi.fn().mockResolvedValue(undefined),
     getTask: vi.fn().mockResolvedValue({ status: "in_review" }),
-    listAgents: vi.fn().mockResolvedValue([]),
-    listSessions: vi.fn().mockResolvedValue([]),
-    closeSession: vi.fn().mockResolvedValue(undefined),
-    updateSessionUsage: vi.fn().mockResolvedValue(undefined),
+    reopenSession: vi.fn().mockResolvedValue(undefined),
+    getAgentGpgKey: vi.fn().mockResolvedValue({ armored_private_key: "", gpg_subkey_id: null }),
     ...overrides,
-  } as unknown as MachineClient;
+  } as unknown as ApiClient;
 }
 
 function makeSession(cwdOverride: string, overrides: Partial<SessionFile> = {}): SessionFile {
@@ -97,7 +120,6 @@ function makeSession(cwdOverride: string, overrides: Partial<SessionFile> = {}):
     type: "worker",
     agentId: randomUUID(),
     sessionId: randomUUID(),
-    pid: process.pid,
     runtime: "claude" as any,
     startedAt: Date.now(),
     apiUrl: "https://example.com",
@@ -111,70 +133,63 @@ function makeSession(cwdOverride: string, overrides: Partial<SessionFile> = {}):
 
 // ── Fix 5: resumeSession() cwd guard ─────────────────────────────────────────
 
-describe("TaskRunner.resumeSession — missing workspace.cwd", () => {
+describe("resumeSession — missing workspace.cwd", () => {
   it("returns false when workspace.cwd does not exist", async () => {
     const missingCwd = join(tmpdir(), `ak-nonexistent-${randomUUID()}`);
     const session = makeSession(missingCwd);
-    const client = makeMachineClient();
-    const runner = new TaskRunner(client, mockProcessManager);
+    const client = makeApiClient();
 
-    const result = await runner.resumeSession(session, "retry after rejection");
+    const result = await resumeSession(session, "retry after rejection", client, mockPool);
 
     expect(result).toBe(false);
   });
 
-  it("calls removeSession with the session ID when workspace.cwd is missing", async () => {
+  it("calls releaseTask with the task ID when workspace.cwd is missing", async () => {
     const missingCwd = join(tmpdir(), `ak-nonexistent-${randomUUID()}`);
     const session = makeSession(missingCwd);
-    const client = makeMachineClient();
-    const runner = new TaskRunner(client, mockProcessManager);
-    vi.mocked(removeSession).mockClear();
+    const client = makeApiClient();
 
-    await runner.resumeSession(session, "retry");
-
-    expect(vi.mocked(removeSession)).toHaveBeenCalledWith(session.sessionId);
-  });
-
-  it("calls client.releaseTask with the task ID when workspace.cwd is missing", async () => {
-    const missingCwd = join(tmpdir(), `ak-nonexistent-${randomUUID()}`);
-    const session = makeSession(missingCwd);
-    const client = makeMachineClient();
-    const runner = new TaskRunner(client, mockProcessManager);
-
-    await runner.resumeSession(session, "retry");
+    await resumeSession(session, "retry", client, mockPool);
 
     expect(client.releaseTask).toHaveBeenCalledWith(session.taskId);
+  });
+
+  it("calls forceRemove (removeSession) with the session ID when workspace.cwd is missing", async () => {
+    const missingCwd = join(tmpdir(), `ak-nonexistent-${randomUUID()}`);
+    const session = makeSession(missingCwd);
+    const client = makeApiClient();
+    mockRemoveSession.mockClear();
+
+    await resumeSession(session, "retry", client, mockPool);
+
+    expect(mockRemoveSession).toHaveBeenCalledWith(session.sessionId);
   });
 
   it("does NOT call spawnAgent when workspace.cwd is missing", async () => {
     const missingCwd = join(tmpdir(), `ak-nonexistent-${randomUUID()}`);
     const session = makeSession(missingCwd);
-    const client = makeMachineClient();
-    const runner = new TaskRunner(client, mockProcessManager);
+    const client = makeApiClient();
     mockSpawnAgent.mockClear();
 
-    await runner.resumeSession(session, "retry");
+    await resumeSession(session, "retry", client, mockPool);
 
     expect(mockSpawnAgent).not.toHaveBeenCalled();
   });
 });
 
-describe("TaskRunner.resumeSession — existing workspace.cwd proceeds past the guard", () => {
-  it("does not return false immediately when workspace.cwd exists", async () => {
+describe("resumeSession — existing workspace.cwd proceeds past the guard", () => {
+  it("does not return false immediately when workspace.cwd exists and task is cancelled", async () => {
     // Create a real temp dir so existsSync returns true
     const existingCwd = mkdtempSync(join(tmpdir(), "ak-existing-"));
     try {
       const session = makeSession(existingCwd);
-      // Let getTask return a cancelled task so the function bails early but
-      // for a different reason (task gone), not the cwd guard.
-      const client = makeMachineClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) });
-      const runner = new TaskRunner(client, mockProcessManager);
+      // Let getTask return a cancelled task so the function bails for a different reason
+      const client = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) });
 
-      const result = await runner.resumeSession(session, "retry");
+      const result = await resumeSession(session, "retry", client, mockPool);
 
       // The function returns false for a cancelled task, but the cwd guard
-      // was NOT the reason — spawnAgent was not called, which proves we got
-      // past the guard into the task status check.
+      // was NOT the reason — getTask was called, which proves we got past the guard.
       expect(result).toBe(false);
       expect(client.getTask).toHaveBeenCalledWith(session.taskId);
     } finally {

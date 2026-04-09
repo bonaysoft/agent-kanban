@@ -12,10 +12,10 @@ import type { AgentProvider, UsageInfo } from "../providers/types.js";
 import { migrateLegacySessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 import { auditOrphanedTasks, cleanupLeaderSessions, cleanupStaleSessions } from "./cleanup.js";
+import { DaemonLoop } from "./loop.js";
 import { PrMonitor } from "./prMonitor.js";
-import { ProcessManager } from "./processManager.js";
-import { Scheduler } from "./scheduler.js";
-import { TaskRunner } from "./taskRunner.js";
+import { RateLimiter } from "./rateLimiter.js";
+import { RuntimePool } from "./runtimePool.js";
 import { TunnelClient } from "./tunnel.js";
 
 const logger = createLogger("daemon");
@@ -66,9 +66,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const pollInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
   const availableProviders = getAvailableProviders();
 
-  // Wire up components
   const prMonitor = new PrMonitor(client);
-  let scheduler: Scheduler;
 
   const { apiUrl, apiKey } = getCredentials();
   const tunnel = new TunnelClient(apiUrl, apiKey);
@@ -78,12 +76,18 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     logger.warn(`Tunnel connection failed: ${err instanceof Error ? err.message : err}`);
   }
 
-  const pm = new ProcessManager(
+  let loop: DaemonLoop;
+
+  const rateLimiter = new RateLimiter({
+    onResumed: (runtime) => loop.resumeRateLimitedSessions(runtime).catch((e) => logger.error(`Resume error: ${(e as Error).message}`)),
+  });
+
+  const pool = new RuntimePool(
     client,
+    { onSlotFreed: () => loop.onSlotFreed() },
     {
-      onSlotFreed: () => scheduler.onSlotFreed(),
-      onRateLimited: (runtime, resetAt) => scheduler.pauseForRateLimit(runtime, resetAt),
-      onRateLimitResumed: (runtime) => scheduler.resumeRateLimit(runtime),
+      onRateLimited: (runtime, resetAt) => rateLimiter.pause(runtime, resetAt),
+      onRateLimitResumed: (runtime) => rateLimiter.resumeRateLimit(runtime),
     },
     opts.taskTimeout,
     tunnel,
@@ -95,20 +99,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
       .catch((e) => logger.warn(`History fetch failed for ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`));
   });
 
-  // Human → agent messages are fail-fast: if no live agent holds the session
-  // we log and drop. The frontend surfaces an error to the human, who resends.
-  // Previously this silently tried to resume-from-disk, which was a hidden
-  // fallback that masked bugs.
   tunnel.onHumanMessage(async (sessionId, content) => {
-    const delivered = await pm.sendToSession(sessionId, content);
+    const delivered = await pool.sendToSession(sessionId, content);
     if (!delivered) {
       logger.warn(`Human message for session ${sessionId.slice(0, 8)} dropped: no live agent`);
     }
   });
 
-  const runner = new TaskRunner(client, pm);
-
-  scheduler = new Scheduler(client, pm, runner, prMonitor, {
+  loop = new DaemonLoop(client, pool, rateLimiter, prMonitor, {
     maxConcurrent: opts.maxConcurrent,
     pollInterval,
   });
@@ -123,17 +121,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const shutdown = async () => {
     logger.info("Shutting down daemon...");
-    scheduler.stop();
+    loop.stop();
+    rateLimiter.stop();
     prMonitor.stop();
     clearInterval(heartbeatInterval);
-    await pm.killAll();
+    await pool.killAll();
     tunnel.disconnect();
     await cleanupLeaderSessions(client);
-    // DO NOT clearAllSessions() here. Worker sessions in status=in_review
-    // represent tasks awaiting a review decision — their session file is the
-    // only entry point for reject-resume and must survive daemon restart.
-    // Leader sessions and active worker sessions are handled by killAll()
-    // and by cleanupStaleSessions() on next startup.
     removePidFile();
     logger.info("Daemon stopped.");
     process.exit(0);
@@ -146,7 +140,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   );
 
   prMonitor.start();
-  scheduler.start();
+  loop.start();
 }
 
 function removePidFile(): void {

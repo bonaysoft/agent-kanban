@@ -46,7 +46,7 @@ vi.mock("../src/agent/systemPrompt.js", () => ({
 }));
 
 import type { AgentClient, ApiClient } from "../src/client/index.js";
-import { ProcessManager, type SpawnRequest } from "../src/daemon/processManager.js";
+import { RuntimePool, type SpawnRequest } from "../src/daemon/runtimePool.js";
 import { SessionManager } from "../src/session/manager.js";
 import { readSession, writeSession } from "../src/session/store.js";
 import type { SessionFile } from "../src/session/types.js";
@@ -97,10 +97,11 @@ function makeApiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   } as unknown as ApiClient;
 }
 
-function makeAgentClient(agentId = "agent-1", sessionId = "session-1"): AgentClient {
+function makeAgentClient(agentId = "agent-1", sessionId = "session-1", taskStatus = "in_progress"): AgentClient {
   return {
     getAgentId: () => agentId,
     getSessionId: () => sessionId,
+    getTask: vi.fn().mockResolvedValue({ status: taskStatus }),
     sendMessage: vi.fn().mockResolvedValue(undefined),
     updateSessionUsage: vi.fn().mockResolvedValue(undefined),
   } as unknown as AgentClient;
@@ -147,6 +148,18 @@ function makeCallbacks() {
   };
 }
 
+function makePoolCallbacks(cbs = makeCallbacks()) {
+  return { onSlotFreed: cbs.onSlotFreed };
+}
+
+function makeRateLimitSink(cbs = makeCallbacks()) {
+  return { onRateLimited: cbs.onRateLimited, onRateLimitResumed: cbs.onRateLimitResumed };
+}
+
+function makePool(client: ApiClient, cbs = makeCallbacks(), timeoutMs = 0, tunnel?: TunnelClient) {
+  return new RuntimePool(client, makePoolCallbacks(cbs), makeRateLimitSink(cbs), timeoutMs, tunnel);
+}
+
 // ── Helper: wait for all microtasks / promises to settle ──────────────────────
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -167,7 +180,7 @@ afterEach(() => {
 
 describe("ProcessManager.sendToSession()", () => {
   it("returns false when no agent matches the given sessionId", async () => {
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks());
+    const pm = makePool(makeApiClient(), makeCallbacks());
     const result = await pm.sendToSession("nonexistent", "hello");
     expect(result).toBe(false);
   });
@@ -190,7 +203,7 @@ describe("ProcessManager.sendToSession()", () => {
     const provider = makeProvider(neverHandle);
     const agentClient = makeAgentClient("agent-1", "session-abc");
     const apiClient = makeApiClient();
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
 
     writeSession(makeWorkerSession("session-abc", { taskId: "task-1" }));
 
@@ -225,7 +238,7 @@ describe("ProcessManager.sendToSession()", () => {
     };
     const provider = makeProvider(neverHandle);
     const agentClient = makeAgentClient("agent-1", "session-xyz");
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("session-xyz", { taskId: "task-2" }));
 
@@ -253,7 +266,7 @@ describe("ProcessManager — tunnel.sendStatus on spawn", () => {
     const handle = makeHandle();
     const provider = makeProvider(handle);
     const agentClient = makeAgentClient("a1", "sess-1");
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0, tunnel);
+    const pm = makePool(makeApiClient(), makeCallbacks(), 0, tunnel);
 
     writeSession(makeWorkerSession("sess-1", { taskId: "task-1" }));
 
@@ -273,7 +286,7 @@ describe("ProcessManager — tunnel.sendStatus on spawn", () => {
   it("does not call tunnel.sendStatus when no tunnel is provided", async () => {
     const handle = makeHandle();
     const provider = makeProvider(handle);
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-notunnel", { taskId: "task-notunnel" }));
 
@@ -303,7 +316,7 @@ describe("ProcessManager — tunnel.sendStatus on cleanup", () => {
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) });
     const callbacks = makeCallbacks();
     const onCleanup = vi.fn();
-    const pm = new ProcessManager(apiClient, callbacks, 0, tunnel);
+    const pm = makePool(apiClient, callbacks, 0, tunnel);
 
     writeSession(makeWorkerSession("sess-done", { taskId: "task-cleanup" }));
 
@@ -333,7 +346,7 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
     const provider = makeProvider(handle);
     const agentClient = makeAgentClient("a1", sessionId);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) });
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
 
     writeSession(makeWorkerSession(sessionId, { taskId }));
 
@@ -382,7 +395,7 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
   it("does not throw when tunnel is not provided and events arrive", async () => {
     const handle = makeHandle([{ type: "error", detail: "x" }]);
     const provider = makeProvider(handle);
-    const pm = new ProcessManager(makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) }), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) }), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-no-tunnel", { taskId: "task-no-tunnel" }));
 
@@ -407,12 +420,12 @@ describe("ProcessManager — tunnel.sendEvent() forwarding", () => {
 
 describe("ProcessManager — activeCount / hasTask / getActiveTaskIds", () => {
   it("activeCount returns 0 when no agents are running", () => {
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks());
+    const pm = makePool(makeApiClient(), makeCallbacks());
     expect(pm.activeCount).toBe(0);
   });
 
   it("hasTask returns false when task is not running", () => {
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks());
+    const pm = makePool(makeApiClient(), makeCallbacks());
     expect(pm.hasTask("nonexistent")).toBe(false);
   });
 
@@ -430,7 +443,7 @@ describe("ProcessManager — activeCount / hasTask / getActiveTaskIds", () => {
       }),
       send: vi.fn().mockResolvedValue(undefined),
     };
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-active", { taskId: "task-active" }));
 
@@ -455,7 +468,7 @@ describe("ProcessManager — activeCount / hasTask / getActiveTaskIds", () => {
       }),
       send: vi.fn().mockResolvedValue(undefined),
     };
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-xyz", { taskId: "task-xyz" }));
 
@@ -470,7 +483,7 @@ describe("ProcessManager — activeCount / hasTask / getActiveTaskIds", () => {
 
 describe("ProcessManager — sendToAgent()", () => {
   it("does nothing when the taskId does not exist", async () => {
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks());
+    const pm = makePool(makeApiClient(), makeCallbacks());
     await expect(pm.sendToAgent("nonexistent", "msg")).resolves.toBeUndefined();
   });
 
@@ -488,7 +501,7 @@ describe("ProcessManager — sendToAgent()", () => {
       }),
       send: vi.fn().mockResolvedValue(undefined),
     };
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-msg", { taskId: "task-msg" }));
 
@@ -504,7 +517,7 @@ describe("ProcessManager — sendToAgent()", () => {
 
 describe("ProcessManager — killTask()", () => {
   it("does nothing when the task does not exist", async () => {
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks());
+    const pm = makePool(makeApiClient(), makeCallbacks());
     await expect(pm.killTask("nonexistent")).resolves.toBeUndefined();
   });
 
@@ -523,7 +536,7 @@ describe("ProcessManager — killTask()", () => {
       send: vi.fn().mockResolvedValue(undefined),
     };
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-kill", { taskId: "task-kill" }));
 
@@ -567,7 +580,7 @@ describe("ProcessManager — killAll()", () => {
       }),
       send: vi.fn().mockResolvedValue(undefined),
     };
-    const pm = new ProcessManager(makeApiClient(), makeCallbacks(), 0);
+    const pm = makePool(makeApiClient(), makeCallbacks());
 
     writeSession(makeWorkerSession("sess-a", { taskId: "task-a" }));
     writeSession(makeWorkerSession("sess-b", { taskId: "task-b" }));
@@ -586,20 +599,21 @@ describe("ProcessManager — killAll()", () => {
 // ── spawnAgent — provider execute failure ─────────────────────────────────────
 
 describe("ProcessManager — spawnAgent provider failure", () => {
-  it("releases the task when provider.execute() throws", async () => {
+  it("throws when provider.execute() throws and does not add the task to the pool", async () => {
     const apiClient = makeApiClient();
     const failingProvider: AgentProvider = {
       name: "claude" as any,
       label: "Claude",
       execute: vi.fn().mockRejectedValue(new Error("provider exploded")),
     };
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0);
+    const pm = makePool(apiClient, makeCallbacks());
 
     writeSession(makeWorkerSession("sess-fail", { taskId: "task-fail" }));
 
-    await pm.spawnAgent(makeSpawnRequest({ provider: failingProvider, taskId: "task-fail", sessionId: "sess-fail" }));
+    await expect(
+      pm.spawnAgent(makeSpawnRequest({ provider: failingProvider, taskId: "task-fail", sessionId: "sess-fail" }))
+    ).rejects.toThrow("provider exploded");
 
-    expect(apiClient.releaseTask).toHaveBeenCalledWith("task-fail");
     expect(pm.hasTask("task-fail")).toBe(false);
   });
 });
@@ -618,7 +632,7 @@ describe("ProcessManager — crash path", () => {
     };
     const apiClient = makeApiClient();
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(apiClient, callbacks, 0);
+    const pm = makePool(apiClient, callbacks);
 
     writeSession(makeWorkerSession("sess-crash", { taskId: "task-crash" }));
 
@@ -640,7 +654,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl", { taskId: "task-rl" }));
 
@@ -655,7 +669,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 3600_000).toISOString() };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-noresume", { taskId: "task-rl-no-resume" }));
 
@@ -677,7 +691,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-overage", { taskId: "task-rl-overage" }));
 
@@ -699,7 +713,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-main-later", { taskId: "task-rl-main-later" }));
 
@@ -715,7 +729,7 @@ describe("ProcessManager — handleEvent rate_limit rejected", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "rejected" };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-noreset", { taskId: "task-rl-no-reset" }));
 
@@ -735,7 +749,7 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: false };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-cleared", { taskId: "task-rl-cleared" }));
 
@@ -750,7 +764,7 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: true };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-overage-running", { taskId: "task-rl-overage-running" }));
 
@@ -765,7 +779,7 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
     const event: AgentEvent = { type: "turn.rate_limit", status: "allowed", isUsingOverage: false };
     const handle = makeHandle([event]);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(makeApiClient(), callbacks, 0);
+    const pm = makePool(makeApiClient(), callbacks);
 
     writeSession(makeWorkerSession("sess-rl-allowed", { taskId: "task-rl-allowed-no-limited" }));
 
@@ -788,7 +802,7 @@ describe("ProcessManager — result event does not call onRateLimitResumed", () 
     const handle = makeHandle([rejectedEvent, resultEvent]);
     const callbacks = makeCallbacks();
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
-    const pm = new ProcessManager(apiClient, callbacks, 0);
+    const pm = makePool(apiClient, callbacks);
 
     writeSession(makeWorkerSession("sess-result-no-resume", { taskId: "task-result-no-resume" }));
 
@@ -812,10 +826,8 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
     const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const onCleanup = vi.fn();
-    // getTask returns in_review → taskInReview=true → state machine → in_review
-    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
-
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    // agentClient.getTask returns in_review → taskInReview=true → state machine → in_review
+    const pm = makePool(makeApiClient(), makeCallbacks(), 0, tunnel);
     writeSession(makeWorkerSession("sess-review", { taskId: "task-review" }));
 
     await pm.spawnAgent({
@@ -824,7 +836,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
       sessionId: "sess-review",
       cwd: "/tmp",
       taskContext: "ctx",
-      agentClient: makeAgentClient("a1", "sess-review"),
+      agentClient: makeAgentClient("a1", "sess-review", "in_review"),
       agentEnv: {},
       onCleanup,
     });
@@ -839,9 +851,8 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
     const tunnel = makeTunnel();
     const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
-    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
 
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(makeApiClient(), makeCallbacks(), 0, tunnel);
     writeSession(makeWorkerSession("sess-review-done", { taskId: "task-review-done" }));
 
     await pm.spawnAgent({
@@ -850,7 +861,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
       sessionId: "sess-review-done",
       cwd: "/tmp",
       taskContext: "ctx",
-      agentClient: makeAgentClient("a1", "sess-review-done"),
+      agentClient: makeAgentClient("a1", "sess-review-done", "in_review"),
       agentEnv: {},
     });
 
@@ -864,9 +875,8 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
     const tunnel = makeTunnel();
     const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
-    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_review" }) });
 
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(makeApiClient(), makeCallbacks(), 0, tunnel);
     writeSession(makeWorkerSession("sess-review-no-remove", { taskId: "task-review-no-remove" }));
 
     await pm.spawnAgent({
@@ -875,7 +885,7 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
       sessionId: "sess-review-no-remove",
       cwd: "/tmp",
       taskContext: "ctx",
-      agentClient: makeAgentClient("a1", "sess-review-no-remove"),
+      agentClient: makeAgentClient("a1", "sess-review-no-remove", "in_review"),
       agentEnv: {},
     });
 
@@ -896,7 +906,7 @@ describe("ProcessManager — onComplete normal completion invokes cleanup", () =
     // getTask returns "done" → taskInReview=false → state machine → completing → runCleanup
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
 
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
     writeSession(makeWorkerSession("sess-normal", { taskId: "task-normal" }));
 
     await pm.spawnAgent({
@@ -922,7 +932,7 @@ describe("ProcessManager — onComplete normal completion invokes cleanup", () =
     const handle = makeHandle([resultEvent]);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
 
-    const pm = new ProcessManager(apiClient, makeCallbacks(), 0, tunnel);
+    const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
     writeSession(makeWorkerSession("sess-normal-remove", { taskId: "task-normal-remove" }));
 
     await pm.spawnAgent({

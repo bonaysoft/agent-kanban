@@ -1,8 +1,66 @@
 // @vitest-environment node
 
 import { Miniflare } from "miniflare";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { RateLimiter } from "../packages/cli/src/daemon/rateLimiter.js";
+
+// ── Mocks required by dispatcher.ts / dispatchTasks for CLI unit tests ────────
+vi.mock("../packages/cli/src/logger.js", () => ({
+  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+}));
+vi.mock("../packages/cli/src/workspace/repoOps.js", () => ({
+  ensureCloned: vi.fn(),
+  prepareRepo: vi.fn().mockReturnValue(true),
+  repoDir: vi.fn().mockReturnValue(null),
+}));
+vi.mock("../packages/cli/src/workspace/skills.js", () => ({
+  ensureLefthookTask: vi.fn().mockResolvedValue(false),
+  ensureSkills: vi.fn().mockReturnValue(true),
+}));
+vi.mock("../packages/cli/src/workspace/workspace.js", () => ({
+  createTempWorkspace: vi.fn().mockReturnValue({ cwd: "/tmp/test-workspace", info: { type: "temp", cwd: "/tmp/test-workspace" }, cleanup: vi.fn() }),
+  createRepoWorkspace: vi.fn().mockReturnValue({ cwd: "/tmp/test-workspace", info: { type: "temp", cwd: "/tmp/test-workspace" }, cleanup: vi.fn() }),
+  cleanupWorkspace: vi.fn(),
+  restoreWorkspace: vi.fn(),
+}));
+vi.mock("../packages/cli/src/agent/systemPrompt.js", () => ({
+  generateSystemPrompt: vi.fn().mockReturnValue("prompt"),
+  writePromptFile: vi.fn().mockReturnValue("/tmp/prompt.txt"),
+  cleanupPromptFile: vi.fn(),
+}));
+vi.mock("../packages/cli/src/config.js", () => ({
+  getCredentials: vi.fn().mockReturnValue({ apiUrl: "https://example.com" }),
+}));
+vi.mock("../packages/cli/src/providers/registry.js", () => ({
+  getProvider: vi.fn().mockReturnValue({ name: "claude", label: "Claude", execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }) }),
+  normalizeRuntime: vi.fn().mockImplementation((r: string) => r),
+}));
+vi.mock("../packages/cli/src/daemon/agentEnv.js", () => ({
+  buildAgentEnv: vi.fn().mockReturnValue({}),
+  setupGnupgHome: vi.fn().mockReturnValue(null),
+  cleanupGnupgHome: vi.fn(),
+}));
+vi.mock("../packages/cli/src/session/manager.js", () => {
+  const create = vi.fn().mockResolvedValue(undefined);
+  return {
+    getSessionManager: vi.fn().mockReturnValue({ create, list: vi.fn().mockReturnValue([]), patch: vi.fn().mockResolvedValue(null) }),
+    _setSessionManagerForTest: vi.fn(),
+  };
+});
+vi.mock("../packages/cli/src/client/index.js", async () => {
+  const actual = await vi.importActual<typeof import("../packages/cli/src/client/index.js")>("../packages/cli/src/client/index.js");
+  return {
+    ...actual,
+    AgentClient: vi.fn().mockImplementation(() => ({
+      getAgentId: vi.fn().mockReturnValue("agent-1"),
+      getSessionId: vi.fn().mockReturnValue("session-1"),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      updateSessionUsage: vi.fn().mockResolvedValue(undefined),
+      getTask: vi.fn().mockResolvedValue({ status: "in_progress" }),
+    })),
+  };
+});
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -122,12 +180,11 @@ describe("scheduled_at field — taskRepo", () => {
   });
 });
 
-// ─── Scheduler filter unit tests ─────────────────────────────────────────────
-// The Scheduler.dispatchTasks filter is tested by driving the scheduler's
-// public start() method through a single poll with controlled stub collaborators.
-// MachineClient is an external HTTP service — stubs are appropriate here.
+// ─── DaemonLoop + RateLimiter + dispatchTasks filter unit tests ──────────────
+// Tests for the task dispatch filter logic and loop behavior.
+// dispatchTasks is called directly (filter tests) or via DaemonLoop (loop tests).
 
-describe("Scheduler dispatchTasks — scheduled_at filter", () => {
+describe("dispatchTasks — scheduled_at filter", () => {
   function makeTask(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       id: "task-1",
@@ -136,486 +193,389 @@ describe("Scheduler dispatchTasks — scheduled_at filter", () => {
       repository_id: null,
       board_type: "ops",
       scheduled_at: null,
+      title: "Test task",
+      description: null,
+      priority: null,
       ...overrides,
     };
   }
 
-  function makeStubs(tasks: Record<string, unknown>[]) {
-    const dispatched: string[] = [];
-    const client = {
-      listTasks: async () => tasks,
-      listRepositories: async () => [],
-      getAgent: async () => ({ runtime: "claude" }),
-      getTask: async () => null,
-      releaseTask: async () => null,
-      getTaskNotes: async () => [],
-    };
-    const pm = {
+  function makePool(spawnSpy: ReturnType<typeof vi.fn>) {
+    return {
       activeCount: 0,
       getActiveTaskIds: () => [] as string[],
       hasTask: (_id: string) => false,
       killTask: async () => {},
+      spawnAgent: spawnSpy,
     };
-    const runner = {
-      dispatch: async (task: any) => {
-        dispatched.push(task.id);
-        return true;
-      },
-      resumeSession: async () => {},
-    };
-    const prMonitor = {
-      track: () => {},
-    };
-    return { client, pm, runner, prMonitor, dispatched };
   }
 
+  function makeClient(tasks: Record<string, unknown>[], repos: Record<string, unknown>[] = []) {
+    return {
+      listTasks: async () => tasks,
+      listRepositories: async () => repos,
+      getAgent: async () => ({ runtime: "claude", name: "Agent", model: null, skills: [], gpg_subkey_id: null, username: "agent-1" }),
+      getTask: async () => ({ status: "in_progress" }),
+      releaseTask: async () => null,
+      getTaskNotes: async () => [],
+      createSession: async () => ({ delegation_proof: "fake" }),
+      closeSession: async () => null,
+      getAgentGpgKey: async () => ({ armored_private_key: "", gpg_subkey_id: null }),
+    };
+  }
+
+  function makeRateLimiter() {
+    return new RateLimiter({ onResumed: () => {} });
+  }
+
+  const prMonitor = { track: () => {} };
+  const opts = { maxConcurrent: 5, pollInterval: 60000 };
+
   it("dispatches a task with null scheduled_at immediately", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-null-sched", scheduled_at: null });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    // allow microtasks + timer to run
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).toContain("task-null-sched");
+    expect(spawnSpy).toHaveBeenCalled();
+    rl.stop();
   });
 
   it("does not dispatch a task whose scheduled_at is in the future", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // +1 hour
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const task = makeTask({ id: "task-future", scheduled_at: futureDate });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).not.toContain("task-future");
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
   });
 
   it("dispatches a task whose scheduled_at is in the past", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const pastDate = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // -1 hour
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const pastDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const task = makeTask({ id: "task-past", scheduled_at: pastDate });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).toContain("task-past");
+    expect(spawnSpy).toHaveBeenCalled();
+    rl.stop();
   });
 
   it("dispatches a task whose scheduled_at equals now (boundary: not filtered)", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    // Use a timestamp that is guaranteed to be <= now when the filter runs
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const justNow = new Date(Date.now() - 1).toISOString();
     const task = makeTask({ id: "task-boundary", scheduled_at: justNow });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).toContain("task-boundary");
+    expect(spawnSpy).toHaveBeenCalled();
+    rl.stop();
   });
 
   it("does not dispatch a future-scheduled task while dispatching a past-scheduled task in the same list", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const pastDate = new Date(Date.now() - 1000).toISOString();
     const futureDate = new Date(Date.now() + 3_600_000).toISOString();
-    const tasks = [makeTask({ id: "task-ready", scheduled_at: pastDate }), makeTask({ id: "task-deferred", scheduled_at: futureDate })];
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs(tasks);
+    const tasks = [
+      makeTask({ id: "task-ready", scheduled_at: pastDate }),
+      makeTask({ id: "task-deferred", scheduled_at: futureDate }),
+    ];
+    const client = makeClient(tasks);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).toContain("task-ready");
-    expect(dispatched).not.toContain("task-deferred");
+    // Dispatched exactly once (only the past-scheduled task)
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+    rl.stop();
   });
 
   it("does not dispatch a task whose repository is not locally cloned", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-uncloned-repo", board_type: "dev", repository_id: "repo-1" });
-    const dispatched: string[] = [];
-    const client = {
-      listTasks: async () => [task],
-      // Return a repo so the lookup hits lines 208-209, but with a URL that won't have a local dir
-      listRepositories: async () => [{ id: "repo-1", url: "https://github.com/test/nonexistent-repo-xyz.git" }],
-      getAgent: async () => ({ runtime: "claude" }),
-      getTask: async () => null,
-      releaseTask: async () => null,
-      getTaskNotes: async () => [],
-    };
-    const pm = {
-      activeCount: 0,
-      getActiveTaskIds: () => [] as string[],
-      hasTask: () => false,
-      killTask: async () => {},
-    };
-    const runner = {
-      dispatch: async (t: any) => {
-        dispatched.push(t.id);
-        return true;
-      },
-      resumeSession: async () => {},
-    };
-    const prMonitor = { track: () => {} };
+    const repos = [{ id: "repo-1", url: "https://github.com/test/nonexistent-repo-xyz.git" }];
+    const client = makeClient([task], repos);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    // task is not dispatched because repoDir returns null (not cloned)
-    expect(dispatched).not.toContain("task-uncloned-repo");
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
   });
 
   it("does not dispatch a dev-board task that has no repository_id", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-dev-no-repo", board_type: "dev", repository_id: null });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).not.toContain("task-dev-no-repo");
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
   });
 
   it("does not dispatch a blocked task even with no scheduled_at", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-blocked", blocked: true });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).not.toContain("task-blocked");
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
   });
 
   it("does not dispatch a task with no assigned_to", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-unassigned", assigned_to: null });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).not.toContain("task-unassigned");
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
   });
 
   it("skips task when board_type is invalid", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const task = makeTask({ id: "task-bad-board", board_type: "unknown_type" });
-    const { client, pm, runner, prMonitor, dispatched } = makeStubs([task]);
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("does not dispatch when all available tasks have a paused runtime", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-paused-runtime", assigned_to: "agent-paused" });
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    const futureReset = new Date(Date.now() + 120_000).toISOString();
+    rl.pause("claude", futureReset);
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+});
+
+describe("DaemonLoop + RateLimiter — loop behavior", () => {
+  function makePool() {
+    return {
+      activeCount: 0,
+      getActiveTaskIds: () => [] as string[],
+      hasTask: (_id: string) => false,
+      killTask: async () => {},
+      spawnAgent: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  function makeClient() {
+    return {
+      listTasks: async () => [],
+      listRepositories: async () => [],
+      getAgent: async () => ({ runtime: "claude" }),
+      getTask: async () => ({ status: "in_progress" }),
+      releaseTask: async () => null,
+      getTaskNotes: async () => [],
+    };
+  }
+
+  it("isRuntimePaused returns false when no runtimes are paused", async () => {
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    rl.stop();
+  });
+
+  it("pause marks runtime as paused", async () => {
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const futureReset = new Date(Date.now() + 120_000).toISOString();
+    rl.pause("claude", futureReset);
+    expect(rl.isRuntimePaused("claude")).toBe(true);
+    rl.stop();
+  });
+
+  it("resumeRateLimit unpauses a paused runtime", async () => {
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const futureReset = new Date(Date.now() + 120_000).toISOString();
+    rl.pause("claude", futureReset);
+    rl.resumeRateLimit("claude");
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    rl.stop();
+  });
+
+  it("resumeRateLimit is a no-op on a non-paused runtime", async () => {
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    expect(() => rl.resumeRateLimit("claude")).not.toThrow();
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    rl.stop();
+  });
+
+  it("pause ignores a newer pause that is earlier than the existing one", async () => {
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const laterReset = new Date(Date.now() + 120_000).toISOString();
+    const earlierReset = new Date(Date.now() + 30_000).toISOString();
+    rl.pause("claude", laterReset);
+    rl.pause("claude", earlierReset); // earlier — should NOT replace later
+    expect(rl.isRuntimePaused("claude")).toBe(true);
+    rl.stop();
+  });
+
+  it("DaemonLoop starts and stops without errors", async () => {
+    const { DaemonLoop } = await import("../packages/cli/src/daemon/loop");
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const pool = makePool();
+    const client = makeClient();
+    const prMonitor = { track: () => {} };
+
+    const loop = new DaemonLoop(client as any, pool as any, rl, prMonitor, {
       maxConcurrent: 5,
       pollInterval: 60000,
     });
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
+    loop.stop();
+    rl.stop();
+  });
 
-    expect(dispatched).not.toContain("task-bad-board");
+  it("DaemonLoop.onSlotFreed triggers a new poll", async () => {
+    const { DaemonLoop } = await import("../packages/cli/src/daemon/loop");
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const pool = makePool();
+    let listTasksCalled = 0;
+    const client = {
+      ...makeClient(),
+      listTasks: async () => {
+        listTasksCalled++;
+        return [];
+      },
+    };
+    const prMonitor = { track: () => {} };
+
+    const loop = new DaemonLoop(client as any, pool as any, rl, prMonitor, {
+      maxConcurrent: 5,
+      pollInterval: 60000,
+    });
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 50));
+    loop.onSlotFreed();
+    await new Promise((r) => setTimeout(r, 50));
+    loop.stop();
+    rl.stop();
+
+    expect(listTasksCalled).toBeGreaterThanOrEqual(1);
   });
 
   it("backs off with rate-limit delay when client.listTasks throws ApiError 429", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { DaemonLoop } = await import("../packages/cli/src/daemon/loop");
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
     const { ApiError } = await import("../packages/cli/src/client/index");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const pool = makePool();
     let callCount = 0;
     const client = {
+      ...makeClient(),
       listTasks: async () => {
         callCount++;
         throw new ApiError(429, "rate limited");
       },
-      listRepositories: async () => [],
-      getAgent: async () => ({ runtime: "claude" }),
-      getTask: async () => null,
-      releaseTask: async () => null,
-      getTaskNotes: async () => [],
     };
-    const pm = {
-      activeCount: 0,
-      getActiveTaskIds: () => [] as string[],
-      hasTask: () => false,
-      killTask: async () => {},
-    };
-    const runner = { dispatch: async () => false, resumeSession: async () => {} };
     const prMonitor = { track: () => {} };
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+    const loop = new DaemonLoop(client as any, pool as any, rl, prMonitor, {
       maxConcurrent: 5,
       pollInterval: 60000,
     });
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
+    loop.stop();
+    rl.stop();
 
     expect(callCount).toBeGreaterThanOrEqual(1);
   });
 
   it("backs off when client.listTasks throws a generic error", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
+    const { DaemonLoop } = await import("../packages/cli/src/daemon/loop");
+    const { RateLimiter } = await import("../packages/cli/src/daemon/rateLimiter");
+    const rl = new RateLimiter({ onResumed: () => {} });
+    const pool = makePool();
     let callCount = 0;
     const client = {
+      ...makeClient(),
       listTasks: async () => {
         callCount++;
         throw new Error("network error");
       },
-      listRepositories: async () => [],
-      getAgent: async () => ({ runtime: "claude" }),
-      getTask: async () => null,
-      releaseTask: async () => null,
-      getTaskNotes: async () => [],
     };
-    const pm = {
-      activeCount: 0,
-      getActiveTaskIds: () => [] as string[],
-      hasTask: () => false,
-      killTask: async () => {},
-    };
-    const runner = { dispatch: async () => false, resumeSession: async () => {} };
     const prMonitor = { track: () => {} };
 
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
+    const loop = new DaemonLoop(client as any, pool as any, rl, prMonitor, {
       maxConcurrent: 5,
       pollInterval: 60000,
     });
 
-    scheduler.start();
+    loop.start();
     await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
+    loop.stop();
+    rl.stop();
 
-    // scheduler should have attempted at least one poll and handled the error
     expect(callCount).toBeGreaterThanOrEqual(1);
-  });
-
-  it("does not dispatch when all available tasks have a paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const task = makeTask({ id: "task-paused-runtime", assigned_to: "agent-paused" });
-    const dispatched: string[] = [];
-    const client = {
-      listTasks: async () => [task],
-      listRepositories: async () => [],
-      getAgent: async (_id: string) => ({ runtime: "claude" }),
-      getTask: async () => null,
-      releaseTask: async () => null,
-      getTaskNotes: async () => [],
-    };
-    const pm = {
-      activeCount: 0,
-      getActiveTaskIds: () => [] as string[],
-      hasTask: () => false,
-      killTask: async () => {},
-    };
-    const runner = {
-      dispatch: async (t: any) => {
-        dispatched.push(t.id);
-        return true;
-      },
-      resumeSession: async () => {},
-    };
-    const prMonitor = { track: () => {} };
-
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    // Pause the runtime before starting
-    const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    expect(dispatched).not.toContain("task-paused-runtime");
-  });
-
-  it("isRuntimePaused returns false when no runtimes are paused", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const { client, pm, runner, prMonitor } = makeStubs([]);
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    expect(scheduler.isRuntimePaused("claude")).toBe(false);
-  });
-
-  it("pauseForRateLimit marks runtime as paused", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const { client, pm, runner, prMonitor } = makeStubs([]);
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-
-    expect(scheduler.isRuntimePaused("claude")).toBe(true);
-    scheduler.stop();
-  });
-
-  it("resumeRateLimit unpauses a paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const { client, pm, runner, prMonitor } = makeStubs([]);
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    // start() is required so resumeRuntime's `!this.running` guard does not bail out early
-    scheduler.start();
-
-    const futureReset = new Date(Date.now() + 120_000).toISOString();
-    scheduler.pauseForRateLimit("claude", futureReset);
-    scheduler.resumeRateLimit("claude");
-
-    // resumeRateLimit calls resumeRuntime (async) — wait for microtasks to settle
-    await new Promise((r) => setTimeout(r, 50));
-    expect(scheduler.isRuntimePaused("claude")).toBe(false);
-    scheduler.stop();
-  });
-
-  it("onSlotFreed schedules another poll", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const dispatched: string[] = [];
-    const task = makeTask({ id: "task-slot", scheduled_at: null });
-    const { client, pm, runner, prMonitor } = makeStubs([task]);
-    (runner as any).dispatch = async (t: any) => {
-      dispatched.push(t.id);
-      return true;
-    };
-
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.onSlotFreed();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    // Task should have been dispatched at least once
-    expect(dispatched.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("resumeRateLimit is a no-op on a non-paused runtime", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const { client, pm, runner, prMonitor } = makeStubs([]);
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    scheduler.start();
-    // calling resumeRateLimit when not paused should not throw
-    expect(() => scheduler.resumeRateLimit("claude")).not.toThrow();
-    // and runtime stays unpaused
-    expect(scheduler.isRuntimePaused("claude")).toBe(false);
-    scheduler.stop();
-  });
-
-  it("tick does not resume rate_limited sessions for unpaused runtimes (no automatic promotion)", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const resumed: string[] = [];
-    const { client, pm, prMonitor } = makeStubs([]);
-    const runner = {
-      dispatch: async (_t: any) => true,
-      resumeSession: async (s: any) => {
-        resumed.push(s.sessionId ?? "unknown");
-      },
-    };
-
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    scheduler.start();
-    await new Promise((r) => setTimeout(r, 50));
-    scheduler.stop();
-
-    // tick should NOT have resumed any rate_limited sessions on its own
-    // (resumeRateLimitedSessions is only triggered via resumeRuntime)
-    expect(resumed).toHaveLength(0);
-  });
-
-  it("pauseForRateLimit ignores a newer pause that is earlier than the existing one", async () => {
-    const { Scheduler } = await import("../packages/cli/src/daemon/scheduler");
-    const { client, pm, runner, prMonitor } = makeStubs([]);
-    const scheduler = new Scheduler(client as any, pm as any, runner as any, prMonitor as any, {
-      maxConcurrent: 5,
-      pollInterval: 60000,
-    });
-
-    const laterReset = new Date(Date.now() + 120_000).toISOString();
-    const earlierReset = new Date(Date.now() + 30_000).toISOString();
-
-    scheduler.pauseForRateLimit("claude", laterReset);
-    // This earlier reset should NOT replace the existing later one
-    scheduler.pauseForRateLimit("claude", earlierReset);
-
-    // Runtime must still be paused
-    expect(scheduler.isRuntimePaused("claude")).toBe(true);
-    scheduler.stop();
   });
 });

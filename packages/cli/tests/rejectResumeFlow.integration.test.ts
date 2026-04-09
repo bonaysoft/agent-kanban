@@ -73,6 +73,10 @@ vi.mock("../src/workspace/skills.js", () => ({
 }));
 
 // ── AgentClient: stub so no real HTTP calls are made ─────────────────────────
+// getTask is delegated to currentAgentGetTask so individual tests can control
+// the task status returned when routeTurnEnd checks for in_review.
+let currentAgentGetTask: ((taskId: string) => Promise<{ status: string }>) | null = null;
+
 vi.mock("../src/client/index.js", async () => {
   const actual = await vi.importActual<typeof import("../src/client/index.js")>("../src/client/index.js");
   return {
@@ -80,6 +84,10 @@ vi.mock("../src/client/index.js", async () => {
     AgentClient: vi.fn().mockImplementation((_url: string, agentId: string, sessionId: string) => ({
       getAgentId: () => agentId,
       getSessionId: () => sessionId,
+      getTask: vi.fn().mockImplementation((taskId: string) => {
+        if (currentAgentGetTask) return currentAgentGetTask(taskId);
+        return Promise.resolve({ status: "in_progress" });
+      }),
       sendMessage: vi.fn().mockResolvedValue(undefined),
       updateSessionUsage: vi.fn().mockResolvedValue(undefined),
     })),
@@ -103,8 +111,8 @@ vi.mock("../src/providers/registry.js", () => ({
 
 import type { MachineClient } from "../src/client/index.js";
 import { cleanupStaleSessions } from "../src/daemon/cleanup.js";
-import { ProcessManager } from "../src/daemon/processManager.js";
-import { TaskRunner } from "../src/daemon/taskRunner.js";
+import { resumeSession } from "../src/daemon/resumer.js";
+import { RuntimePool } from "../src/daemon/runtimePool.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts } from "../src/providers/types.js";
 import type { SessionFile } from "../src/session/store.js";
 import { clearAllSessions, listSessions, readSession, writeSession } from "../src/session/store.js";
@@ -298,6 +306,15 @@ function makeCallbacks(scheduler?: { onSlotFreed(): void }) {
   };
 }
 
+function makePool(client: MachineClient, cbs: ReturnType<typeof makeCallbacks>, timeoutMs = 0) {
+  return new RuntimePool(
+    client as any,
+    { onSlotFreed: cbs.onSlotFreed },
+    { onRateLimited: cbs.onRateLimited, onRateLimitResumed: cbs.onRateLimitResumed },
+    timeoutMs,
+  );
+}
+
 // Build a minimal in-review SessionFile for use in tests that start from that state.
 // Uses a well-known valid Ed25519 JWK (public x + private d in base64url, 32 bytes each).
 // This is required for TaskRunner.resumeSession which calls crypto.subtle.importKey.
@@ -334,6 +351,7 @@ function makeInReviewSession(taskId: string, cwd: string): SessionFile {
 beforeEach(() => {
   mkdirSync(testSessionsDir, { recursive: true });
   currentFakeProvider = null;
+  currentAgentGetTask = null;
 });
 
 afterEach(() => {
@@ -360,7 +378,7 @@ describe("Scenario 1: agent completes normally → session preserved as in_revie
       tasks: { [taskId]: { id: taskId, status: "in_review", title: "S1 task", assigned_to: "agent-1", board_id: "board-1", board_type: "general" } },
     });
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
 
     const sessionId = randomUUID();
     const sessionFile: SessionFile = {
@@ -378,6 +396,9 @@ describe("Scenario 1: agent completes normally → session preserved as in_revie
     };
     writeSession(sessionFile);
 
+    // routeTurnEnd calls agentClient.getTask to detect in_review
+    currentAgentGetTask = () => client.getTask(taskId) as Promise<any>;
+
     let cleanupCalled = false;
     await pm.spawnAgent({
       provider: fake,
@@ -388,6 +409,7 @@ describe("Scenario 1: agent completes normally → session preserved as in_revie
       agentClient: {
         getAgentId: () => "agent-1",
         getSessionId: () => sessionId,
+        getTask: (id: string) => client.getTask(id),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         updateSessionUsage: vi.fn().mockResolvedValue(undefined),
       } as any,
@@ -437,7 +459,7 @@ describe("Scenario 2 (Fix 6): daemon shutdown does not wipe in_review session fi
 
     const client = makeFakeMachineClient({});
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
 
     // Simulate the shutdown path as daemon.ts now does it:
     // pm.killAll() + cleanupLeaderSessions (leader sessions have dead PIDs)
@@ -552,10 +574,9 @@ describe("Scenario 4 (Fix 5): resumeSession bails out when workspace.cwd is miss
     const fake = new FakeProvider();
     setFakeProvider(fake);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
-    const runner = new TaskRunner(client as unknown as MachineClient, pm);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
 
-    const result = await runner.resumeSession(session, "Task rejected. Reason: fix it\n\nPlease fix the issues and submit for review again.");
+    const result = await resumeSession(session, "Task rejected. Reason: fix it\n\nPlease fix the issues and submit for review again.", client as unknown as any, pm);
 
     // (a) returns false
     expect(result).toBe(false);
@@ -604,12 +625,14 @@ describe("Scenario 5: full end-to-end reject-resume", () => {
     const fake = new FakeProvider();
     setFakeProvider(fake);
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
-    const runner = new TaskRunner(client as unknown as MachineClient, pm);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
+
+    // AgentClient mock uses currentAgentGetTask for getTask calls in routeTurnEnd
+    currentAgentGetTask = (id: string) => client.getTask(id) as Promise<any>;
 
     // (a) simulate a scheduler tick: resumeSession is called for in_review task that's in_progress
     const message = "Task rejected. Reason: fix it\n\nPlease fix the issues and submit for review again.";
-    const resumed = await runner.resumeSession(session, message);
+    const resumed = await resumeSession(session, message, client as unknown as any, pm);
     expect(resumed).toBe(true);
 
     // (b) a new execute() call happened on FakeProvider
@@ -660,7 +683,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
       tasks: { [taskId]: { id: taskId, status: "in_review", title: "S7", assigned_to: "a1", board_id: "b1", board_type: "general" } },
     });
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
 
     const sessionId = randomUUID();
     writeSession({
@@ -687,6 +710,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
       agentClient: {
         getAgentId: () => "a1",
         getSessionId: () => sessionId,
+        getTask: (id: string) => client.getTask(id),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         updateSessionUsage: vi.fn().mockResolvedValue(undefined),
       } as any,
@@ -727,7 +751,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
       tasks: { [taskId]: { id: taskId, status: "done", title: "S7 normal", assigned_to: "a1", board_id: "b1", board_type: "general" } },
     });
     const callbacks = makeCallbacks();
-    const pm = new ProcessManager(client as unknown as MachineClient, callbacks, 0);
+    const pm = makePool(client as unknown as MachineClient, callbacks);
 
     const sessionId = randomUUID();
     writeSession({
@@ -754,6 +778,7 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
       agentClient: {
         getAgentId: () => "a1",
         getSessionId: () => sessionId,
+        getTask: (id: string) => client.getTask(id),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         updateSessionUsage: vi.fn().mockResolvedValue(undefined),
       } as any,
