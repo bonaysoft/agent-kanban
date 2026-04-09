@@ -36,7 +36,10 @@ export async function cleanupStaleSessions(client: MachineClient, machineId: str
         if (local?.status === "in_review") continue;
         if (local && isPidAlive(local.pid)) continue;
         await client.closeSession(agent.id, session.id).catch(() => {});
-        if (local) removeSession(local.sessionId);
+        if (local) {
+          logger.info(`Closing stale session ${session.id.slice(0, 8)} for agent ${agent.id.slice(0, 8)}`);
+          removeSession(local.sessionId);
+        }
         closedCount++;
       }
     }

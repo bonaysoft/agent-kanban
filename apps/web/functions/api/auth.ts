@@ -118,7 +118,8 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     });
     const sessionRes = await auth.handler(sessionReq);
     if (!sessionRes.ok) {
-      return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid agent session" } }, 401);
+      const body = await sessionRes.text().catch(() => "");
+      return c.json({ error: { code: "UNAUTHORIZED", message: `Invalid agent session: ${sessionRes.status} ${body}`.trim() } }, 401);
     }
     const agentIdentity = await sessionRes.json();
     // Extract persistent agent ID from JWT `aid` claim

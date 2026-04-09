@@ -166,6 +166,7 @@ export class Scheduler {
         throw err;
       }
       if (!task || task.status === "done" || task.status === "cancelled") {
+        logger.info(`Cleaning up orphaned active session for task ${s.taskId} (task status=${task?.status ?? "missing"})`);
         cleanupWorkspace(s.workspace!);
         removeSession(s.sessionId);
       } else {
@@ -200,6 +201,7 @@ export class Scheduler {
       }
 
       if (!task || task.status === "done" || task.status === "cancelled") {
+        logger.info(`Cleaning up review session for task ${s.taskId} (task status=${task?.status ?? "missing"})`);
         cleanupWorkspace(s.workspace!);
         removeSession(s.sessionId);
         continue;

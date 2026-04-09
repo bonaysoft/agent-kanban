@@ -197,6 +197,7 @@ export class TaskRunner {
       throw err;
     }
     if (!task || task.status === "cancelled" || task.status === "done") {
+      logger.info(`Task ${taskId} is ${task?.status ?? "missing"}, cleaning up resume session`);
       workspace.cleanup();
       removeSession(session.sessionId);
       return false;
@@ -214,11 +215,11 @@ export class TaskRunner {
 
     try {
       await this.client.reopenSession(session.agentId, session.sessionId);
-    } catch {
-      logger.warn(`Failed to reopen session ${session.sessionId}, releasing task ${taskId}`);
-      workspace.cleanup();
-      removeSession(session.sessionId);
-      await this.client.releaseTask(taskId).catch(() => {});
+    } catch (err: any) {
+      // Transient failure (network, 429, etc.) — keep session file so we can retry
+      // on the next tick. Only destroying the session on transient errors is what
+      // caused the "rejected task never resumes" bug.
+      logger.warn(`Failed to reopen session ${session.sessionId}: ${err.message}, will retry next tick`);
       return false;
     }
 
@@ -263,12 +264,9 @@ export class TaskRunner {
         },
         model: session.model,
       });
-    } catch {
-      logger.warn(`Failed to resume task ${taskId}, releasing`);
-      workspace.cleanup();
+    } catch (err: any) {
+      logger.warn(`Failed to resume task ${taskId}: ${err.message}, will retry next tick`);
       cleanupGnupgHome(gnupgHome);
-      removeSession(session.sessionId);
-      await this.client.releaseTask(taskId).catch(() => {});
       return false;
     }
 
