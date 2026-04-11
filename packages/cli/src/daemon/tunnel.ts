@@ -3,16 +3,36 @@ import type { AgentEvent } from "../providers/types.js";
 
 const logger = createLogger("tunnel");
 
-const RECONNECT_DELAY_MS = 2000;
 const KEEPALIVE_INTERVAL_MS = 25_000;
+
+// Reconnect policy — exponential backoff with a hard cap.
+//
+// Why these numbers:
+//   - 1s base: fast recovery from a single-packet blip
+//   - 30s cap: after ~6 consecutive failures we stop piling on. A fully
+//     failing server (e.g. DO quota exhausted) settles at 2 attempts/min =
+//     ~2880/day, well under the free-tier budget.
+//   - Sequence: 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
+const RECONNECT_BASE_DELAY_MS = 1_000;
+const RECONNECT_MAX_DELAY_MS = 30_000;
+
+// Safety net for a truly dead socket. If `new WebSocket()` neither fires
+// `open` nor `close` nor `error` within this window — which we've observed
+// happen after macOS sleep/wake leaves the network stack wedged — we force
+// a close ourselves so the reconnect chain can advance.
+const CONNECT_TIMEOUT_MS = 10_000;
 
 /**
  * Single WebSocket tunnel to the relay worker.
- * Daemon connects once on startup. All session events and history requests flow through this one connection.
  *
- * Reconnect policy: keep trying forever until disconnect() is called. The daemon is a long-lived
- * process and the tunnel must always recover from transient failures (dev server restarts, network
- * blips, idle timeouts). A keepalive ping prevents idle proxies from dropping the socket.
+ * Daemon connects once on startup; every session event, history request,
+ * and status transition flows through this one socket.
+ *
+ * Reconnect semantics: retry forever until `disconnect()` is called. A
+ * single owner (`reconnectTimer`) serializes attempts so a bad server
+ * response can't amplify one close event into many concurrent attempts.
+ * Backoff grows exponentially to `RECONNECT_MAX_DELAY_MS` and resets the
+ * moment we see a successful `open`.
  */
 export class TunnelClient {
   private ws: WebSocket | null = null;
@@ -22,6 +42,9 @@ export class TunnelClient {
   private wsBaseUrl: string;
   private apiKey: string;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private consecutiveFailures = 0;
 
   constructor(apiUrl: string, apiKey: string) {
     this.wsBaseUrl = apiUrl.replace(/^https?/, (p) => (p === "https" ? "wss" : "ws"));
@@ -29,7 +52,14 @@ export class TunnelClient {
   }
 
   async connect(): Promise<void> {
+    // Idempotent: if a socket is already active or a reconnect is already
+    // pending, calling `connect()` again is a no-op. Without this guard, a
+    // second `connect()` would orphan the first WebSocket and create two
+    // concurrent reconnect chains sharing mutable state — re-introducing
+    // the storm bug through a different path.
+    if (this.ws !== null || this.reconnectTimer !== null) return;
     this.closed = false;
+    this.consecutiveFailures = 0;
     await this.openSocket();
   }
 
@@ -49,12 +79,28 @@ export class TunnelClient {
       try {
         ws = new WebSocket(url);
       } catch (err) {
-        settle(new Error(`Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`));
+        const message = `Failed to create WebSocket: ${err instanceof Error ? err.message : String(err)}`;
+        settle(new Error(message));
+        this.onAttemptFailed(message);
         return;
       }
       this.ws = ws;
 
+      // Wedge guard — force progress if the socket never transitions state.
+      this.connectTimeoutTimer = setTimeout(() => {
+        this.connectTimeoutTimer = null;
+        logger.warn(`Tunnel connect stalled after ${CONNECT_TIMEOUT_MS}ms — forcing close`);
+        try {
+          ws.close();
+        } catch {
+          /* already closed */
+        }
+        // `close` event will fire next tick and run the normal disconnect path.
+      }, CONNECT_TIMEOUT_MS);
+
       ws.addEventListener("open", () => {
+        this.clearConnectTimeout();
+        this.consecutiveFailures = 0;
         logger.info("Tunnel connected");
         this.startKeepalive();
         settle();
@@ -65,25 +111,69 @@ export class TunnelClient {
       });
 
       ws.addEventListener("close", (ev) => {
+        this.clearConnectTimeout();
         this.stopKeepalive();
-        // Always settle the promise so callers never hang.
+        if (this.closed) {
+          // `disconnect()` was called. If the socket was still connecting,
+          // `settle` rejects any awaiter with a clean abort message; if it
+          // had already opened, `settle` is a no-op. Either way, skip the
+          // reconnect path — a shut-down tunnel must stay shut down.
+          settle(new Error("Tunnel connect aborted"));
+          return;
+        }
+        // Pre-open close from the server side — reject any awaiter so the
+        // `connect()` caller never hangs, then fall through to reconnect.
         settle(new Error("Tunnel closed before open"));
-        if (this.closed) return;
-        logger.warn(`Tunnel disconnected (code=${ev.code} reason=${ev.reason || "none"}), reconnecting in ${RECONNECT_DELAY_MS}ms...`);
-        setTimeout(() => {
-          this.openSocket().catch((e) => {
-            // Reconnect attempt couldn't even create the socket. Schedule another try
-            // — `close` will not fire when the WebSocket constructor itself throws.
-            logger.warn(`Reconnect failed: ${e instanceof Error ? e.message : e}`);
-            if (!this.closed) setTimeout(() => this.openSocket().catch(() => {}), RECONNECT_DELAY_MS);
-          });
-        }, RECONNECT_DELAY_MS);
+        const detail = `code=${ev.code} reason=${ev.reason || "none"}`;
+        this.onAttemptFailed(`Tunnel disconnected (${detail})`);
       });
 
       ws.addEventListener("error", () => {
-        // Don't settle here — `close` always follows and handles cleanup + reconnect.
+        // `close` always follows `error` and handles cleanup + reconnect.
       });
     });
+  }
+
+  /** Called exactly once per failed/broken attempt to schedule the next retry. */
+  private onAttemptFailed(reason: string): void {
+    if (this.closed) return;
+    this.consecutiveFailures += 1;
+    const delayMs = this.nextBackoffMs();
+    logger.warn(`${reason}, reconnecting in ${delayMs}ms (attempt ${this.consecutiveFailures})`);
+    this.scheduleReconnect(delayMs);
+  }
+
+  private nextBackoffMs(): number {
+    // `consecutiveFailures` has already been incremented by the caller.
+    const exp = RECONNECT_BASE_DELAY_MS * 2 ** (this.consecutiveFailures - 1);
+    return Math.min(exp, RECONNECT_MAX_DELAY_MS);
+  }
+
+  private scheduleReconnect(delayMs: number): void {
+    if (this.closed) return;
+    // Single-source guarantee: drop any previously-scheduled timer so each
+    // close event yields exactly one pending reconnect attempt.
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      // Errors are surfaced via the `close` handler's log + reschedule path,
+      // so we swallow the rejection here to avoid unhandled-rejection warnings.
+      this.openSocket().catch(() => {});
+    }, delayMs);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private clearConnectTimeout(): void {
+    if (this.connectTimeoutTimer) {
+      clearTimeout(this.connectTimeoutTimer);
+      this.connectTimeoutTimer = null;
+    }
   }
 
   private startKeepalive(): void {
@@ -150,6 +240,8 @@ export class TunnelClient {
 
   disconnect(): void {
     this.closed = true;
+    this.clearReconnectTimer();
+    this.clearConnectTimeout();
     this.stopKeepalive();
     if (this.ws) {
       try {

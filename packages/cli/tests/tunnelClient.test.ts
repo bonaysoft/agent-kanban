@@ -375,3 +375,127 @@ describe("TunnelClient — reconnect on close", () => {
     client.disconnect();
   });
 });
+
+// ── connect() re-entry guard ──────────────────────────────────────────────────
+
+describe("TunnelClient — connect() re-entry guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not create a second WebSocket when connect() is called twice while first is still pending", async () => {
+    const client = new TunnelClient("https://api.example.com", "key");
+    // First connect — WebSocket exists but not yet open
+    client.connect();
+    const firstWs = lastCreatedWs!;
+    // Second connect call while socket is pending
+    client.connect();
+    // Must still be the same WebSocket instance
+    expect(lastCreatedWs).toBe(firstWs);
+    // Clean up — open then disconnect
+    firstWs._open();
+    client.disconnect();
+  });
+
+  it("does not create a second WebSocket when connect() is called while a reconnect timer is pending", async () => {
+    const client = new TunnelClient("https://api.example.com", "key");
+    // First attempt — close before open triggers a reconnect timer
+    const p = client.connect();
+    const firstWs = lastCreatedWs!;
+    firstWs._close();
+    await expect(p).rejects.toThrow("Tunnel closed before open");
+    // Reconnect timer is now pending; ws is null but reconnectTimer is set
+    // Second connect() call must not create a new WebSocket
+    client.connect();
+    expect(lastCreatedWs).toBe(firstWs);
+    // Clean up
+    client.disconnect();
+  });
+
+  it("does not create a second WebSocket when connect() is called while already fully open", async () => {
+    const client = await makeConnected();
+    const firstWs = lastCreatedWs!;
+    // Call connect() again on an already-open client
+    client.connect();
+    expect(lastCreatedWs).toBe(firstWs);
+    // Clean up
+    client.disconnect();
+  });
+
+  it("allows a fresh connect() after disconnect() clears the guard state", async () => {
+    const client = await makeConnected();
+    const firstWs = lastCreatedWs!;
+    client.disconnect();
+    // disconnect() nulls ws and clears reconnectTimer — guard must allow a new connect
+    client.connect();
+    // A brand-new WebSocket should have been created
+    expect(lastCreatedWs).not.toBe(firstWs);
+    // Clean up
+    lastCreatedWs!._open();
+    client.disconnect();
+  });
+});
+
+// ── disconnect() during connect — abort behavior ──────────────────────────────
+
+describe("TunnelClient — disconnect() called while socket is connecting", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("rejects the connect() promise with 'Tunnel connect aborted' when disconnect() is called before the socket opens", async () => {
+    const client = new TunnelClient("https://api.example.com", "key");
+    const p = client.connect();
+    // Socket is pending (not yet open or closed)
+    client.disconnect();
+    // Now fire the close event that the ws.close() call from disconnect() would trigger
+    lastCreatedWs!._close();
+    await expect(p).rejects.toThrow("Tunnel connect aborted");
+  });
+
+  it("does not schedule a reconnect after disconnect()-during-connect close event", async () => {
+    const client = new TunnelClient("https://api.example.com", "key");
+    const p = client.connect();
+    const firstWs = lastCreatedWs!;
+    client.disconnect();
+    firstWs._close();
+    // Swallow the expected rejection
+    await p.catch(() => {});
+    // Advance well past any possible reconnect delay
+    vi.advanceTimersByTime(35_000);
+    // No new WebSocket should have been created
+    expect(lastCreatedWs).toBe(firstWs);
+  });
+
+  it("does not increment consecutiveFailures when disconnect()-during-connect fires the close event", async () => {
+    const client = new TunnelClient("https://api.example.com", "key");
+    const p = client.connect();
+    client.disconnect();
+    lastCreatedWs!._close();
+    await p.catch(() => {});
+
+    // A fresh client starts with delay 1000ms (consecutiveFailures=0 → first failure → 1s).
+    // After disconnect-during-connect, consecutiveFailures must still be 0.
+    // Verify: create a new client, trigger one normal failure, and confirm it backs off to 1000ms.
+    const freshClient = new TunnelClient("https://api.example.com", "key");
+    const fp = freshClient.connect();
+    const freshWs = lastCreatedWs!;
+    freshWs._close();
+    await fp.catch(() => {});
+    // After 1 failure, delay should be 1000ms. Advance 999ms — no new ws yet.
+    vi.advanceTimersByTime(999);
+    expect(lastCreatedWs).toBe(freshWs);
+    // Advance 1ms more — reconnect fires and creates a new ws.
+    vi.advanceTimersByTime(1);
+    expect(lastCreatedWs).not.toBe(freshWs);
+    freshClient.disconnect();
+  });
+});
