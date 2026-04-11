@@ -1186,71 +1186,220 @@ describe("claudeProvider.execute — handle shape", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getUsage — ordered tests to exercise all branches before cache is populated.
-// platform() is mocked to "linux" so readFileSync path is taken for token.
+// fetchUsage — platform() is mocked to "linux" so readFileSync path is taken.
 // ---------------------------------------------------------------------------
 
-describe("claudeProvider.getUsage — no token", () => {
+describe("claudeProvider.fetchUsage — no token", () => {
   it("returns null when readOAuthToken returns null (execSync and readFileSync both throw)", async () => {
-    const result = await claudeProvider.getUsage?.();
+    const result = await claudeProvider.fetchUsage?.();
     expect(result).toBeNull();
   });
 });
 
-describe("claudeProvider.getUsage — non-OK fetch response", () => {
-  it("returns null (cached) when usage API returns a non-OK status", async () => {
+describe("claudeProvider.fetchUsage — non-OK fetch response", () => {
+  it("throws UsageFetchError when usage API returns a non-OK status", async () => {
+    const { UsageFetchError } = await import("../packages/cli/src/providers/types.js");
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-bad-status" } }) as any);
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
       ok: false,
       status: 429,
-    } as Response);
+      headers: { get: (_: string) => null },
+    } as any);
 
-    const result = await claudeProvider.getUsage?.();
-    expect(result === null || typeof result === "object").toBe(true);
+    await expect(claudeProvider.fetchUsage?.()).rejects.toBeInstanceOf(UsageFetchError);
+    fetchSpy.mockRestore();
+  });
+
+  it("throws UsageFetchError with status=429 when API returns 429", async () => {
+    const { UsageFetchError } = await import("../packages/cli/src/providers/types.js");
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-429" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: (_: string) => null },
+    } as any);
+
+    let caught: unknown;
+    try {
+      await claudeProvider.fetchUsage?.();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageFetchError);
+    expect((caught as InstanceType<typeof UsageFetchError>).status).toBe(429);
+    fetchSpy.mockRestore();
+  });
+
+  it("throws UsageFetchError with parsed retryAfterMs when Retry-After header is present", async () => {
+    const { UsageFetchError } = await import("../packages/cli/src/providers/types.js");
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-retry" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: (_: string) => "120" },
+    } as any);
+
+    let caught: unknown;
+    try {
+      await claudeProvider.fetchUsage?.();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageFetchError);
+    expect((caught as InstanceType<typeof UsageFetchError>).retryAfterMs).toBe(120_000);
     fetchSpy.mockRestore();
   });
 });
 
-describe("claudeProvider.getUsage — fetch throws", () => {
-  it("returns null (cached) when fetch throws a network error", async () => {
+describe("claudeProvider.fetchUsage — fetch throws", () => {
+  it("throws UsageFetchError when fetch itself rejects (network error)", async () => {
+    const { UsageFetchError } = await import("../packages/cli/src/providers/types.js");
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-throw" } }) as any);
     const fetchSpy = vi.spyOn(global, "fetch").mockRejectedValueOnce(new Error("network error"));
 
-    const result = await claudeProvider.getUsage?.();
-    expect(result === null || typeof result === "object").toBe(true);
+    await expect(claudeProvider.fetchUsage?.()).rejects.toBeInstanceOf(UsageFetchError);
     fetchSpy.mockRestore();
   });
 });
 
-describe("claudeProvider.getUsage — successful fetch", () => {
+describe("claudeProvider.fetchUsage — successful fetch", () => {
   it("returns usage data with windows array when API succeeds", async () => {
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-xyz" } }) as any);
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => null },
       json: async () => ({
         five_hour: { utilization: 0.5, resets_at: "2026-04-01T12:00:00Z" },
         seven_day: { utilization: 0.2, resets_at: "2026-04-08T00:00:00Z" },
       }),
-    } as Response);
+    } as any);
 
-    const result = await claudeProvider.getUsage?.();
+    const result = await claudeProvider.fetchUsage?.();
     expect(result).not.toBeNull();
-    if (result) {
-      expect(Array.isArray(result.windows)).toBe(true);
-      expect(typeof result.updated_at).toBe("string");
-    }
+    expect(Array.isArray(result!.windows)).toBe(true);
+    expect(result!.windows.length).toBeGreaterThanOrEqual(1);
+    expect(typeof result!.updated_at).toBe("string");
     fetchSpy.mockRestore();
   });
 
-  it("returns cached usage without fetching when called again within TTL", async () => {
-    // Cache was populated by the previous test in this describe block.
-    const fetchSpy = vi.spyOn(global, "fetch");
-    const result = await claudeProvider.getUsage?.();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result).not.toBeNull();
+  it("makes a fresh HTTP request every call (no module-level cache)", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync)
+      .mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "tok-a" } }) as any)
+      .mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "tok-b" } }) as any);
+    const successResponse = () => ({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ({}),
+    });
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(successResponse() as any)
+      .mockResolvedValueOnce(successResponse() as any);
+    await claudeProvider.fetchUsage?.();
+    await claudeProvider.fetchUsage?.();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     fetchSpy.mockRestore();
+  });
+
+  it("returns only windows for keys present in CLAUDE_WINDOW_LABELS", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "tok-label" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ({
+        five_hour: { utilization: 0.3, resets_at: "2026-04-11T12:00:00Z" },
+        unknown_key: { utilization: 0.9, resets_at: "2026-04-11T12:00:00Z" },
+      }),
+    } as any);
+
+    const result = await claudeProvider.fetchUsage?.();
+    expect(result!.windows.every((w) => w.label !== undefined)).toBe(true);
+    // unknown_key should not produce a window
+    expect(result!.windows.find((w) => (w as any).key === "unknown_key")).toBeUndefined();
+    fetchSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchUsage — 401 clears the in-memory token cache
+// ---------------------------------------------------------------------------
+
+describe("claudeProvider.fetchUsage — 401 invalidates cachedToken", () => {
+  it("throws UsageFetchError with status 401 when API returns 401", async () => {
+    const { UsageFetchError } = await import("../packages/cli/src/providers/types.js");
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      headers: { get: (_: string) => null },
+    } as any);
+
+    let caught: unknown;
+    try {
+      await claudeProvider.fetchUsage?.();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageFetchError);
+    expect((caught as InstanceType<typeof UsageFetchError>).status).toBe(401);
+    fetchSpy.mockRestore();
+  });
+
+  it("re-reads credentials from disk on the next call after a 401 (cache invalidated)", async () => {
+    const fsModule = await import("node:fs");
+
+    // Reset the readFileSync mock queue: prior tests may have accumulated
+    // unconsumed once-mocks that would poison the cachedToken read below.
+    // Re-establish the default: always throw so readOAuthToken returns null.
+    vi.mocked(fsModule.readFileSync).mockReset();
+    vi.mocked(fsModule.readFileSync).mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    // First call — supply a known token so the fetch reaches the server,
+    // then the server returns 401 which clears cachedToken.
+    const firstToken = "token-before-401";
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: firstToken } }) as any);
+    const fetchSpy401 = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      headers: { get: (_: string) => null },
+    } as any);
+    try {
+      await claudeProvider.fetchUsage?.();
+    } catch {
+      // expected — 401 throws UsageFetchError
+    }
+    fetchSpy401.mockRestore();
+
+    // Second call — cachedToken must be null now, so readFileSync is called again.
+    // We supply a distinct token so we can verify the Authorization header.
+    const freshToken = "token-fresh-after-401";
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: freshToken } }) as any);
+
+    let capturedAuthHeader: string | undefined;
+    const fetchSpy2 = vi.spyOn(global, "fetch").mockImplementationOnce(async (url, init) => {
+      capturedAuthHeader = (init?.headers as Record<string, string>)?.Authorization;
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => ({ five_hour: { utilization: 0.1, resets_at: "2026-04-12T00:00:00Z" } }),
+      } as any;
+    });
+
+    await claudeProvider.fetchUsage?.();
+    expect(capturedAuthHeader).toBe(`Bearer ${freshToken}`);
+    fetchSpy2.mockRestore();
+
+    // Restore the default mock behavior for any tests that follow.
+    vi.mocked(fsModule.readFileSync).mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
   });
 });

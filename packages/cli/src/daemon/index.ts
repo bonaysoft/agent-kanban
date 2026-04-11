@@ -8,7 +8,6 @@ import { generateDeviceId } from "../device.js";
 import { createLogger } from "../logger.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
-import type { AgentProvider, UsageInfo } from "../providers/types.js";
 import { migrateLegacySessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 import { auditOrphanedTasks, cleanupLeaderSessions, cleanupStaleSessions } from "./cleanup.js";
@@ -17,17 +16,9 @@ import { PrMonitor } from "./prMonitor.js";
 import { RateLimiter } from "./rateLimiter.js";
 import { RuntimePool } from "./runtimePool.js";
 import { TunnelClient } from "./tunnel.js";
+import { UsageCollector } from "./usageCollector.js";
 
 const logger = createLogger("daemon");
-
-async function collectUsage(providers: AgentProvider[]): Promise<UsageInfo | null> {
-  const results = await Promise.allSettled(providers.filter((p) => p.getUsage).map((p) => p.getUsage!()));
-  const windows = results
-    .filter((r): r is PromiseFulfilledResult<UsageInfo | null> => r.status === "fulfilled" && r.value !== null)
-    .flatMap((r) => r.value!.windows);
-  if (windows.length === 0) return null;
-  return { windows, updated_at: new Date().toISOString() };
-}
 
 export interface DaemonOptions {
   maxConcurrent: number;
@@ -65,6 +56,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   const MIN_POLL_INTERVAL = 5000;
   const pollInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
   const availableProviders = getAvailableProviders();
+
+  const usageCollector = new UsageCollector({ providers: availableProviders });
+  usageCollector.start();
 
   const prMonitor = new PrMonitor(client);
 
@@ -113,8 +107,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const heartbeatInterval = setInterval(() => {
     (async () => {
-      const usageInfo = await collectUsage(availableProviders);
-      await client.heartbeat(machineId!, { version: machineInfo.version, runtimes: machineInfo.runtimes, usage_info: usageInfo });
+      await client.heartbeat(machineId!, {
+        version: machineInfo.version,
+        runtimes: machineInfo.runtimes,
+        usage_info: usageCollector.getSnapshot(),
+      });
       await cleanupLeaderSessions(client);
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
@@ -124,6 +121,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     loop.stop();
     rateLimiter.stop();
     prMonitor.stop();
+    usageCollector.stop();
     clearInterval(heartbeatInterval);
     await pool.killAll();
     tunnel.disconnect();

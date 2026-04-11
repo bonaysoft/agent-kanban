@@ -7,6 +7,7 @@ import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUs
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+import { parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const SUBTASK_STATUSES: readonly SubtaskStatus[] = ["completed", "failed", "stopped"] as const;
 
@@ -18,7 +19,6 @@ const logger = createLogger("claude");
 
 const CREDENTIALS_PATH = join(homedir(), ".claude", ".credentials.json");
 const USAGE_API = "https://api.anthropic.com/api/oauth/usage";
-const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const CLAUDE_WINDOW_LABELS: Record<string, string> = {
   five_hour: "5-Hour",
@@ -27,8 +27,6 @@ const CLAUDE_WINDOW_LABELS: Record<string, string> = {
   seven_day_opus: "7-Day Opus",
 };
 
-let cachedUsage: UsageInfo | null = null;
-let cachedAt = 0;
 let cachedToken: string | null = null;
 
 function parseToken(raw: string): string | null {
@@ -333,38 +331,38 @@ export const claudeProvider: AgentProvider = {
     });
   },
 
-  async getUsage(): Promise<UsageInfo | null> {
-    if (cachedUsage && Date.now() - cachedAt < CACHE_TTL_MS) {
-      return cachedUsage;
-    }
-
+  async fetchUsage(): Promise<UsageInfo | null> {
     const token = readOAuthToken();
-    if (!token) return cachedUsage;
+    if (!token) return null;
 
+    let res: Response;
     try {
-      const res = await fetch(USAGE_API, {
+      res = await fetch(USAGE_API, {
         headers: {
           Authorization: `Bearer ${token}`,
           "anthropic-beta": "oauth-2025-04-20",
         },
         signal: AbortSignal.timeout(5000),
       });
-
-      if (!res.ok) {
-        logger.warn(`Usage API returned ${res.status}`);
-        return cachedUsage;
-      }
-
-      const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
-      const windows: UsageWindow[] = Object.entries(CLAUDE_WINDOW_LABELS)
-        .filter(([key]) => data[key])
-        .map(([key, label]) => ({ runtime: "claude", label, ...data[key] }));
-      cachedUsage = { windows, updated_at: new Date().toISOString() };
-      cachedAt = Date.now();
-      return cachedUsage;
-    } catch (err: any) {
-      logger.warn(`Failed to fetch usage: ${err.message}`);
-      return cachedUsage;
+    } catch (err) {
+      throw new UsageFetchError(`claude usage request failed: ${(err as Error).message}`, { cause: err });
     }
+
+    if (!res.ok) {
+      // 401 means the cached OAuth token is stale (user re-authed, rotation,
+      // expiry). Drop the in-memory copy so the next poll re-reads from the
+      // keychain instead of looping on a dead token forever.
+      if (res.status === 401) cachedToken = null;
+      throw new UsageFetchError(`claude usage API returned ${res.status}`, {
+        status: res.status,
+        retryAfterMs: parseRetryAfterMs(res.headers.get("retry-after")),
+      });
+    }
+
+    const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
+    const windows: UsageWindow[] = Object.entries(CLAUDE_WINDOW_LABELS)
+      .filter(([key]) => data[key])
+      .map(([key, label]) => ({ runtime: "claude", label, ...data[key] }));
+    return { windows, updated_at: new Date().toISOString() };
   },
 };

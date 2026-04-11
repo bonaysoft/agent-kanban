@@ -668,69 +668,122 @@ describe("codexProvider.execute — thread selection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// codexProvider.getUsage
+// codexProvider.fetchUsage
 // ---------------------------------------------------------------------------
 
-describe("codexProvider.getUsage — no token", () => {
+describe("codexProvider.fetchUsage — no token", () => {
   it("returns null when readAccessToken returns null (readFileSync throws)", async () => {
-    const result = await codexProvider.getUsage?.();
+    const result = await codexProvider.fetchUsage?.();
     expect(result).toBeNull();
   });
 });
 
-describe("codexProvider.getUsage — non-OK fetch response", () => {
-  it("returns null when usage API returns non-OK status", async () => {
+describe("codexProvider.fetchUsage — non-OK fetch response", () => {
+  it("throws UsageFetchError when usage API returns non-OK status", async () => {
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "test-token" } }) as any);
-    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({ ok: false, status: 429 } as Response);
-    const result = await codexProvider.getUsage?.();
-    expect(result === null || typeof result === "object").toBe(true);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+    } as any);
+    await expect(codexProvider.fetchUsage?.()).rejects.toThrow("codex usage API returned 429");
+    fetchSpy.mockRestore();
+  });
+
+  it("throws UsageFetchError with status=429 when API returns 429", async () => {
+    const { UsageFetchError: UFE } = await import("../src/providers/types.js");
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "test-token-429" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: (_: string) => "120" },
+    } as any);
+    let caught: unknown;
+    try {
+      await codexProvider.fetchUsage?.();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UFE);
+    expect((caught as InstanceType<typeof UFE>).status).toBe(429);
+    fetchSpy.mockRestore();
+  });
+
+  it("throws UsageFetchError with parsed retryAfterMs when Retry-After header is present", async () => {
+    const { UsageFetchError: UFE } = await import("../src/providers/types.js");
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "test-token-retry" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: (_: string) => "60" },
+    } as any);
+    let caught: unknown;
+    try {
+      await codexProvider.fetchUsage?.();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UFE);
+    expect((caught as InstanceType<typeof UFE>).retryAfterMs).toBe(60_000);
     fetchSpy.mockRestore();
   });
 });
 
-describe("codexProvider.getUsage — fetch throws", () => {
-  it("returns null when fetch throws a network error", async () => {
+describe("codexProvider.fetchUsage — fetch throws", () => {
+  it("throws UsageFetchError when fetch itself rejects (network error)", async () => {
+    const { UsageFetchError: UFE } = await import("../src/providers/types.js");
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "test-token-throw" } }) as any);
     const fetchSpy = vi.spyOn(global, "fetch").mockRejectedValueOnce(new Error("network error"));
-    const result = await codexProvider.getUsage?.();
-    expect(result === null || typeof result === "object").toBe(true);
+    await expect(codexProvider.fetchUsage?.()).rejects.toBeInstanceOf(UFE);
     fetchSpy.mockRestore();
   });
 });
 
-describe("codexProvider.getUsage — successful fetch", () => {
+describe("codexProvider.fetchUsage — successful fetch", () => {
   it("returns usage with windows when API succeeds with primary and secondary windows", async () => {
     const fsModule = await import("node:fs");
     vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "valid-token" } }) as any);
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => null },
       json: async () => ({
         rate_limit: {
           primary_window: { used_percent: 0.5, reset_at: 1700003600, limit_window_seconds: 18000 },
           secondary_window: { used_percent: 0.2, reset_at: 1700604800, limit_window_seconds: 604800 },
         },
       }),
-    } as Response);
-    const result = await codexProvider.getUsage?.();
+    } as any);
+    const result = await codexProvider.fetchUsage?.();
     expect(result).not.toBeNull();
-    if (result) {
-      expect(Array.isArray(result.windows)).toBe(true);
-      expect(result.windows.length).toBe(2);
-      expect(result.windows[0].label).toBe("5-Hour");
-      expect(result.windows[1].label).toBe("Weekly");
-      expect(typeof result.updated_at).toBe("string");
-    }
+    expect(Array.isArray(result!.windows)).toBe(true);
+    expect(result!.windows.length).toBe(2);
+    expect(result!.windows[0].label).toBe("5-Hour");
+    expect(result!.windows[1].label).toBe("Weekly");
+    expect(typeof result!.updated_at).toBe("string");
     fetchSpy.mockRestore();
   });
 
-  it("returns cached usage without fetching when called again within TTL", async () => {
-    // Cache was populated by the previous test in this describe block.
-    const fetchSpy = vi.spyOn(global, "fetch");
-    const result = await codexProvider.getUsage?.();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result).not.toBeNull();
+  it("makes a fresh HTTP request every call (no module-level cache)", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync)
+      .mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "tok1" } }) as any)
+      .mockReturnValueOnce(JSON.stringify({ tokens: { access_token: "tok2" } }) as any);
+    const successResponse = () => ({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ({ rate_limit: {} }),
+    });
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(successResponse() as any)
+      .mockResolvedValueOnce(successResponse() as any);
+    await codexProvider.fetchUsage?.();
+    await codexProvider.fetchUsage?.();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     fetchSpy.mockRestore();
   });
 });
