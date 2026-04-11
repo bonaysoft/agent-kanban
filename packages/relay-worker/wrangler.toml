@@ -3,6 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+[observability]
+enabled = true
+
 [durable_objects]
 bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
 
