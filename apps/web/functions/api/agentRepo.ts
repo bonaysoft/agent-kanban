@@ -192,6 +192,7 @@ export async function updateAgent(
 }
 
 export async function deleteAgent(db: D1, agentId: string): Promise<boolean> {
+  await db.prepare("UPDATE tasks SET assigned_to = NULL WHERE assigned_to = ? AND status IN ('todo', 'in_progress')").bind(agentId).run();
   const result = await db.prepare("DELETE FROM agents WHERE id = ?").bind(agentId).run();
   return result.meta.changes > 0;
 }

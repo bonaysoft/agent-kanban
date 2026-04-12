@@ -136,10 +136,16 @@ export async function dispatchTasks(
   for (const t of available) {
     let runtime = agentCache.get(t.assigned_to);
     if (runtime === undefined) {
-      const agent = (await client.getAgent(t.assigned_to)) as any;
-      runtime = normalizeRuntime(agent?.runtime ?? "claude");
+      const agent = (await apiCallOptional("getAgent", () => client.getAgent(t.assigned_to))) as any;
+      if (!agent) {
+        logger.warn(`Agent ${t.assigned_to} not found, skipping task ${t.id}`);
+        agentCache.set(t.assigned_to, "");
+        continue;
+      }
+      runtime = normalizeRuntime(agent.runtime ?? "claude");
       agentCache.set(t.assigned_to, runtime);
     }
+    if (!runtime) continue;
     if (!rateLimiter.isRuntimePaused(runtime)) {
       task = t;
       break;
