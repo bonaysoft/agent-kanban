@@ -140,17 +140,26 @@ export async function createTask(
   };
 }
 
+export async function assertTaskOwner(db: D1, taskId: string, ownerId: string): Promise<void> {
+  const row = await db
+    .prepare("SELECT 1 FROM tasks t JOIN boards b ON t.board_id = b.id WHERE t.id = ? AND b.owner_id = ?")
+    .bind(taskId, ownerId)
+    .first();
+  if (!row) throw new HTTPException(404, { message: "Task not found" });
+}
+
 export async function listTasks(
   db: D1,
+  ownerId: string,
   filters: { repository_id?: string; status?: string; label?: string; board_id?: string; parent?: string; assigned_to?: string },
 ): Promise<Task[]> {
   let query = `
     SELECT t.*, r.name as repository_name, b.type as board_type FROM tasks t
     LEFT JOIN repositories r ON t.repository_id = r.id
-    JOIN boards b ON t.board_id = b.id -- INNER JOIN safe: FK + ON DELETE CASCADE prevents orphaned tasks
-    WHERE 1=1
+    JOIN boards b ON t.board_id = b.id
+    WHERE b.owner_id = ?
   `;
-  const binds: unknown[] = [];
+  const binds: unknown[] = [ownerId];
 
   if (filters.board_id) {
     query += " AND t.board_id = ?";
@@ -209,7 +218,7 @@ export async function listTasks(
   return tasks;
 }
 
-export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | null> {
+export async function getTask(db: D1, taskId: string, ownerId: string): Promise<TaskWithNotes | null> {
   const task = await db
     .prepare(`
     SELECT t.*, a.name as agent_name, a.public_key as agent_public_key, a.fingerprint as agent_fingerprint,
@@ -219,9 +228,10 @@ export async function getTask(db: D1, taskId: string): Promise<TaskWithNotes | n
     FROM tasks t
     LEFT JOIN agents a ON t.assigned_to = a.id
     LEFT JOIN repositories r ON t.repository_id = r.id
-    WHERE t.id = ?
+    JOIN boards b ON t.board_id = b.id
+    WHERE t.id = ? AND b.owner_id = ?
   `)
-    .bind(taskId)
+    .bind(taskId, ownerId)
     .first<Task & { subtask_count: number; active_session_id: string | null }>();
   if (!task) return null;
   parseTask(task);

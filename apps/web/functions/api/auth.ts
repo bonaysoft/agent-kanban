@@ -118,6 +118,13 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     });
     const sessionRes = await auth.handler(sessionReq);
     if (!sessionRes.ok) {
+      if (sessionRes.status === 429) {
+        const retryAfter = sessionRes.headers.get("Retry-After");
+        return c.json(
+          { error: { code: "RATE_LIMITED", message: "Too many requests" } },
+          { status: 429, headers: retryAfter ? { "Retry-After": retryAfter } : {} },
+        );
+      }
       const body = await sessionRes.text().catch(() => "");
       return c.json({ error: { code: "UNAUTHORIZED", message: `Invalid agent session: ${sessionRes.status} ${body}`.trim() } }, 401);
     }

@@ -49,6 +49,9 @@ export function createAuth(env: Env) {
         agentMaxLifetime: 86400,
         allowDynamicHostRegistration: true,
         modes: ["autonomous"],
+        rateLimit: {
+          "/agent/session": { window: 60, max: 600 },
+        },
         capabilities: [
           { name: "task:claim", description: "Claim an assigned task" },
           { name: "task:review", description: "Submit a task for review" },

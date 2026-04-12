@@ -28,6 +28,7 @@ import { createSSEResponse } from "./sse";
 import { getSystemStats } from "./statsRepo";
 import {
   addTaskAction,
+  assertTaskOwner,
   assignTask,
   cancelTask,
   claimTask,
@@ -455,6 +456,17 @@ api.patch("/api/agents/:agentId/sessions/:sessionId/usage", async (c) => {
 
 // ─── Tasks ───
 
+// Tenant isolation: all /api/tasks/:id routes verify the task belongs to the caller's org
+api.use("/api/tasks/:id/*", async (c, next) => {
+  await assertTaskOwner(c.env.DB, c.req.param("id"), c.get("ownerId"));
+  return next();
+});
+api.use("/api/tasks/:id", async (c, next) => {
+  if (c.req.method === "POST") return next(); // POST /api/tasks creates new tasks (no :id param match here anyway)
+  await assertTaskOwner(c.env.DB, c.req.param("id"), c.get("ownerId"));
+  return next();
+});
+
 api.post("/api/tasks", async (c) => {
   const body = await c.req.json();
   if (!body.title) throw new HTTPException(400, { message: "title is required" });
@@ -476,12 +488,12 @@ api.post("/api/tasks", async (c) => {
 
 api.get("/api/tasks", async (c) => {
   const { repository_id, status, label, board_id, parent, assigned_to } = c.req.query();
-  const tasks = await listTasks(c.env.DB, { repository_id, status, label, board_id, parent, assigned_to });
+  const tasks = await listTasks(c.env.DB, c.get("ownerId"), { repository_id, status, label, board_id, parent, assigned_to });
   return c.json(tasks);
 });
 
 api.get("/api/tasks/:id", async (c) => {
-  const task = await getTask(c.env.DB, c.req.param("id"));
+  const task = await getTask(c.env.DB, c.req.param("id"), c.get("ownerId"));
   if (!task) throw new HTTPException(404, { message: "Task not found" });
   return c.json(task);
 });

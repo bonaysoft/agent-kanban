@@ -89,7 +89,7 @@ describe("task dependencies", () => {
     const t1 = await createTask({ title: "dep-parent" });
     const t2 = await createTask({ title: "dep-child", depends_on: [t1.id] });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id) as any;
     expect(child.depends_on).toEqual([t1.id]);
   });
@@ -98,7 +98,7 @@ describe("task dependencies", () => {
     const { listTasks } = await import("../apps/web/functions/api/taskRepo");
     const t = await createTask({ title: "no-deps" });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const found = tasks.find((task: any) => task.id === t.id) as any;
     expect(found.depends_on).toEqual([]);
   });
@@ -109,7 +109,7 @@ describe("task dependencies", () => {
     const t2 = await createTask({ title: "multi-dep-b" });
     const t3 = await createTask({ title: "multi-dep-child", depends_on: [t1.id, t2.id] });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t3.id) as any;
     expect(child.depends_on).toHaveLength(2);
     expect(child.depends_on).toContain(t1.id);
@@ -121,7 +121,7 @@ describe("task dependencies", () => {
     const t1 = await createTask({ title: "blocker" });
     const t2 = await createTask({ title: "blocked-task", depends_on: [t1.id] });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id);
     expect(child!.blocked).toBe(true);
   });
@@ -132,7 +132,7 @@ describe("task dependencies", () => {
     await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(t1.id).run();
     const t2 = await createTask({ title: "unblocked-task", depends_on: [t1.id] });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t2.id);
     expect(child!.blocked).toBe(false);
   });
@@ -144,12 +144,12 @@ describe("task dependencies", () => {
     const t3 = await createTask({ title: "child-with-append", depends_on: [t1.id] });
 
     // Simulate what daemon does: read depends_on from listTasks, append new dep
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, userId, { board_id: boardId });
     const child = tasks.find((t: any) => t.id === t3.id) as any;
     await updateTask(env.DB, t3.id, { depends_on: [...child.depends_on, t2.id] });
 
     // Verify both deps exist
-    const tasksAfter = await listTasks(env.DB, { board_id: boardId });
+    const tasksAfter = await listTasks(env.DB, userId, { board_id: boardId });
     const childAfter = tasksAfter.find((t: any) => t.id === t3.id) as any;
     expect(childAfter.depends_on).toHaveLength(2);
     expect(childAfter.depends_on).toContain(t1.id);

@@ -85,7 +85,7 @@ describe("updateTask position field", () => {
     const task = await createTask(env.DB, "pos-test-user", { title: "Persist Position", board_id: boardId });
 
     await updateTask(env.DB, task.id, { position: 42 });
-    const fetched = await getTask(env.DB, task.id);
+    const fetched = await getTask(env.DB, task.id, "pos-test-user");
 
     expect(fetched).not.toBeNull();
     expect(fetched!.position).toBe(42);

@@ -94,7 +94,7 @@ describe("task JSON field parsing (labels, input)", () => {
 
   it("listTasks returns parsed labels and input", async () => {
     const { listTasks } = await import("../apps/web/functions/api/taskRepo");
-    const tasks = await listTasks(db, { board_id: boardId });
+    const tasks = await listTasks(db, ownerId, { board_id: boardId });
     const task = tasks.find((t) => t.id === taskId)!;
 
     expect(Array.isArray(task.labels)).toBe(true);
@@ -105,7 +105,7 @@ describe("task JSON field parsing (labels, input)", () => {
 
   it("getTask returns parsed labels and input", async () => {
     const { getTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await getTask(db, taskId);
+    const task = await getTask(db, taskId, ownerId);
 
     expect(task).toBeTruthy();
     expect(Array.isArray(task!.labels)).toBe(true);
@@ -128,7 +128,7 @@ describe("task JSON field parsing (labels, input)", () => {
 
   it("updated values persist through getTask", async () => {
     const { getTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await getTask(db, taskId);
+    const task = await getTask(db, taskId, ownerId);
 
     expect(task!.labels).toEqual(["feature"]);
     expect(task!.input).toEqual({ prompt: "new prompt" });

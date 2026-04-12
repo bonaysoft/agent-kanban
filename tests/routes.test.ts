@@ -31,6 +31,7 @@ describe("routes", () => {
   const userId = "routes-test-user";
   let apiKey: string;
   let userToken: string;
+  let userTokenOwnerId: string;
   let machineId: string;
   let agentId: string;
   let sessionId: string;
@@ -47,14 +48,14 @@ describe("routes", () => {
     return result.key;
   }
 
-  async function createUserSessionToken(): Promise<string> {
+  async function createUserSessionToken(): Promise<{ token: string; userId: string }> {
     const { createAuth } = await import("../apps/web/functions/api/betterAuth");
     const auth = createAuth(env);
     const result = await auth.api.signUpEmail({
       body: { name: "Routes Test User", email: "routes-session@test.com", password: "test-password-123" },
     });
     if (!result.token) throw new Error("signUpEmail did not return a session token");
-    return result.token;
+    return { token: result.token, userId: result.user.id };
   }
 
   async function signSessionJWT(): Promise<string> {
@@ -76,7 +77,9 @@ describe("routes", () => {
   beforeAll(async () => {
     await seedUser(env.DB, userId, "routes@test.com");
     apiKey = await createApiKeyForUser(userId);
-    userToken = await createUserSessionToken();
+    const userSession = await createUserSessionToken();
+    userToken = userSession.token;
+    userTokenOwnerId = userSession.userId;
 
     const machineRes = await apiRequest(
       "POST",
@@ -562,8 +565,10 @@ describe("routes", () => {
   // ─── Messages ───
 
   it("POST /api/tasks/:id/messages creates a message", async () => {
+    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Msg Task", board_id: boardId });
+    const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board", "ops");
+    const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task", board_id: userBoard.id });
     const res = await apiRequest(
       "POST",
       `/api/tasks/${task.id}/messages`,
@@ -580,15 +585,19 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/messages requires sender_type and content", async () => {
+    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Msg Task 2", board_id: boardId });
+    const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board-2", "ops");
+    const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task 2", board_id: userBoard.id });
     const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, { content: "No sender" }, userToken);
     expect(res.status).toBe(400);
   });
 
   it("POST /api/tasks/:id/messages rejects invalid sender_type", async () => {
+    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
     const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const task = await createTask(env.DB, userId, { title: "Msg Task 3", board_id: boardId });
+    const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board-3", "ops");
+    const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task 3", board_id: userBoard.id });
     const res = await apiRequest(
       "POST",
       `/api/tasks/${task.id}/messages`,

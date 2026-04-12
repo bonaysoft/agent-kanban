@@ -2,8 +2,8 @@
 
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 import { RateLimiter } from "../packages/cli/src/daemon/rateLimiter.js";
+import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 // ── Mocks required by dispatcher.ts / dispatchTasks for CLI unit tests ────────
 vi.mock("../packages/cli/src/logger.js", () => ({
@@ -33,7 +33,11 @@ vi.mock("../packages/cli/src/config.js", () => ({
   getCredentials: vi.fn().mockReturnValue({ apiUrl: "https://example.com" }),
 }));
 vi.mock("../packages/cli/src/providers/registry.js", () => ({
-  getProvider: vi.fn().mockReturnValue({ name: "claude", label: "Claude", execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }) }),
+  getProvider: vi.fn().mockReturnValue({
+    name: "claude",
+    label: "Claude",
+    execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }),
+  }),
   normalizeRuntime: vi.fn().mockImplementation((r: string) => r),
 }));
 vi.mock("../packages/cli/src/daemon/agentEnv.js", () => ({
@@ -128,7 +132,7 @@ describe("scheduled_at field — taskRepo", () => {
 
     const scheduledAt = "2099-03-20T08:00:00.000Z";
     await updateTask(env.DB, task.id, { scheduled_at: scheduledAt });
-    const fetched = await getTask(env.DB, task.id);
+    const fetched = await getTask(env.DB, task.id, "sched-test-user");
 
     expect(fetched).not.toBeNull();
     expect(fetched!.scheduled_at).toBe(scheduledAt);
@@ -158,7 +162,7 @@ describe("scheduled_at field — taskRepo", () => {
       scheduled_at: scheduledAt,
     });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, "sched-test-user", { board_id: boardId });
     const found = tasks.find((t) => t.id === task.id);
 
     expect(found).toBeDefined();
@@ -172,7 +176,7 @@ describe("scheduled_at field — taskRepo", () => {
       board_id: boardId,
     });
 
-    const tasks = await listTasks(env.DB, { board_id: boardId });
+    const tasks = await listTasks(env.DB, "sched-test-user", { board_id: boardId });
     const found = tasks.find((t) => t.id === task.id);
 
     expect(found).toBeDefined();
@@ -296,10 +300,7 @@ describe("dispatchTasks — scheduled_at filter", () => {
     const spawnSpy = vi.fn().mockResolvedValue(undefined);
     const pastDate = new Date(Date.now() - 1000).toISOString();
     const futureDate = new Date(Date.now() + 3_600_000).toISOString();
-    const tasks = [
-      makeTask({ id: "task-ready", scheduled_at: pastDate }),
-      makeTask({ id: "task-deferred", scheduled_at: futureDate }),
-    ];
+    const tasks = [makeTask({ id: "task-ready", scheduled_at: pastDate }), makeTask({ id: "task-deferred", scheduled_at: futureDate })];
     const client = makeClient(tasks);
     const pool = makePool(spawnSpy);
     const rl = makeRateLimiter();
