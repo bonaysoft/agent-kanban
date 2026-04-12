@@ -44,7 +44,7 @@ Before creating the task, understand what's involved:
 - Read CONTRIBUTING.md in the target repo to understand contribution requirements
 - Read relevant source files to understand current implementation
 - Identify which files need to change
-- Check for existing related tasks: `ak get task`
+- Check for existing related tasks: `ak get task --board <board-id>`
 
 ### Step 3: Confirm with User
 

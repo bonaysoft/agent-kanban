@@ -38,7 +38,7 @@ export function registerGetCommand(program: Command) {
     .command("task [id]")
     .description("Get a task or list tasks")
     .option("-o, --output <format>", "Output format (json, yaml, wide, text)")
-    .option("--board <id>", "Filter by board ID")
+    .option("--board <id>", "Board ID (required when listing)")
     .option("--status <status>", "Filter by status")
     .option("--label <label>", "Filter by label")
     .option("--repo <id>", "Filter by repository ID")
@@ -49,8 +49,11 @@ export function registerGetCommand(program: Command) {
         const task = await client.getTask(id);
         output(task, fmt, formatTask, { kind: "task" });
       } else {
-        const params: Record<string, string> = {};
-        if (opts.board) params.board_id = opts.board;
+        if (!opts.board) {
+          console.error("Error: --board is required when listing tasks\nUsage: ak get task --board <id>");
+          process.exit(1);
+        }
+        const params: Record<string, string> = { board_id: opts.board };
         if (opts.status) params.status = opts.status;
         if (opts.label) params.label = opts.label;
         if (opts.repo) params.repository_id = opts.repo;

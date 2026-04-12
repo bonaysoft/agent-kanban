@@ -27,8 +27,8 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 
 | Command | Description |
 |---------|-------------|
-| `ak get task [id]` | View task details, or list tasks with filters |
-| `ak get task --board <id> --status <s>` | List tasks filtered by board, status, label, repo |
+| `ak get task <id>` | View a single task by ID |
+| `ak get task --board <id>` | List tasks for a board (`--board` required). Optional filters: `--status`, `--label`, `--repo` |
 | `ak get note --task <id>` | View progress logs for a task |
 | `ak create note --task <id> "message"` | Add a progress log entry |
 | `ak apply -f <file>` | Apply a YAML/JSON resource spec (preferred for tasks) |
