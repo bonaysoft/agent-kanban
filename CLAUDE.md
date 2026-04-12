@@ -1,3 +1,4 @@
+# reject-resume regression test
 # Agent Kanban
 
 Agent-first kanban board. React SPA + Hono API on Cloudflare Pages + D1.
