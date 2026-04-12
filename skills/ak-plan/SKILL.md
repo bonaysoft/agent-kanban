@@ -71,10 +71,11 @@ ak get repo                    # registered repos
 git remote -v                  # repo URL (use this, never guess)
 ```
 
-Read CLAUDE.md and recent git history to understand:
+Read CLAUDE.md, CONTRIBUTING.md, and recent git history to understand:
 - What was shipped recently
 - What patterns/conventions exist
 - What the project architecture looks like
+- Contribution requirements (branch strategy, commit format, code style, test expectations)
 
 ## Phase 2: Analyze Gaps
 
@@ -85,7 +86,14 @@ Use Explore agents to thoroughly scan the codebase for gaps related to the goals
 - Frontend gaps (if applicable, respect UI Principles in CLAUDE.md)
 - Test coverage gaps
 
-Present the analysis to the user and confirm scope before creating tasks.
+Use `AskUserQuestion` to interactively confirm the plan with the user. For each ambiguous point, present options:
+
+- **Scope** — which gaps to address in this version vs defer to later
+- **Priority/ordering** — which tasks are critical path vs nice-to-have
+- **Approach** — when multiple implementation strategies exist, present them with trade-off descriptions
+- **Task granularity** — whether to split a large piece into subtasks or keep it as one
+
+Keep iterating until all uncertainties are resolved. Only proceed to create tasks after the user confirms the final scope and approach.
 
 ## Phase 3: Create Board & Tasks
 
@@ -133,6 +141,7 @@ POST /api/items — create item
 
 ## Patterns
 - Follow existing project conventions (read CLAUDE.md)
+
 ```
 
 Vague descriptions produce vague code. Be specific.
@@ -168,10 +177,12 @@ ak wait board <board-id> --until all-done --timeout 0
 Run `ak wait board --help` for the full flag list.
 
 ### When a task reaches `in_review` with a PR:
-1. Wait for CI green: `ak wait pr <pr-number> --timeout 10m` (exit 0 pass, 1 fail, 124 timeout)
-2. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
-3. The daemon's PR Monitor will automatically complete the task when it detects the PR was merged — do NOT manually `ak task complete`.
-4. If CI fails → check the failure, reject if needed: `ak task reject <task-id>`
+1. Code review — read the diff, check implementation matches spec, code quality, tests
+2. Follow the target repo's CONTRIBUTING.md review process — this may include visiting a preview/staging environment for functional verification, running specific checks, or other project-specific procedures
+3. Wait for CI green: `ak wait pr <pr-number> --timeout 10m` (exit 0 pass, 1 fail, 124 timeout)
+3. If CI passes → merge: `gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch`
+4. The daemon's PR Monitor will automatically complete the task when it detects the PR was merged — do NOT manually `ak task complete`.
+5. If CI fails → check the failure, reject if needed: `ak task reject <task-id>`
 
 ### Handle merge conflicts:
 If a PR can't merge cleanly (conflicts with previously merged PRs):
@@ -185,6 +196,7 @@ When all tasks are done, report the final summary to the user.
 
 ## Rules
 
+- **Follow CONTRIBUTING.md** — read the target repo's CONTRIBUTING.md before creating tasks; check PR compliance during review
 - **Prefer text output** — only use `-o json | jq` when extracting fields into variables (e.g. task IDs for `--depends-on`). For display, use default text output.
 - **Always get repo URL from `git remote -v`** — never guess
 - **Discuss the plan with the user before creating tasks** — don't just start creating
