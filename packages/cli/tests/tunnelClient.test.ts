@@ -499,3 +499,98 @@ describe("TunnelClient — disconnect() called while socket is connecting", () =
     freshClient.disconnect();
   });
 });
+
+// ── Stale-socket close guard ──────────────────────────────────────────────────
+//
+// These tests cover the guard added to the close handler:
+//   if (!this.closed && this.ws !== ws) return;
+// and the subsequent `this.ws = null` on legitimate close.
+
+describe("TunnelClient — stale socket close guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("ignores a close event from a superseded socket (does not null ws or trigger reconnect)", async () => {
+    // Connect and capture the first socket
+    const client = await makeConnected();
+    const firstWs = lastCreatedWs!;
+
+    // Simulate reconnect: disconnect first then reconnect to get a new socket
+    // We do this by triggering the reconnect path: close the socket server-side
+    // which schedules a reconnect, then advance timers to create the second ws.
+    firstWs._close();
+    vi.advanceTimersByTime(1100); // past 1s backoff
+    const secondWs = lastCreatedWs!;
+    expect(secondWs).not.toBe(firstWs);
+    secondWs._open(); // second socket is now connected
+
+    // isConnected should reflect the new socket
+    expect(client.isConnected).toBe(true);
+
+    // Now fire a delayed close from the OLD (superseded) firstWs.
+    // The guard `if (!this.closed && this.ws !== ws) return` should discard it.
+    firstWs._close();
+
+    // isConnected must still be true — the new ws should not have been nulled.
+    expect(client.isConnected).toBe(true);
+
+    // No spurious reconnect should be scheduled either — timer must not fire
+    // and create a third WebSocket.
+    vi.advanceTimersByTime(5000);
+    expect(lastCreatedWs).toBe(secondWs);
+
+    client.disconnect();
+  });
+
+  it("sets isConnected to false after the current socket closes legitimately", async () => {
+    const client = await makeConnected();
+    const ws = lastCreatedWs!;
+
+    // Simulate a server-side close of the current (non-superseded) socket.
+    ws._close();
+
+    // The close handler should set this.ws = null, making isConnected false.
+    expect(client.isConnected).toBe(false);
+
+    client.disconnect();
+  });
+
+  it("still schedules a reconnect after a legitimate (non-superseded) close", async () => {
+    const client = await makeConnected();
+    const firstWs = lastCreatedWs!;
+
+    firstWs._close();
+    expect(client.isConnected).toBe(false);
+
+    // Advance past the 1s backoff — a new socket should be created.
+    vi.advanceTimersByTime(1100);
+    expect(lastCreatedWs).not.toBe(firstWs);
+
+    client.disconnect();
+  });
+
+  it("does not reconnect after superseded socket close even when disconnect has not been called", async () => {
+    const client = await makeConnected();
+    const firstWs = lastCreatedWs!;
+
+    // Trigger reconnect to get a live second socket
+    firstWs._close();
+    vi.advanceTimersByTime(1100);
+    const secondWs = lastCreatedWs!;
+    secondWs._open();
+
+    // Fire close from the superseded first socket
+    firstWs._close();
+
+    // Advance time well past any potential backoff — no third socket expected
+    vi.advanceTimersByTime(35_000);
+    expect(lastCreatedWs).toBe(secondWs);
+
+    client.disconnect();
+  });
+});

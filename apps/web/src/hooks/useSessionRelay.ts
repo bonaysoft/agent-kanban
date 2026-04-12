@@ -161,6 +161,13 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
         }
         case "daemon:connected":
           setDaemonConnected(true);
+          setAgentStatus("idle");
+          // Re-request history if it was never loaded (e.g. the initial
+          // request was forwarded to a stale daemon socket that never replied).
+          if (!historyLoaded.current && ws.readyState === WebSocket.OPEN) {
+            historyRetries.current = 0;
+            requestHistory(ws);
+          }
           break;
         case "daemon:disconnected":
           setDaemonConnected(false);

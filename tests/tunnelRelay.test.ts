@@ -16,6 +16,7 @@ class MockWebSocket {
   sentMessages: string[] = [];
   closedWith: { code?: number; reason?: string } | null = null;
   tags: string[] = [];
+  private _attachment: unknown = null;
 
   send(data: string): void {
     this.sentMessages.push(data);
@@ -29,6 +30,14 @@ class MockWebSocket {
   addEventListener(type: string, fn: (e: unknown) => void): void {
     if (!this._listeners[type]) this._listeners[type] = [];
     this._listeners[type].push(fn);
+  }
+
+  serializeAttachment(data: unknown): void {
+    this._attachment = data;
+  }
+
+  deserializeAttachment(): unknown {
+    return this._attachment;
   }
 
   // Test helper: reset sent messages
@@ -218,18 +227,15 @@ describe("TunnelRelay — connectDaemon()", () => {
     expect(b2Msgs.some((m: any) => m.type === "daemon:connected")).toBe(true);
   });
 
-  it("does not close the existing daemon socket when a new daemon connects (avoids close-frame misrouting)", async () => {
+  it("closes the existing daemon socket when a new daemon connects", async () => {
     const { relay, state } = makeRelay();
     // First daemon connects
     await relay.fetch(makeRequest("daemon"));
     const firstDaemon = state.getWebSockets("daemon")[0];
     // Second daemon connects
     await relay.fetch(makeRequest("daemon"));
-    // Stale socket is left open — closing it under Hibernation API can
-    // misroute the close frame to the new client connection.
-    expect(firstDaemon.closedWith).toBeNull();
-    // Both sockets are tagged "daemon"; getDaemonWs returns the latest
-    expect(state.getWebSockets("daemon")).toHaveLength(2);
+    // Stale socket is closed with code 4000 (superseded)
+    expect(firstDaemon.closedWith).toEqual({ code: 4000, reason: "superseded" });
   });
 });
 
@@ -433,5 +439,126 @@ describe("TunnelRelay — webSocketError()", () => {
 
     const msgs = browser.sentMessages.map((m) => JSON.parse(m));
     expect(msgs.some((m: any) => m.type === "daemon:disconnected")).toBe(true);
+  });
+});
+
+// ── getDaemonWs() — picks latest connectedAt ──────────────────────────────────
+//
+// When multiple daemon sockets are present (e.g. after hibernation wake-up),
+// getDaemonWs() must select the one with the highest connectedAt attachment,
+// NOT just the last element in the array.
+
+describe("TunnelRelay — getDaemonWs() picks socket with latest connectedAt", () => {
+  it("routes daemon message via the socket with the highest connectedAt when two daemon sockets are present", async () => {
+    const { relay, state } = makeRelay();
+
+    // First daemon connect — gets a connectedAt stamp
+    const firstDaemon = await connectDaemon(relay, state);
+
+    // Manually attach an older timestamp to simulate the first socket being stale.
+    // connectDaemon() calls serializeAttachment({ connectedAt: Date.now() }) on pair[1].
+    // We overwrite firstDaemon's attachment with an older timestamp.
+    firstDaemon.serializeAttachment({ connectedAt: 1000 });
+
+    // Second daemon connect — the relay closes the first and accepts the second
+    // with a fresh (higher) connectedAt.
+    const secondDaemon = await connectDaemon(relay, state);
+    // Give the second a clearly higher timestamp.
+    secondDaemon.serializeAttachment({ connectedAt: 9_000_000_000_000 });
+
+    const browser = await connectBrowser(relay, state, "sess-X");
+    browser.clearMessages();
+    firstDaemon.clearMessages();
+    secondDaemon.clearMessages();
+
+    // Send a message FROM the second (newest) daemon — should be handled as daemon message.
+    relay.webSocketMessage(secondDaemon as unknown as WebSocket, JSON.stringify({ type: "agent:status", sessionId: "sess-X", status: "working" }));
+
+    // The browser bound to sess-X must receive the forwarded message.
+    expect(browser.sentMessages).toHaveLength(1);
+    const parsed = JSON.parse(browser.sentMessages[0]);
+    expect(parsed.type).toBe("agent:status");
+  });
+
+  it("selects the socket with the highest connectedAt even when it is not last in the array", async () => {
+    const { relay, state } = makeRelay();
+
+    // Connect first daemon and give it the HIGHER timestamp manually.
+    const firstDaemon = await connectDaemon(relay, state);
+    firstDaemon.serializeAttachment({ connectedAt: 9_000_000_000_000 });
+
+    // Connect second daemon and give it a LOWER timestamp to simulate an
+    // out-of-order scenario (e.g. after DO hibernation reorders socket list).
+    const secondDaemon = await connectDaemon(relay, state);
+    secondDaemon.serializeAttachment({ connectedAt: 1000 });
+
+    const browser = await connectBrowser(relay, state, "sess-Y");
+    browser.clearMessages();
+
+    // Sending from firstDaemon (higher connectedAt) must be routed as the daemon.
+    relay.webSocketMessage(firstDaemon as unknown as WebSocket, JSON.stringify({ type: "agent:status", sessionId: "sess-Y", status: "done" }));
+
+    expect(browser.sentMessages).toHaveLength(1);
+    const parsed = JSON.parse(browser.sentMessages[0]);
+    expect(parsed.status).toBe("done");
+  });
+});
+
+// ── connectDaemon() — stale socket close with code 4000 ──────────────────────
+//
+// When a new daemon connects, all pre-existing daemon sockets must be closed
+// with WebSocket close code 4000 and reason "superseded".
+
+describe("TunnelRelay — connectDaemon() closes stale sockets with code 4000", () => {
+  it("closes the first daemon socket with code 4000 when a second daemon connects", async () => {
+    const { relay, state } = makeRelay();
+
+    const firstDaemon = await connectDaemon(relay, state);
+    await connectDaemon(relay, state);
+
+    expect(firstDaemon.closedWith).not.toBeNull();
+    expect(firstDaemon.closedWith!.code).toBe(4000);
+  });
+
+  it("closes the first daemon socket with reason 'superseded' when a second daemon connects", async () => {
+    const { relay, state } = makeRelay();
+
+    const firstDaemon = await connectDaemon(relay, state);
+    await connectDaemon(relay, state);
+
+    expect(firstDaemon.closedWith!.reason).toBe("superseded");
+  });
+
+  it("closes all stale daemon sockets when a third daemon connects", async () => {
+    const { relay, state } = makeRelay();
+
+    const first = await connectDaemon(relay, state);
+    const second = await connectDaemon(relay, state);
+    await connectDaemon(relay, state);
+
+    expect(first.closedWith?.code).toBe(4000);
+    expect(second.closedWith?.code).toBe(4000);
+  });
+
+  it("does not close the newly accepted daemon socket itself", async () => {
+    const { relay, state } = makeRelay();
+
+    await connectDaemon(relay, state);
+    const newest = await connectDaemon(relay, state);
+
+    // The most recently accepted socket must remain open (readyState 1 = OPEN).
+    expect(newest.closedWith).toBeNull();
+  });
+
+  it("stamps connectedAt attachment on the newly accepted daemon socket", async () => {
+    const { relay, state } = makeRelay();
+
+    const daemonWs = await connectDaemon(relay, state);
+
+    // connectDaemon calls serializeAttachment({ connectedAt: Date.now() })
+    const att = daemonWs.deserializeAttachment() as { connectedAt: number } | null;
+    expect(att).not.toBeNull();
+    expect(typeof att!.connectedAt).toBe("number");
+    expect(att!.connectedAt).toBeGreaterThan(0);
   });
 });

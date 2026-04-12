@@ -111,6 +111,14 @@ export class TunnelClient {
       });
 
       ws.addEventListener("close", (ev) => {
+        // Ignore close events from superseded sockets. When the daemon
+        // reconnects, the old socket's delayed close must not stop the
+        // new connection's keepalive or trigger another reconnect cycle.
+        // But if disconnect() was called (this.closed), always process
+        // cleanup so the connect() promise settles.
+        if (!this.closed && this.ws !== ws) return;
+
+        this.ws = null;
         this.clearConnectTimeout();
         this.stopKeepalive();
         if (this.closed) {

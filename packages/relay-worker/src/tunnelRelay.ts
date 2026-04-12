@@ -16,9 +16,23 @@ export class TunnelRelay implements DurableObject {
 
   private getDaemonWs(): WebSocket | null {
     const sockets = this.state.getWebSockets("daemon");
-    // Take the last socket — most recently accepted. Stale sockets from prior
-    // connections may linger in the list under Hibernation API.
-    return sockets.length > 0 ? sockets[sockets.length - 1] : null;
+    if (sockets.length === 0) return null;
+    if (sockets.length === 1) return sockets[0];
+
+    // Multiple daemon sockets can linger after reconnects + hibernation.
+    // `getWebSockets` order is NOT guaranteed after DO wake-up, so pick
+    // the socket with the latest `connectedAt` attachment.
+    let best: WebSocket | null = null;
+    let bestTime = -1;
+    for (const ws of sockets) {
+      const att = ws.deserializeAttachment() as { connectedAt: number } | null;
+      const t = att?.connectedAt ?? 0;
+      if (t > bestTime) {
+        bestTime = t;
+        best = ws;
+      }
+    }
+    return best;
   }
 
   private getBrowserSockets(sessionId?: string): WebSocket[] {
@@ -53,13 +67,25 @@ export class TunnelRelay implements DurableObject {
   }
 
   private connectDaemon(): Response {
-    // Don't close stale daemon sockets with ws.close() — under Hibernation API,
-    // the close frame can be routed to the new client connection, causing an
-    // immediate disconnect loop. Instead, just accept the new socket; stale
-    // sockets will be garbage-collected by the runtime.
     const pair = new WebSocketPair();
+    // Accept and stamp the new socket BEFORE closing stale ones. This
+    // guarantees getDaemonWs() returns the new socket if any stale close
+    // event fires synchronously, preventing a spurious daemon:disconnected.
     this.state.acceptWebSocket(pair[1], ["daemon"]);
+    pair[1].serializeAttachment({ connectedAt: Date.now() });
     this.broadcastToBrowsers({ type: "daemon:connected" });
+
+    // Close stale daemon sockets from prior connections. Safe because the
+    // daemon's TunnelClient ignores close events from superseded sockets,
+    // and getDaemonWs() will always prefer the new socket (highest connectedAt).
+    for (const ws of this.state.getWebSockets("daemon")) {
+      if (ws === pair[1]) continue;
+      try {
+        ws.close(4000, "superseded");
+      } catch {
+        /* already closed */
+      }
+    }
 
     return new Response(null, { status: 101, webSocket: pair[0] });
   }

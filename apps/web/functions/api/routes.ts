@@ -651,6 +651,7 @@ api.get("/api/tunnel/ws", async (c) => {
   const url = new URL(c.req.url);
   url.hostname = "relay";
   url.pathname = "/ws";
+  url.searchParams.set("ownerId", c.get("ownerId"));
   return c.env.RELAY.fetch(new Request(url.toString(), c.req.raw));
 });
 

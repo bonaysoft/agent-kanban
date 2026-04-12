@@ -374,11 +374,7 @@ describe("useSessionRelay — status transitions", () => {
 
     expect(result.current.agentStatus).toBe("working");
 
-    // Send other message types
-    act(() => {
-      getMockWebSocket().simulateMessage({ type: "daemon:connected" });
-    });
-
+    // agent:event does not change status
     act(() => {
       getMockWebSocket().simulateMessage({
         type: "agent:event",
@@ -386,7 +382,14 @@ describe("useSessionRelay — status transitions", () => {
       });
     });
 
-    // Status should remain unchanged
+    // Status should remain unchanged after non-status messages
     expect(result.current.agentStatus).toBe("working");
+
+    // daemon:connected resets status to idle (daemon may have restarted)
+    act(() => {
+      getMockWebSocket().simulateMessage({ type: "daemon:connected" });
+    });
+
+    expect(result.current.agentStatus).toBe("idle");
   });
 });
