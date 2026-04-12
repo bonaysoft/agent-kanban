@@ -73,7 +73,8 @@ export function registerGetCommand(program: Command) {
         const agent = await client.getAgent(id);
         output(agent, fmt, formatAgent, { kind: "agent" });
       } else {
-        const agents = await client.listAgents();
+        const all = (await client.listAgents()) as any[];
+        const agents = all.filter((a: any) => a.kind !== "leader");
         output(agents, fmt, formatAgentList, { kind: "agent" });
       }
     });

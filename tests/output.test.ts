@@ -369,16 +369,17 @@ describe("formatAgentList", () => {
     expect(result).toContain("[working]");
   });
 
-  it("shows 'never active' when last_active_at is null", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: null }];
+  it("includes role when present", () => {
+    const agents = [{ id: "a1", name: "Claude", status: "idle", role: "backend-dev", runtime: "claude" }];
     const result = formatAgentList(agents);
-    expect(result).toContain("never active");
+    expect(result).toContain("(backend-dev)");
   });
 
-  it("includes last_active_at when present", () => {
-    const agents = [{ id: "a1", name: "Claude", status: "idle", task_count: 0, last_active_at: "2024-01-01T00:00:00Z" }];
+  it("includes runtime and bio when present", () => {
+    const agents = [{ id: "a1", name: "Claude", status: "idle", runtime: "claude", bio: "Builds APIs" }];
     const result = formatAgentList(agents);
-    expect(result).toContain("2024-01-01T00:00:00Z");
+    expect(result).toContain("claude");
+    expect(result).toContain("Builds APIs");
   });
 });
 

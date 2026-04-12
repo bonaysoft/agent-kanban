@@ -1,0 +1,162 @@
+// @vitest-environment node
+/**
+ * Tests for `get agent` command handler in commands/get.ts.
+ *
+ * Covers the leader-filtering added to list mode and the unchanged single-agent path:
+ *   - `ak get agent` (no id) → calls listAgents, filters out kind === "leader"
+ *   - `ak get agent <id>`    → calls getAgent directly, no filtering
+ */
+
+import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// ── Mock createClient before importing the command ────────────────────────────
+
+const mockGetAgent = vi.fn();
+const mockListAgents = vi.fn();
+const mockClient = { getAgent: mockGetAgent, listAgents: mockListAgents };
+const mockCreateClient = vi.fn(() => Promise.resolve(mockClient));
+
+vi.mock("../src/agent/leader.js", () => ({
+  createClient: mockCreateClient,
+}));
+
+vi.mock("../src/output.js", () => ({
+  getOutputFormat: vi.fn(() => "text"),
+  output: vi.fn(),
+  formatTask: vi.fn(),
+  formatTaskList: vi.fn(),
+  formatTaskListWide: vi.fn(),
+  formatBoard: vi.fn(),
+  formatBoardList: vi.fn(),
+  formatAgent: vi.fn(),
+  formatAgentList: vi.fn(),
+  formatRepository: vi.fn(),
+  formatRepositoryList: vi.fn(),
+  formatTaskNotes: vi.fn(),
+}));
+
+const { registerGetCommand } = await import("../src/commands/get.js");
+const outputModule = await import("../src/output.js");
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeProgram(): Command {
+  const program = new Command();
+  program.exitOverride();
+  registerGetCommand(program);
+  return program;
+}
+
+// ── Cleanup ───────────────────────────────────────────────────────────────────
+
+let exitSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Restore getOutputFormat default after clearAllMocks wipes it
+  vi.mocked(outputModule.getOutputFormat).mockReturnValue("text");
+  exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit called");
+  }) as any);
+});
+
+afterEach(() => {
+  exitSpy.mockRestore();
+});
+
+// ── Tests: list mode ──────────────────────────────────────────────────────────
+
+describe("get agent — list mode leader filtering", () => {
+  it("calls listAgents once", async () => {
+    mockListAgents.mockResolvedValue([]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    expect(mockListAgents).toHaveBeenCalledOnce();
+  });
+
+  it("filters out the agent where kind === 'leader'", async () => {
+    mockListAgents.mockResolvedValue([
+      { id: "a1", kind: "worker", name: "Alice" },
+      { id: "a2", kind: "leader", name: "LeaderBot" },
+      { id: "a3", kind: "worker", name: "Bob" },
+    ]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    // output(agents, fmt, formatAgentList, ...) — first arg is the agents array
+    const passed = vi.mocked(outputModule.output).mock.calls[0][0] as any[];
+    expect(passed.find((a: any) => a.kind === "leader")).toBeUndefined();
+  });
+
+  it("keeps all non-leader agents and preserves their order", async () => {
+    mockListAgents.mockResolvedValue([
+      { id: "a1", kind: "worker", name: "Alice" },
+      { id: "a2", kind: "leader", name: "LeaderBot" },
+      { id: "a3", kind: "worker", name: "Bob" },
+    ]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    const passed = vi.mocked(outputModule.output).mock.calls[0][0] as any[];
+    expect(passed).toHaveLength(2);
+    expect(passed.map((a: any) => a.id)).toEqual(["a1", "a3"]);
+  });
+
+  it("passes an empty array when all agents are leaders", async () => {
+    mockListAgents.mockResolvedValue([
+      { id: "l1", kind: "leader", name: "Alpha" },
+      { id: "l2", kind: "leader", name: "Beta" },
+    ]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    const passed = vi.mocked(outputModule.output).mock.calls[0][0] as any[];
+    expect(passed).toHaveLength(0);
+  });
+
+  it("passes all agents when none are leaders", async () => {
+    mockListAgents.mockResolvedValue([
+      { id: "w1", kind: "worker", name: "Worker1" },
+      { id: "w2", kind: "worker", name: "Worker2" },
+    ]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    const passed = vi.mocked(outputModule.output).mock.calls[0][0] as any[];
+    expect(passed).toHaveLength(2);
+  });
+
+  it("does not call getAgent in list mode", async () => {
+    mockListAgents.mockResolvedValue([]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    expect(mockGetAgent).not.toHaveBeenCalled();
+  });
+
+  it("does not call process.exit in list mode", async () => {
+    mockListAgents.mockResolvedValue([]);
+    await makeProgram().parseAsync(["get", "agent"], { from: "user" });
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── Tests: single-agent fetch ─────────────────────────────────────────────────
+
+describe("get agent — single agent fetch by ID", () => {
+  it("calls getAgent with the provided id", async () => {
+    mockGetAgent.mockResolvedValue({ id: "agent-99", name: "Solo", kind: "worker" });
+    await makeProgram().parseAsync(["get", "agent", "agent-99"], { from: "user" });
+    expect(mockGetAgent).toHaveBeenCalledWith("agent-99");
+  });
+
+  it("does not call listAgents when an id is provided", async () => {
+    mockGetAgent.mockResolvedValue({ id: "agent-99", name: "Solo", kind: "worker" });
+    await makeProgram().parseAsync(["get", "agent", "agent-99"], { from: "user" });
+    expect(mockListAgents).not.toHaveBeenCalled();
+  });
+
+  it("does not call process.exit when an id is provided", async () => {
+    mockGetAgent.mockResolvedValue({ id: "agent-99", name: "Solo", kind: "worker" });
+    await makeProgram().parseAsync(["get", "agent", "agent-99"], { from: "user" });
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it("works when the fetched agent has kind === 'leader' (no filtering on single fetch)", async () => {
+    const leaderAgent = { id: "leader-1", name: "TopDog", kind: "leader" };
+    mockGetAgent.mockResolvedValue(leaderAgent);
+    await makeProgram().parseAsync(["get", "agent", "leader-1"], { from: "user" });
+    expect(mockGetAgent).toHaveBeenCalledWith("leader-1");
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+});

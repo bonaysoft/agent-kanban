@@ -84,9 +84,10 @@ export function formatAgentList(agents: any[]): string {
 
   const lines = agents.map((a) => {
     const status = `[${a.status}]`.padEnd(10);
-    const tasks = `${a.task_count} tasks`;
-    const lastActive = a.last_active_at ? `last: ${a.last_active_at}` : "never active";
-    return `  ${a.id}  ${status} ${a.name} — ${tasks}, ${lastActive}`;
+    const role = a.role ? `(${a.role})` : "";
+    const runtime = a.runtime ?? "";
+    const bio = a.bio ? ` — ${a.bio}` : "";
+    return `  ${a.id}  ${status} ${a.name} ${role} ${runtime}${bio}`.trimEnd();
   });
 
   return lines.join("\n");
