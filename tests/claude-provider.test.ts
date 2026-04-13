@@ -1100,6 +1100,158 @@ describe("mapSDKMessageStream — stream_event mapStreamBlock branches", () => {
 });
 
 // ---------------------------------------------------------------------------
+// mapSDKMessageStream — rateLimitSeen deduplication
+// ---------------------------------------------------------------------------
+
+describe("mapSDKMessageStream — rateLimitSeen deduplication", () => {
+  const rateLimitEventMsg = {
+    type: "rate_limit_event",
+    rate_limit_info: { status: "rejected", resetsAt: 1700000000, rateLimitType: "five_hour" },
+    uuid: "u1",
+    session_id: "s1",
+  } as unknown as SDKMessage;
+
+  const assistantRateLimitMsg = {
+    type: "assistant",
+    error: "rate_limit",
+    message: { content: [] },
+    parent_tool_use_id: null,
+    uuid: "u2",
+    session_id: "s1",
+  } as unknown as SDKMessage;
+
+  it("yields only one turn.rate_limit when rate_limit_event comes before assistant rate_limit error", () => {
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    const firstEvents = [...mapSDKMessageStream(rateLimitEventMsg, turnOpen, rateLimitSeen)];
+    const secondEvents = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+
+    expect(firstEvents).toHaveLength(1);
+    expect(firstEvents[0].type).toBe("turn.rate_limit");
+    expect(secondEvents).toHaveLength(0);
+  });
+
+  it("uses the rate_limit_event resetAt (accurate API time), not the 60-min fallback", () => {
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    const [rateLimitEvent] = [...mapSDKMessageStream(rateLimitEventMsg, turnOpen, rateLimitSeen)];
+    [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+
+    expect(rateLimitEvent.type).toBe("turn.rate_limit");
+    if (rateLimitEvent.type === "turn.rate_limit") {
+      // resetAt must come from the rate_limit_event epoch (1700000000), not from Date.now() + 1h
+      expect(new Date(rateLimitEvent.resetAt!).getTime()).toBe(1700000000 * 1000);
+    }
+  });
+
+  it("still yields turn.rate_limit from assistant error when no prior rate_limit_event", () => {
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    const events = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("turn.rate_limit");
+  });
+
+  it("uses 60-min fallback resetAt when assistant error fires alone (no prior rate_limit_event)", () => {
+    const before = Date.now();
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    const [event] = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+    const after = Date.now();
+
+    expect(event.type).toBe("turn.rate_limit");
+    if (event.type === "turn.rate_limit") {
+      const resetMs = new Date(event.resetAt).getTime();
+      expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
+      expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
+    }
+  });
+
+  it("yields turn.rate_limit from assistant error when rateLimitSeen is omitted", () => {
+    const turnOpen = { value: false };
+
+    // No rateLimitSeen passed — third argument omitted
+    const events = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen)];
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("turn.rate_limit");
+  });
+
+  it("sets rateLimitSeen.value to true after processing a rate_limit_event", () => {
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    [...mapSDKMessageStream(rateLimitEventMsg, turnOpen, rateLimitSeen)];
+
+    expect(rateLimitSeen.value).toBe(true);
+  });
+
+  it("does not set rateLimitSeen.value when rate_limit_event has allowed_warning status (no event yielded)", () => {
+    const warningMsg = {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour", utilization: 0.9 },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    [...mapSDKMessageStream(warningMsg, turnOpen, rateLimitSeen)];
+
+    // mapSDKMessage returns null for allowed_warning, so rateLimitSeen should remain false
+    expect(rateLimitSeen.value).toBe(false);
+  });
+
+  it("does not mutate rateLimitSeen when it is not provided", () => {
+    const turnOpen = { value: false };
+
+    // Must not throw when rateLimitSeen is undefined
+    expect(() => [...mapSDKMessageStream(rateLimitEventMsg, turnOpen)]).not.toThrow();
+  });
+
+  it("skips duplicate after rateLimitSeen.value is pre-set to true externally", () => {
+    const turnOpen = { value: false };
+    // Simulate that rateLimitSeen was already set by a prior iteration
+    const rateLimitSeen = { value: true };
+
+    const events = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+
+    expect(events).toHaveLength(0);
+  });
+
+  it("turn reset: result message resets the flag so the next turn's assistant rate_limit is not suppressed", () => {
+    const resultMsg = {
+      type: "result",
+      subtype: "success",
+      result: "done",
+      total_cost_usd: 0,
+      usage: {},
+    } as unknown as SDKMessage;
+
+    const turnOpen = { value: false };
+    const rateLimitSeen = { value: false };
+
+    // Turn 1: rate_limit_event sets the flag, then result resets it
+    [...mapSDKMessageStream(rateLimitEventMsg, turnOpen, rateLimitSeen)];
+    expect(rateLimitSeen.value).toBe(true);
+
+    [...mapSDKMessageStream(resultMsg, turnOpen, rateLimitSeen)];
+    expect(rateLimitSeen.value).toBe(false);
+
+    // Turn 2: assistant rate_limit error must NOT be suppressed since the flag was reset
+    const secondTurnEvents = [...mapSDKMessageStream(assistantRateLimitMsg, turnOpen, rateLimitSeen)];
+    expect(secondTurnEvents).toHaveLength(1);
+    expect(secondTurnEvents[0].type).toBe("turn.rate_limit");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // claudeProvider identity
 // ---------------------------------------------------------------------------
 

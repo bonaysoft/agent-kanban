@@ -211,7 +211,7 @@ function mapStreamBlock(block: { type: string; [k: string]: unknown }, parentId:
  * One turn.start per query() call. Blocks stream in between.
  * turn.end emitted when SDK yields `result`.
  */
-export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean }): Generator<AgentEvent> {
+export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean }, rateLimitSeen?: { value: boolean }): Generator<AgentEvent> {
   if (msg.type === "stream_event") {
     const partial = msg as SDKPartialAssistantMessage;
     const evt = partial.event;
@@ -235,6 +235,12 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
     if (assistantMsg.error) {
       if (turnOpen.value) {
         turnOpen.value = false;
+      }
+      // Skip the fallback rate_limit event if the SDK already sent a
+      // rate_limit_event with real reset times — avoids a duplicate that
+      // overwrites the accurate window with a 60-min fallback.
+      if (assistantMsg.error === "rate_limit" && rateLimitSeen?.value) {
+        return;
       }
       const event = mapSDKMessage(msg);
       if (event) yield event;
@@ -267,8 +273,9 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
   }
 
   if (msg.type === "result") {
-    // Turn complete — emit turn.end with cost
+    // Turn complete — reset per-turn state and emit turn.end
     turnOpen.value = false;
+    if (rateLimitSeen !== undefined) rateLimitSeen.value = false;
     const text = (msg as any).subtype === "success" ? (msg as any).result : undefined;
     yield { type: "turn.end", text, cost: (msg as any).total_cost_usd || 0, usage: (msg as any).usage };
     return;
@@ -276,7 +283,12 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
 
   // Everything else (rate_limit_event, etc.) — delegate
   const event = mapSDKMessage(msg);
-  if (event) yield event;
+  if (event) {
+    if (event.type === "turn.rate_limit" && rateLimitSeen !== undefined) {
+      rateLimitSeen.value = true;
+    }
+    yield event;
+  }
 }
 
 export const claudeProvider: AgentProvider = {
@@ -305,8 +317,9 @@ export const claudeProvider: AgentProvider = {
 
     const events = (async function* () {
       const turnOpen = { value: false };
+      const rateLimitSeen = { value: false };
       for await (const msg of q) {
-        yield* mapSDKMessageStream(msg, turnOpen);
+        yield* mapSDKMessageStream(msg, turnOpen, rateLimitSeen);
       }
     })();
 

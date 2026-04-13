@@ -47,6 +47,7 @@ vi.mock("../src/agent/systemPrompt.js", () => ({
 import type { AgentClient, ApiClient } from "../src/client/index.js";
 import { RuntimePool, type SpawnRequest } from "../src/daemon/runtimePool.js";
 import type { TunnelClient } from "../src/daemon/tunnel.js";
+import { mapSDKMessageStream } from "../src/providers/claude.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "../src/providers/types.js";
 import { SessionManager } from "../src/session/manager.js";
 import { readSession, writeSession } from "../src/session/store.js";
@@ -1067,5 +1068,139 @@ describe("rate-limited iterator crash preserves worktree (no cleanup)", () => {
     await flushPromises();
 
     expect(onCleanup).toHaveBeenCalled();
+  });
+});
+
+// ── duplicate rate-limit deduplication via mapSDKMessageStream ────────────────
+
+describe("duplicate rate-limit signal deduplication through mapSDKMessageStream", () => {
+  it("calls onRateLimited exactly once when SDK emits both rate_limit_event and assistant error:rate_limit", async () => {
+    const realResetEpoch = Math.floor(Date.now() / 1000) + 420; // 7 minutes from now
+
+    const sdkMessages = [
+      {
+        type: "rate_limit_event",
+        rate_limit_info: {
+          status: "rejected",
+          resetsAt: realResetEpoch,
+          rateLimitType: "daily",
+          isUsingOverage: false,
+          overageStatus: null,
+          overageResetsAt: null,
+        },
+      },
+      {
+        type: "assistant",
+        error: "rate_limit",
+        message: { role: "assistant", content: [] },
+        parent_tool_use_id: null,
+      },
+      {
+        type: "result",
+        subtype: "success",
+        result: "",
+        total_cost_usd: 0,
+        usage: {},
+      },
+    ];
+
+    const handle: AgentHandle = {
+      events: (async function* () {
+        const turnOpen = { value: false };
+        const rateLimitSeen = { value: false };
+        for (const msg of sdkMessages) {
+          yield* mapSDKMessageStream(msg as any, turnOpen, rateLimitSeen);
+        }
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const callbacks = makeCallbacks();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, callbacks);
+
+    writeSession(makeWorkerSession("sess-rl-dedup-1", { taskId: "task-rl-dedup-1" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-rl-dedup-1",
+      sessionId: "sess-rl-dedup-1",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-rl-dedup-1", "in_progress"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(callbacks.onRateLimited).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the real API reset time (not 60-min fallback) to onRateLimited", async () => {
+    const realResetEpoch = Math.floor(Date.now() / 1000) + 420; // 7 minutes from now
+    const expectedResetAt = new Date(realResetEpoch * 1000).toISOString();
+
+    const sdkMessages = [
+      {
+        type: "rate_limit_event",
+        rate_limit_info: {
+          status: "rejected",
+          resetsAt: realResetEpoch,
+          rateLimitType: "daily",
+          isUsingOverage: false,
+          overageStatus: null,
+          overageResetsAt: null,
+        },
+      },
+      {
+        type: "assistant",
+        error: "rate_limit",
+        message: { role: "assistant", content: [] },
+        parent_tool_use_id: null,
+      },
+      {
+        type: "result",
+        subtype: "success",
+        result: "",
+        total_cost_usd: 0,
+        usage: {},
+      },
+    ];
+
+    const handle: AgentHandle = {
+      events: (async function* () {
+        const turnOpen = { value: false };
+        const rateLimitSeen = { value: false };
+        for (const msg of sdkMessages) {
+          yield* mapSDKMessageStream(msg as any, turnOpen, rateLimitSeen);
+        }
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const callbacks = makeCallbacks();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, callbacks);
+
+    writeSession(makeWorkerSession("sess-rl-dedup-2", { taskId: "task-rl-dedup-2" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-rl-dedup-2",
+      sessionId: "sess-rl-dedup-2",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-rl-dedup-2", "in_progress"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    const [[_taskId, resetAt]] = callbacks.onRateLimited.mock.calls;
+    expect(resetAt).toBe(expectedResetAt);
   });
 });
