@@ -12,6 +12,7 @@ export interface Env {
   MAILS_ADMIN_TOKEN: string;
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN: string;
+  MIN_CLI_VERSION?: string;
 }
 
 declare module "hono" {

@@ -22,7 +22,7 @@ import type { SessionFile } from "../session/types.js";
 import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
 import { ensureLefthookTask, ensureSkills } from "../workspace/skills.js";
 import { createRepoWorkspace, createTempWorkspace } from "../workspace/workspace.js";
-import { apiCall, apiCallIdempotent, apiCallOptional, cryptoBoundary, execBoundary, fsSync } from "./boundaries.js";
+import { apiCallIdempotent, apiCallOptional, cryptoBoundary, execBoundary, fsSync } from "./boundaries.js";
 import type { PrMonitor } from "./prMonitor.js";
 import type { RateLimiter } from "./rateLimiter.js";
 import type { RuntimePool } from "./runtimePool.js";
@@ -45,6 +45,7 @@ export function buildAgentEnv(opts: BuildEnvOpts): Record<string, string> {
   const { agentId, sessionId, privateKeyJwk, agentName, agentUsername, gpgSubkeyId, gnupgHome } = opts;
   const email = `${agentUsername}@mails.agent-kanban.dev`;
   const env: Record<string, string> = {
+    AK_WORKER: "1",
     AK_AGENT_ID: agentId,
     AK_SESSION_ID: sessionId,
     AK_AGENT_KEY: JSON.stringify(privateKeyJwk),

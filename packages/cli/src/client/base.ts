@@ -1,11 +1,16 @@
 import type { UsageInfo } from "../types.js";
+import { getVersion } from "../version.js";
 
 export class ApiError extends Error {
+  public code: string;
+
   constructor(
     public status: number,
     message: string,
+    code = `HTTP_${status}`,
   ) {
     super(message);
+    this.code = code;
   }
 }
 
@@ -25,6 +30,7 @@ export abstract class ApiClient {
         method,
         headers: {
           "Content-Type": "application/json",
+          "X-CLI-Version": getVersion(),
           Authorization: authorization,
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -50,7 +56,7 @@ export abstract class ApiClient {
         const retryAfter = res.headers.get("Retry-After");
         if (retryAfter) msg += ` (retry after ${retryAfter}s)`;
       }
-      throw new ApiError(res.status, msg);
+      throw new ApiError(res.status, msg, (data as any).error?.code);
     }
 
     return data;

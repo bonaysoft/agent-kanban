@@ -25,7 +25,7 @@ const mockSaveIdentity = vi.fn();
 const DEAD_PID = "4194304";
 const mockReadFileSync = vi.fn((path: unknown, ...args: unknown[]) => {
   if (typeof path === "string" && path.endsWith("daemon.pid")) return DEAD_PID;
-  // Fall through for all other paths — not needed in these tests
+  if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
   throw new Error(`Unexpected readFileSync call: ${path}`);
 });
 
@@ -84,6 +84,7 @@ beforeEach(() => {
   mockIsPidAlive.mockReturnValue(false);
   mockReadFileSync.mockImplementation((path: unknown) => {
     if (typeof path === "string" && path.endsWith("daemon.pid")) return DEAD_PID;
+    if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
     throw new Error(`Unexpected readFileSync: ${path}`);
   });
 });
@@ -487,6 +488,7 @@ describe("createClient — full leader auto-init", () => {
     // Make daemon appear alive by returning the current PID
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
+      if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
       throw new Error(`Unexpected readFileSync: ${path}`);
     });
 
@@ -509,6 +511,7 @@ describe("createClient — full leader auto-init", () => {
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
+      if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
       throw new Error(`Unexpected readFileSync: ${path}`);
     });
 
@@ -533,6 +536,7 @@ describe("createClient — full leader auto-init", () => {
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
+      if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
       throw new Error(`Unexpected readFileSync: ${path}`);
     });
 
@@ -557,6 +561,7 @@ describe("createClient — full leader auto-init", () => {
     mockLoadIdentity.mockReturnValue({ agent_id: randomUUID(), name: "claude", fingerprint: "fp" });
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
+      if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
       throw new Error(`Unexpected readFileSync: ${path}`);
     });
 
@@ -584,6 +589,7 @@ describe("createClient — full leader auto-init", () => {
     mockLoadIdentity.mockReturnValue(null);
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (typeof path === "string" && path.endsWith("daemon.pid")) return String(process.pid);
+      if (typeof path === "string" && path.endsWith("package.json")) return JSON.stringify({ version: "0.0.0-test" });
       throw new Error(`Unexpected readFileSync: ${path}`);
     });
 

@@ -9,9 +9,11 @@ import { registerDescribeCommand } from "./commands/describe.js";
 import { registerGetCommand } from "./commands/get.js";
 import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
+import { registerUpgradeCommand } from "./commands/upgrade.js";
 import { registerWaitCommand } from "./commands/wait.js";
 import { getCredentials, readConfig, saveCredentials } from "./config.js";
 import { getOutputFormat, output } from "./output.js";
+import { checkForUpdate, isNpx, isWorkerAgent } from "./updateCheck.js";
 import { getVersion } from "./version.js";
 
 const program = new Command();
@@ -225,6 +227,7 @@ registerStartCommand(program);
 registerStopCommand(program);
 registerStatusCommand(program);
 registerLogsCommand(program);
+registerUpgradeCommand(program);
 
 program
   .command("__daemon", { hidden: true })
@@ -240,7 +243,18 @@ program
     });
   });
 
-program.parseAsync().catch((err: Error) => {
-  console.error(err.message);
-  process.exit(1);
-});
+// Fire update check in background for non-npx, non-worker invocations
+const updatePromise = !isNpx() && !isWorkerAgent() ? checkForUpdate() : Promise.resolve(null);
+
+program
+  .parseAsync()
+  .then(async () => {
+    const update = await updatePromise;
+    if (update) {
+      process.stderr.write(`\nUpdate available: v${update.current} → v${update.latest}. Run \`ak upgrade\` to update.\n`);
+    }
+  })
+  .catch((err: Error) => {
+    console.error(err.message);
+    process.exit(1);
+  });

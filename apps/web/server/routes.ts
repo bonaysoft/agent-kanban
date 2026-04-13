@@ -17,6 +17,7 @@ import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
 import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
+import { cliVersionMiddleware } from "./cliVersion";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
 import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
@@ -280,6 +281,12 @@ api.get("/share/*", async (c) => {
 api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
   return authMiddleware(c, next);
+});
+
+// CLI version gate — reject outdated CLI versions (skip heartbeat so old machines can still report in)
+api.use("/api/*", async (c, next) => {
+  if (c.req.path.match(/^\/api\/machines\/[^/]+\/heartbeat$/)) return next();
+  return cliVersionMiddleware(c, next);
 });
 
 // Metrics — write AE data point for machine/agent requests (fire-and-forget)

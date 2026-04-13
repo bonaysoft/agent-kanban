@@ -13,9 +13,11 @@
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/semver": "^7.7.1",
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "semver": "^7.7.4",
     "yaml": "^2.8.3"
   }
 }
