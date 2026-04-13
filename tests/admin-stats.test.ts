@@ -2,14 +2,14 @@
 
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getSystemStats } from "../apps/web/functions/api/statsRepo";
+import { getSystemStats } from "../apps/web/server/statsRepo";
 import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
 
 async function apiRequest(method: string, path: string, body?: Record<string, unknown>, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
@@ -125,7 +125,7 @@ describe("getSystemStats", () => {
     const before = await getSystemStats(env.DB);
     const userId = "stats-board-owner";
     await seedUser(env.DB, userId, "stats-board-owner@test.com");
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     await createBoard(env.DB, userId, "Stats Test Board", "dev");
     const after = await getSystemStats(env.DB);
     expect(after.boards.total).toBeGreaterThan(before.boards.total);
@@ -134,9 +134,9 @@ describe("getSystemStats", () => {
   it("reflects task status counts after seeding tasks", async () => {
     const userId = "stats-task-owner";
     await seedUser(env.DB, userId, "stats-task-owner@test.com");
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "Stats Task Board", "ops");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     await createTask(env.DB, userId, { title: "Stats Todo Task", board_id: board.id });
 
     const stats = await getSystemStats(env.DB);
@@ -146,9 +146,9 @@ describe("getSystemStats", () => {
   it("reflects done task count after updating task to done", async () => {
     const userId = "stats-done-owner";
     await seedUser(env.DB, userId, "stats-done-owner@test.com");
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "Stats Done Board", "ops");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Stats Done Task", board_id: board.id });
     await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(task.id).run();
 
@@ -174,7 +174,7 @@ describe("GET /api/admin/stats", () => {
   let machineApiKey: string;
 
   beforeAll(async () => {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
 
     // Create admin user via signup then elevate role

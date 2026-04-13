@@ -63,14 +63,14 @@ async function seedUser(db: D1Database): Promise<string> {
 }
 
 async function createApiKeyForUser(db: D1Database, userId: string): Promise<string> {
-  const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  const { createAuth } = await import("../apps/web/server/betterAuth");
   const auth = createAuth({ ...testEnv, DB: db });
   const result = await auth.api.createApiKey({ body: { userId } });
   return result.key;
 }
 
 async function honoRequest(method: string, path: string, body?: any, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
@@ -184,8 +184,8 @@ describe("CLI ApiClient agent JWT passthrough", () => {
     expect(leaderSessionRes.status).toBe(201);
 
     // Create board + task
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask, assignTask } = await import("../apps/web/server/taskRepo");
     const board = await createBoard(testEnv.DB, userId, "jwt-test-board", "ops");
     boardId = board.id;
     const task = await createTask(testEnv.DB, userId, { title: "JWT test task", board_id: boardId });

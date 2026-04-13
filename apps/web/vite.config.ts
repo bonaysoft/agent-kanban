@@ -1,38 +1,15 @@
 import path from "node:path";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const port = Number(process.env.VITE_DEV_PORT) || 5173;
-
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  build: {
-    outDir: path.resolve(__dirname, "dist"),
-  },
+  plugins: [react(), tailwindcss(), cloudflare()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  server: {
-    port,
-    strictPort: true,
-    proxy: {
-      "/api": {
-        target: "http://localhost:8788",
-        ws: true,
-      },
-      "/.well-known": {
-        target: "http://localhost:8788",
-      },
-      "/agents": {
-        target: "http://localhost:8788",
-        bypass(req) {
-          // Only proxy .gpg requests, let SPA handle the rest
-          if (!req.url?.endsWith(".gpg")) return req.url;
-        },
-      },
+      "@agent-kanban/shared": path.resolve(__dirname, "../../packages/shared/src"),
     },
   },
 });

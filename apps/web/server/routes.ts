@@ -219,6 +219,61 @@ api.get("/.well-known/openpgpkey/policy", (c) => {
   return new Response("", { headers: { "Content-Type": "text/plain" } });
 });
 
+// ─── Share SSR (meta tag injection for social sharing) ───
+
+api.get("/share/*", async (c) => {
+  const slug = c.req.path.replace(/^\/share\/?/, "").replace(/\/$/, "");
+  const asset = await c.env.ASSETS.fetch(new URL("/", c.req.url));
+  let html = await asset.text();
+
+  if (slug) {
+    const board = await c.env.DB.prepare("SELECT name, description FROM boards WHERE share_slug = ? AND visibility = 'public'")
+      .bind(slug)
+      .first<{ name: string; description: string | null }>();
+
+    if (board) {
+      const countRow = await c.env.DB.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END) as todo,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+          SUM(CASE WHEN status = 'in_review' THEN 1 ELSE 0 END) as in_review,
+          SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
+        FROM tasks t
+        JOIN boards b ON t.board_id = b.id
+        WHERE b.share_slug = ?
+      `)
+        .bind(slug)
+        .first<{ total: number; todo: number; in_progress: number; in_review: number; done: number }>();
+
+      const counts = countRow || { total: 0, todo: 0, in_progress: 0, in_review: 0, done: 0 };
+      const title = `${escapeHtml(board.name)} — Agent Kanban`;
+      const description = escapeHtml(
+        board.description ||
+          `${counts.total} tasks: ${counts.done} done, ${counts.in_progress} active, ${counts.in_review} review, ${counts.todo} todo`,
+      );
+      const url = `https://agent-kanban.dev/share/${slug}`;
+
+      const metaTags = [
+        `<title>${title}</title>`,
+        `<meta name="description" content="${description}" />`,
+        `<meta property="og:type" content="website" />`,
+        `<meta property="og:url" content="${url}" />`,
+        `<meta property="og:title" content="${title}" />`,
+        `<meta property="og:description" content="${description}" />`,
+        `<meta property="og:site_name" content="Agent Kanban" />`,
+        `<meta name="twitter:card" content="summary" />`,
+        `<meta name="twitter:title" content="${title}" />`,
+        `<meta name="twitter:description" content="${description}" />`,
+      ].join("\n    ");
+
+      html = html.replace(/<title>.*?<\/title>/, metaTags);
+    }
+  }
+
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+});
+
 // Auth middleware for all API routes (except Better Auth's own endpoints)
 api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
@@ -660,11 +715,13 @@ api.get("/api/tasks/:id/messages", async (c) => {
 // ─── WebSocket Relay ───
 
 api.get("/api/tunnel/ws", async (c) => {
+  const ownerId = c.get("ownerId");
+  const id = c.env.TUNNEL_RELAY.idFromName(ownerId);
+  const stub = c.env.TUNNEL_RELAY.get(id);
   const url = new URL(c.req.url);
-  url.hostname = "relay";
   url.pathname = "/ws";
-  url.searchParams.set("ownerId", c.get("ownerId"));
-  return c.env.RELAY.fetch(new Request(url.toString(), c.req.raw));
+  url.searchParams.set("ownerId", ownerId);
+  return stub.fetch(new Request(url.toString(), c.req.raw));
 });
 
 // ─── SSE Stream ───
@@ -799,6 +856,10 @@ api.get("/api/agents/:id/inbox/:emailId", async (c) => {
 export { api };
 
 // ─── Helpers ───
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 function agentEmail(username: string): string {
   return `${username}@mails.agent-kanban.dev`;

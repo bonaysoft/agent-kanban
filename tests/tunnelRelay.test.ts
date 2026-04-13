@@ -109,7 +109,7 @@ class CFResponse {
 // Spy on crypto.randomUUID — cannot replace the getter, so we spy on the method
 vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("test-uuid-1234" as `${string}-${string}-${string}-${string}-${string}`);
 
-import { TunnelRelay } from "../packages/relay-worker/src/tunnelRelay.js";
+import { TunnelRelay } from "../apps/web/server/tunnelRelay.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

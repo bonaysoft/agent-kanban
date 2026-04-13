@@ -9,7 +9,7 @@ const env = createTestEnv();
 let mf: Miniflare;
 
 async function apiRequest(method: string, path: string, body?: Record<string, unknown>, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
@@ -34,21 +34,21 @@ describe("getBoardActions", () => {
   beforeAll(async () => {
     await seedUser(env.DB, userId, `board-sse-unit-${randomUUID()}@test.com`);
 
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "board-sse-unit-board", "ops");
     boardId = board.id;
 
     const agent = await createTestAgent(env.DB, userId, { name: "SSE Unit Agent", username: "sse-unit-agent", runtime: "claude" });
     agentId = agent.id;
 
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "SSE Unit Task", board_id: boardId, actorType: "agent:worker", actorId: agentId });
     taskId = task.id;
   });
 
   it("returns notes for a board with actor_public_key populated", async () => {
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const { getBoardActions } = await import("../apps/web/server/taskRepo");
     const notes = await getBoardActions(env.DB, boardId, userId, since);
 
     expect(notes.length).toBeGreaterThan(0);
@@ -59,7 +59,7 @@ describe("getBoardActions", () => {
 
   it("returns notes with agent_kind populated", async () => {
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const { getBoardActions } = await import("../apps/web/server/taskRepo");
     const notes = await getBoardActions(env.DB, boardId, userId, since);
 
     const note = notes.find((n) => n.actor_id === agentId);
@@ -69,21 +69,21 @@ describe("getBoardActions", () => {
 
   it("returns empty array when no notes exist after since timestamp", async () => {
     const future = new Date(Date.now() + 60 * 1000).toISOString();
-    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const { getBoardActions } = await import("../apps/web/server/taskRepo");
     const notes = await getBoardActions(env.DB, boardId, userId, future);
 
     expect(notes).toEqual([]);
   });
 
   it("does not return notes from a different board", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const otherBoard = await createBoard(env.DB, userId, "board-sse-other-board", "ops");
 
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     await createTask(env.DB, userId, { title: "Other Board Task", board_id: otherBoard.id });
 
     const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const { getBoardActions } = await import("../apps/web/server/taskRepo");
     const notes = await getBoardActions(env.DB, boardId, userId, since);
 
     const ids = notes.map((n) => n.task_id);
@@ -94,7 +94,7 @@ describe("getBoardActions", () => {
   });
 
   it("returns null actor_public_key for notes without an agent actor", async () => {
-    const { createTask, getBoardActions } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, getBoardActions } = await import("../apps/web/server/taskRepo");
     const since = new Date(Date.now() - 1).toISOString();
     // Create a task with no agentId — the created action has actor_type 'machine'
     await createTask(env.DB, userId, { title: "No Agent Task", board_id: boardId });
@@ -114,7 +114,7 @@ describe("GET /api/boards/:id/stream", () => {
   let apiKey: string;
 
   async function createApiKeyForUser(uid: string): Promise<string> {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
     const result = await auth.api.createApiKey({ body: { userId: uid } });
     return result.key;
@@ -124,7 +124,7 @@ describe("GET /api/boards/:id/stream", () => {
     await seedUser(env.DB, userId, `board-sse-route-${randomUUID()}@test.com`);
     apiKey = await createApiKeyForUser(userId);
 
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "board-sse-route-board", "ops");
     boardId = board.id;
   });
@@ -143,7 +143,7 @@ describe("GET /api/boards/:id/stream", () => {
   it("emits board_note events for existing notes in the stream body", async () => {
     const agent = await createTestAgent(env.DB, userId, { name: "SSE Route Agent", username: "sse-route-agent", runtime: "claude" });
 
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     await createTask(env.DB, userId, { title: "SSE Stream Task", board_id: boardId, actorType: "agent:worker", actorId: agent.id });
 
     const res = await apiRequest("GET", `/api/boards/${boardId}/stream`, undefined, apiKey);

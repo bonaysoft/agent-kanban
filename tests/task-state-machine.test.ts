@@ -61,7 +61,7 @@ async function seedUser(db: D1Database): Promise<string> {
 }
 
 async function createApiKeyForUser(db: D1Database, userId: string): Promise<string> {
-  const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  const { createAuth } = await import("../apps/web/server/betterAuth");
   const auth = createAuth({ ...env, DB: db });
   const result = await auth.api.createApiKey({ body: { userId } });
   return result.key;
@@ -277,7 +277,7 @@ describe("task lifecycle repo functions", () => {
   let leaderAgentId: string;
 
   async function createTestTask() {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     return createTask(env.DB, userId, { title: `Task ${randomUUID().slice(0, 8)}`, board_id: boardId });
   }
 
@@ -287,7 +287,7 @@ describe("task lifecycle repo functions", () => {
 
   beforeAll(async () => {
     await seedUser(env.DB);
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "sm-board", "ops");
     boardId = board.id;
     const agent = await createTestAgent(env.DB, userId, { name: "SM Test Agent", username: "sm-test-agent", runtime: "claude" });
@@ -305,7 +305,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("claim", () => {
     it("succeeds: todo → in_progress (agent:worker)", async () => {
-      const { claimTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { claimTask, assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       const result = await claimTask(env.DB, task.id, testAgentId, "agent:worker");
@@ -313,7 +313,7 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects claim from in_progress", async () => {
-      const { claimTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { claimTask, assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       await forceStatus(task.id, "in_progress");
@@ -321,7 +321,7 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects claim by wrong agent", async () => {
-      const { claimTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { claimTask, assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       await expect(claimTask(env.DB, task.id, otherAgentId, "agent:worker")).rejects.toThrow("not assigned");
@@ -330,7 +330,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("review", () => {
     it("succeeds: in_progress → in_review (agent:worker)", async () => {
-      const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
+      const { reviewTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       const result = await reviewTask(env.DB, task.id, "agent:worker", testAgentId, null, "agent:worker");
@@ -338,13 +338,13 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects review from todo", async () => {
-      const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
+      const { reviewTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await expect(reviewTask(env.DB, task.id, "agent:worker", testAgentId, null, "agent:worker")).rejects.toThrow();
     });
 
     it("rejects review by machine", async () => {
-      const { reviewTask } = await import("../apps/web/functions/api/taskRepo");
+      const { reviewTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(reviewTask(env.DB, task.id, "machine", "system", null, "machine")).rejects.toThrow();
@@ -353,7 +353,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("reject", () => {
     it("succeeds: in_review → in_progress (agent:leader)", async () => {
-      const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
+      const { rejectTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       const result = await rejectTask(env.DB, task.id, "agent:leader", "system", "agent:leader");
@@ -361,14 +361,14 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects reject from in_progress", async () => {
-      const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
+      const { rejectTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(rejectTask(env.DB, task.id, "agent:leader", "system", "agent:leader")).rejects.toThrow();
     });
 
     it("rejects reject by agent:worker", async () => {
-      const { rejectTask } = await import("../apps/web/functions/api/taskRepo");
+      const { rejectTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       await expect(rejectTask(env.DB, task.id, "agent:worker", "system", "agent:worker")).rejects.toThrow();
@@ -377,7 +377,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("complete", () => {
     it("succeeds: in_review → done (agent:leader)", async () => {
-      const { completeTask } = await import("../apps/web/functions/api/taskRepo");
+      const { completeTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       const result = await completeTask(env.DB, task.id, "agent:leader", "system", "done", null, "agent:leader");
@@ -385,20 +385,20 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects complete from todo", async () => {
-      const { completeTask } = await import("../apps/web/functions/api/taskRepo");
+      const { completeTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await expect(completeTask(env.DB, task.id, "agent:leader", "system", null, null, "agent:leader")).rejects.toThrow();
     });
 
     it("rejects complete from in_progress", async () => {
-      const { completeTask } = await import("../apps/web/functions/api/taskRepo");
+      const { completeTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(completeTask(env.DB, task.id, "agent:leader", "system", null, null, "agent:leader")).rejects.toThrow();
     });
 
     it("rejects complete by agent:worker", async () => {
-      const { completeTask } = await import("../apps/web/functions/api/taskRepo");
+      const { completeTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       await expect(completeTask(env.DB, task.id, "agent:worker", "system", null, null, "agent:worker")).rejects.toThrow();
@@ -407,7 +407,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("cancel", () => {
     it("succeeds: in_progress → cancelled (agent:leader)", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       const result = await cancelTask(env.DB, task.id, "agent:leader", "system", "agent:leader");
@@ -415,7 +415,7 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("succeeds: in_review → cancelled (agent:leader)", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       const result = await cancelTask(env.DB, task.id, "agent:leader", "system", "agent:leader");
@@ -423,27 +423,27 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects cancel from todo", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await expect(cancelTask(env.DB, task.id, "agent:leader", "system", "agent:leader")).rejects.toThrow();
     });
 
     it("rejects cancel from done", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "done");
       await expect(cancelTask(env.DB, task.id, "agent:leader", "system", "agent:leader")).rejects.toThrow();
     });
 
     it("rejects cancel from cancelled", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "cancelled");
       await expect(cancelTask(env.DB, task.id, "agent:leader", "system", "agent:leader")).rejects.toThrow();
     });
 
     it("rejects cancel by agent:worker", async () => {
-      const { cancelTask } = await import("../apps/web/functions/api/taskRepo");
+      const { cancelTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(cancelTask(env.DB, task.id, "agent:worker", "system", "agent:worker")).rejects.toThrow();
@@ -452,7 +452,7 @@ describe("task lifecycle repo functions", () => {
 
   describe("release", () => {
     it("succeeds: in_progress → todo (machine)", async () => {
-      const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
+      const { releaseTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       const result = await releaseTask(env.DB, task.id, "machine", "system", "machine");
@@ -460,27 +460,27 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects release from in_review", async () => {
-      const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
+      const { releaseTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       await expect(releaseTask(env.DB, task.id, "machine", "system", "machine")).rejects.toThrow("Cannot release from in_review");
     });
 
     it("rejects release from todo", async () => {
-      const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
+      const { releaseTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await expect(releaseTask(env.DB, task.id, "machine", "system", "machine")).rejects.toThrow();
     });
 
     it("rejects release by agent:worker", async () => {
-      const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
+      const { releaseTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(releaseTask(env.DB, task.id, "agent:worker", "system", "agent:worker")).rejects.toThrow();
     });
 
     it("allows release by agent:leader", async () => {
-      const { releaseTask } = await import("../apps/web/functions/api/taskRepo");
+      const { releaseTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       const result = await releaseTask(env.DB, task.id, "agent:leader", "system", "agent:leader");
@@ -490,41 +490,41 @@ describe("task lifecycle repo functions", () => {
 
   describe("assign restrictions", () => {
     it("succeeds: assign in todo with no existing assignment", async () => {
-      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       const result = await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       expect(result!.assigned_to).toBe(testAgentId);
     });
 
     it("rejects assign when already assigned", async () => {
-      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       await expect(assignTask(env.DB, task.id, otherAgentId, "machine", "system")).rejects.toThrow("already assigned");
     });
 
     it("rejects assign in in_progress", async () => {
-      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(assignTask(env.DB, task.id, testAgentId, "machine", "system")).rejects.toThrow("todo");
     });
 
     it("rejects assign in done", async () => {
-      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "done");
       await expect(assignTask(env.DB, task.id, testAgentId, "machine", "system")).rejects.toThrow("todo");
     });
 
     it("rejects assign to leader agent", async () => {
-      const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await expect(assignTask(env.DB, task.id, leaderAgentId, "machine", "system")).rejects.toThrow("Cannot assign tasks to leader agents");
     });
 
     it("rejects createTask with assigned_to leader agent", async () => {
-      const { createTask } = await import("../apps/web/functions/api/taskRepo");
+      const { createTask } = await import("../apps/web/server/taskRepo");
       await expect(createTask(env.DB, userId, { title: "Leader Task", board_id: boardId, assigned_to: leaderAgentId })).rejects.toThrow(
         "Cannot assign tasks to leader agents",
       );
@@ -533,14 +533,14 @@ describe("task lifecycle repo functions", () => {
 
   describe("delete restrictions", () => {
     it("succeeds: delete unassigned todo", async () => {
-      const { deleteTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       const result = await deleteTask(env.DB, task.id);
       expect(result).toBe(true);
     });
 
     it("succeeds: delete cancelled task", async () => {
-      const { deleteTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "cancelled");
       const result = await deleteTask(env.DB, task.id);
@@ -548,7 +548,7 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("allows delete of assigned todo", async () => {
-      const { deleteTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask, assignTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await assignTask(env.DB, task.id, testAgentId, "machine", "system");
       const result = await deleteTask(env.DB, task.id);
@@ -556,21 +556,21 @@ describe("task lifecycle repo functions", () => {
     });
 
     it("rejects delete of in_progress task", async () => {
-      const { deleteTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_progress");
       await expect(deleteTask(env.DB, task.id)).rejects.toThrow("Cannot delete");
     });
 
     it("rejects delete of in_review task", async () => {
-      const { deleteTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "in_review");
       await expect(deleteTask(env.DB, task.id)).rejects.toThrow("Cannot delete");
     });
 
     it("rejects delete of done task", async () => {
-      const { deleteTask } = await import("../apps/web/functions/api/taskRepo");
+      const { deleteTask } = await import("../apps/web/server/taskRepo");
       const task = await createTestTask();
       await forceStatus(task.id, "done");
       await expect(deleteTask(env.DB, task.id)).rejects.toThrow("Cannot delete");
@@ -590,7 +590,7 @@ describe("task lifecycle HTTP permissions", () => {
   let boardId: string;
 
   async function apiRequest(method: string, path: string, body?: any, token?: string) {
-    const { api } = await import("../apps/web/functions/api/routes");
+    const { api } = await import("../apps/web/server/routes");
     const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const init: RequestInit = { method, headers };
@@ -607,7 +607,7 @@ describe("task lifecycle HTTP permissions", () => {
   }
 
   async function createTestTask() {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     return createTask(env.DB, userId, { title: `HTTP Task ${randomUUID().slice(0, 8)}`, board_id: boardId });
   }
 
@@ -655,7 +655,7 @@ describe("task lifecycle HTTP permissions", () => {
     );
 
     // Create board
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "sm-http-board", "ops");
     boardId = board.id;
   });
@@ -694,7 +694,7 @@ describe("task lifecycle HTTP permissions", () => {
 
   it("machine can release a task (200)", async () => {
     const task = await createTestTask();
-    const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { assignTask } = await import("../apps/web/server/taskRepo");
     await assignTask(env.DB, task.id, agentId, "machine", "system");
     await forceStatus(task.id, "in_progress");
     const res = await apiRequest("POST", `/api/tasks/${task.id}/release`, {}, apiKey);

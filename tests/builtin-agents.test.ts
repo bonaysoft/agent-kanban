@@ -75,10 +75,10 @@ describe("builtin agents", () => {
 
   it("createBoard seeds builtin agents", async () => {
     await seedUser(env.DB, userId, "builtin@test.com");
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     await createBoard(env.DB, userId, "Test Board", "dev");
 
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, userId);
     const builtins = agents.filter((a) => a.builtin);
 
@@ -89,10 +89,10 @@ describe("builtin agents", () => {
   });
 
   it("second board does not duplicate builtin agents", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     await createBoard(env.DB, userId, "Second Board", "dev");
 
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, userId);
     const builtins = agents.filter((a) => a.builtin);
 
@@ -100,7 +100,7 @@ describe("builtin agents", () => {
   });
 
   it("builtin agent has valid keypair and fingerprint", async () => {
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, userId);
     const builtin = agents.find((a) => a.builtin);
 
@@ -112,10 +112,10 @@ describe("builtin agents", () => {
   it("different tenant gets separate builtin agents", async () => {
     const otherUserId = "user-builtin-other";
     await seedUser(env.DB, otherUserId, "other@test.com");
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     await createBoard(env.DB, otherUserId, "Other Board", "dev");
 
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, otherUserId);
     const builtins = agents.filter((a) => a.builtin);
 

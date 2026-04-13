@@ -60,13 +60,13 @@ describe("task JSON field parsing (labels, input)", () => {
 
   it("setup: create board", async () => {
     await seedUser(db, ownerId, `${ownerId}@test.local`);
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(db, ownerId, "json-test-board", "ops");
     boardId = board.id;
   });
 
   it("createTask returns labels as array and input as object", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(db, ownerId, {
       title: "Test labels and input",
       board_id: boardId,
@@ -82,7 +82,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("createTask with null labels/input returns null", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(db, ownerId, {
       title: "Bare task",
       board_id: boardId,
@@ -93,7 +93,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("listTasks returns parsed labels and input", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const tasks = await listTasks(db, ownerId, { board_id: boardId });
     const task = tasks.find((t) => t.id === taskId)!;
 
@@ -104,7 +104,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("getTask returns parsed labels and input", async () => {
-    const { getTask } = await import("../apps/web/functions/api/taskRepo");
+    const { getTask } = await import("../apps/web/server/taskRepo");
     const task = await getTask(db, taskId, ownerId);
 
     expect(task).toBeTruthy();
@@ -115,7 +115,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("updateTask accepts arrays/objects and returns parsed values", async () => {
-    const { updateTask } = await import("../apps/web/functions/api/taskRepo");
+    const { updateTask } = await import("../apps/web/server/taskRepo");
     const task = await updateTask(db, taskId, {
       labels: ["feature"],
       input: { prompt: "new prompt" },
@@ -127,7 +127,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("updated values persist through getTask", async () => {
-    const { getTask } = await import("../apps/web/functions/api/taskRepo");
+    const { getTask } = await import("../apps/web/server/taskRepo");
     const task = await getTask(db, taskId, ownerId);
 
     expect(task!.labels).toEqual(["feature"]);
@@ -135,7 +135,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("getBoard returns tasks with parsed labels and input", async () => {
-    const { getBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { getBoard } = await import("../apps/web/server/boardRepo");
     const board = await getBoard(db, boardId);
 
     expect(board).toBeTruthy();
@@ -147,7 +147,7 @@ describe("task JSON field parsing (labels, input)", () => {
   });
 
   it("lifecycle functions preserve parsed JSON fields", async () => {
-    const { assignTask, claimTask, reviewTask } = await import("../apps/web/functions/api/taskRepo");
+    const { assignTask, claimTask, reviewTask } = await import("../apps/web/server/taskRepo");
 
     const agent = await createTestAgent(db, ownerId, { name: "worker", username: "worker", runtime: "claude" });
     const assigned = await assignTask(db, taskId, agent.id, "machine", "system");

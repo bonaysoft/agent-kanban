@@ -13,8 +13,8 @@
 
 import { type ApiClient, ApiError } from "../client/index.js";
 import { createLogger } from "../logger.js";
-import { getSessionManager } from "../session/manager.js";
 import type { SessionManager } from "../session/manager.js";
+import { getSessionManager } from "../session/manager.js";
 import type { SessionFile } from "../session/types.js";
 import { cleanupWorkspace } from "../workspace/workspace.js";
 import { apiCallOptional, apiFireAndForget, cleanupSync } from "./boundaries.js";

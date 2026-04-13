@@ -9,9 +9,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "types": ["@cloudflare/workers-types"],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "functions"]
+  "include": ["src", "server", "worker"]
 }

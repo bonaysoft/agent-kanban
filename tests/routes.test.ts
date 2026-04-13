@@ -11,7 +11,7 @@ const env = createTestEnv();
 let mf: Miniflare;
 
 async function apiRequest(method: string, path: string, body?: Record<string, unknown>, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
@@ -42,14 +42,14 @@ describe("routes", () => {
   let boardId: string;
 
   async function createApiKeyForUser(userId: string): Promise<string> {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
     const result = await auth.api.createApiKey({ body: { userId } });
     return result.key;
   }
 
   async function createUserSessionToken(): Promise<{ token: string; userId: string }> {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
     const result = await auth.api.signUpEmail({
       body: { name: "Routes Test User", email: "routes-session@test.com", password: "test-password-123" },
@@ -136,7 +136,7 @@ describe("routes", () => {
       apiKey,
     );
 
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "routes-board", "ops");
     boardId = board.id;
   });
@@ -226,7 +226,7 @@ describe("routes", () => {
   });
 
   it("DELETE /api/boards/:id deletes board", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "Delete Route Board", "dev");
     const res = await apiRequest("DELETE", `/api/boards/${board.id}`, undefined, userToken);
     expect(res.status).toBe(200);
@@ -270,7 +270,7 @@ describe("routes", () => {
   });
 
   it("DELETE /api/repositories/:id deletes a repository", async () => {
-    const { createRepository } = await import("../apps/web/functions/api/repositoryRepo");
+    const { createRepository } = await import("../apps/web/server/repositoryRepo");
     const repo = await createRepository(env.DB, userId, { name: "del-repo", url: "https://github.com/org/del-repo" });
     const jwt = await signLeaderSessionJWT();
     const res = await apiRequest("DELETE", `/api/repositories/${repo.id}`, undefined, jwt);
@@ -405,7 +405,7 @@ describe("routes", () => {
   });
 
   it("GET /api/tasks/:id returns a task", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Get Task", board_id: boardId });
     const res = await apiRequest("GET", `/api/tasks/${task.id}`, undefined, apiKey);
     expect(res.status).toBe(200);
@@ -419,7 +419,7 @@ describe("routes", () => {
   });
 
   it("PATCH /api/tasks/:id updates a task", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Patch Task", board_id: boardId });
     const jwt = await signLeaderSessionJWT();
     const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { title: "Patched" }, jwt);
@@ -435,7 +435,7 @@ describe("routes", () => {
   });
 
   it("PATCH /api/tasks/:id rejects non-object input", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Bad Patch", board_id: boardId });
     const jwt = await signLeaderSessionJWT();
     const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { input: 42 }, jwt);
@@ -443,7 +443,7 @@ describe("routes", () => {
   });
 
   it("DELETE /api/tasks/:id deletes a task", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Delete Task", board_id: boardId });
     const jwt = await signLeaderSessionJWT();
     const res = await apiRequest("DELETE", `/api/tasks/${task.id}`, undefined, jwt);
@@ -461,7 +461,7 @@ describe("routes", () => {
   // ─── Task Lifecycle ───
 
   it("POST /api/tasks/:id/assign assigns a task to a worker agent via leader", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Task", board_id: boardId });
     const leaderJwt = await signLeaderSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);
@@ -471,7 +471,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/assign rejects leader agents (400)", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Leader Assign Task", board_id: boardId });
     const leaderJwt = await signLeaderSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, {}, leaderJwt);
@@ -479,7 +479,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/complete completes a task", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Complete Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
     const leaderJwt = await signLeaderSessionJWT();
@@ -490,7 +490,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/release releases a task", async () => {
-    const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, assignTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Release Task", board_id: boardId });
     await assignTask(env.DB, task.id, agentId, "machine", "system");
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").bind(task.id).run();
@@ -499,7 +499,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/cancel cancels a task", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Cancel Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").bind(task.id).run();
     const leaderJwt = await signLeaderSessionJWT();
@@ -510,7 +510,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/reject rejects a task in review", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Reject Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").bind(task.id).run();
     const leaderJwt = await signLeaderSessionJWT();
@@ -523,7 +523,7 @@ describe("routes", () => {
   // ─── Task Notes ───
 
   it("POST /api/tasks/:id/notes creates a note", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Note Task", board_id: boardId });
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, { detail: "A note entry" }, jwt);
@@ -533,7 +533,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/notes requires detail", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Note Task 2", board_id: boardId });
     const jwt = await signSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/notes`, {}, jwt);
@@ -547,7 +547,7 @@ describe("routes", () => {
   });
 
   it("GET /api/tasks/:id/notes returns notes", async () => {
-    const { createTask, addTaskAction } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, addTaskAction } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Get Notes Task", board_id: boardId });
     await addTaskAction(env.DB, task.id, "machine", "system", "commented", "Test note");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/notes`, undefined, apiKey);
@@ -565,8 +565,8 @@ describe("routes", () => {
   // ─── Messages ───
 
   it("POST /api/tasks/:id/messages creates a message", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board", "ops");
     const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task", board_id: userBoard.id });
     const res = await apiRequest(
@@ -585,8 +585,8 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/messages requires sender_type and content", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board-2", "ops");
     const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task 2", board_id: userBoard.id });
     const res = await apiRequest("POST", `/api/tasks/${task.id}/messages`, { content: "No sender" }, userToken);
@@ -594,8 +594,8 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/messages rejects invalid sender_type", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const userBoard = await createBoard(env.DB, userTokenOwnerId, "msg-board-3", "ops");
     const task = await createTask(env.DB, userTokenOwnerId, { title: "Msg Task 3", board_id: userBoard.id });
     const res = await apiRequest(
@@ -624,8 +624,8 @@ describe("routes", () => {
   });
 
   it("GET /api/tasks/:id/messages returns messages", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
-    const { createMessage } = await import("../apps/web/functions/api/messageRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
+    const { createMessage } = await import("../apps/web/server/messageRepo");
     const task = await createTask(env.DB, userId, { title: "Get Msg Task", board_id: boardId });
     await createMessage(env.DB, task.id, "user", userId, "Test msg");
     const res = await apiRequest("GET", `/api/tasks/${task.id}/messages`, undefined, apiKey);
@@ -643,7 +643,7 @@ describe("routes", () => {
   // ─── SSE Stream ───
 
   it("GET /api/tasks/:id/stream returns SSE response", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Stream Task", board_id: boardId });
     const res = await apiRequest("GET", `/api/tasks/${task.id}/stream`, undefined, apiKey);
     expect(res.status).toBe(200);
@@ -728,7 +728,7 @@ describe("routes", () => {
   // ─── Task claim forbidden for machine identity ───
 
   it("POST /api/tasks/:id/claim returns 403 for machine identity", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Claim Task", board_id: boardId });
     const res = await apiRequest("POST", `/api/tasks/${task.id}/claim`, {}, apiKey);
     expect(res.status).toBe(403);
@@ -739,7 +739,7 @@ describe("routes", () => {
   it("POST /api/tasks/:id/claim works with agent JWT", async () => {
     await apiRequest("POST", `/api/agents/${agentId}/sessions/${sessionId}/reopen`, {}, apiKey);
 
-    const { createTask, assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask, assignTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Agent Claim Task", board_id: boardId });
     await assignTask(env.DB, task.id, agentId, "machine", "system");
     const jwt = await signSessionJWT();
@@ -750,7 +750,7 @@ describe("routes", () => {
   });
 
   it("POST /api/tasks/:id/review works with agent JWT", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Agent Review Task", board_id: boardId });
     await env.DB.prepare("UPDATE tasks SET status = 'in_progress', assigned_to = ? WHERE id = ?").bind(agentId, task.id).run();
     const jwt = await signSessionJWT();
@@ -763,7 +763,7 @@ describe("routes", () => {
   // ─── Task assign with stale detection ───
 
   it("POST /api/tasks/:id/assign triggers stale detection", async () => {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     const task = await createTask(env.DB, userId, { title: "Assign Stale Task", board_id: boardId });
     const leaderJwt = await signLeaderSessionJWT();
     const res = await apiRequest("POST", `/api/tasks/${task.id}/assign`, { agent_id: agentId }, leaderJwt);

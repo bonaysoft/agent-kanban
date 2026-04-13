@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p .pages-dev && B=$(awk 'NF{printf \"-b %s \", $0}' .dev.vars) && concurrently -n relay,vite,wrangler -c yellow,blue,green \"wrangler dev --config ../../packages/relay-worker/wrangler.toml --port 8787\" \"vite\" \"sleep 3 && wrangler pages dev .pages-dev $B\"",
+    "dev": "vite dev",
     "build": "vite build",
-    "preview": "wrangler pages dev dist",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",
     "db:reset": "rm -rf .wrangler/state && pnpm db:migrate",
     "lint": "tsc --noEmit"
@@ -58,6 +59,6 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "vite": "^6.4.2",
-    "wrangler": "^4.81.0"
+    "wrangler": "^4.81.1"
   }
 }

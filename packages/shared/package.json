@@ -16,7 +16,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "dayjs": "^1.11.20",
     "yaml": "^2.8.3"
   }
 }

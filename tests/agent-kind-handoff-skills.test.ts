@@ -40,7 +40,7 @@ describe("create agent: --kind flag", () => {
   });
 
   it("kind=leader persists through getAgent", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const created = await createTestAgent(db, "owner-kind2", {
       username: "test-leader-persist",
       name: "Test Leader Persist",
@@ -54,7 +54,7 @@ describe("create agent: --kind flag", () => {
   });
 
   it("kind=leader appears in listAgents", async () => {
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const created = await createTestAgent(db, "owner-kind3", {
       username: "test-leader-list",
       name: "Test Leader List",
@@ -137,7 +137,7 @@ describe("update agent: --handoff-to, --skills flags", () => {
   });
 
   it("updates handoff_to via updateAgent", async () => {
-    const { updateAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { updateAgent } = await import("../apps/web/server/agentRepo");
     const updated = await updateAgent(db, agentId, { handoff_to: ["some-leader-id"] });
 
     expect(updated).toBeTruthy();
@@ -145,7 +145,7 @@ describe("update agent: --handoff-to, --skills flags", () => {
   });
 
   it("updates skills via updateAgent", async () => {
-    const { updateAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { updateAgent } = await import("../apps/web/server/agentRepo");
     const updated = await updateAgent(db, agentId, { skills: ["agent-kanban"] });
 
     expect(updated).toBeTruthy();
@@ -153,7 +153,7 @@ describe("update agent: --handoff-to, --skills flags", () => {
   });
 
   it("handoff_to and skills persist together", async () => {
-    const { updateAgent, getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { updateAgent, getAgent } = await import("../apps/web/server/agentRepo");
     await updateAgent(db, agentId, {
       handoff_to: ["final-leader"],
       skills: ["agent-kanban", "browse"],

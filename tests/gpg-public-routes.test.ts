@@ -8,7 +8,7 @@ const env = createTestEnv();
 let mf: Miniflare;
 
 async function apiRequest(method: string, path: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { Host: "localhost:8788", "x-forwarded-proto": "http" };
   return api.request(path, { method, headers }, env);
 }

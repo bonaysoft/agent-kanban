@@ -1,4 +1,4 @@
-name: Deploy
+name: CI
 
 on:
   push:
@@ -21,39 +21,6 @@ jobs:
       - run: pnpm --filter @agent-kanban/shared build
       - run: pnpm run lint
       - run: pnpm run test -- --run
-
-  deploy:
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-
-      - name: Deploy relay worker
-        working-directory: packages/relay-worker
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Deploy to Cloudflare Pages
-        working-directory: apps/web
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            npx wrangler pages deploy --branch main --commit-dirty=true
-          else
-            npx wrangler pages deploy --branch preview --commit-dirty=true
-          fi
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   publish-cli:
     needs: lint-and-test

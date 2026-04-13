@@ -1,6 +1,6 @@
 # Agent Kanban
 
-Agent-first kanban board. React SPA + Hono API on Cloudflare Pages + D1.
+Agent-first kanban board. React SPA + Hono API on Cloudflare Workers + D1.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
@@ -10,9 +10,12 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Architecture
 - Monorepo: pnpm workspaces
-- Frontend: apps/web/ — React + Vite + Tailwind + shadcn/ui
-- Backend: apps/web/functions/[[path]].ts — Hono catch-all on Cloudflare Pages Functions
+- Frontend: apps/web/src/ — React + Vite + Tailwind + shadcn/ui
+- Backend: apps/web/server/ — Hono API, repo layer, auth, SSE
+- Worker entry: apps/web/worker/index.ts — exports Hono app + TunnelRelay DO
+- Build: @cloudflare/vite-plugin — produces client assets + worker bundle
 - Database: Cloudflare D1 (SQLite)
+- Durable Objects: TunnelRelay (WebSocket relay for daemon ↔ browser)
 - CLI: packages/cli/ — TypeScript, published to npm
 - Shared types: packages/shared/ — proper package with build step
 - Agent skill: skills/agent-kanban/ — installed via `npx skills add` to target repos

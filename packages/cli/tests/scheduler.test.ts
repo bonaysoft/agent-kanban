@@ -83,13 +83,18 @@ vi.mock("../src/daemon/dispatcher.js", () => ({
 import { ApiError } from "../src/client/index.js";
 import { DaemonLoop } from "../src/daemon/loop.js";
 import { RateLimiter } from "../src/daemon/rateLimiter.js";
-import { SessionManager, _setSessionManagerForTest } from "../src/session/manager.js";
+import { _setSessionManagerForTest, SessionManager } from "../src/session/manager.js";
 import { writeSession } from "../src/session/store.js";
 import type { SessionFile } from "../src/session/types.js";
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 
-function makeWorkerSession(sessionId: string, taskId: string, status: SessionFile["status"] = "active", overrides: Partial<SessionFile> = {}): SessionFile {
+function makeWorkerSession(
+  sessionId: string,
+  taskId: string,
+  status: SessionFile["status"] = "active",
+  overrides: Partial<SessionFile> = {},
+): SessionFile {
   return {
     type: "worker",
     agentId: "agent-1",
@@ -208,7 +213,12 @@ describe("DaemonLoop.resumeRateLimitedSessions()", () => {
 
     const stubs = makeStubs();
     const onResumedCallback = vi.fn();
-    const rl = new RateLimiter({ onResumed: (runtime) => { onResumedCallback(runtime); loop.resumeRateLimitedSessions(runtime); } });
+    const rl = new RateLimiter({
+      onResumed: (runtime) => {
+        onResumedCallback(runtime);
+        loop.resumeRateLimitedSessions(runtime);
+      },
+    });
     const loop = new DaemonLoop(stubs.client as any, stubs.pool as any, rl, stubs.prMonitor as any, {
       maxConcurrent: 5,
       pollInterval: 60000,
@@ -221,12 +231,7 @@ describe("DaemonLoop.resumeRateLimitedSessions()", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockResumeOneSession).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "sess-rl" }),
-      "",
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockResumeOneSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess-rl" }), "", expect.anything(), expect.anything());
     loop.stop();
     rl.stop();
   });
@@ -280,9 +285,11 @@ describe("DaemonLoop tick — in_review session resumption", () => {
   });
 
   it("removes session when task is done", async () => {
-    writeSession(makeWorkerSession("sess-done", "task-done", "in_review", {
-      workspace: { type: "temp", cwd: "/tmp/work", branch: "task-done" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-done", "task-done", "in_review", {
+        workspace: { type: "temp", cwd: "/tmp/work", branch: "task-done" },
+      }),
+    );
 
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "done" });
@@ -299,9 +306,11 @@ describe("DaemonLoop tick — in_review session resumption", () => {
   });
 
   it("removes session when task is cancelled", async () => {
-    writeSession(makeWorkerSession("sess-cancelled", "task-cancelled", "in_review", {
-      workspace: { type: "temp", cwd: "/tmp/work", branch: "task-cancelled" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-cancelled", "task-cancelled", "in_review", {
+        workspace: { type: "temp", cwd: "/tmp/work", branch: "task-cancelled" },
+      }),
+    );
 
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "cancelled" });
@@ -316,9 +325,11 @@ describe("DaemonLoop tick — in_review session resumption", () => {
   });
 
   it("removes session and logs when task is not found (ApiError 404)", async () => {
-    writeSession(makeWorkerSession("sess-notfound", "task-notfound", "in_review", {
-      workspace: { type: "temp", cwd: "/tmp/work", branch: "task-notfound" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-notfound", "task-notfound", "in_review", {
+        workspace: { type: "temp", cwd: "/tmp/work", branch: "task-notfound" },
+      }),
+    );
 
     const stubs = makeStubs();
     stubs.client.getTask.mockRejectedValue(new ApiError(404, "not found"));
@@ -358,9 +369,11 @@ describe("DaemonLoop tick — in_review session resumption", () => {
 
 describe("DaemonLoop tick — orphaned active session cleanup", () => {
   it("releases and cleans up an orphaned active session whose task is still viable", async () => {
-    writeSession(makeWorkerSession("sess-orphan", "task-orphan", "active", {
-      workspace: { type: "temp", cwd: "/tmp/orphan", branch: "task-orphan" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-orphan", "task-orphan", "active", {
+        workspace: { type: "temp", cwd: "/tmp/orphan", branch: "task-orphan" },
+      }),
+    );
 
     const stubs = makeStubs();
     // pool.hasTask returns false (default) — this session is an orphan
@@ -378,9 +391,11 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
   });
 
   it("cleans up orphaned active session without releasing when task is done", async () => {
-    writeSession(makeWorkerSession("sess-orphan-done", "task-orphan-done", "active", {
-      workspace: { type: "temp", cwd: "/tmp/orphan-done", branch: "task-orphan-done" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-orphan-done", "task-orphan-done", "active", {
+        workspace: { type: "temp", cwd: "/tmp/orphan-done", branch: "task-orphan-done" },
+      }),
+    );
 
     const stubs = makeStubs();
     stubs.client.getTask.mockResolvedValue({ status: "done" });
@@ -397,9 +412,11 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
   });
 
   it("removes orphaned session when task is not found (ApiError 404)", async () => {
-    writeSession(makeWorkerSession("sess-orphan-404", "task-orphan-404", "active", {
-      workspace: { type: "temp", cwd: "/tmp/orphan-404", branch: "task-orphan-404" },
-    }));
+    writeSession(
+      makeWorkerSession("sess-orphan-404", "task-orphan-404", "active", {
+        workspace: { type: "temp", cwd: "/tmp/orphan-404", branch: "task-orphan-404" },
+      }),
+    );
 
     const stubs = makeStubs();
     stubs.client.getTask.mockRejectedValue(new ApiError(404, "not found"));

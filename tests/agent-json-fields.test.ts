@@ -81,7 +81,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("listAgents returns parsed arrays", async () => {
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(db, ownerId);
     const agent = agents.find((a) => a.id === agentId)!;
 
@@ -92,7 +92,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("listAgents returns email derived from username", async () => {
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(db, ownerId);
     const agent = agents.find((a) => a.id === agentId)!;
 
@@ -101,7 +101,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("getAgent returns parsed arrays", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(db, agentId, ownerId);
 
     expect(agent).toBeTruthy();
@@ -111,7 +111,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("getAgent returns email derived from username", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(db, agentId, ownerId);
 
     expect(agent).toBeTruthy();
@@ -120,7 +120,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("updateAgent accepts arrays and returns parsed arrays", async () => {
-    const { updateAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { updateAgent } = await import("../apps/web/server/agentRepo");
     const agent = await updateAgent(db, agentId, {
       skills: ["new/skill@code-review"],
       handoff_to: ["enduser"],
@@ -133,7 +133,7 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
   });
 
   it("updated values persist through getAgent", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(db, agentId, ownerId);
 
     expect(agent!.skills).toEqual(["new/skill@code-review"]);

@@ -83,8 +83,8 @@ describe("agent-auth bridge", () => {
   });
 
   it("creates a machine with BA agentHost", async () => {
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
-    const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
+    const { upsertMachine } = await import("../apps/web/server/machineRepo");
 
     const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
     const auth = createAuth(env);
@@ -123,7 +123,7 @@ describe("agent-auth bridge", () => {
   });
 
   it("creates a session with delegation proof via CSR", async () => {
-    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession } = await import("../apps/web/server/agentSessionRepo");
     const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
 
     const sessionId = randomUUID();
@@ -144,8 +144,8 @@ describe("agent-auth bridge", () => {
   });
 
   it("session JWT authenticates through HTTP handler", async () => {
-    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
-    const { api } = await import("../apps/web/functions/api/routes");
+    const { createSession } = await import("../apps/web/server/agentSessionRepo");
+    const { api } = await import("../apps/web/server/routes");
     const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
 
     const sessionId = randomUUID();

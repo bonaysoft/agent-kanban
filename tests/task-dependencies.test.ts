@@ -70,13 +70,13 @@ describe("task dependencies", () => {
   let boardId: string;
 
   beforeAll(async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "deps-board", "ops");
     boardId = board.id;
   });
 
   async function createTask(opts: { title?: string; depends_on?: string[] } = {}) {
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     return createTask(env.DB, userId, {
       title: opts.title || `Task ${randomUUID().slice(0, 8)}`,
       board_id: boardId,
@@ -85,7 +85,7 @@ describe("task dependencies", () => {
   }
 
   it("listTasks returns depends_on for each task", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const t1 = await createTask({ title: "dep-parent" });
     const t2 = await createTask({ title: "dep-child", depends_on: [t1.id] });
 
@@ -95,7 +95,7 @@ describe("task dependencies", () => {
   });
 
   it("listTasks returns empty depends_on for tasks with no deps", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const t = await createTask({ title: "no-deps" });
 
     const tasks = await listTasks(env.DB, userId, { board_id: boardId });
@@ -104,7 +104,7 @@ describe("task dependencies", () => {
   });
 
   it("listTasks returns multiple depends_on", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const t1 = await createTask({ title: "multi-dep-a" });
     const t2 = await createTask({ title: "multi-dep-b" });
     const t3 = await createTask({ title: "multi-dep-child", depends_on: [t1.id, t2.id] });
@@ -117,7 +117,7 @@ describe("task dependencies", () => {
   });
 
   it("blocked is true when dependency is not done", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const t1 = await createTask({ title: "blocker" });
     const t2 = await createTask({ title: "blocked-task", depends_on: [t1.id] });
 
@@ -127,7 +127,7 @@ describe("task dependencies", () => {
   });
 
   it("blocked is false when dependency is done", async () => {
-    const { listTasks } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks } = await import("../apps/web/server/taskRepo");
     const t1 = await createTask({ title: "done-blocker" });
     await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(t1.id).run();
     const t2 = await createTask({ title: "unblocked-task", depends_on: [t1.id] });
@@ -138,7 +138,7 @@ describe("task dependencies", () => {
   });
 
   it("setDependencies preserves existing deps when appending", async () => {
-    const { listTasks, updateTask } = await import("../apps/web/functions/api/taskRepo");
+    const { listTasks, updateTask } = await import("../apps/web/server/taskRepo");
     const t1 = await createTask({ title: "original-dep" });
     const t2 = await createTask({ title: "appended-dep" });
     const t3 = await createTask({ title: "child-with-append", depends_on: [t1.id] });

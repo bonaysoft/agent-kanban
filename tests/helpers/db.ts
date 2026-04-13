@@ -71,7 +71,7 @@ export async function createTestAgent(db: D1Database, ownerId: string, input: Cr
   const existing = await db.prepare("SELECT 1 FROM user WHERE id = ?").bind(ownerId).first();
   if (!existing) await seedUser(db, ownerId, `${ownerId}@test.local`);
 
-  const { createAgent, createAgentIdentity } = await import("../../apps/web/functions/api/agentRepo");
+  const { createAgent, createAgentIdentity } = await import("../../apps/web/server/agentRepo");
   const identity = await createAgentIdentity(db, ownerId, `${input.username}@mails.agent-kanban.dev`);
   return createAgent(db, ownerId, input, identity, builtin);
 }

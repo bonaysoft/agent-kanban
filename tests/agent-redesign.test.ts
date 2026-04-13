@@ -68,14 +68,14 @@ async function seedUser(db: D1Database, id: string, email: string): Promise<stri
 }
 
 async function createApiKeyForUser(userId: string): Promise<string> {
-  const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  const { createAuth } = await import("../apps/web/server/betterAuth");
   const auth = createAuth(env);
   const result = await auth.api.createApiKey({ body: { userId } });
   return result.key;
 }
 
 async function _apiRequest(method: string, path: string, body?: any, token?: string) {
-  const { api } = await import("../apps/web/functions/api/routes");
+  const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
@@ -131,7 +131,7 @@ describe("agent CRUD", () => {
   });
 
   it("updates agent fields", async () => {
-    const { updateAgent, getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { updateAgent, getAgent } = await import("../apps/web/server/agentRepo");
     await updateAgent(env.DB, agentId, { name: "UpdatedAgent", bio: "new bio", soul: "be precise" });
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.name).toBe("UpdatedAgent");
@@ -140,7 +140,7 @@ describe("agent CRUD", () => {
   });
 
   it("deletes agent", async () => {
-    const { deleteAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { deleteAgent } = await import("../apps/web/server/agentRepo");
     const temp = await createTestAgent(env.DB, userId, { name: "ToDelete", username: "to-delete", runtime: "claude" });
     const deleted = await deleteAgent(env.DB, temp.id);
     expect(deleted).toBe(true);
@@ -149,7 +149,7 @@ describe("agent CRUD", () => {
   });
 
   it("list agents returns computed status and usage", async () => {
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, userId);
     const agent = agents.find((a) => a.id === agentId);
     expect(agent).toBeTruthy();
@@ -165,7 +165,7 @@ describe("agent status computation", () => {
   let _apiKey: string;
 
   it("setup", async () => {
-    const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
+    const { upsertMachine } = await import("../apps/web/server/machineRepo");
     userId = await seedUser(env.DB, "user-status", "status@test.com");
     _apiKey = await createApiKeyForUser(userId);
     const machine = await upsertMachine(env.DB, userId, {
@@ -178,7 +178,7 @@ describe("agent status computation", () => {
     machineId = machine.id;
 
     // Create BA agentHost
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
     const authCtx = await auth.$context;
     await (authCtx.adapter.create as any)({
@@ -200,41 +200,41 @@ describe("agent status computation", () => {
   });
 
   it("agent is offline with no sessions", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.status).toBe("offline");
   });
 
   it("agent goes online when session is created", async () => {
-    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession } = await import("../apps/web/server/agentSessionRepo");
     const { publicKey } = await createSessionKeypair();
     await createSession(env.DB, env, agentId, machineId, randomUUID(), publicKey, userId);
 
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.status).toBe("online");
   });
 
   it("agent stays online with multiple sessions", async () => {
-    const { createSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession } = await import("../apps/web/server/agentSessionRepo");
     const { publicKey } = await createSessionKeypair();
     const sessionId2 = randomUUID();
     await createSession(env.DB, env, agentId, machineId, sessionId2, publicKey, userId);
 
-    const { listAgents } = await import("../apps/web/functions/api/agentRepo");
+    const { listAgents } = await import("../apps/web/server/agentRepo");
     const agents = await listAgents(env.DB, userId);
     const agent = agents.find((a) => a.id === agentId);
     expect(agent!.status).toBe("online");
   });
 
   it("agent goes offline when all sessions are closed", async () => {
-    const { closeSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { closeSession } = await import("../apps/web/server/agentSessionRepo");
     const sessions = await env.DB.prepare("SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'").bind(agentId).all();
     for (const s of sessions.results as any[]) {
       await closeSession(env.DB, s.id);
     }
 
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.status).toBe("offline");
   });
@@ -247,7 +247,7 @@ describe("session lifecycle", () => {
   let sessionId: string;
 
   it("setup", async () => {
-    const { upsertMachine } = await import("../apps/web/functions/api/machineRepo");
+    const { upsertMachine } = await import("../apps/web/server/machineRepo");
     userId = await seedUser(env.DB, "user-session", "session@test.com");
     const machine = await upsertMachine(env.DB, userId, {
       name: "session-machine",
@@ -258,7 +258,7 @@ describe("session lifecycle", () => {
     });
     machineId = machine.id;
 
-    const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+    const { createAuth } = await import("../apps/web/server/betterAuth");
     const authCtx = await createAuth(env).$context;
     await (authCtx.adapter.create as any)({
       model: "agentHost",
@@ -279,7 +279,7 @@ describe("session lifecycle", () => {
   });
 
   it("close session sets status and closed_at", async () => {
-    const { createSession, closeSession, getSession } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession, closeSession, getSession } = await import("../apps/web/server/agentSessionRepo");
     const { publicKey } = await createSessionKeypair();
     sessionId = randomUUID();
     await createSession(env.DB, env, agentId, machineId, sessionId, publicKey, userId);
@@ -291,7 +291,7 @@ describe("session lifecycle", () => {
   });
 
   it("list sessions shows full history", async () => {
-    const { createSession, listSessions } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { createSession, listSessions } = await import("../apps/web/server/agentSessionRepo");
     const { publicKey } = await createSessionKeypair();
     await createSession(env.DB, env, agentId, machineId, randomUUID(), publicKey, userId);
 
@@ -303,7 +303,7 @@ describe("session lifecycle", () => {
   });
 
   it("session usage accumulates", async () => {
-    const { updateSessionUsage } = await import("../apps/web/functions/api/agentSessionRepo");
+    const { updateSessionUsage } = await import("../apps/web/server/agentSessionRepo");
     const active = await env.DB.prepare("SELECT id FROM agent_sessions WHERE agent_id = ? AND status = 'active'")
       .bind(agentId)
       .first<{ id: string }>();
@@ -330,7 +330,7 @@ describe("session lifecycle", () => {
   });
 
   it("agent usage is aggregated from sessions", async () => {
-    const { getAgent } = await import("../apps/web/functions/api/agentRepo");
+    const { getAgent } = await import("../apps/web/server/agentRepo");
     const agent = await getAgent(env.DB, agentId, userId);
     expect(agent!.input_tokens).toBeGreaterThanOrEqual(300);
     expect(agent!.cost_micro_usd).toBeGreaterThanOrEqual(1500);
@@ -343,8 +343,8 @@ describe("message sender model", () => {
   let taskId: string;
 
   it("setup board + task", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     userId = await seedUser(env.DB, "user-msg", "msg@test.com");
     const agent = await createTestAgent(env.DB, userId, { name: "MsgAgent", username: "msg-agent", runtime: "claude" });
     agentId = agent.id;
@@ -354,7 +354,7 @@ describe("message sender model", () => {
   });
 
   it("creates user message with sender_type=user", async () => {
-    const { createMessage } = await import("../apps/web/functions/api/messageRepo");
+    const { createMessage } = await import("../apps/web/server/messageRepo");
     const msg = await createMessage(env.DB, taskId, "user", userId, "Hello agent");
     expect(msg.sender_type).toBe("user");
     expect(msg.sender_id).toBe(userId);
@@ -362,14 +362,14 @@ describe("message sender model", () => {
   });
 
   it("creates agent message with sender_type=agent", async () => {
-    const { createMessage } = await import("../apps/web/functions/api/messageRepo");
+    const { createMessage } = await import("../apps/web/server/messageRepo");
     const msg = await createMessage(env.DB, taskId, "agent", agentId, "Working on it");
     expect(msg.sender_type).toBe("agent");
     expect(msg.sender_id).toBe(agentId);
   });
 
   it("list messages returns sender fields", async () => {
-    const { listMessages } = await import("../apps/web/functions/api/messageRepo");
+    const { listMessages } = await import("../apps/web/server/messageRepo");
     const msgs = await listMessages(env.DB, taskId);
     expect(msgs.length).toBe(2);
     expect(msgs[0].sender_type).toBe("user");
@@ -427,8 +427,8 @@ describe("user assigns task to agent", () => {
   let taskId: string;
 
   it("setup", async () => {
-    const { createBoard } = await import("../apps/web/functions/api/boardRepo");
-    const { createTask } = await import("../apps/web/functions/api/taskRepo");
+    const { createBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
     userId = await seedUser(env.DB, "user-assign", "assign@test.com");
     const agent = await createTestAgent(env.DB, userId, { name: "AssignAgent", username: "assign-agent", runtime: "claude" });
     agentId = agent.id;
@@ -438,7 +438,7 @@ describe("user assigns task to agent", () => {
   });
 
   it("assigns task via repo function", async () => {
-    const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { assignTask } = await import("../apps/web/server/taskRepo");
     const task = await assignTask(env.DB, taskId, agentId, "machine", "system");
     expect(task!.assigned_to).toBe(agentId);
     expect(task!.status).toBe("todo"); // assign doesn't change status
@@ -451,7 +451,7 @@ describe("user assigns task to agent", () => {
   });
 
   it("release resets status from in_progress to todo", async () => {
-    const { claimTask, releaseTask } = await import("../apps/web/functions/api/taskRepo");
+    const { claimTask, releaseTask } = await import("../apps/web/server/taskRepo");
     await claimTask(env.DB, taskId, agentId, "agent:worker");
     const task = await releaseTask(env.DB, taskId, "machine", "system", "machine");
     expect(task!.status).toBe("todo");

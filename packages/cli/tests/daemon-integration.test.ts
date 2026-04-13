@@ -7,10 +7,10 @@
  * their boundaries so no actual network or subprocesses are invoked.
  */
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Redirect SESSIONS_DIR to isolated temp dir BEFORE any session code is imported ──
@@ -69,7 +69,7 @@ vi.mock("../src/providers/registry.js", () => ({
 
 // ── AgentClient: stub to avoid real JWT signing during resume ────────────
 vi.mock("../src/client/index.js", async (importOriginal) => {
-  const actual = await importOriginal() as any;
+  const actual = (await importOriginal()) as any;
   return {
     ...actual,
     AgentClient: vi.fn().mockImplementation(() => ({
@@ -86,7 +86,7 @@ vi.mock("../src/client/index.js", async (importOriginal) => {
 // Default: pass-through to real implementation. Individual tests can use
 // vi.mocked(cleanupWorkspace).mockImplementation(...) to simulate failures.
 vi.mock("../src/workspace/workspace.js", async (importOriginal) => {
-  const real = await importOriginal() as any;
+  const real = (await importOriginal()) as any;
   return {
     ...real,
     cleanupWorkspace: vi.fn((...args: any[]) => real.cleanupWorkspace(...args)),
@@ -95,13 +95,6 @@ vi.mock("../src/workspace/workspace.js", async (importOriginal) => {
 
 // ── Real imports after mocks ──────────────────────────────────────────────────
 import { ApiError } from "../src/client/index.js";
-import { cleanupWorkspace } from "../src/workspace/workspace.js";
-import { CleanupError as WorkspaceCleanupError } from "../src/daemon/errors.js";
-import { SessionManager, _setSessionManagerForTest } from "../src/session/manager.js";
-import { applyTransition, classifyIteratorEnd, TransitionError } from "../src/session/stateMachine.js";
-import { reapCleanupPending, reapOrphanWorkerSessions, checkRejectedReviews } from "../src/daemon/loop.js";
-import { resumeOneSession } from "../src/daemon/resumer.js";
-import { RateLimiter } from "../src/daemon/rateLimiter.js";
 import {
   apiCall,
   apiCallIdempotent,
@@ -118,14 +111,21 @@ import {
   boundary,
   boundarySync,
   ClassifiedError,
-  classify,
   CleanupError,
+  classify,
   RateLimitError,
   TerminalError,
   TransientError,
+  CleanupError as WorkspaceCleanupError,
 } from "../src/daemon/errors.js";
-import type { SessionFile } from "../src/session/types.js";
+import { checkRejectedReviews, reapCleanupPending, reapOrphanWorkerSessions } from "../src/daemon/loop.js";
+import { RateLimiter } from "../src/daemon/rateLimiter.js";
+import { resumeOneSession } from "../src/daemon/resumer.js";
 import type { RuntimePool } from "../src/daemon/runtimePool.js";
+import { _setSessionManagerForTest, SessionManager } from "../src/session/manager.js";
+import { applyTransition, classifyIteratorEnd, TransitionError } from "../src/session/stateMachine.js";
+import type { SessionFile } from "../src/session/types.js";
+import { cleanupWorkspace } from "../src/workspace/workspace.js";
 
 // ── Shared setup / teardown ───────────────────────────────────────────────────
 
@@ -546,11 +546,13 @@ describe("review watcher — resumeAfter gate", () => {
   it("skips a session whose resumeAfter is in the future", async () => {
     const sessionId = randomUUID();
     const taskId = `task-${randomUUID()}`;
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId,
-      status: "in_review",
-      resumeAfter: Date.now() + 60_000, // backoff window active
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId,
+        status: "in_review",
+        resumeAfter: Date.now() + 60_000, // backoff window active
+      }),
+    );
 
     const pool = makePool({ hasTask: vi.fn().mockReturnValue(false), activeCount: 0 } as any);
     const client = makeApiClient({
@@ -818,11 +820,13 @@ describe("orphan reaping — completeTerminal: workspace cleanup CleanupError �
     const taskId = `task-${randomUUID()}`;
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-ct-cle-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId,
-      status: "active",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId,
+        status: "active",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     const pool = makePool({ hasTask: vi.fn().mockReturnValue(false) });
     const client = makeApiClient({
@@ -855,11 +859,13 @@ describe("orphan reaper — reapCleanupPending: cleanupWorkspace still throws �
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-rcp-cle-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-rcp",
-      status: "active",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-rcp",
+        status: "active",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
     await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     await sm.patch(sessionId, { cleanupPending: true });
 
@@ -1127,7 +1133,11 @@ describe("boundary helpers", () => {
 
   it("boundary classifies thrown error", async () => {
     const err = Object.assign(new Error("boom"), { code: "ECONNRESET" });
-    await expect(boundary("ctx", async () => { throw err; })).rejects.toBeInstanceOf(TransientError);
+    await expect(
+      boundary("ctx", async () => {
+        throw err;
+      }),
+    ).rejects.toBeInstanceOf(TransientError);
   });
 
   it("boundarySync returns value on success", () => {
@@ -1136,7 +1146,11 @@ describe("boundary helpers", () => {
 
   it("boundarySync classifies thrown error", () => {
     const err = Object.assign(new Error("gone"), { code: "ENOENT" });
-    expect(() => boundarySync("ctx", () => { throw err; })).toThrow(TerminalError);
+    expect(() =>
+      boundarySync("ctx", () => {
+        throw err;
+      }),
+    ).toThrow(TerminalError);
   });
 });
 
@@ -1151,20 +1165,28 @@ describe("boundaries.ts — apiCall", () => {
   });
 
   it("classifies thrown ApiError", async () => {
-    await expect(apiCall("label", async () => { throw new ApiError(500, "oops"); }))
-      .rejects.toBeInstanceOf(TransientError);
+    await expect(
+      apiCall("label", async () => {
+        throw new ApiError(500, "oops");
+      }),
+    ).rejects.toBeInstanceOf(TransientError);
   });
 });
 
 describe("boundaries.ts — apiCallOptional", () => {
   it("returns null on 404 ApiError", async () => {
-    const result = await apiCallOptional("label", async () => { throw new ApiError(404, "not found"); });
+    const result = await apiCallOptional("label", async () => {
+      throw new ApiError(404, "not found");
+    });
     expect(result).toBeNull();
   });
 
   it("throws ClassifiedError on non-404 ApiError", async () => {
-    await expect(apiCallOptional("label", async () => { throw new ApiError(500, "error"); }))
-      .rejects.toBeInstanceOf(ClassifiedError);
+    await expect(
+      apiCallOptional("label", async () => {
+        throw new ApiError(500, "error");
+      }),
+    ).rejects.toBeInstanceOf(ClassifiedError);
   });
 
   it("resolves on success", async () => {
@@ -1175,25 +1197,40 @@ describe("boundaries.ts — apiCallOptional", () => {
 
 describe("boundaries.ts — apiCallIdempotent", () => {
   it("returns null on 404", async () => {
-    const result = await apiCallIdempotent("label", async () => { throw new ApiError(404, "not found"); });
+    const result = await apiCallIdempotent("label", async () => {
+      throw new ApiError(404, "not found");
+    });
     expect(result).toBeNull();
   });
 
   it("returns null on 409 conflict", async () => {
-    const result = await apiCallIdempotent("label", async () => { throw new ApiError(409, "conflict"); });
+    const result = await apiCallIdempotent("label", async () => {
+      throw new ApiError(409, "conflict");
+    });
     expect(result).toBeNull();
   });
 
   it("throws on other errors", async () => {
-    await expect(apiCallIdempotent("label", async () => { throw new ApiError(500, "err"); }))
-      .rejects.toBeInstanceOf(ClassifiedError);
+    await expect(
+      apiCallIdempotent("label", async () => {
+        throw new ApiError(500, "err");
+      }),
+    ).rejects.toBeInstanceOf(ClassifiedError);
   });
 });
 
 describe("boundaries.ts — apiFireAndForget", () => {
   it("resolves even when fn throws", async () => {
     const log = vi.fn();
-    await expect(apiFireAndForget("label", async () => { throw new Error("boom"); }, log)).resolves.toBeUndefined();
+    await expect(
+      apiFireAndForget(
+        "label",
+        async () => {
+          throw new Error("boom");
+        },
+        log,
+      ),
+    ).resolves.toBeUndefined();
     expect(log).toHaveBeenCalledOnce();
   });
 
@@ -1212,7 +1249,11 @@ describe("boundaries.ts — providerExecute", () => {
 
   it("classifies thrown error", async () => {
     const err = Object.assign(new Error("abort"), { name: "AbortError" });
-    await expect(providerExecute("claude", async () => { throw err; })).rejects.toBeInstanceOf(TerminalError);
+    await expect(
+      providerExecute("claude", async () => {
+        throw err;
+      }),
+    ).rejects.toBeInstanceOf(TerminalError);
   });
 });
 
@@ -1223,18 +1264,30 @@ describe("boundaries.ts — fsSync", () => {
 
   it("EBUSY → TransientError", () => {
     const err = Object.assign(new Error("busy"), { code: "EBUSY" });
-    expect(() => fsSync("label", () => { throw err; })).toThrow(TransientError);
+    expect(() =>
+      fsSync("label", () => {
+        throw err;
+      }),
+    ).toThrow(TransientError);
   });
 
   it("ENOENT → TerminalError", () => {
     const err = Object.assign(new Error("missing"), { code: "ENOENT" });
-    expect(() => fsSync("label", () => { throw err; })).toThrow(TerminalError);
+    expect(() =>
+      fsSync("label", () => {
+        throw err;
+      }),
+    ).toThrow(TerminalError);
   });
 });
 
 describe("boundaries.ts — cleanupSync", () => {
   it("wraps thrown error as CleanupError", () => {
-    expect(() => cleanupSync("ws", () => { throw new Error("rm failed"); })).toThrow(CleanupError);
+    expect(() =>
+      cleanupSync("ws", () => {
+        throw new Error("rm failed");
+      }),
+    ).toThrow(CleanupError);
   });
 
   it("does not throw on success", () => {
@@ -1249,7 +1302,11 @@ describe("boundaries.ts — execBoundary / execBoundaryAsync", () => {
 
   it("execBoundary classifies thrown error", () => {
     const err = Object.assign(new Error("not found"), { code: "ENOENT" });
-    expect(() => execBoundary("cmd", () => { throw err; })).toThrow(TerminalError);
+    expect(() =>
+      execBoundary("cmd", () => {
+        throw err;
+      }),
+    ).toThrow(TerminalError);
   });
 
   it("execBoundaryAsync resolves on success", async () => {
@@ -1259,7 +1316,11 @@ describe("boundaries.ts — execBoundary / execBoundaryAsync", () => {
 
   it("execBoundaryAsync classifies thrown error", async () => {
     const err = Object.assign(new Error("reset"), { code: "ECONNRESET" });
-    await expect(execBoundaryAsync("cmd", async () => { throw err; })).rejects.toBeInstanceOf(TransientError);
+    await expect(
+      execBoundaryAsync("cmd", async () => {
+        throw err;
+      }),
+    ).rejects.toBeInstanceOf(TransientError);
   });
 });
 
@@ -1270,7 +1331,11 @@ describe("boundaries.ts — cryptoBoundary", () => {
   });
 
   it("wraps thrown error as TerminalError", async () => {
-    await expect(cryptoBoundary("key", async () => { throw new Error("bad key"); })).rejects.toBeInstanceOf(TerminalError);
+    await expect(
+      cryptoBoundary("key", async () => {
+        throw new Error("bad key");
+      }),
+    ).rejects.toBeInstanceOf(TerminalError);
   });
 });
 
@@ -1360,11 +1425,13 @@ describe("applyTransition — additional cases", () => {
 describe("orphan reaper — workspace cleanup error marks cleanupPending", () => {
   it("retries cleanupPending: cleanup succeeds on retry → session removed", async () => {
     const sessionId = randomUUID();
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-cp",
-      status: "active",
-      workspace: { type: "temp", cwd: "/tmp/already-gone-xyz" },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-cp",
+        status: "active",
+        workspace: { type: "temp", cwd: "/tmp/already-gone-xyz" },
+      }),
+    );
     await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     await sm.patch(sessionId, { cleanupPending: true });
 
@@ -1380,11 +1447,13 @@ describe("orphan reaper — workspace cleanup error marks cleanupPending", () =>
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-cp-repo-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-cp-repo",
-      status: "active",
-      workspace: { type: "repo", cwd: workDir, repoDir: "/nonexistent-repo", branchName: "ak-test" },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-cp-repo",
+        status: "active",
+        workspace: { type: "repo", cwd: workDir, repoDir: "/nonexistent-repo", branchName: "ak-test" },
+      }),
+    );
     await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     await sm.patch(sessionId, { cleanupPending: true });
 
@@ -1532,11 +1601,13 @@ describe("resumeSession — workspace missing → forceRemove and return false",
     const missingCwd = join(tmpdir(), `ak-gone-${randomUUID()}`);
     // Deliberately do NOT create missingCwd
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-missing-ws",
-      status: "in_review",
-      workspace: { type: "temp", cwd: missingCwd },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-missing-ws",
+        status: "in_review",
+        workspace: { type: "temp", cwd: missingCwd },
+      }),
+    );
 
     const client = makeApiClient({
       releaseTask: vi.fn().mockResolvedValue(undefined),
@@ -1564,16 +1635,28 @@ describe("resumeSession — workspace missing → forceRemove and return false",
 describe("boundaries.ts — fsSync fall-through (non-EBUSY/ENOENT error)", () => {
   it("classifies an error with unknown code as TerminalError", () => {
     const err = Object.assign(new Error("access denied"), { code: "EACCES" });
-    expect(() => fsSync("label", () => { throw err; })).toThrow(TerminalError);
+    expect(() =>
+      fsSync("label", () => {
+        throw err;
+      }),
+    ).toThrow(TerminalError);
   });
 
   it("throws classified error for a plain error with no code", () => {
-    expect(() => fsSync("label", () => { throw new Error("unexpected"); })).toThrow(ClassifiedError);
+    expect(() =>
+      fsSync("label", () => {
+        throw new Error("unexpected");
+      }),
+    ).toThrow(ClassifiedError);
   });
 
   it("EAGAIN → TransientError", () => {
     const err = Object.assign(new Error("again"), { code: "EAGAIN" });
-    expect(() => fsSync("label", () => { throw err; })).toThrow(TransientError);
+    expect(() =>
+      fsSync("label", () => {
+        throw err;
+      }),
+    ).toThrow(TransientError);
   });
 });
 
@@ -1639,11 +1722,13 @@ describe("reviewWatcher — completeTerminalFromReview with real temp workspace"
     // Use a real temp dir so cleanupWorkspace actually does something
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-rw-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId,
-      status: "in_review",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId,
+        status: "in_review",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     const pool = makePool({ hasTask: vi.fn().mockReturnValue(false), activeCount: 0 } as any);
     const client = makeApiClient({
@@ -1666,11 +1751,13 @@ describe("reviewWatcher — completeTerminalFromReview with real temp workspace"
     const taskId = `task-${randomUUID()}`;
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-rw2-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId,
-      status: "in_review",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId,
+        status: "in_review",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     // Spy on applyEvent to throw a fake TransitionError — this exercises the catch bodies
     const origApplyEvent = sm.applyEvent.bind(sm);
@@ -1702,11 +1789,13 @@ describe("resumeSession — task done → cleanup workspace and return false", (
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-done-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-done",
-      status: "in_review",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-done",
+        status: "in_review",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     const client = makeApiClient({
       getTask: vi.fn().mockResolvedValue({ status: "done" }),
@@ -1726,11 +1815,13 @@ describe("resumeSession — task done → cleanup workspace and return false", (
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-cancelled-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-cancelled",
-      status: "in_review",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-cancelled",
+        status: "in_review",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     const client = makeApiClient({
       getTask: vi.fn().mockResolvedValue({ status: "cancelled" }),
@@ -1750,11 +1841,13 @@ describe("resumeSession — task done → cleanup workspace and return false", (
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-null-"));
 
-    await sm.create(makeWorkerFile(sessionId, {
-      taskId: "t-null",
-      status: "in_review",
-      workspace: { type: "temp", cwd: workDir },
-    }));
+    await sm.create(
+      makeWorkerFile(sessionId, {
+        taskId: "t-null",
+        status: "in_review",
+        workspace: { type: "temp", cwd: workDir },
+      }),
+    );
 
     const client = makeApiClient({
       getTask: vi.fn().mockRejectedValue(new ApiError(404, "not found")),

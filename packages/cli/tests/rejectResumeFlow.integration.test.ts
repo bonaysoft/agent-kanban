@@ -576,7 +576,12 @@ describe("Scenario 4 (Fix 5): resumeSession bails out when workspace.cwd is miss
     const callbacks = makeCallbacks();
     const pm = makePool(client as unknown as MachineClient, callbacks);
 
-    const result = await resumeSession(session, "Task rejected. Reason: fix it\n\nPlease fix the issues and submit for review again.", client as unknown as any, pm);
+    const result = await resumeSession(
+      session,
+      "Task rejected. Reason: fix it\n\nPlease fix the issues and submit for review again.",
+      client as unknown as any,
+      pm,
+    );
 
     // (a) returns false
     expect(result).toBe(false);

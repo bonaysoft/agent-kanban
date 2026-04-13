@@ -1,21 +1,29 @@
 name = "agent-kanban"
-pages_build_output_dir = "dist"
-compatibility_date = "2025-01-01"
+main = "./worker/index.ts"
+compatibility_date = "2026-04-13"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ALLOWED_HOSTS = "agent-kanban.dev,agent-kanban-6zd.pages.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
 
-# Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET) are set via `wrangler pages secret put`
+# Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET, MAILS_ADMIN_TOKEN) are set via `wrangler secret put`
 # Local dev overrides are in .dev.vars
 
 [observability]
 enabled = true
 
-[[services]]
-binding = "RELAY"
-service = "agent-kanban-relay"
+[assets]
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/.well-known/*", "/agents/*.gpg", "/share/*"]
+
+[durable_objects]
+bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TunnelRelay"]
 
 [[d1_databases]]
 binding = "DB"
@@ -25,6 +33,11 @@ migrations_dir = "migrations"
 
 [env.preview]
 compatibility_flags = ["nodejs_compat"]
+
+[env.preview.assets]
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/.well-known/*", "/agents/*.gpg", "/share/*"]
 
 [[env.preview.d1_databases]]
 binding = "DB"

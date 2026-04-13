@@ -64,7 +64,7 @@ async function seedUser(db: D1Database): Promise<string> {
 }
 
 async function createApiKeyForUser(db: D1Database, userId: string): Promise<string> {
-  const { createAuth } = await import("../apps/web/functions/api/betterAuth");
+  const { createAuth } = await import("../apps/web/server/betterAuth");
   const auth = createAuth({ ...env, DB: db });
   const result = await auth.api.createApiKey({ body: { userId } });
   return result.key;
@@ -99,7 +99,7 @@ describe("machine → agent session flow", () => {
   let taskId: string;
 
   async function apiRequest(method: string, path: string, body?: any, token?: string) {
-    const { api } = await import("../apps/web/functions/api/routes");
+    const { api } = await import("../apps/web/server/routes");
     const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const init: RequestInit = { method, headers };
@@ -219,9 +219,9 @@ describe("machine → agent session flow", () => {
   });
 
   it("creates a board and task", async () => {
-    const board = await (await import("../apps/web/functions/api/boardRepo")).createBoard(env.DB, userId, "test-board", "ops");
+    const board = await (await import("../apps/web/server/boardRepo")).createBoard(env.DB, userId, "test-board", "ops");
     boardId = board.id;
-    const task = await (await import("../apps/web/functions/api/taskRepo")).createTask(env.DB, userId, {
+    const task = await (await import("../apps/web/server/taskRepo")).createTask(env.DB, userId, {
       title: "Test task for agent",
       board_id: boardId,
     });
@@ -236,7 +236,7 @@ describe("machine → agent session flow", () => {
 
   it("agent claims the worker-assigned task via session JWT", async () => {
     // Re-assign the task to the worker agent directly via repo so the worker can claim it
-    const { assignTask } = await import("../apps/web/functions/api/taskRepo");
+    const { assignTask } = await import("../apps/web/server/taskRepo");
     await env.DB.prepare("UPDATE tasks SET status = 'todo', assigned_to = NULL WHERE id = ?").bind(taskId).run();
     await assignTask(env.DB, taskId, agentId, "machine", "system");
 
