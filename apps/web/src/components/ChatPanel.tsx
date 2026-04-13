@@ -5,11 +5,10 @@ interface ChatPanelProps {
   taskId: string;
   agentId: string | null;
   sessionId: string | null;
-  userId: string | null;
   taskDone: boolean;
 }
 
-export function ChatPanel({ agentId, sessionId, userId, taskDone }: ChatPanelProps) {
+export function ChatPanel({ agentId, sessionId, taskDone }: ChatPanelProps) {
   if (!agentId) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -27,7 +26,7 @@ export function ChatPanel({ agentId, sessionId, userId, taskDone }: ChatPanelPro
   }
 
   return (
-    <RelayRuntimeProvider sessionId={sessionId} userId={userId} taskDone={taskDone}>
+    <RelayRuntimeProvider sessionId={sessionId} taskDone={taskDone}>
       <ChatToolUIs />
       <AgentThread taskDone={taskDone} />
     </RelayRuntimeProvider>

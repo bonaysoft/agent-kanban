@@ -11,7 +11,6 @@ dayjs.extend(duration);
 
 import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
-import { useSession } from "../lib/auth-client";
 import { ActivityLog } from "./ActivityLog";
 import { AgentIdenticon } from "./AgentIdenticon";
 import { ChatPanel } from "./ChatPanel";
@@ -82,7 +81,6 @@ const PRIORITY_CLASSES: Record<string, string> = {
 };
 
 export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentClick }: TaskDetailProps) {
-  const { data: session } = useSession();
   const queryClient = useQueryClient();
   const [chatOpen, setChatOpen] = useState(false);
   const { notes: sseNotes, reconnecting } = useSSE({ taskId, enabled: true });
@@ -362,7 +360,6 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
                 taskId={taskId}
                 agentId={task.assigned_to}
                 sessionId={task.active_session_id ?? null}
-                userId={session?.user?.id || null}
                 taskDone={task.status === "done" || task.status === "cancelled"}
               />
             </div>

@@ -1,5 +1,5 @@
-import { AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, ThreadPrimitive, type ToolCallMessagePartComponent } from "@assistant-ui/react";
-import { ArrowDownIcon, ArrowUpIcon, Plug, SquareIcon, Wrench } from "lucide-react";
+import { AuiIf, ErrorPrimitive, MessagePrimitive, ThreadPrimitive, type ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { ArrowDownIcon, Plug, Wrench } from "lucide-react";
 import type { FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
@@ -30,12 +30,9 @@ export const AgentThread: FC<AgentThreadProps> = ({ taskDone }) => {
           }}
         />
 
-        {!taskDone && (
-          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col gap-2 bg-background pt-2">
-            <ScrollToBottom />
-            <AgentComposer />
-          </ThreadPrimitive.ViewportFooter>
-        )}
+        <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex w-full flex-col gap-2 bg-background pt-2">
+          <ScrollToBottom />
+        </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   );
@@ -103,31 +100,6 @@ const HumanMessage: FC = () => {
         <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
       </div>
     </MessagePrimitive.Root>
-  );
-};
-
-// ─── Composer ───
-
-const AgentComposer: FC = () => {
-  return (
-    <ComposerPrimitive.Root className="flex w-full gap-2">
-      <ComposerPrimitive.Input
-        placeholder="Message the agent..."
-        className="flex-1 min-h-[36px] rounded-md border border-border bg-background px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
-        rows={1}
-        aria-label="Message input"
-      />
-      <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-background disabled:opacity-30">
-          <ArrowUpIcon className="size-4" />
-        </ComposerPrimitive.Send>
-      </AuiIf>
-      <AuiIf condition={(s) => s.thread.isRunning}>
-        <ComposerPrimitive.Cancel className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-content-secondary">
-          <SquareIcon className="size-3 fill-current" />
-        </ComposerPrimitive.Cancel>
-      </AuiIf>
-    </ComposerPrimitive.Root>
   );
 };
 

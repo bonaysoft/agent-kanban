@@ -1,4 +1,4 @@
-import { type AppendMessage, AssistantRuntimeProvider, type ThreadMessageLike, useExternalStoreRuntime } from "@assistant-ui/react";
+import { AssistantRuntimeProvider, type ThreadMessageLike, useExternalStoreRuntime } from "@assistant-ui/react";
 import { type ReactNode, useCallback, useMemo } from "react";
 import type { AgentStatus, RelayEvent } from "../hooks/useSessionRelay";
 import { useSessionRelay } from "../hooks/useSessionRelay";
@@ -354,13 +354,12 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
 
 interface RelayRuntimeProviderProps {
   sessionId: string | null;
-  userId: string | null;
   taskDone: boolean;
   children: ReactNode;
 }
 
-export function RelayRuntimeProvider({ sessionId, userId, taskDone, children }: RelayRuntimeProviderProps) {
-  const { events, sendMessage, daemonConnected, agentStatus } = useSessionRelay({
+export function RelayRuntimeProvider({ sessionId, taskDone, children }: RelayRuntimeProviderProps) {
+  const { events, agentStatus } = useSessionRelay({
     sessionId,
     enabled: !!sessionId,
   });
@@ -369,19 +368,9 @@ export function RelayRuntimeProvider({ sessionId, userId, taskDone, children }: 
 
   const isRunning = agentStatus === "working" && !taskDone;
 
-  const onNew = useCallback(
-    async (message: AppendMessage) => {
-      if (!userId || !daemonConnected) {
-        throw new Error("Cannot send: agent not connected");
-      }
-      const textPart = message.content.find((p) => p.type === "text");
-      if (!textPart || textPart.type !== "text") return;
-      sendMessage(textPart.text, userId);
-    },
-    [userId, daemonConnected, sendMessage],
-  );
-
   const convertMessage = useCallback((message: ThreadMessageLike): ThreadMessageLike => message, []);
+
+  const onNew = useCallback(async () => {}, []);
 
   const runtime = useExternalStoreRuntime({
     isRunning,
