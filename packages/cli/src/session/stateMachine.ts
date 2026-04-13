@@ -136,8 +136,10 @@ function completingTransitions(event: SessionEvent): SessionState {
  * flags. Callers pass this directly to `applyTransition`.
  */
 export function classifyIteratorEnd(flags: { resultReceived: boolean; rateLimited: boolean; taskInReview: boolean; crashed: boolean }): SessionEvent {
+  // Rate-limited exits are recoverable — preserve worktree even if the CLI
+  // process crashed on its way out (the crash is a side-effect of the limit).
+  if (flags.rateLimited) return { type: "iterator_done_rate_limited" };
   if (flags.crashed) return { type: "iterator_crashed" };
   if (flags.resultReceived) return { type: "iterator_done_with_result", taskInReview: flags.taskInReview };
-  if (flags.rateLimited) return { type: "iterator_done_rate_limited" };
   return { type: "iterator_done_normal" };
 }

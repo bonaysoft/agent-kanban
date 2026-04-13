@@ -353,20 +353,21 @@ async function consumeEvents(agent: AgentProcess, ctx: RuntimeContext): Promise<
     handle: agent.handle,
   };
 
-  const crashed = false;
-  let error: unknown;
-
-  for await (const event of agent.handle.events) {
-    if (!ctx.isAlive(agent.taskId)) return { crashed: false };
-    await routeEvent(flags, event, agent.agentClient, ctx.rateLimitSink, ctx.tunnel);
+  try {
+    for await (const event of agent.handle.events) {
+      if (!ctx.isAlive(agent.taskId)) return { crashed: false };
+      await routeEvent(flags, event, agent.agentClient, ctx.rateLimitSink, ctx.tunnel);
+    }
+    return { crashed: false };
+  } catch (err) {
+    return { crashed: true, error: err };
+  } finally {
+    // Always sync flags back so finalize() sees rate-limit / result state
+    // even when the iterator throws (e.g. CLI exits with rate-limit error).
+    agent.rateLimited = flags.rateLimited;
+    agent.resultReceived = flags.resultReceived;
+    agent.taskInReview = flags.taskInReview;
   }
-
-  // Sync mutable flags back to agent process
-  agent.rateLimited = flags.rateLimited;
-  agent.resultReceived = flags.resultReceived;
-  agent.taskInReview = flags.taskInReview;
-
-  return { crashed, error };
 }
 
 async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: unknown }, ctx: RuntimeContext): Promise<void> {

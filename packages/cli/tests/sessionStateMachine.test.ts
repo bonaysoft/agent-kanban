@@ -1,12 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  applyTransition,
-  classifyIteratorEnd,
-  type SessionEvent,
-  type SessionState,
-  TransitionError,
-} from "../src/session/stateMachine.js";
+import { applyTransition, classifyIteratorEnd, type SessionEvent, type SessionState, TransitionError } from "../src/session/stateMachine.js";
 
 describe("applyTransition — active", () => {
   it.each<[SessionEvent, SessionState]>([
@@ -22,12 +16,16 @@ describe("applyTransition — active", () => {
     expect(applyTransition("active", event)).toBe(expected);
   });
 
-  it.each<SessionEvent["type"]>(["resume_started", "resume_failed_transient", "resume_failed_terminal", "rejected_by_reviewer", "cleanup_done", "task_deleted"])(
-    "rejects %s from active",
-    (type) => {
-      expect(() => applyTransition("active", { type } as SessionEvent)).toThrow(TransitionError);
-    },
-  );
+  it.each<SessionEvent["type"]>([
+    "resume_started",
+    "resume_failed_transient",
+    "resume_failed_terminal",
+    "rejected_by_reviewer",
+    "cleanup_done",
+    "task_deleted",
+  ])("rejects %s from active", (type) => {
+    expect(() => applyTransition("active", { type } as SessionEvent)).toThrow(TransitionError);
+  });
 });
 
 describe("applyTransition — rate_limited", () => {
@@ -42,12 +40,15 @@ describe("applyTransition — rate_limited", () => {
     expect(applyTransition("rate_limited", event)).toBe(expected);
   });
 
-  it.each<SessionEvent["type"]>(["iterator_done_normal", "iterator_done_rate_limited", "iterator_crashed", "rejected_by_reviewer", "cleanup_done"])(
-    "rejects %s from rate_limited",
-    (type) => {
-      expect(() => applyTransition("rate_limited", { type } as SessionEvent)).toThrow(TransitionError);
-    },
-  );
+  it.each<SessionEvent["type"]>([
+    "iterator_done_normal",
+    "iterator_done_rate_limited",
+    "iterator_crashed",
+    "rejected_by_reviewer",
+    "cleanup_done",
+  ])("rejects %s from rate_limited", (type) => {
+    expect(() => applyTransition("rate_limited", { type } as SessionEvent)).toThrow(TransitionError);
+  });
 });
 
 describe("applyTransition — in_review", () => {
@@ -95,8 +96,10 @@ describe("applyTransition — terminal", () => {
 });
 
 describe("classifyIteratorEnd", () => {
-  it("crashed takes precedence", () => {
-    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: true, taskInReview: true, crashed: true })).toEqual({ type: "iterator_crashed" });
+  it("rateLimited takes precedence over crashed", () => {
+    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: true, taskInReview: true, crashed: true })).toEqual({
+      type: "iterator_done_rate_limited",
+    });
   });
 
   it("result + in_review → iterator_done_with_result(true)", () => {
