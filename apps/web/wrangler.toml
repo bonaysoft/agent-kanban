@@ -2,6 +2,7 @@ name = "agent-kanban"
 main = "./worker/index.ts"
 compatibility_date = "2026-04-13"
 compatibility_flags = ["nodejs_compat"]
+preview_urls = true
 
 [vars]
 ALLOWED_HOSTS = "agent-kanban.dev"
