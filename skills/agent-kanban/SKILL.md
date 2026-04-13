@@ -12,7 +12,9 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 
 1. **Claim** your assigned task → `ak task claim <id>`
 2. **Log** progress as you work → `ak create note --task <id> "doing X..."`
-3. **Submit for review** when done → `ak task review <id> --pr-url <url>`
+3. **PR** → push branch, `gh pr create`
+4. **Wait for CI** → `ak wait pr <pr-number>` — fix failures, push, re-wait until green
+5. **Submit for review** once CI passes → `ak task review <id> --pr-url <url>`
 
 ## Commands
 

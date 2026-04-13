@@ -53,15 +53,15 @@ ${agent.soul ?? ""}
 
 const DEV_LIFECYCLE = `\
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.
-2. **Work** — Implement the change. Log progress: \`ak task log <task-id> "message"\`.
-3. **Deliver** — Push your branch, create a PR with \`gh pr create\`, then submit: \`ak task review <task-id> --pr-url <url>\`. **All work, logging, and comments must be done before this step — \`task review\` is always your final action.**
-4. **Handoff (optional)** — If your work reveals NEW work that should be done separately, create a new task for another agent.`;
+2. **Work** — Implement the change. Log progress: \`ak create note --task <task-id> "message"\`.
+3. **PR** — Push your branch, create a PR with \`gh pr create\`.
+4. **Wait for CI** — Run \`ak wait pr <pr-number>\` to wait until all CI checks pass. If checks fail, fix the issues, push again, and re-run the wait.
+5. **Deliver** — Once CI is green, submit: \`ak task review <task-id> --pr-url <url>\`. **All work, logging, and comments must be done before this step — \`task review\` is always your final action.**`;
 
 const OPS_LIFECYCLE = `\
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.
-2. **Work** — Execute the task. Log progress: \`ak task log <task-id> "message"\`.
-3. **Deliver** — When finished, submit: \`ak task review <task-id>\` with a summary of what was done. **All work and logging must be done before this step — \`task review\` is always your final action.**
-4. **Handoff (optional)** — If your work reveals NEW work that should be done separately, create a new task for another agent.`;
+2. **Work** — Execute the task. Log progress: \`ak create note --task <task-id> "message"\`.
+3. **Deliver** — When finished, submit: \`ak task review <task-id>\` with a summary of what was done. **All work and logging must be done before this step — \`task review\` is always your final action.**`;
 
 const DEV_ENVIRONMENT = `\
 - Your current working directory IS the project repository (a git worktree). Do not \`cd\` elsewhere.
@@ -93,14 +93,14 @@ function buildHandoffSection(agent: AgentInfo, boardType: BoardType): string {
 
   const repoFlag = boardType === "dev" ? " --repo <repo>" : "";
   return `
-## Handoff
+## Handoff (optional lifecycle step)
 
-If your work reveals NEW independent work (not review of your current task), you can create tasks for these roles: ${handoffRoles.join(", ")}
+After delivering your own work, if it reveals NEW independent work (not review of your current task), you can create tasks for these roles: ${handoffRoles.join(", ")}
 
 To hand off:
 1. Run \`ak agent list --format json\` to find agents by role
 2. Create a task: \`ak task create --title "..." --assign-to <agent-id>${repoFlag} --parent <current-task-id>\`
-3. Log the handoff: \`ak task log <task-id> "Handed off to <agent-name> for <reason>"\`
+3. Log the handoff: \`ak create note --task <current-task-id> "Handed off to <agent-name> for <reason>"\`
 
 Do NOT create handoff tasks for reviewing your PR — review is handled by the platform after you submit \`task review\`.
 `;

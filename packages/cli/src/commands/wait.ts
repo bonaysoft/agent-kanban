@@ -246,7 +246,7 @@ export function registerWaitCommand(program: Command): void {
     .option("--until <pred>", "Terminal predicate: <status> | all-done | all-<status> | first-match")
     .option("--filter <list>", "Comma-separated statuses to watch (events outside the list are ignored)")
     .option("--label <label>", "Restrict to tasks carrying this label")
-    .option("--include-current", "Treat tasks already in a target state as fresh events", false)
+    .option("--include-current", "Treat tasks already in a target state as fresh events (default: true when --filter is set)")
     .option("--timeout <duration>", "Max wait time (e.g. 30s, 1h, 0=infinite)", "2h")
     .action(async (id: string, opts) => {
       try {
@@ -255,7 +255,7 @@ export function registerWaitCommand(program: Command): void {
           until: opts.until,
           filter,
           label: opts.label,
-          includeCurrent: !!opts.includeCurrent,
+          includeCurrent: opts.includeCurrent ?? !!filter,
           timeout: parseDuration(opts.timeout),
         });
         process.exit(code);
