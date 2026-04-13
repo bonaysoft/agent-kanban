@@ -7,8 +7,8 @@
     "dev": "vite dev",
     "build": "[ \"$WORKERS_CI\" = \"1\" ] && [ \"$WORKERS_CI_BRANCH\" != \"main\" ] && export CLOUDFLARE_ENV=staging; vite build",
     "preview": "vite preview",
-    "deploy": "vite build && wrangler deploy",
-    "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",
+    "deploy": "vite build && npx wrangler deploy",
+    "db:migrate": "npx wrangler d1 migrations apply agent-kanban-db --local",
     "db:reset": "rm -rf .wrangler/state && pnpm db:migrate",
     "lint": "tsc --noEmit"
   },
@@ -51,14 +51,15 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260408.1",
+    "@cloudflare/vite-plugin": "^1.32.0",
+    "@cloudflare/workers-types": "^4.20260413.1",
     "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^6.4.2",
+    "vite": "^7.3.2",
     "wrangler": "^4.82.0"
   }
 }
