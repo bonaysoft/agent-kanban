@@ -50,7 +50,7 @@ export function createAuth(env: Env) {
         allowDynamicHostRegistration: true,
         modes: ["autonomous"],
         rateLimit: {
-          "/agent/session": { window: 60, max: 600 },
+          "/agent/session": { window: 60, max: 6000 },
         },
         capabilities: [
           { name: "task:claim", description: "Claim an assigned task" },
