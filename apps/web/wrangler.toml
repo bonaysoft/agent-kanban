@@ -32,10 +32,18 @@ database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"
 
 # ----------------------------------------------------------------------------
-# Staging environment — used by non-production branch builds.
+# Staging environment — non-main branch builds via Workers Builds.
 # CLOUDFLARE_ENV=staging is set automatically in the build script.
+# vars and durable_objects are NOT inherited — must be redeclared.
 # ----------------------------------------------------------------------------
 [env.staging]
+
+[env.staging.vars]
+ALLOWED_HOSTS = "*.workers.dev"
+GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
+
+[env.staging.durable_objects]
+bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
 
 [[env.staging.d1_databases]]
 binding = "DB"
