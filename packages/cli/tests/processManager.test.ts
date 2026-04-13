@@ -1071,6 +1071,142 @@ describe("rate-limited iterator crash preserves worktree (no cleanup)", () => {
   });
 });
 
+// ── transient API error preserves worktree (no cleanup) ──────────────────────
+
+describe("transient API error (500) preserves worktree — no crash-loop", () => {
+  it("does NOT invoke onCleanup when iterator throws SDK error with status 500", async () => {
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield { type: "turn.end", cost: 0 } as AgentEvent;
+        throw Object.assign(new Error("Internal server error"), { status: 500 });
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const callbacks = makeCallbacks();
+    const pm = makePool(apiClient, callbacks);
+
+    writeSession(makeWorkerSession("sess-api500-1", { taskId: "task-api500-1" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-api500-1",
+      sessionId: "sess-api500-1",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-api500-1", "in_progress"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).not.toHaveBeenCalled();
+  });
+
+  it("session lands in rate_limited state (not terminal) after API 500 crash", async () => {
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield { type: "turn.end", cost: 0 } as AgentEvent;
+        throw Object.assign(new Error("Internal server error"), { status: 500 });
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, makeCallbacks());
+
+    writeSession(makeWorkerSession("sess-api500-2", { taskId: "task-api500-2" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-api500-2",
+      sessionId: "sess-api500-2",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-api500-2", "in_progress"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    const session = readSession("sess-api500-2");
+    expect(session).not.toBeNull();
+    expect(session?.status).toBe("rate_limited");
+  });
+
+  it("does NOT call releaseTask for transient API 502 crash", async () => {
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield { type: "turn.end", cost: 0 } as AgentEvent;
+        throw Object.assign(new Error("Bad Gateway"), { status: 502 });
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const releaseTask = vi.fn().mockResolvedValue(undefined);
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }), releaseTask });
+    const pm = makePool(apiClient, makeCallbacks());
+
+    writeSession(makeWorkerSession("sess-api502", { taskId: "task-api502" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-api502",
+      sessionId: "sess-api502",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-api502", "in_progress"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(releaseTask).not.toHaveBeenCalled();
+  });
+
+  it("DOES invoke onCleanup for non-transient crash (real bug)", async () => {
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield { type: "turn.end", cost: 0 } as AgentEvent;
+        throw new Error("Cannot read properties of undefined (reading 'foo')");
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, makeCallbacks());
+
+    writeSession(makeWorkerSession("sess-real-crash", { taskId: "task-real-crash" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-real-crash",
+      sessionId: "sess-real-crash",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-real-crash", "in_progress"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).toHaveBeenCalled();
+  });
+});
+
 // ── duplicate rate-limit deduplication via mapSDKMessageStream ────────────────
 
 describe("duplicate rate-limit signal deduplication through mapSDKMessageStream", () => {
@@ -1202,5 +1338,67 @@ describe("duplicate rate-limit signal deduplication through mapSDKMessageStream"
 
     const [[_taskId, resetAt]] = callbacks.onRateLimited.mock.calls;
     expect(resetAt).toBe(expectedResetAt);
+  });
+});
+
+// ── clearTimer path — agent finishes before timeout fires ─────────────────────
+
+describe("ProcessManager — clearTimer path (agent with timeout)", () => {
+  it("clears the timeout when the agent finishes before the timeout fires", async () => {
+    const handle = makeHandle([]); // empty events — completes immediately
+    const provider = makeProvider(handle);
+    const agentClient = makeAgentClient("a1", "sess-timeout-clear");
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "cancelled" }) });
+    const callbacks = makeCallbacks();
+
+    // Pass a large timeout (10 minutes) — it should be cleared when agent finishes
+    const pm = makePool(apiClient, callbacks, 10 * 60 * 1000);
+
+    writeSession(makeWorkerSession("sess-timeout-clear", { taskId: "task-timeout-clear" }));
+
+    await pm.spawnAgent({
+      provider,
+      taskId: "task-timeout-clear",
+      sessionId: "sess-timeout-clear",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient,
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    // If the timer was not cleared the slot wouldn't have been freed — just check slot was freed
+    expect(callbacks.onSlotFreed).toHaveBeenCalled();
+  });
+});
+
+// ── runtimePool errMessage — crash error that is not an Error instance ────────
+
+describe("ProcessManager — crash with non-Error thrown value", () => {
+  it("handles a thrown string (non-Error) from the event iterator without crashing", async () => {
+    const throwingHandle: AgentHandle = {
+      // biome-ignore lint/correctness/useYield: generator must throw without yielding
+      events: (async function* () {
+        throw "fatal string error";
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const apiClient = makeApiClient();
+    const callbacks = makeCallbacks();
+    const pm = makePool(apiClient, callbacks);
+
+    writeSession(makeWorkerSession("sess-str-crash", { taskId: "task-str-crash" }));
+
+    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(throwingHandle), taskId: "task-str-crash", sessionId: "sess-str-crash" }));
+
+    await flushPromises();
+    await flushPromises();
+
+    // Slot should be freed even when the thrown value is not an Error
+    expect(callbacks.onSlotFreed).toHaveBeenCalled();
   });
 });

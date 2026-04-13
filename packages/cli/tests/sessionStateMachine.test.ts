@@ -97,33 +97,33 @@ describe("applyTransition — terminal", () => {
 
 describe("classifyIteratorEnd", () => {
   it("rateLimited takes precedence over crashed", () => {
-    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: true, taskInReview: true, crashed: true })).toEqual({
+    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: true, taskInReview: true, crashed: true, transient: false })).toEqual({
       type: "iterator_done_rate_limited",
     });
   });
 
   it("result + in_review → iterator_done_with_result(true)", () => {
-    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: true, crashed: false })).toEqual({
+    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: true, crashed: false, transient: false })).toEqual({
       type: "iterator_done_with_result",
       taskInReview: true,
     });
   });
 
   it("result + not in_review → iterator_done_with_result(false)", () => {
-    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: false, crashed: false })).toEqual({
+    expect(classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: false, crashed: false, transient: false })).toEqual({
       type: "iterator_done_with_result",
       taskInReview: false,
     });
   });
 
   it("rate limited without result → iterator_done_rate_limited", () => {
-    expect(classifyIteratorEnd({ resultReceived: false, rateLimited: true, taskInReview: false, crashed: false })).toEqual({
+    expect(classifyIteratorEnd({ resultReceived: false, rateLimited: true, taskInReview: false, crashed: false, transient: false })).toEqual({
       type: "iterator_done_rate_limited",
     });
   });
 
   it("neither rate limited nor result → iterator_done_normal", () => {
-    expect(classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: false })).toEqual({
+    expect(classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: false, transient: false })).toEqual({
       type: "iterator_done_normal",
     });
   });

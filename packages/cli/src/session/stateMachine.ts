@@ -27,6 +27,7 @@ export type SessionEvent =
   | { type: "iterator_done_with_result"; taskInReview: boolean } // agent produced a result
   | { type: "iterator_done_rate_limited" } // agent exited before result due to rate limit
   | { type: "iterator_crashed" } // iterator threw an error
+  | { type: "iterator_crashed_transient" } // iterator threw a transient error (API 5xx, network)
 
   // Fired by scheduler phases (outside the agent lifecycle)
   | { type: "rejected_by_reviewer" } // in_review → active (resume path)
@@ -77,6 +78,8 @@ function activeTransitions(event: SessionEvent): SessionState {
       return "completing";
     case "iterator_crashed":
       return "completing";
+    case "iterator_crashed_transient":
+      return "rate_limited";
     case "task_cancelled":
       return "completing";
     case "orphan_detected":
@@ -135,11 +138,19 @@ function completingTransitions(event: SessionEvent): SessionState {
  * Convenience: classify how an iterator ended given the AgentRuntime's tracked
  * flags. Callers pass this directly to `applyTransition`.
  */
-export function classifyIteratorEnd(flags: { resultReceived: boolean; rateLimited: boolean; taskInReview: boolean; crashed: boolean }): SessionEvent {
+export function classifyIteratorEnd(flags: {
+  resultReceived: boolean;
+  rateLimited: boolean;
+  taskInReview: boolean;
+  crashed: boolean;
+  transient: boolean;
+}): SessionEvent {
   // Rate-limited exits are recoverable — preserve worktree even if the CLI
   // process crashed on its way out (the crash is a side-effect of the limit).
   if (flags.rateLimited) return { type: "iterator_done_rate_limited" };
-  if (flags.crashed) return { type: "iterator_crashed" };
+  if (flags.crashed) {
+    return flags.transient ? { type: "iterator_crashed_transient" } : { type: "iterator_crashed" };
+  }
   if (flags.resultReceived) return { type: "iterator_done_with_result", taskInReview: flags.taskInReview };
   return { type: "iterator_done_normal" };
 }

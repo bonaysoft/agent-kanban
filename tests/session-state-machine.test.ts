@@ -14,6 +14,7 @@ describe("classifyIteratorEnd", () => {
       crashed: true,
       resultReceived: true,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_rate_limited");
   });
@@ -24,6 +25,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_rate_limited");
   });
@@ -34,6 +36,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: true,
       taskInReview: true,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_rate_limited");
   });
@@ -46,6 +49,7 @@ describe("classifyIteratorEnd", () => {
       crashed: true,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_crashed");
   });
@@ -56,6 +60,7 @@ describe("classifyIteratorEnd", () => {
       crashed: true,
       resultReceived: true,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_crashed");
   });
@@ -68,6 +73,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: true,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_with_result");
     if (event.type === "iterator_done_with_result") {
@@ -81,6 +87,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: true,
       taskInReview: true,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_with_result");
     if (event.type === "iterator_done_with_result") {
@@ -96,6 +103,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_normal");
   });
@@ -108,6 +116,7 @@ describe("classifyIteratorEnd", () => {
       crashed: false,
       resultReceived: false,
       taskInReview: true,
+      transient: false,
     });
     expect(event.type).toBe("iterator_done_normal");
   });
@@ -261,6 +270,7 @@ describe("classifyIteratorEnd feeds into applyTransition correctly", () => {
       crashed: true,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     const nextState = applyTransition("active", event);
     expect(nextState).toBe("rate_limited");
@@ -272,9 +282,22 @@ describe("classifyIteratorEnd feeds into applyTransition correctly", () => {
       crashed: true,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     const nextState = applyTransition("active", event);
     expect(nextState).toBe("completing");
+  });
+
+  it("crashed+transient → rate_limited state (worktree preserved)", () => {
+    const event = classifyIteratorEnd({
+      rateLimited: false,
+      crashed: true,
+      resultReceived: false,
+      taskInReview: false,
+      transient: true,
+    });
+    const nextState = applyTransition("active", event);
+    expect(nextState).toBe("rate_limited");
   });
 
   it("resultReceived+taskInReview → in_review state (reject-resume path)", () => {
@@ -283,6 +306,7 @@ describe("classifyIteratorEnd feeds into applyTransition correctly", () => {
       crashed: false,
       resultReceived: true,
       taskInReview: true,
+      transient: false,
     });
     const nextState = applyTransition("active", event);
     expect(nextState).toBe("in_review");
@@ -294,6 +318,7 @@ describe("classifyIteratorEnd feeds into applyTransition correctly", () => {
       crashed: false,
       resultReceived: false,
       taskInReview: false,
+      transient: false,
     });
     const nextState = applyTransition("active", event);
     expect(nextState).toBe("completing");

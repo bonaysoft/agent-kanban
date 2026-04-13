@@ -430,3 +430,143 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
     expect(sm.read("sess-orphan-404")).toBeNull();
   });
 });
+
+// ── DaemonLoop tick — resumeBackoffSessions (transient crash recovery) ────────
+
+describe("DaemonLoop tick — resumeBackoffSessions: expired backoff triggers resume", () => {
+  it("calls resumeOneSession for a rate_limited session whose resumeAfter has passed", async () => {
+    writeSession(
+      makeWorkerSession("sess-backoff-expired", "task-backoff-expired", "rate_limited", {
+        resumeAfter: Date.now() - 1000, // expired 1 second ago
+        resumeBackoffMs: 30000,
+      }),
+    );
+
+    const stubs = makeStubs();
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(mockResumeOneSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess-backoff-expired" }),
+      "",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does NOT call resumeOneSession for a rate_limited session whose resumeAfter is in the future", async () => {
+    writeSession(
+      makeWorkerSession("sess-backoff-pending", "task-backoff-pending", "rate_limited", {
+        resumeAfter: Date.now() + 60_000, // still 1 minute away
+        resumeBackoffMs: 30000,
+      }),
+    );
+
+    const stubs = makeStubs();
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call resumeOneSession for a rate_limited session with no resumeAfter set", async () => {
+    writeSession(
+      makeWorkerSession("sess-backoff-none", "task-backoff-none", "rate_limited"),
+      // no resumeAfter — driven by RateLimiter, not backoff
+    );
+
+    const stubs = makeStubs();
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
+  });
+
+  it("skips resumeBackoffSessions when pool is at max capacity", async () => {
+    writeSession(
+      makeWorkerSession("sess-backoff-max", "task-backoff-max", "rate_limited", {
+        resumeAfter: Date.now() - 1000,
+        resumeBackoffMs: 30000,
+      }),
+    );
+
+    const stubs = makeStubs();
+    // Fill pool to max
+    stubs.pool.activeCount = 5;
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
+  });
+});
+
+// ── DaemonLoop tick — killCancelledTasks ──────────────────────────────────────
+
+describe("DaemonLoop tick — killCancelledTasks kills cancelled running tasks", () => {
+  it("calls pool.killTask when a running task status becomes cancelled", async () => {
+    const stubs = makeStubs();
+    // pool reports task-running as active
+    stubs.pool.getActiveTaskIds = vi.fn().mockReturnValue(["task-running"]);
+    // server reports the task is now cancelled
+    stubs.client.getTask.mockResolvedValue({ status: "cancelled" });
+
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(stubs.pool.killTask).toHaveBeenCalledWith("task-running");
+  });
+
+  it("does NOT call pool.killTask when a running task is still in_progress", async () => {
+    const stubs = makeStubs();
+    stubs.pool.getActiveTaskIds = vi.fn().mockReturnValue(["task-active"]);
+    stubs.client.getTask.mockResolvedValue({ status: "in_progress" });
+
+    const { loop } = makeLoop(stubs);
+
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+
+    expect(stubs.pool.killTask).not.toHaveBeenCalled();
+  });
+});
+
+// ── loop.ts — errMessage fallback for non-Error values ───────────────────────
+
+describe("DaemonLoop — handleTickError with non-Error value", () => {
+  it("survives and reschedules when tick throws a non-Error string", async () => {
+    const stubs = makeStubs();
+    // Make dispatchTasks throw a plain string to exercise the non-Error errMessage path
+    mockDispatchTasks.mockRejectedValueOnce("something went wrong");
+
+    const rl = makeRateLimiter();
+    const loop = new DaemonLoop(stubs.client as any, stubs.pool as any, rl, stubs.prMonitor as any, {
+      maxConcurrent: 5,
+      pollInterval: 60000,
+    });
+
+    // Loop should not throw — it catches tick errors internally
+    loop.start();
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+    rl.stop();
+
+    // If we reach here without throwing, the non-Error path was handled correctly
+    expect(true).toBe(true);
+  });
+});

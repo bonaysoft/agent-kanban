@@ -1122,6 +1122,82 @@ describe("classify — network error codes", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// errors.ts — classify: SDK API errors (plain Error with message pattern)
+// ════════════════════════════════════════════════════════════════════════════
+
+describe("classify — SDK errors with .status property", () => {
+  it("error with status 500 → transient", () => {
+    const err = Object.assign(new Error("Internal server error"), { status: 500 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+
+  it("error with status 502 → transient", () => {
+    const err = Object.assign(new Error("Bad Gateway"), { status: 502 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+
+  it("error with status 503 → transient", () => {
+    const err = Object.assign(new Error("Service Unavailable"), { status: 503 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+
+  it("error with status 529 → transient", () => {
+    const err = Object.assign(new Error("Overloaded"), { status: 529 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+
+  it("error with status 401 → terminal", () => {
+    const err = Object.assign(new Error("Unauthorized"), { status: 401 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TerminalError);
+  });
+
+  it("error with status 429 → terminal (SDK rate limits use rate_limit_event)", () => {
+    const err = Object.assign(new Error("Too Many Requests"), { status: 429 });
+    expect(classify(err, "ctx")).toBeInstanceOf(TerminalError);
+  });
+
+  it("plain Error containing 'fetch failed' → transient", () => {
+    const err = new Error("fetch failed");
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+
+  it("plain Error without .status → terminal", () => {
+    const err = new Error("something broke");
+    expect(classify(err, "ctx")).toBeInstanceOf(TerminalError);
+  });
+
+  it("plain Error with 'fetch failed' in longer message → transient", () => {
+    const err = new Error("TypeError: fetch failed: ECONNRESET");
+    expect(classify(err, "ctx")).toBeInstanceOf(TransientError);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// errors.ts — classify: error-like objects without .message (branch coverage)
+// ════════════════════════════════════════════════════════════════════════════
+
+describe("classify — error-like objects with undefined .message (branch coverage)", () => {
+  it("ECONNREFUSED with message=undefined → transient (String(err) fallback path)", () => {
+    // Exercises the `(err as Error).message ?? String(err)` branch when message is undefined
+    const err = { code: "ECONNREFUSED", message: undefined };
+    const result = classify(err, "ctx");
+    expect(result).toBeInstanceOf(TransientError);
+  });
+
+  it("EPIPE with message=undefined → transient (String(err) fallback path)", () => {
+    const err = { code: "EPIPE", message: undefined };
+    const result = classify(err, "ctx");
+    expect(result).toBeInstanceOf(TransientError);
+  });
+
+  it("ENOENT with message=undefined → terminal (String(err) fallback path)", () => {
+    const err = { code: "ENOENT", message: undefined };
+    const result = classify(err, "ctx");
+    expect(result).toBeInstanceOf(TerminalError);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // errors.ts — boundary and boundarySync helpers
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1345,30 +1421,40 @@ describe("boundaries.ts — cryptoBoundary", () => {
 
 describe("classifyIteratorEnd", () => {
   it("crashed=true → iterator_crashed", () => {
-    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: true });
+    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: true, transient: false });
     expect(ev.type).toBe("iterator_crashed");
   });
 
   it("resultReceived=true, taskInReview=true → iterator_done_with_result(true)", () => {
-    const ev = classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: true, crashed: false });
+    const ev = classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: true, crashed: false, transient: false });
     expect(ev.type).toBe("iterator_done_with_result");
     if (ev.type === "iterator_done_with_result") expect(ev.taskInReview).toBe(true);
   });
 
   it("resultReceived=true, taskInReview=false → iterator_done_with_result(false)", () => {
-    const ev = classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: false, crashed: false });
+    const ev = classifyIteratorEnd({ resultReceived: true, rateLimited: false, taskInReview: false, crashed: false, transient: false });
     expect(ev.type).toBe("iterator_done_with_result");
     if (ev.type === "iterator_done_with_result") expect(ev.taskInReview).toBe(false);
   });
 
   it("rateLimited=true → iterator_done_rate_limited", () => {
-    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: true, taskInReview: false, crashed: false });
+    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: true, taskInReview: false, crashed: false, transient: false });
     expect(ev.type).toBe("iterator_done_rate_limited");
   });
 
   it("all false → iterator_done_normal", () => {
-    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: false });
+    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: false, transient: false });
     expect(ev.type).toBe("iterator_done_normal");
+  });
+
+  it("crashed=true, transient=true → iterator_crashed_transient", () => {
+    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: true, transient: true });
+    expect(ev.type).toBe("iterator_crashed_transient");
+  });
+
+  it("crashed=true, transient=false → iterator_crashed (not transient)", () => {
+    const ev = classifyIteratorEnd({ resultReceived: false, rateLimited: false, taskInReview: false, crashed: true, transient: false });
+    expect(ev.type).toBe("iterator_crashed");
   });
 });
 
@@ -1379,6 +1465,10 @@ describe("classifyIteratorEnd", () => {
 describe("applyTransition — additional cases", () => {
   it("active + rate_limit_cleared → active (noop)", () => {
     expect(applyTransition("active", { type: "rate_limit_cleared" })).toBe("active");
+  });
+
+  it("active + iterator_crashed_transient → rate_limited", () => {
+    expect(applyTransition("active", { type: "iterator_crashed_transient" })).toBe("rate_limited");
   });
 
   it("active + iterator_crashed → completing", () => {

@@ -13,6 +13,7 @@ import type { AgentEvent, AgentHandle, AgentProvider } from "../providers/types.
 import { getSessionManager } from "../session/manager.js";
 import { classifyIteratorEnd, type SessionEvent } from "../session/stateMachine.js";
 import { apiCallOptional, apiFireAndForget, providerExecute } from "./boundaries.js";
+import { classify } from "./errors.js";
 
 const logger = createLogger("runtime-pool");
 
@@ -383,9 +384,15 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     (msg) => logger.warn(`Failed to close session ${sessionId}: ${msg}`),
   );
 
+  let transient = false;
   if (opts.crashed) {
     const err = opts.error as { exitCode?: number; stderr?: string; message?: string } | undefined;
-    logger.warn(`Agent crashed on task ${taskId} (${agent.providerName}, exit ${err?.exitCode ?? "?"}): ${err?.message ?? ""}`);
+    transient = classify(opts.error, "iterator").kind === "transient";
+    if (transient) {
+      logger.warn(`Agent hit transient error on task ${taskId} (${agent.providerName}): ${err?.message ?? ""}`);
+    } else {
+      logger.warn(`Agent crashed on task ${taskId} (${agent.providerName}, exit ${err?.exitCode ?? "?"}): ${err?.message ?? ""}`);
+    }
     if (err?.stderr) logger.warn(`stderr: ${err.stderr}`);
   } else {
     logger.info(`Agent finished task ${taskId}`);
@@ -396,6 +403,7 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     rateLimited: agent.rateLimited,
     taskInReview: agent.taskInReview,
     crashed: opts.crashed,
+    transient,
   });
 
   const next = await sessions.applyEvent(sessionId, event).catch((e) => {
@@ -421,7 +429,13 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     (ctx.tunnel as TunnelSink & { sendStatus?: (sid: string, s: string) => void })?.sendStatus?.(sessionId, "done");
     logger.info(`Task ${taskId} in review, preserving worktree`);
   } else if (nextStatus === "rate_limited") {
-    logger.warn(`Agent for task ${taskId} (${agent.providerName}) exited while rate-limited, suspending`);
+    if (transient) {
+      const backoffMs = 30_000;
+      await sessions.patch(sessionId, { resumeBackoffMs: backoffMs, resumeAfter: Date.now() + backoffMs }).catch(() => {});
+      logger.warn(`Transient crash on task ${taskId}, suspending with ${backoffMs / 1000}s backoff`);
+    } else {
+      logger.warn(`Agent for task ${taskId} (${agent.providerName}) exited while rate-limited, suspending`);
+    }
   }
 }
 

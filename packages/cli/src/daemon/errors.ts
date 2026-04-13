@@ -113,7 +113,21 @@ export function classify(err: unknown, context: string): ClassifiedError {
     return new TerminalError(`${context}: aborted`, err);
   }
 
+  // The Anthropic SDK throws errors with a numeric `.status` property.
+  // These aren't our ApiError class but carry the same HTTP status semantics.
+  const status = (err as { status?: number } | null)?.status;
+  if (typeof status === "number" && status >= 500 && status < 600) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return new TransientError(`${context}: ${msg}`, err);
+  }
+
   const msg = err instanceof Error ? err.message : String(err);
+
+  // Fallback: network-level failures from fetch (no status code).
+  if (/\bfetch failed\b/.test(msg)) {
+    return new TransientError(`${context}: ${msg}`, err);
+  }
+
   return new TerminalError(`${context}: ${msg}`, err);
 }
 

@@ -22,7 +22,7 @@ import { dispatchTasks } from "./dispatcher.js";
 import { CleanupError } from "./errors.js";
 import type { PrMonitor } from "./prMonitor.js";
 import { type RateLimiter } from "./rateLimiter.js";
-import { resumeOneSession, resumeSession } from "./resumer.js";
+import { resumeOneSession } from "./resumer.js";
 import type { RuntimePool } from "./runtimePool.js";
 
 const logger = createLogger("loop");
@@ -81,6 +81,30 @@ export class DaemonLoop {
     this.schedulePoll(0);
   }
 
+  /**
+   * Resume rate_limited sessions whose backoff timer has expired.
+   * Covers transient crash recovery (not driven by RateLimiter timer).
+   */
+  private async resumeBackoffSessions(): Promise<void> {
+    const now = Date.now();
+    for (const s of this.sessions.list({ type: "worker", status: "rate_limited" })) {
+      if (this.pool.activeCount >= this.opts.maxConcurrent) return;
+      if (!s.taskId || this.pool.hasTask(s.taskId)) continue;
+      if (!s.resumeAfter || s.resumeAfter > now) continue;
+      await resumeOneSession(s, "", this.client, this.pool);
+    }
+  }
+
+  /** Pick the shorter of pollInterval and the nearest backoff expiry. */
+  private nextPollDelay(): number {
+    const now = Date.now();
+    let earliest = Infinity;
+    for (const s of this.sessions.list({ type: "worker", status: "rate_limited" })) {
+      if (s.resumeAfter && s.resumeAfter > now) earliest = Math.min(earliest, s.resumeAfter - now);
+    }
+    return Math.min(this.opts.pollInterval, earliest === Infinity ? this.opts.pollInterval : Math.max(earliest, 1000));
+  }
+
   private schedulePoll(delayMs: number): void {
     if (!this.running) return;
     if (this.pollTimer) clearTimeout(this.pollTimer);
@@ -101,18 +125,20 @@ export class DaemonLoop {
       this.opts.maxConcurrent,
     );
 
+    await this.resumeBackoffSessions();
+
     if (this.pool.activeCount >= this.opts.maxConcurrent) {
-      this.schedulePoll(this.opts.pollInterval);
+      this.schedulePoll(this.nextPollDelay());
       return;
     }
 
-    const dispatched = await dispatchTasks(this.client, this.pool, this.rateLimiter, this.prMonitor, {
+    await dispatchTasks(this.client, this.pool, this.rateLimiter, this.prMonitor, {
       maxConcurrent: this.opts.maxConcurrent,
       pollInterval: this.opts.pollInterval,
     });
 
     this.backoffMs = this.opts.pollInterval;
-    this.schedulePoll(this.opts.pollInterval);
+    this.schedulePoll(this.nextPollDelay());
   }
 
   private async killCancelledTasks(): Promise<void> {
