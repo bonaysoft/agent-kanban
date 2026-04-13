@@ -31,19 +31,19 @@ database_name = "agent-kanban-db"
 database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"
 
-[env.preview]
+[env.staging]
 compatibility_flags = ["nodejs_compat"]
 
-[env.preview.assets]
+[env.staging.assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/.well-known/*", "/agents/*.gpg", "/share/*"]
 
-[[env.preview.d1_databases]]
+[[env.staging.d1_databases]]
 binding = "DB"
-database_name = "agent-kanban-db-preview"
+database_name = "agent-kanban-db-staging"
 database_id = "d12fc329-6105-437c-9580-bab26891b059"
 
-[env.preview.vars]
-ALLOWED_HOSTS = "*.agent-kanban-6zd.pages.dev"
+[env.staging.vars]
+ALLOWED_HOSTS = "*.workers.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
