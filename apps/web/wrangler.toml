@@ -4,7 +4,7 @@ compatibility_date = "2026-04-13"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-ALLOWED_HOSTS = "agent-kanban.dev,agent-kanban-6zd.pages.dev"
+ALLOWED_HOSTS = "agent-kanban.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
 
 # Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET, MAILS_ADMIN_TOKEN) are set via `wrangler secret put`
@@ -31,19 +31,14 @@ database_name = "agent-kanban-db"
 database_id = "13cdf435-a99c-4744-9eca-9ed22b232581"
 migrations_dir = "migrations"
 
+# ----------------------------------------------------------------------------
+# Staging environment — used by non-production branch builds.
+# CLOUDFLARE_ENV=staging is set automatically in the build script.
+# ----------------------------------------------------------------------------
 [env.staging]
-compatibility_flags = ["nodejs_compat"]
-
-[env.staging.assets]
-binding = "ASSETS"
-not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/.well-known/*", "/agents/*.gpg", "/share/*"]
 
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db-staging"
 database_id = "d12fc329-6105-437c-9580-bab26891b059"
-
-[env.staging.vars]
-ALLOWED_HOSTS = "*.workers.dev"
-GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
+migrations_dir = "migrations"

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "[ \"$WORKERS_CI\" = \"1\" ] && [ \"$WORKERS_CI_BRANCH\" != \"main\" ] && export CLOUDFLARE_ENV=staging; vite build",
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply agent-kanban-db --local",
