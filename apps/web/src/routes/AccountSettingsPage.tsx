@@ -207,6 +207,8 @@ export function AccountSettingsPage() {
             </div>
           )}
         </section>
+
+        <p className="text-xs text-content-tertiary pt-4">Version {__APP_VERSION__}</p>
       </div>
     </div>
   );
