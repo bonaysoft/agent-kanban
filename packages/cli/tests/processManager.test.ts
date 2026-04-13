@@ -8,8 +8,7 @@
  *   - onCleanup invocation based on session state machine outcome
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
@@ -47,11 +46,11 @@ vi.mock("../src/agent/systemPrompt.js", () => ({
 
 import type { AgentClient, ApiClient } from "../src/client/index.js";
 import { RuntimePool, type SpawnRequest } from "../src/daemon/runtimePool.js";
+import type { TunnelClient } from "../src/daemon/tunnel.js";
+import type { AgentEvent, AgentHandle, AgentProvider } from "../src/providers/types.js";
 import { SessionManager } from "../src/session/manager.js";
 import { readSession, writeSession } from "../src/session/store.js";
 import type { SessionFile } from "../src/session/types.js";
-import type { TunnelClient } from "../src/daemon/tunnel.js";
-import type { AgentEvent, AgentHandle, AgentProvider } from "../src/providers/types.js";
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 
@@ -610,9 +609,9 @@ describe("ProcessManager — spawnAgent provider failure", () => {
 
     writeSession(makeWorkerSession("sess-fail", { taskId: "task-fail" }));
 
-    await expect(
-      pm.spawnAgent(makeSpawnRequest({ provider: failingProvider, taskId: "task-fail", sessionId: "sess-fail" }))
-    ).rejects.toThrow("provider exploded");
+    await expect(pm.spawnAgent(makeSpawnRequest({ provider: failingProvider, taskId: "task-fail", sessionId: "sess-fail" }))).rejects.toThrow(
+      "provider exploded",
+    );
 
     expect(pm.hasTask("task-fail")).toBe(false);
   });
@@ -768,7 +767,9 @@ describe("ProcessManager — handleEvent rate_limit allowed", () => {
 
     writeSession(makeWorkerSession("sess-rl-overage-running", { taskId: "task-rl-overage-running" }));
 
-    await pm.spawnAgent(makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-overage-running", sessionId: "sess-rl-overage-running" }));
+    await pm.spawnAgent(
+      makeSpawnRequest({ provider: makeProvider(handle), taskId: "task-rl-overage-running", sessionId: "sess-rl-overage-running" }),
+    );
     await flushPromises();
     await flushPromises();
 
@@ -950,5 +951,121 @@ describe("ProcessManager — onComplete normal completion invokes cleanup", () =
 
     // After cleanup_done the state machine removes the file
     expect(readSession("sess-normal-remove")).toBeNull();
+  });
+});
+
+// ── rate-limited iterator crash preserves worktree (no cleanup) ───────────────
+
+describe("rate-limited iterator crash preserves worktree (no cleanup)", () => {
+  it("does NOT invoke onCleanup when rate-limited iterator throws", async () => {
+    const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const rateLimitEvent: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt };
+    const turnEndEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
+
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield rateLimitEvent;
+        yield turnEndEvent;
+        throw new Error("You've hit your limit");
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const callbacks = makeCallbacks();
+    const pm = makePool(apiClient, callbacks);
+
+    writeSession(makeWorkerSession("sess-rl-crash-1", { taskId: "task-rl-crash-1" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-rl-crash-1",
+      sessionId: "sess-rl-crash-1",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-rl-crash-1", "in_progress"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).not.toHaveBeenCalled();
+  });
+
+  it("session lands in rate_limited state (not terminal) when iterator throws after rate limit", async () => {
+    const resetAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const rateLimitEvent: AgentEvent = { type: "turn.rate_limit", status: "rejected", resetAt };
+    const turnEndEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
+
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield rateLimitEvent;
+        yield turnEndEvent;
+        throw new Error("You've hit your limit");
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, makeCallbacks());
+
+    writeSession(makeWorkerSession("sess-rl-crash-2", { taskId: "task-rl-crash-2" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-rl-crash-2",
+      sessionId: "sess-rl-crash-2",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-rl-crash-2", "in_progress"),
+      agentEnv: {},
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    const session = readSession("sess-rl-crash-2");
+    expect(session).not.toBeNull();
+    expect(session?.status).toBe("rate_limited");
+  });
+
+  it("DOES invoke onCleanup when non-rate-limited iterator throws (real crash)", async () => {
+    const turnEndEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
+
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yield turnEndEvent;
+        throw new Error("process crashed unexpectedly");
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const onCleanup = vi.fn();
+    const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "in_progress" }) });
+    const pm = makePool(apiClient, makeCallbacks());
+
+    writeSession(makeWorkerSession("sess-crash-no-rl", { taskId: "task-crash-no-rl" }));
+
+    await pm.spawnAgent({
+      provider: makeProvider(handle),
+      taskId: "task-crash-no-rl",
+      sessionId: "sess-crash-no-rl",
+      cwd: "/tmp",
+      taskContext: "ctx",
+      agentClient: makeAgentClient("a1", "sess-crash-no-rl", "in_progress"),
+      agentEnv: {},
+      onCleanup,
+    });
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(onCleanup).toHaveBeenCalled();
   });
 });
