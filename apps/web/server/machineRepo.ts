@@ -113,9 +113,31 @@ export async function getMachine(db: D1, machineId: string, ownerId: string): Pr
   return { ...parseMachine(machine), agents: agents.results };
 }
 
+export interface AdminMachine extends MachineWithAgents {
+  owner_name: string | null;
+  owner_email: string | null;
+}
+
+export async function listAllMachines(db: D1): Promise<AdminMachine[]> {
+  await detectStaleMachines(db);
+
+  const result = await db
+    .prepare(`
+    SELECT m.*,
+      u.name AS owner_name, u.email AS owner_email,
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id) AS session_count,
+      (SELECT COUNT(*) FROM agent_sessions s WHERE s.machine_id = m.id AND s.status = 'active') AS active_session_count
+    FROM machines m
+    LEFT JOIN user u ON u.id = m.owner_id
+    ORDER BY m.last_heartbeat_at DESC
+  `)
+    .all<AdminMachine>();
+  return result.results.map(parseMachine);
+}
+
 const parseMachine = <T extends Machine>(row: T) => parseJsonFields(row, ["runtimes", "usage_info"]);
 
-async function detectStaleMachines(db: D1): Promise<void> {
+export async function detectStaleMachines(db: D1): Promise<void> {
   const cutoff = new Date(Date.now() - MACHINE_STALE_TIMEOUT_MS).toISOString();
   await db.prepare("UPDATE machines SET status = 'offline' WHERE status = 'online' AND last_heartbeat_at < ?").bind(cutoff).run();
 }

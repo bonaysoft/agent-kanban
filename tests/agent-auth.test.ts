@@ -146,7 +146,14 @@ describe("agent-auth bridge", () => {
   it("session JWT authenticates through HTTP handler", async () => {
     const { createSession } = await import("../apps/web/server/agentSessionRepo");
     const { api } = await import("../apps/web/server/routes");
-    const env = { DB: db, AUTH_SECRET, ALLOWED_HOSTS: "localhost:8788", GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "x" };
+    const env = {
+      DB: db,
+      AE: { writeDataPoint: () => {} } as unknown as AnalyticsEngineDataset,
+      AUTH_SECRET,
+      ALLOWED_HOSTS: "localhost:8788",
+      GITHUB_CLIENT_ID: "x",
+      GITHUB_CLIENT_SECRET: "x",
+    };
 
     const sessionId = randomUUID();
     const { publicKey, privateKey } = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);

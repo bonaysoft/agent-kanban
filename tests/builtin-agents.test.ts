@@ -11,6 +11,7 @@ const AUTH_SECRET = "test-secret-32-chars-minimum-ok!!";
 
 const env = {
   DB: null as any as D1Database,
+  AE: { writeDataPoint: () => {} } as unknown as AnalyticsEngineDataset,
   AUTH_SECRET,
   ALLOWED_HOSTS: "localhost:8788",
   GITHUB_CLIENT_ID: "x",

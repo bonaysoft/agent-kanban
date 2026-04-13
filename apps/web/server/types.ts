@@ -2,6 +2,7 @@ import type { Session, User } from "better-auth";
 
 export interface Env {
   DB: D1Database;
+  AE: AnalyticsEngineDataset;
   TUNNEL_RELAY: DurableObjectNamespace;
   ASSETS: Fetcher;
   AUTH_SECRET: string;
@@ -9,6 +10,8 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   MAILS_ADMIN_TOKEN: string;
+  CF_ACCOUNT_ID: string;
+  CF_API_TOKEN: string;
 }
 
 declare module "hono" {

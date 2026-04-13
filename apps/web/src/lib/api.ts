@@ -106,5 +106,6 @@ export const api = {
   },
   admin: {
     getStats: () => request<any>("GET", "/admin/stats"),
+    getMachines: () => request<any[]>("GET", "/admin/machines"),
   },
 };

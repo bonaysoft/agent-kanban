@@ -7,8 +7,9 @@ preview_urls = true
 [vars]
 ALLOWED_HOSTS = "agent-kanban.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
+CF_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 
-# Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET, MAILS_ADMIN_TOKEN) are set via `wrangler secret put`
+# Secrets (AUTH_SECRET, GITHUB_CLIENT_SECRET, MAILS_ADMIN_TOKEN, CF_API_TOKEN) are set via `wrangler secret put`
 # Local dev overrides are in .dev.vars
 
 [observability]
@@ -26,6 +27,10 @@ bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
 tag = "v1"
 new_sqlite_classes = ["TunnelRelay"]
 
+[[analytics_engine_datasets]]
+binding = "AE"
+dataset = "agent_kanban_metrics"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"
@@ -42,9 +47,14 @@ migrations_dir = "migrations"
 [env.staging.vars]
 ALLOWED_HOSTS = "*.workers.dev"
 GITHUB_CLIENT_ID = "Ov23liryJHLmoT8019oo"
+CF_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 
 [env.staging.durable_objects]
 bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
+
+[[env.staging.analytics_engine_datasets]]
+binding = "AE"
+dataset = "agent_kanban_metrics_staging"
 
 [[env.staging.d1_databases]]
 binding = "DB"

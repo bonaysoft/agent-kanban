@@ -1,9 +1,10 @@
-import { BarChart3, ChevronLeft, LayoutDashboard, Users } from "lucide-react";
+import { BarChart3, ChevronLeft, LayoutDashboard, Server, Users } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 const navItems = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/machines", label: "Machines", icon: Server },
 ];
 
 export function AdminLayout() {

@@ -9,6 +9,7 @@ import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { AuthPage } from "./routes/AuthPage";
 import { AdminDashboardPage } from "./routes/admin/AdminDashboardPage";
 import { AdminLayout } from "./routes/admin/AdminLayout";
+import { AdminMachinesPage } from "./routes/admin/AdminMachinesPage";
 import { AdminUsersPage } from "./routes/admin/AdminUsersPage";
 import { BoardPage } from "./routes/BoardPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
@@ -154,6 +155,7 @@ export function App() {
         >
           <Route index element={<AdminDashboardPage />} />
           <Route path="users" element={<AdminUsersPage />} />
+          <Route path="machines" element={<AdminMachinesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

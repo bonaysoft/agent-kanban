@@ -8,6 +8,7 @@ const MIGRATIONS_DIR = join(__dirname, "../../apps/web/migrations");
 export function createTestEnv() {
   return {
     DB: null as any as D1Database,
+    AE: { writeDataPoint: () => {} } as unknown as AnalyticsEngineDataset,
     AUTH_SECRET: "test-secret-32-chars-minimum-ok!!",
     ALLOWED_HOSTS: "localhost:8788",
     GITHUB_CLIENT_ID: "x",

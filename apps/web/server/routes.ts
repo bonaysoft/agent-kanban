@@ -20,9 +20,11 @@ import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
 import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
-import { deleteMachine, getMachine, listMachines, updateMachine, upsertMachine } from "./machineRepo";
+import { deleteMachine, getMachine, listAllMachines, listMachines, updateMachine, upsertMachine } from "./machineRepo";
 import { createMailbox, deleteMailbox, getEmail, getInbox } from "./mailsService";
 import { createMessage, listMessages } from "./messageRepo";
+import { metricsMiddleware } from "./metrics";
+import { getMachineMetrics } from "./metricsRepo";
 import { createRepository, deleteRepository, getRepository, listRepositories } from "./repositoryRepo";
 import { createSSEResponse } from "./sse";
 import { getSystemStats } from "./statsRepo";
@@ -279,6 +281,9 @@ api.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
   return authMiddleware(c, next);
 });
+
+// Metrics — write AE data point for machine/agent requests (fire-and-forget)
+api.use("/api/*", metricsMiddleware);
 
 // ─── Machines ───
 
@@ -779,12 +784,23 @@ api.delete("/api/boards/:id", async (c) => {
 
 // ─── Admin ───
 
-api.get("/api/admin/stats", async (c) => {
+function requireAdmin(c: { get: (key: string) => any }) {
   if ((c.get("user") as any)?.role !== "admin") {
-    return c.json({ error: { code: "FORBIDDEN", message: "Admin role required" } }, 403);
+    throw new HTTPException(403, { message: "FORBIDDEN" });
   }
+}
+
+api.get("/api/admin/stats", async (c) => {
+  requireAdmin(c);
   const stats = await getSystemStats(c.env.DB);
   return c.json(stats);
+});
+
+api.get("/api/admin/machines", async (c) => {
+  requireAdmin(c);
+  const machines = await listAllMachines(c.env.DB);
+  const metrics = await getMachineMetrics(c.env);
+  return c.json(machines.map((m) => ({ ...m, metrics: metrics.get(m.id) ?? null })));
 });
 
 // ─── Repositories ───

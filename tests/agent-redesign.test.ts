@@ -22,6 +22,7 @@ const BETTER_AUTH_URL = "http://localhost:8788";
 
 const env = {
   DB: null as any as D1Database,
+  AE: { writeDataPoint: () => {} } as unknown as AnalyticsEngineDataset,
   AUTH_SECRET,
   ALLOWED_HOSTS: "localhost:8788",
   GITHUB_CLIENT_ID: "x",
