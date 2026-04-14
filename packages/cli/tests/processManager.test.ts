@@ -900,12 +900,11 @@ describe("ProcessManager — onComplete skips cleanup when session is in_review"
 });
 
 describe("ProcessManager — onComplete normal completion invokes cleanup", () => {
-  it("invokes onCleanup when getTask returns done (normal completion)", async () => {
+  it("preserves worktree when agent finishes with result (session stays in_review)", async () => {
     const tunnel = makeTunnel();
     const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const onCleanup = vi.fn();
-    // getTask returns "done" → taskInReview=false → state machine → completing → runCleanup
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
 
     const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
@@ -925,33 +924,36 @@ describe("ProcessManager — onComplete normal completion invokes cleanup", () =
     await flushPromises();
     await flushPromises();
 
-    expect(onCleanup).toHaveBeenCalled();
+    // resultReceived=true → worktree preserved, cleanup deferred to daemon loop
+    expect(onCleanup).not.toHaveBeenCalled();
   });
 
-  it("removes session file when getTask returns done (normal completion)", async () => {
+  it("session stays in in_review when agent finishes with result", async () => {
     const tunnel = makeTunnel();
     const resultEvent: AgentEvent = { type: "turn.end", cost: 0.001 };
     const handle = makeHandle([resultEvent]);
     const apiClient = makeApiClient({ getTask: vi.fn().mockResolvedValue({ status: "done" }) });
 
     const pm = makePool(apiClient, makeCallbacks(), 0, tunnel);
-    writeSession(makeWorkerSession("sess-normal-remove", { taskId: "task-normal-remove" }));
+    writeSession(makeWorkerSession("sess-normal-keep", { taskId: "task-normal-keep" }));
 
     await pm.spawnAgent({
       provider: makeProvider(handle),
-      taskId: "task-normal-remove",
-      sessionId: "sess-normal-remove",
+      taskId: "task-normal-keep",
+      sessionId: "sess-normal-keep",
       cwd: "/tmp",
       taskContext: "ctx",
-      agentClient: makeAgentClient("a1", "sess-normal-remove"),
+      agentClient: makeAgentClient("a1", "sess-normal-keep"),
       agentEnv: {},
     });
 
     await flushPromises();
     await flushPromises();
 
-    // After cleanup_done the state machine removes the file
-    expect(readSession("sess-normal-remove")).toBeNull();
+    // Session preserved for daemon loop to clean up later
+    const session = readSession("sess-normal-keep");
+    expect(session).not.toBeNull();
+    expect(session?.status).toBe("in_review");
   });
 });
 

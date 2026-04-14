@@ -299,17 +299,16 @@ describe("RuntimePool finalize() — releaseTask on completing", () => {
   });
 
   // --------------------------------------------------------------------------
-  // Case 2: agent finishes normally and task is NOT in_review (e.g. still in_progress)
-  //   → nextStatus === "completing", opts.crashed === false, taskInReview === false
-  //   → releaseTask MUST be called (the new behavior)
+  // Case 2: agent finishes normally with result but task is in_progress
+  //   (e.g. rejected before finalize ran). Since agent produced a result,
+  //   worktree is preserved for resume — releaseTask must NOT be called.
   // --------------------------------------------------------------------------
 
-  it("calls releaseTask when agent finishes normally but task is NOT in_review", async () => {
+  it("does NOT call releaseTask when agent produces result even if task is in_progress", async () => {
     const taskId = randomUUID();
     const sessionId = randomUUID();
     await seedActiveSession(sessions, sessionId, taskId);
 
-    // turn.end fires; getTask returns in_progress → agent.taskInReview = false
     const agentClient = makeAgentClient({ status: "in_progress" });
     const handle = makeHandle([makeTurnEndEvent()]);
     const provider = makeProvider(handle);
@@ -319,7 +318,7 @@ describe("RuntimePool finalize() — releaseTask on completing", () => {
       pool.spawnAgent({ provider, taskId, sessionId, cwd: "/tmp", taskContext: "test", agentClient, agentEnv: {} });
     });
 
-    expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(taskId);
+    expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
   // --------------------------------------------------------------------------

@@ -12,7 +12,7 @@ import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "../providers/types.js";
 import { getSessionManager } from "../session/manager.js";
 import { classifyIteratorEnd, type SessionEvent } from "../session/stateMachine.js";
-import { apiCallOptional, apiFireAndForget, providerExecute } from "./boundaries.js";
+import { apiFireAndForget, providerExecute } from "./boundaries.js";
 import { classify } from "./errors.js";
 
 const logger = createLogger("runtime-pool");
@@ -423,16 +423,14 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     );
   }
 
-  // Check task status after the iterator ends — only now is the state final.
-  let taskInReview = false;
-  if (agent.resultReceived) {
-    try {
-      const task = (await apiCallOptional("getTask", () => agent.agentClient.getTask(taskId))) as { status?: string } | null;
-      taskInReview = task?.status === "in_review";
-    } catch (e) {
-      logger.warn(`Failed to check task status for ${taskId}, assuming not in review: ${errMessage(e)}`);
-    }
-  }
+  // Agent produced a result → preserve worktree. The work product lives in
+  // the worktree and must survive for review, reject-resume, or completion
+  // cleanup. The daemon loop handles all post-finalize lifecycle:
+  //   - in_review → wait for human review
+  //   - in_progress + rejected → resume agent
+  //   - in_progress + no reject → release (agent forgot to submit review)
+  //   - done/cancelled → cleanup
+  const taskInReview = agent.resultReceived && !opts.crashed;
 
   const event: SessionEvent = classifyIteratorEnd({
     resultReceived: agent.resultReceived,

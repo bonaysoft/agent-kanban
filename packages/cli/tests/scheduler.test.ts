@@ -343,7 +343,7 @@ describe("DaemonLoop tick — in_review session resumption", () => {
     expect(sm.read("sess-notfound")).toBeNull();
   });
 
-  it("falls back to 'No reason provided' when no rejected note exists", async () => {
+  it("cleans up session when in_progress with no rejected note", async () => {
     writeSession(makeWorkerSession("sess-noreason", "task-noreason", "in_review"));
 
     const stubs = makeStubs();
@@ -356,12 +356,9 @@ describe("DaemonLoop tick — in_review session resumption", () => {
     await new Promise((r) => setTimeout(r, 100));
     loop.stop();
 
-    expect(mockResumeOneSession).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "sess-noreason" }),
-      expect.stringContaining("No reason provided"),
-      expect.anything(),
-      expect.anything(),
-    );
+    // No reject action → don't resume, clean up instead
+    expect(mockResumeOneSession).not.toHaveBeenCalled();
+    expect(sm.read("sess-noreason")).toBeNull();
   });
 });
 

@@ -280,9 +280,15 @@ export async function checkRejectedReviews(
     if (task.status === "in_progress") {
       const notes = (await client.getTaskNotes(s.taskId)) as Array<{ action?: string; detail?: string }>;
       const rejectLog = [...notes].reverse().find((l) => l.action === "rejected");
-      const reason = rejectLog?.detail || "No reason provided";
-      const message = `Task rejected. Reason: ${reason}\n\nPlease fix the issues and submit for review again.`;
-      await resumeOne(s, message);
+      if (rejectLog) {
+        const reason = rejectLog.detail || "No reason provided";
+        const message = `Task rejected. Reason: ${reason}\n\nPlease fix the issues and submit for review again.`;
+        await resumeOne(s, message);
+      } else {
+        // Agent finished with result but never submitted for review — release.
+        logger.info(`Task ${s.taskId} in_progress without reject, releasing orphan review session`);
+        await completeTerminalFromReview(sessions, s, { type: "task_cancelled" });
+      }
     }
   }
 }

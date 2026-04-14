@@ -604,7 +604,7 @@ describe("routeTurnEnd — per-segment token reporting", () => {
     expect(costCall[2].cost_micro_usd).toBe(Math.round(secondCost * 1_000_000));
   });
 
-  it("sets resultReceived=true so finalize calls getTask", async () => {
+  it("resultReceived=true causes finalize to preserve worktree (no release)", async () => {
     const taskId = randomUUID();
     const sessionId = randomUUID();
     await seedActiveSession(sessions, sessionId, taskId);
@@ -614,21 +614,21 @@ describe("routeTurnEnd — per-segment token reporting", () => {
 
     await spawnAndWait(apiClient, { events: [turnEnd], taskId, sessionId, agentClient });
 
-    // getTask is only called when resultReceived=true
-    expect(agentClient.getTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(taskId);
+    // resultReceived=true → worktree preserved, no release
+    expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
-  it("does NOT call getTask when no turn.end is received (resultReceived=false)", async () => {
+  it("resultReceived=false causes finalize to release task", async () => {
     const taskId = randomUUID();
     const sessionId = randomUUID();
     await seedActiveSession(sessions, sessionId, taskId);
 
-    // No turn.end → resultReceived stays false → getTask not called
+    // No turn.end → resultReceived stays false → release
     const agentClient = makeAgentClient(null);
 
     await spawnAndWait(apiClient, { events: [], taskId, sessionId, agentClient });
 
-    expect(agentClient.getTask as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(taskId);
   });
 });
 
@@ -959,8 +959,7 @@ describe("consumeEvents — syncs flags back to AgentProcess", () => {
 
     await spawnAndWait(apiClient, { events: [makeTurnEndEvent(0.001)], taskId, sessionId, agentClient });
 
-    // getTask is called because resultReceived=true was synced back from flags
-    expect(agentClient.getTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(taskId);
+    // resultReceived=true → worktree preserved, no release
     expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
@@ -1217,10 +1216,8 @@ describe("multi-result: taskInReview reflects final state, not intermediate", ()
     await spawnAndWait(apiClient, { handle, taskId, sessionId, agentClient });
     await new Promise((r) => setTimeout(r, 10));
 
-    // in_review path: releaseTask is NOT called, worktree is preserved
+    // resultReceived=true → worktree preserved, no release
     expect(apiClient.releaseTask as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
-    // getTask was called once after the iterator fully ended
-    expect(agentClient.getTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(taskId);
   });
 });
 

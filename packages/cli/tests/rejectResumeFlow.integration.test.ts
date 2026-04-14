@@ -799,10 +799,13 @@ describe("Scenario 7 (Fix 2): onComplete skips onCleanup when real session file 
 
     await flushPromises(8);
 
-    // Normal completion: onCleanup must be called
-    expect(cleanupInvoked).toBe(true);
+    // Agent produced result → worktree preserved for potential reject-resume.
+    // Cleanup is deferred to daemon loop (checkRejectedReviews detects done → cleans up).
+    expect(cleanupInvoked).toBe(false);
 
-    // Session file must be removed
-    expect(readSession(sessionId)).toBeNull();
+    // Session stays in in_review (daemon loop handles terminal cleanup)
+    const session = readSession(sessionId);
+    expect(session).not.toBeNull();
+    expect(session?.status).toBe("in_review");
   });
 });

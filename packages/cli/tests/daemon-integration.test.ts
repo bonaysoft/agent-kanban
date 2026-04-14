@@ -449,7 +449,7 @@ describe("review watcher — task rejected (in_progress)", () => {
     expect(message).toContain("wrong approach");
   });
 
-  it("uses fallback message when no rejection note exists", async () => {
+  it("cleans up session when in_progress with no rejection note (agent never submitted review)", async () => {
     const sessionId = randomUUID();
     const taskId = `task-${randomUUID()}`;
     await sm.create(makeWorkerFile(sessionId, { taskId, status: "in_review" }));
@@ -463,9 +463,9 @@ describe("review watcher — task rejected (in_progress)", () => {
     const resumeOne = vi.fn().mockResolvedValue(undefined);
     await checkRejectedReviews(sm, pool, client as any, resumeOne, 5);
 
-    expect(resumeOne).toHaveBeenCalledOnce();
-    const [, message] = resumeOne.mock.calls[0];
-    expect(message).toContain("No reason provided");
+    // No reject action → don't resume, clean up instead
+    expect(resumeOne).not.toHaveBeenCalled();
+    expect(sm.read(sessionId)).toBeNull();
   });
 });
 
