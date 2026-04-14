@@ -432,7 +432,7 @@ describe("TunnelClient — send methods", () => {
     const msg = JSON.parse(sock.sentMessages[0]);
     expect(msg.type).toBe("session:history");
     expect(msg.requestId).toBe("req-99");
-    expect(Array.isArray(msg.messages)).toBe(true);
+    expect(Array.isArray(msg.events)).toBe(true);
   });
 
   it("sendEvent does not send when socket is not OPEN", async () => {

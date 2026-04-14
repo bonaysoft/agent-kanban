@@ -4,9 +4,9 @@ import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import type { SubtaskStatus } from "@agent-kanban/shared";
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionMessages, query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
 import { parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const SUBTASK_STATUSES: readonly SubtaskStatus[] = ["completed", "failed", "stopped"] as const;
@@ -386,3 +386,22 @@ export const claudeProvider: AgentProvider = {
     return { windows, updated_at: new Date().toISOString() };
   },
 };
+
+// ── History ──
+
+/** Fetch Claude session history and normalize to AgentEvent stream. */
+export async function getClaudeHistory(sessionId: string): Promise<HistoryEvent[]> {
+  const messages = await getSessionMessages(sessionId);
+  const events: HistoryEvent[] = [];
+  let counter = 0;
+  for (const msg of messages) {
+    // SessionMessage has { type, uuid, message, parent_tool_use_id }.
+    // Reconstruct the shape mapSDKMessage expects.
+    const sdkLike = { ...msg, message: msg.message } as unknown as SDKMessage;
+    const event = mapSDKMessage(sdkLike);
+    if (event) {
+      events.push({ id: msg.uuid || `claude-hist-${++counter}`, event, timestamp: new Date().toISOString() });
+    }
+  }
+  return events;
+}

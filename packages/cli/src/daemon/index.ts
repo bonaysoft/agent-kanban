@@ -1,13 +1,16 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { arch, hostname, platform, release } from "node:os";
-import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
 import { MachineClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
 import { generateDeviceId } from "../device.js";
 import { createLogger } from "../logger.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
+import { getClaudeHistory } from "../providers/claude.js";
+import { getCodexHistory } from "../providers/codex.js";
 import { getAvailableProviders } from "../providers/registry.js";
+import type { HistoryEvent } from "../providers/types.js";
+import { getSessionManager } from "../session/manager.js";
 import { migrateLegacySessions } from "../session/store.js";
 import { getVersion } from "../version.js";
 import { auditOrphanedTasks, cleanupLeaderSessions, cleanupStaleSessions } from "./cleanup.js";
@@ -19,6 +22,20 @@ import { TunnelClient } from "./tunnel.js";
 import { UsageCollector } from "./usageCollector.js";
 
 const logger = createLogger("daemon");
+
+async function fetchSessionHistory(sessionId: string): Promise<HistoryEvent[]> {
+  const session = getSessionManager().read(sessionId);
+  if (!session) return [];
+
+  switch (session.runtime) {
+    case "claude":
+      return getClaudeHistory(sessionId);
+    case "codex":
+      return session.providerResumeToken ? getCodexHistory(session.providerResumeToken) : [];
+    default:
+      return [];
+  }
+}
 
 export interface DaemonOptions {
   maxConcurrent: number;
@@ -88,8 +105,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   );
 
   tunnel.onHistoryRequest((sessionId, requestId) => {
-    getSessionMessages(sessionId)
-      .then((messages) => tunnel.sendHistory(messages, requestId))
+    fetchSessionHistory(sessionId)
+      .then((events) => tunnel.sendHistory(events, requestId))
       .catch((e) => logger.warn(`History fetch failed for ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`));
   });
 

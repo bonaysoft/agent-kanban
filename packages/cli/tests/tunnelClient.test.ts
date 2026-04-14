@@ -274,7 +274,7 @@ describe("TunnelClient — sendHistory()", () => {
     const messages = [{ role: "user", content: "hello" }];
     client.sendHistory(messages, "req-1");
     const msg = JSON.parse(lastCreatedWs!.sentMessages[0]);
-    expect(msg.messages).toEqual(messages);
+    expect(msg.events).toEqual(messages);
   });
 });
 

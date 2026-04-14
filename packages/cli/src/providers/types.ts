@@ -2,6 +2,13 @@ import type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow } f
 
 export type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow };
 
+/** Normalized history entry returned by provider history readers. */
+export interface HistoryEvent {
+  id: string;
+  event: AgentEvent;
+  timestamp: string;
+}
+
 export interface ExecuteOpts {
   sessionId: string;
   resumeToken?: string;

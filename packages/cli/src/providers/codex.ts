@@ -1,12 +1,13 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, UsageInfo, UsageWindow } from "./types.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
 import { parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const AUTH_PATH = join(homedir(), ".codex", "auth.json");
+const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
 const USAGE_API = "https://chatgpt.com/backend-api/wham/usage";
 
 function readAccessToken(): string | null {
@@ -281,3 +282,98 @@ export const codexProvider: AgentProvider = {
     return { windows, updated_at: new Date().toISOString() };
   },
 };
+
+// ── History from local JSONL ──
+
+function findSessionFile(threadId: string): string | null {
+  const suffix = `${threadId}.jsonl`;
+  try {
+    for (const year of readdirSync(CODEX_SESSIONS_DIR)) {
+      const yearDir = join(CODEX_SESSIONS_DIR, year);
+      for (const month of readdirSync(yearDir)) {
+        const monthDir = join(yearDir, month);
+        for (const day of readdirSync(monthDir)) {
+          const dayDir = join(monthDir, day);
+          for (const file of readdirSync(dayDir)) {
+            if (file.endsWith(suffix)) return join(dayDir, file);
+          }
+        }
+      }
+    }
+  } catch {
+    /* dir missing */
+  }
+  return null;
+}
+
+function mapResponseItem(payload: Record<string, any>): AgentEvent | null {
+  switch (payload.type) {
+    case "message": {
+      if (payload.role === "assistant") {
+        const texts = (payload.content ?? []).filter((c: any) => c.type === "output_text" && c.text).map((c: any) => c.text);
+        if (texts.length > 0) {
+          return { type: "message", blocks: [{ type: "text", text: texts.join("\n") }] };
+        }
+      }
+      if (payload.role === "user") {
+        const texts = (payload.content ?? []).filter((c: any) => c.type === "input_text" && c.text).map((c: any) => c.text);
+        if (texts.length > 0) return { type: "message.user", text: texts.join("\n") };
+      }
+      return null;
+    }
+    case "function_call": {
+      let input: Record<string, unknown> = {};
+      if (payload.arguments) {
+        try {
+          input = JSON.parse(payload.arguments);
+        } catch {
+          input = { raw: payload.arguments };
+        }
+      }
+      return {
+        type: "message",
+        blocks: [{ type: "tool_use", id: payload.call_id ?? `codex-hist-${Date.now()}`, name: payload.name ?? "tool", input }],
+      };
+    }
+    case "function_call_output":
+      return {
+        type: "message",
+        blocks: [{ type: "tool_result", tool_use_id: payload.call_id ?? "", output: payload.output }],
+      };
+    default:
+      return null;
+  }
+}
+
+/** Read Codex session history from local JSONL files. */
+export function getCodexHistory(threadId: string): HistoryEvent[] {
+  const file = findSessionFile(threadId);
+  if (!file) return [];
+
+  const lines = readFileSync(file, "utf-8").split("\n");
+  const events: HistoryEvent[] = [];
+  let counter = 0;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let row: any;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (row.type !== "response_item") continue;
+    // Skip developer/system messages
+    if (row.payload?.role === "developer") continue;
+
+    const event = mapResponseItem(row.payload);
+    if (event) {
+      events.push({
+        id: `codex-hist-${++counter}`,
+        event,
+        timestamp: row.timestamp ?? new Date().toISOString(),
+      });
+    }
+  }
+  return events;
+}

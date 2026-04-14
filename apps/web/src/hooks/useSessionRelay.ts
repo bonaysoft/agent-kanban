@@ -1,8 +1,8 @@
-import type { AgentEvent, ContentBlock } from "@agent-kanban/shared";
+import type { AgentEvent } from "@agent-kanban/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthToken } from "../lib/auth-client";
 
-export type { AgentEvent, ContentBlock };
+export type { AgentEvent };
 
 export interface RelayEvent {
   id: string;
@@ -13,69 +13,6 @@ export interface RelayEvent {
 interface UseSessionRelayOptions {
   sessionId: string | null;
   enabled?: boolean;
-}
-
-export function parseHistoryMessages(messages: any[]): RelayEvent[] {
-  const events: RelayEvent[] = [];
-  let counter = 0;
-  for (const m of messages) {
-    if (m.type === "assistant" && m.message?.content) {
-      const blocks: ContentBlock[] = [];
-      for (const block of m.message.content) {
-        if (block.type === "thinking" && block.thinking) blocks.push({ type: "thinking", text: block.thinking });
-        else if (block.type === "tool_use") blocks.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
-        else if (block.type === "text" && block.text) blocks.push({ type: "text", text: block.text });
-      }
-      if (blocks.length > 0) {
-        events.push({ id: m.uuid || `hist-${++counter}`, event: { type: "message", blocks }, timestamp: new Date().toISOString() });
-      }
-    } else if (m.type === "user" && m.message?.content != null) {
-      // User messages from the Claude SDK come in two flavors:
-      //   - tool results (assistant attribution: blocks belong to a previous assistant turn)
-      //   - plain user input (human input: a real user message in the chat)
-      // Plain text content can be either a string or an array of `{type:"text"}` blocks.
-      const content = m.message.content;
-      const toolBlocks: ContentBlock[] = [];
-      const userTextParts: string[] = [];
-
-      if (typeof content === "string") {
-        if (content.trim()) userTextParts.push(content);
-      } else if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === "tool_result") {
-            const output =
-              typeof block.content === "string"
-                ? block.content
-                : Array.isArray(block.content)
-                  ? block.content
-                      .filter((c: any) => c.type === "text")
-                      .map((c: any) => c.text)
-                      .join("\n")
-                  : undefined;
-            toolBlocks.push({ type: "tool_result", tool_use_id: block.tool_use_id, output, error: block.is_error });
-          } else if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
-            userTextParts.push(block.text);
-          }
-        }
-      }
-
-      if (toolBlocks.length > 0) {
-        events.push({
-          id: m.uuid ? `${m.uuid}-tool` : `hist-${++counter}`,
-          event: { type: "message", blocks: toolBlocks },
-          timestamp: new Date().toISOString(),
-        });
-      }
-      if (userTextParts.length > 0) {
-        events.push({
-          id: m.uuid ? `${m.uuid}-user` : `hist-${++counter}`,
-          event: { type: "message.user", text: userTextParts.join("\n") },
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }
-  }
-  return events;
 }
 
 export type AgentStatus = "idle" | "working" | "done" | "rate_limited";
@@ -137,9 +74,8 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
         case "session:history": {
           historyLoaded.current = true;
           clearTimeout(historyRetryTimer.current);
-          const messages = msg.messages as any[];
-          if (Array.isArray(messages)) {
-            const history = parseHistoryMessages(messages);
+          const history = msg.events as RelayEvent[] | undefined;
+          if (Array.isArray(history)) {
             setEvents((prev) => {
               const liveEvents = prev.filter((e) => e.id.startsWith("live-"));
               return [...history, ...liveEvents];
