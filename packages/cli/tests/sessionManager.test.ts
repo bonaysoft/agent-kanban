@@ -1,6 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,11 +88,11 @@ describe("SessionManager — applyEvent (state transitions)", () => {
     expect(next?.status).toBe("completing");
   });
 
-  it("completing + cleanup_done → removes file", async () => {
+  it("completing + cleanup_done → closed (file retained)", async () => {
     await sm.create(makeWorkerFile("s-c"));
     await sm.applyEvent("s-c", { type: "iterator_done_normal" });
     await sm.applyEvent("s-c", { type: "cleanup_done" });
-    expect(sm.read("s-c")).toBeNull();
+    expect(sm.read("s-c")?.status).toBe("closed");
   });
 
   it("in_review + rejected_by_reviewer → active", async () => {
@@ -149,12 +148,12 @@ describe("SessionManager — concurrent mutations are serialized", () => {
     expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(TransitionError);
   });
 
-  it("applyEvent then cleanup_done results in file removal", async () => {
+  it("applyEvent then cleanup_done results in closed state", async () => {
     await sm.create(makeWorkerFile("s-seq"));
     await sm.applyEvent("s-seq", { type: "iterator_done_normal" });
-    const removed = await sm.applyEvent("s-seq", { type: "cleanup_done" });
-    expect(removed).toBeNull();
-    expect(sm.read("s-seq")).toBeNull();
+    const closed = await sm.applyEvent("s-seq", { type: "cleanup_done" });
+    expect(closed?.status).toBe("closed");
+    expect(sm.read("s-seq")?.status).toBe("closed");
   });
 });
 

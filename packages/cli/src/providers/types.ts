@@ -44,6 +44,12 @@ export interface AgentProvider {
   readonly label: string;
   execute(opts: ExecuteOpts): Promise<AgentHandle>;
   /**
+   * Retrieve session history from this provider's local storage.
+   * `sessionId` is the AK session ID; `resumeToken` is the provider-specific
+   * identifier (e.g. Codex thread_id) stored in the session file.
+   */
+  getHistory?(sessionId: string, resumeToken?: string): Promise<HistoryEvent[]>;
+  /**
    * Fetch current usage windows for this provider. Pure HTTP request — no
    * caching, no swallowing. Throws `UsageFetchError` on HTTP failure so the
    * caller (UsageCollector) can apply retry/backoff policy.

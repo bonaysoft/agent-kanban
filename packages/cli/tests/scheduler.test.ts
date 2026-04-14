@@ -306,7 +306,7 @@ describe("DaemonLoop tick — in_review session resumption", () => {
     loop.stop();
 
     // State machine transitions in_review → task_cancelled → terminal → file removed
-    expect(sm.read("sess-done")).toBeNull();
+    expect(sm.read("sess-done")?.status).toBe("closed");
     expect(mockResumeOneSession).not.toHaveBeenCalled();
   });
 
@@ -326,7 +326,7 @@ describe("DaemonLoop tick — in_review session resumption", () => {
     await new Promise((r) => setTimeout(r, 100));
     loop.stop();
 
-    expect(sm.read("sess-cancelled")).toBeNull();
+    expect(sm.read("sess-cancelled")?.status).toBe("closed");
   });
 
   it("removes session and logs when task is not found (ApiError 404)", async () => {
@@ -345,7 +345,7 @@ describe("DaemonLoop tick — in_review session resumption", () => {
     await new Promise((r) => setTimeout(r, 100));
     loop.stop();
 
-    expect(sm.read("sess-notfound")).toBeNull();
+    expect(sm.read("sess-notfound")?.status).toBe("closed");
   });
 
   it("cleans up session when in_progress with no rejected note", async () => {
@@ -363,7 +363,7 @@ describe("DaemonLoop tick — in_review session resumption", () => {
 
     // No reject action → don't resume, clean up instead
     expect(mockResumeOneSession).not.toHaveBeenCalled();
-    expect(sm.read("sess-noreason")).toBeNull();
+    expect(sm.read("sess-noreason")?.status).toBe("closed");
   });
 });
 
@@ -389,7 +389,7 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
 
     expect(stubs.client.releaseTask).toHaveBeenCalledWith("task-orphan");
     // Session file must be gone after terminal cleanup
-    expect(sm.read("sess-orphan")).toBeNull();
+    expect(sm.read("sess-orphan")?.status).toBe("closed");
   });
 
   it("cleans up orphaned active session without releasing when task is done", async () => {
@@ -408,7 +408,7 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
     await new Promise((r) => setTimeout(r, 100));
     loop.stop();
 
-    expect(sm.read("sess-orphan-done")).toBeNull();
+    expect(sm.read("sess-orphan-done")?.status).toBe("closed");
     // releaseTask should NOT be called for done tasks
     expect(stubs.client.releaseTask).not.toHaveBeenCalled();
   });
@@ -429,7 +429,7 @@ describe("DaemonLoop tick — orphaned active session cleanup", () => {
     await new Promise((r) => setTimeout(r, 100));
     loop.stop();
 
-    expect(sm.read("sess-orphan-404")).toBeNull();
+    expect(sm.read("sess-orphan-404")?.status).toBe("closed");
   });
 });
 

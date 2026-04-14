@@ -385,23 +385,18 @@ export const claudeProvider: AgentProvider = {
       .map(([key, label]) => ({ runtime: "claude", label, ...data[key] }));
     return { windows, updated_at: new Date().toISOString() };
   },
-};
 
-// ── History ──
-
-/** Fetch Claude session history and normalize to AgentEvent stream. */
-export async function getClaudeHistory(sessionId: string): Promise<HistoryEvent[]> {
-  const messages = await getSessionMessages(sessionId);
-  const events: HistoryEvent[] = [];
-  let counter = 0;
-  for (const msg of messages) {
-    // SessionMessage has { type, uuid, message, parent_tool_use_id }.
-    // Reconstruct the shape mapSDKMessage expects.
-    const sdkLike = { ...msg, message: msg.message } as unknown as SDKMessage;
-    const event = mapSDKMessage(sdkLike);
-    if (event) {
-      events.push({ id: msg.uuid || `claude-hist-${++counter}`, event, timestamp: new Date().toISOString() });
+  async getHistory(sessionId) {
+    const messages = await getSessionMessages(sessionId);
+    const events: HistoryEvent[] = [];
+    let counter = 0;
+    for (const msg of messages) {
+      const sdkLike = { ...msg, message: msg.message } as unknown as SDKMessage;
+      const event = mapSDKMessage(sdkLike);
+      if (event) {
+        events.push({ id: msg.uuid || `claude-hist-${++counter}`, event, timestamp: new Date().toISOString() });
+      }
     }
-  }
-  return events;
-}
+    return events;
+  },
+};

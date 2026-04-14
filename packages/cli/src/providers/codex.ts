@@ -281,6 +281,11 @@ export const codexProvider: AgentProvider = {
     }
     return { windows, updated_at: new Date().toISOString() };
   },
+
+  async getHistory(_sessionId, resumeToken) {
+    if (!resumeToken) return [];
+    return readCodexJsonl(resumeToken);
+  },
 };
 
 // ── History from local JSONL ──
@@ -345,8 +350,8 @@ function mapResponseItem(payload: Record<string, any>): AgentEvent | null {
   }
 }
 
-/** Read Codex session history from local JSONL files. */
-export function getCodexHistory(threadId: string): HistoryEvent[] {
+/** @internal Exported for tests only. */
+export function readCodexJsonl(threadId: string): HistoryEvent[] {
   const file = findSessionFile(threadId);
   if (!file) return [];
 

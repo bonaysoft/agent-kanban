@@ -176,7 +176,7 @@ function makePool(overrides: Partial<RuntimePool> = {}): RuntimePool {
 }
 
 function makeApiClient(overrides: Record<string, unknown> = {}) {
-  const makeNotFound = () => {
+  const _makeNotFound = () => {
     const err = Object.assign(new Error("not found"), { status: 404 });
     return Promise.reject(err);
   };
@@ -196,7 +196,7 @@ function makeApiClient(overrides: Record<string, unknown> = {}) {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("orphan reaping — active session not in pool (task viable)", () => {
-  it("releases task on server, drives session to terminal", async () => {
+  it("releases task on server, drives session to closed", async () => {
     const sessionId = randomUUID();
     const taskId = `task-${randomUUID()}`;
     await sm.create(makeWorkerFile(sessionId, { taskId, status: "active" }));
@@ -210,7 +210,7 @@ describe("orphan reaping — active session not in pool (task viable)", () => {
     await reapOrphanWorkerSessions(sm, pool, client as any);
 
     expect(client.releaseTask).toHaveBeenCalledWith(taskId);
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -233,7 +233,7 @@ describe("orphan reaping — task done on server", () => {
     await reapOrphanWorkerSessions(sm, pool, client as any);
 
     expect(client.releaseTask).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -255,7 +255,7 @@ describe("orphan reaping — task 404", () => {
 
     await reapOrphanWorkerSessions(sm, pool, client as any);
 
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -284,7 +284,7 @@ describe("orphan reaping — session held by pool is skipped", () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("cleanup retry — cleanupPending", () => {
-  it("retries a completing session with cleanupPending=true and removes it on success", async () => {
+  it("retries a completing session with cleanupPending=true and closes it on success", async () => {
     const sessionId = randomUUID();
     // Create session in completing state with cleanupPending
     await sm.create(makeWorkerFile(sessionId, { taskId: "t1", status: "active" }));
@@ -297,10 +297,10 @@ describe("cleanup retry — cleanupPending", () => {
     expect(before?.status).toBe("completing");
     expect(before?.cleanupPending).toBe(true);
 
-    // reapCleanupPending should drive it through cleanup_done → terminal
+    // reapCleanupPending should drive it through cleanup_done → closed
     await reapCleanupPending(sm);
 
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 
   it("leaves session intact if cleanupPending=false", async () => {
@@ -465,7 +465,7 @@ describe("review watcher — task rejected (in_progress)", () => {
 
     // No reject action → don't resume, clean up instead
     expect(resumeOne).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -474,7 +474,7 @@ describe("review watcher — task rejected (in_progress)", () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("review watcher — task done while in_review", () => {
-  it("drives the session to terminal when task.status is done", async () => {
+  it("drives the session to closed when task.status is done", async () => {
     const sessionId = randomUUID();
     const taskId = `task-${randomUUID()}`;
     await sm.create(makeWorkerFile(sessionId, { taskId, status: "in_review" }));
@@ -488,7 +488,7 @@ describe("review watcher — task done while in_review", () => {
     await checkRejectedReviews(sm, pool, client as any, resumeOne, 5);
 
     expect(resumeOne).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -497,7 +497,7 @@ describe("review watcher — task done while in_review", () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("review watcher — task 404 during review", () => {
-  it("drives session to terminal when task returns 404", async () => {
+  it("drives session to closed when task returns 404", async () => {
     const sessionId = randomUUID();
     const taskId = `task-${randomUUID()}`;
     await sm.create(makeWorkerFile(sessionId, { taskId, status: "in_review" }));
@@ -511,7 +511,7 @@ describe("review watcher — task 404 during review", () => {
     await checkRejectedReviews(sm, pool, client as any, resumeOne, 5);
 
     expect(resumeOne).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -622,7 +622,7 @@ describe("resumeOneSession — backoff on failure", () => {
 // 15. State machine — full happy path lifecycle
 // ════════════════════════════════════════════════════════════════════════════
 
-describe("state machine — full lifecycle active→in_review→active→completing→terminal", () => {
+describe("state machine — full lifecycle active→in_review→active→completing→closed", () => {
   it("transitions through complete lifecycle successfully", async () => {
     const sessionId = randomUUID();
     await sm.create(makeWorkerFile(sessionId, { status: "active" }));
@@ -639,10 +639,10 @@ describe("state machine — full lifecycle active→in_review→active→complet
     const s3 = await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     expect(s3?.status).toBe("completing");
 
-    // completing → terminal (file removed)
+    // completing → closed (file retained with status: "closed")
     const s4 = await sm.applyEvent(sessionId, { type: "cleanup_done" });
-    expect(s4).toBeNull();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(s4?.status).toBe("closed");
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -651,7 +651,7 @@ describe("state machine — full lifecycle active→in_review→active→complet
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("state machine — rate limit lifecycle", () => {
-  it("transitions active→rate_limited→active→completing→terminal", async () => {
+  it("transitions active→rate_limited→active→completing→closed", async () => {
     const sessionId = randomUUID();
     await sm.create(makeWorkerFile(sessionId, { status: "active" }));
 
@@ -667,10 +667,10 @@ describe("state machine — rate limit lifecycle", () => {
     const s3 = await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     expect(s3?.status).toBe("completing");
 
-    // completing → terminal
+    // completing → closed (file retained with status: "closed")
     const s4 = await sm.applyEvent(sessionId, { type: "cleanup_done" });
-    expect(s4).toBeNull();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(s4?.status).toBe("closed");
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 
   it("transitions rate_limited→completing via resume_failed_terminal", async () => {
@@ -1003,7 +1003,7 @@ describe("orphan reaping — cancelled task triggers reap without releaseTask", 
     await reapOrphanWorkerSessions(sm, pool, client as any);
 
     expect(client.releaseTask).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 });
 
@@ -1513,7 +1513,7 @@ describe("applyTransition — additional cases", () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe("orphan reaper — workspace cleanup error marks cleanupPending", () => {
-  it("retries cleanupPending: cleanup succeeds on retry → session removed", async () => {
+  it("retries cleanupPending: cleanup succeeds on retry → session closed", async () => {
     const sessionId = randomUUID();
     await sm.create(
       makeWorkerFile(sessionId, {
@@ -1525,14 +1525,14 @@ describe("orphan reaper — workspace cleanup error marks cleanupPending", () =>
     await sm.applyEvent(sessionId, { type: "iterator_done_normal" });
     await sm.patch(sessionId, { cleanupPending: true });
 
-    // reapCleanupPending retries it — cleanup succeeds (rmSync is force:true) → terminal
+    // reapCleanupPending retries it — cleanup succeeds (rmSync is force:true) → closed
     await reapCleanupPending(sm);
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
   });
 
-  it("retries cleanupPending with repo workspace type → removeWorktree swallows error → cleanup_done succeeds → terminal", async () => {
+  it("retries cleanupPending with repo workspace type → removeWorktree swallows error → cleanup_done succeeds → closed", async () => {
     // removeWorktree catches its own errors, so even a repo workspace cleanup
-    // will not throw. The session goes terminal (cleanup succeeds from the
+    // will not throw. The session goes closed (cleanup succeeds from the
     // session state machine's perspective).
     const sessionId = randomUUID();
     const workDir = mkdtempSync(join(tmpdir(), "ak-di-cp-repo-"));
@@ -1549,8 +1549,8 @@ describe("orphan reaper — workspace cleanup error marks cleanupPending", () =>
 
     await reapCleanupPending(sm);
 
-    // removeWorktree swallows the error → cleanup_done fires → terminal
-    expect(sm.read(sessionId)).toBeNull();
+    // removeWorktree swallows the error → cleanup_done fires → closed
+    expect(sm.read(sessionId)?.status).toBe("closed");
 
     rmSync(workDir, { recursive: true, force: true });
   });
@@ -1829,7 +1829,7 @@ describe("reviewWatcher — completeTerminalFromReview with real temp workspace"
     await checkRejectedReviews(sm, pool, client as any, resumeOne, 5);
 
     expect(resumeOne).not.toHaveBeenCalled();
-    expect(sm.read(sessionId)).toBeNull();
+    expect(sm.read(sessionId)?.status).toBe("closed");
     // workDir is cleaned up by cleanupWorkspace — no need to rmSync
   });
 

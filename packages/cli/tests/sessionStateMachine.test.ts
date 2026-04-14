@@ -69,8 +69,8 @@ describe("applyTransition — in_review", () => {
 });
 
 describe("applyTransition — completing", () => {
-  it("cleanup_done → terminal", () => {
-    expect(applyTransition("completing", { type: "cleanup_done" })).toBe("terminal");
+  it("cleanup_done → closed", () => {
+    expect(applyTransition("completing", { type: "cleanup_done" })).toBe("closed");
   });
 
   it.each<SessionEvent["type"]>([

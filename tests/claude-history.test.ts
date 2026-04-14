@@ -43,7 +43,9 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   getSessionMessages: (...args: any[]) => mockGetSessionMessages(...args),
 }));
 
-import { getClaudeHistory } from "../packages/cli/src/providers/claude.js";
+import { claudeProvider } from "../packages/cli/src/providers/claude.js";
+
+const getClaudeHistory = (sessionId: string) => claudeProvider.getHistory!(sessionId);
 
 // ---------------------------------------------------------------------------
 // Helpers

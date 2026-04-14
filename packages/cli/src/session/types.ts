@@ -1,7 +1,7 @@
 import type { AgentRuntime } from "@agent-kanban/shared";
 import type { WorkspaceInfo } from "../types.js";
 
-export type SessionStatus = "active" | "rate_limited" | "in_review" | "completing";
+export type SessionStatus = "active" | "rate_limited" | "in_review" | "completing" | "closed";
 
 /**
  * Persisted session file.

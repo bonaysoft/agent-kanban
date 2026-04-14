@@ -6,9 +6,7 @@ import { getCredentials } from "../config.js";
 import { generateDeviceId } from "../device.js";
 import { createLogger } from "../logger.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
-import { getClaudeHistory } from "../providers/claude.js";
-import { getCodexHistory } from "../providers/codex.js";
-import { getAvailableProviders } from "../providers/registry.js";
+import { getAvailableProviders, getProvider } from "../providers/registry.js";
 import type { HistoryEvent } from "../providers/types.js";
 import { getSessionManager } from "../session/manager.js";
 import { migrateLegacySessions } from "../session/store.js";
@@ -25,16 +23,8 @@ const logger = createLogger("daemon");
 
 async function fetchSessionHistory(sessionId: string): Promise<HistoryEvent[]> {
   const session = getSessionManager().read(sessionId);
-  if (!session) return [];
-
-  switch (session.runtime) {
-    case "claude":
-      return getClaudeHistory(sessionId);
-    case "codex":
-      return session.providerResumeToken ? getCodexHistory(session.providerResumeToken) : [];
-    default:
-      return [];
-  }
+  const provider = session ? getProvider(session.runtime) : getProvider("claude");
+  return provider.getHistory?.(sessionId, session?.providerResumeToken) ?? [];
 }
 
 export interface DaemonOptions {

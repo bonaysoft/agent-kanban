@@ -57,7 +57,7 @@ vi.mock("../packages/cli/src/logger.js", () => ({
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getCodexHistory } from "../packages/cli/src/providers/codex.js";
+import { readCodexJsonl as getCodexHistory } from "../packages/cli/src/providers/codex.js";
 
 // Build the path prefix that matches CODEX_SESSIONS_DIR inside codex.ts
 const SESSIONS_DIR = join(homedir(), ".codex", "sessions");

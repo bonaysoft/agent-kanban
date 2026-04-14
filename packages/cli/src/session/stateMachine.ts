@@ -13,10 +13,11 @@
  *                   This is the reject-resume entry point. MUST survive daemon
  *                   restart. Cleanup is forbidden in this state.
  *   completing      terminal cleanup in progress (workspace cleanup pending)
- *   terminal        session file removed
+ *   closed          session finished, file retained for history lookup
+ *   terminal        session file removed (only via explicit purge)
  */
 
-export type SessionState = "active" | "rate_limited" | "in_review" | "completing" | "terminal";
+export type SessionState = "active" | "rate_limited" | "in_review" | "completing" | "closed" | "terminal";
 
 export type SessionEvent =
   // Fired while agent is live
@@ -61,6 +62,7 @@ export function applyTransition(from: SessionState, event: SessionEvent): Sessio
       return inReviewTransitions(event);
     case "completing":
       return completingTransitions(event);
+    case "closed":
     case "terminal":
       throw new TransitionError(from, event.type);
   }
@@ -128,7 +130,7 @@ function inReviewTransitions(event: SessionEvent): SessionState {
 function completingTransitions(event: SessionEvent): SessionState {
   switch (event.type) {
     case "cleanup_done":
-      return "terminal";
+      return "closed";
     default:
       throw new TransitionError("completing", event.type);
   }

@@ -227,8 +227,8 @@ describe("applyTransition — in_review state", () => {
 });
 
 describe("applyTransition — completing state", () => {
-  it("completing + cleanup_done → terminal", () => {
-    expect(applyTransition("completing", { type: "cleanup_done" })).toBe("terminal");
+  it("completing + cleanup_done → closed", () => {
+    expect(applyTransition("completing", { type: "cleanup_done" })).toBe("closed");
   });
 
   it("completing + illegal event throws TransitionError", () => {
