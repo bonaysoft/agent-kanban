@@ -84,6 +84,12 @@ export function setupGnupgHome(armoredPrivateKey: string): string {
 
 export function cleanupGnupgHome(gnupgHome: string | null): void {
   if (!gnupgHome) return;
+  execBoundary("gpg-kill-agent", () =>
+    execFileSync("gpgconf", ["--kill", "gpg-agent"], {
+      env: { ...process.env, GNUPGHOME: gnupgHome },
+      stdio: "pipe",
+    }),
+  );
   fsSync("rm-gnupghome", () => rmSync(gnupgHome, { recursive: true, force: true }));
 }
 
