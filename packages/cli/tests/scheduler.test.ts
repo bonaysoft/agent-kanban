@@ -231,7 +231,12 @@ describe("DaemonLoop.resumeRateLimitedSessions()", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockResumeOneSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess-rl" }), "", expect.anything(), expect.anything());
+    expect(mockResumeOneSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess-rl" }),
+      expect.stringContaining("Rate limit"),
+      expect.anything(),
+      expect.anything(),
+    );
     loop.stop();
     rl.stop();
   });
@@ -448,7 +453,7 @@ describe("DaemonLoop tick — resumeBackoffSessions: expired backoff triggers re
 
     expect(mockResumeOneSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "sess-backoff-expired" }),
-      "",
+      expect.stringContaining("Rate limit"),
       expect.anything(),
       expect.anything(),
     );

@@ -27,6 +27,8 @@ import type { RuntimePool } from "./runtimePool.js";
 
 const logger = createLogger("loop");
 
+const RATE_LIMIT_RESUME_PROMPT = "Rate limit window has reset. Continue working on the task where you left off.";
+
 export interface LoopOpts {
   maxConcurrent: number;
   pollInterval: number;
@@ -76,7 +78,7 @@ export class DaemonLoop {
       if (s.runtime !== runtime) continue;
       if (!s.taskId || this.pool.hasTask(s.taskId)) continue;
       if (s.resumeAfter && s.resumeAfter > now) continue;
-      await resumeOneSession(s, "", this.client, this.pool);
+      await resumeOneSession(s, RATE_LIMIT_RESUME_PROMPT, this.client, this.pool);
     }
     this.schedulePoll(0);
   }
@@ -91,7 +93,7 @@ export class DaemonLoop {
       if (this.pool.activeCount >= this.opts.maxConcurrent) return;
       if (!s.taskId || this.pool.hasTask(s.taskId)) continue;
       if (!s.resumeAfter || s.resumeAfter > now) continue;
-      await resumeOneSession(s, "", this.client, this.pool);
+      await resumeOneSession(s, RATE_LIMIT_RESUME_PROMPT, this.client, this.pool);
     }
   }
 
