@@ -99,6 +99,8 @@ echo ""
 # ── Test 2: Reject/Resume (reject → daemon resumes → back to in_review) ─────
 
 echo "[Test 2/4] Reject/Resume — reject task, wait for re-review"
+# Wait for daemon to finish finalize (session preservation) after in_review
+sleep 5
 ak task reject "$T1" --reason "Smoke test: change file content to REJECTED" >/dev/null 2>&1
 
 STATUS_AFTER_REJECT=$(task_status "$T1")
