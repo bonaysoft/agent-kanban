@@ -93,7 +93,34 @@ Use `AskUserQuestion` to interactively confirm the plan with the user. For each 
 - **Approach** — when multiple implementation strategies exist, present them with trade-off descriptions
 - **Task granularity** — whether to split a large piece into subtasks or keep it as one
 
-Keep iterating until all uncertainties are resolved. Only proceed to create tasks after the user confirms the final scope and approach.
+Keep iterating until all uncertainties are resolved.
+
+Before creating any tasks, show the user a **task summary table** using `AskUserQuestion`:
+
+```
+📋 Task Plan Preview
+
+| # | Title | Repo | Priority | Labels | Depends on | Agent |
+|---|-------|------|----------|--------|------------|-------|
+| 1 | <title> | <repo> | high | backend | — | <agent> |
+| 2 | <title> | <repo> | medium | frontend | #1 | <agent> |
+| ...
+
+Per-task description summary:
+
+### Task 1: <title>
+Goal: <one sentence>
+Files: <file list>
+Spec: <key points — not the full description, but enough to judge scope>
+
+### Task 2: <title>
+...
+
+---
+Create all tasks? (y/n)
+```
+
+The user must confirm before any `ak create task` calls are made. If the user requests changes, adjust and re-preview.
 
 ## Phase 3: Create Board & Tasks
 
@@ -138,10 +165,13 @@ One sentence: what this task produces.
 POST /api/items — create item
   Request: { "name": string }
   Response: 201 { "id": 1, "name": "..." }
+  Empty name → 400 validation error
 
-## Patterns
-- Follow existing project conventions (read CLAUDE.md)
-
+## Checks
+- [ ] POST /api/items returns 201 with { id, name }
+- [ ] Empty name returns 400 with validation error
+- [ ] New item appears on the list page without refresh
+- [ ] Empty state shows "No items yet" placeholder
 ```
 
 Vague descriptions produce vague code. Be specific.
@@ -190,33 +220,70 @@ ak task reject <task-id> --reason "CI not green — wait for CI to pass before s
 Two gates — both must pass before merging. Reject as soon as either fails.
 
 **Gate 1: Code Review**
-- Read the diff: `gh pr diff <pr-number> --repo <owner>/<repo>`
-- Check implementation matches spec, code quality, tests
-- **Fails → reject immediately**, don't proceed to Gate 2
+
+Read the full PR diff and review against the task spec:
+```bash
+gh pr view <pr-number> --repo <owner>/<repo> --json title,body,additions,deletions,changedFiles
+gh pr diff <pr-number> --repo <owner>/<repo>
+```
+
+Check:
+- Does the implementation match the task spec?
+- Code quality — logic errors, bad abstractions, security issues
+- Boundary awareness — CLI user-facing output vs internal logging, public API vs private
+- Missing or broken test updates
+- Dropped functionality (lost stack traces, removed useful info, etc.)
+
+**Fails → reject immediately**, don't proceed to Gate 2.
 
 **Gate 2: Functional Acceptance**
-- Follow the target repo's CONTRIBUTING.md review process
-- Visit preview/staging deployment and verify the feature works end-to-end
-- Test golden path and edge cases from the task spec
+- Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memory from Phase 1
+- Walk through every item in the task's `## Checks` section — each must pass
+- Visit preview/staging deployment and verify end-to-end
 - Check for regressions in related features
 - **Fails → reject with specific repro steps**
 
-**Both gates pass → Merge.**
-CI was already verified by the worker agent before submitting for review.
+**Either gate fails → Reject.** List all issues in the reason.
+```bash
+ak task reject <task-id> --reason "<all issues, specific and actionable>"
+```
+
+**Both gates pass → Post verification comment, then merge.**
+
+Post evidence on the PR before merging:
+```bash
+gh pr comment <pr-number> --repo <owner>/<repo> --body "$(cat <<'EOF'
+## Verification
+
+### Functional Test
+- Visited: <staging/preview URL tested>
+- Golden path: <what was tested and result>
+- Edge cases: <what was tested and result>
+
+### Test Suite
+<test commands run and pass/fail summary>
+
+### Conclusion
+All checks pass — merging.
+EOF
+)"
+```
+
+If the PR has merge conflicts, reject instead of merging — the worker agent will rebase, fix, and resubmit:
+```bash
+ak task reject <task-id> --reason "merge conflicts with main — rebase and resubmit"
+```
+
+Then merge:
 ```bash
 gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
 ```
 The daemon's PR Monitor will automatically complete the task — do NOT manually `ak task complete`.
 
-**Either gate fails → Reject with all issues.**
+#### Cleanup after merge
+Remove local review artifacts from the repo root:
 ```bash
-ak task reject <task-id> --reason "<all issues, specific and actionable>"
-```
-
-### Handle merge conflicts:
-If a PR can't merge cleanly, reject — the worker agent will rebase, fix, and resubmit:
-```bash
-ak task reject <task-id> --reason "merge conflicts with main — rebase and resubmit"
+rm -rf /tmp/ak-review-* playwright-report/ test-results/
 ```
 
 ### Completion:

@@ -12,9 +12,10 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 
 1. **Claim** your assigned task → `ak task claim <id>`
 2. **Log** progress as you work → `ak create note --task <id> "doing X..."`
-3. **PR** → push branch, `gh pr create`
-4. **Wait for CI** → `ak wait pr <pr-number>` — fix failures, push, re-wait until green
-5. **Submit for review** once CI passes → `ak task review <id> --pr-url <url>`
+3. **Local test** → run the project's test suite and type check before pushing. Fix all failures locally. Skip only if tests cannot run locally.
+4. **PR** → push branch, `gh pr create`
+5. **Wait for CI** → `gh pr checks <pr-number> --watch` — fix failures, push, re-check until green
+6. **Submit for review** once CI passes → `ak task review <id> --pr-url <url>`
 
 ## Commands
 
@@ -99,6 +100,7 @@ ak create task --board <id> --title "Title" \
 
 - **If claim fails, stop immediately** — do not write any code or make any changes. Report the error and wait.
 - **Never call `task complete`** — only humans complete tasks.
+- **Test before pushing** — run the project's test suite and type check locally. All tests must pass before `git push`. Skip only if tests cannot run locally. Do not rely on CI to catch failures you could have caught locally.
 - Always create a PR and submit via `task review --pr-url` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
 - **Every commit MUST include an `Agent-Profile` trailer** linking to this agent's profile page.

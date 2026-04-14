@@ -57,15 +57,49 @@ Use `AskUserQuestion` to interactively resolve any uncertainties before creating
 
 Keep iterating — each answer may reveal new questions. Only proceed to create when all points are resolved and the user has confirmed the final task spec.
 
-If nothing is ambiguous (simple, clear-cut request), skip straight to presenting a summary and asking for a single confirmation.
+If nothing is ambiguous (simple, clear-cut request), skip straight to the task preview below.
 
-### Step 4: Create Task
+### Step 4: Preview & Create Task
 
-Write a detailed description with:
-- Goal (one sentence)
-- Files to modify
-- Specific behavior/spec
-- Patterns to follow
+Before creating, show the user the **exact task that will be created** using `AskUserQuestion`. Format the preview as:
+
+```
+📋 Task Preview
+
+Title: <concise action phrase>
+Board: <board-name>
+Repo: <repo-name>
+Agent: <agent-name>
+Priority: <priority>
+Labels: <labels>
+Depends on: <task-ids or "none">
+
+## Goal
+<one sentence>
+
+## Files
+- <file path> — <what changes>
+
+## Spec
+<concrete behavior: inputs, outputs, edge cases, error handling>
+
+## Checks
+- [ ] <verifiable condition — reviewer will check each one in Gate 2>
+
+Examples by task type:
+- API: "POST /api/items returns 201 with { id, name }"
+- API: "empty name returns 400 with validation error"
+- UI: "clicking Submit creates the item and navigates to detail page"
+- UI: "empty form shows inline validation, submit button stays disabled"
+- CLI: "ak get task --board xxx prints task table with status column"
+
+---
+Create this task? (y/n)
+```
+
+Everything from `## Goal` through `## Checks` is the exact text that will be passed to `--description`. The header fields above it (Title, Board, Agent, etc.) are metadata for display only — do not include them in `--description`. The user must see the full description before it's sent to the agent.
+
+**On confirmation**, create the task:
 
 ```bash
 ak create task \
@@ -86,14 +120,14 @@ Report to user: task ID, title, assigned agent.
 
 ## Phase 2: Monitor & Review
 
-### Step 6: Monitor
+### Step 5: Monitor
 
 **Block on `ak wait` instead of writing polling loops.** Exit codes: 0 condition met, 2 task cancelled, 124 timeout.
 
 ```bash
 ak wait task <task-id> --until in_review --timeout 1h
 case $? in
-  0)   ;;  # ready for review → Step 7
+  0)   ;;  # ready for review → Step 6
   2)   echo "task cancelled — abort" ; exit 1 ;;
   124) echo "timed out — investigate" ;;  # fall through to investigation
 esac
@@ -107,7 +141,7 @@ Run `ak wait task --help` for the full flag list.
 3. Check agent session log for what it's doing or where it's stuck
 4. Check child processes: the agent may be stuck on a hook, install, or network call
 
-### Step 7: Review PR
+### Step 6: Review PR
 
 **Pre-check: CI status.** Before reviewing, verify CI has passed on the PR:
 ```bash
@@ -124,8 +158,8 @@ Two gates — both must pass before merging. Reject as soon as either fails.
 
 Read the full PR diff and review against the task spec:
 ```bash
-gh pr view <pr-number> --repo <owner/repo> --json title,body,additions,deletions,changedFiles
-gh pr diff <pr-number> --repo <owner/repo>
+gh pr view <pr-number> --repo <owner>/<repo> --json title,body,additions,deletions,changedFiles
+gh pr diff <pr-number> --repo <owner>/<repo>
 ```
 
 Check:
@@ -139,32 +173,58 @@ Check:
 
 #### Gate 2: Functional Acceptance
 
-Follow the target repo's CONTRIBUTING.md review process. This typically includes:
-- Visit the preview/staging deployment and manually verify the feature works end-to-end
-- Test the golden path and edge cases described in the task spec
+Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memory from Step 2.
+- Walk through every item in the task's `## Checks` section — each must pass
+- Visit the preview/staging deployment and verify end-to-end
 - Check for regressions in related features
 - Run any project-specific verification steps defined in CONTRIBUTING.md
 
 **Fails → reject with specific repro steps.**
 
-### Step 8: Decide — act immediately, do not ask the user
+### Step 7: Decide — act immediately, do not ask the user
 
 **Either gate fails → Reject.** List all issues in the reason.
 ```bash
 ak task reject <task-id> --reason "<all issues, specific and actionable>"
 ```
-After reject, go back to Step 6 and keep monitoring.
+After reject, go back to Step 5 and keep monitoring.
 
-**Both gates pass → Merge the PR, daemon auto-completes the task.**
-CI was already verified by the worker agent before submitting for review.
+**Both gates pass → Post verification comment, then merge.**
+
+Post a verification comment on the PR with evidence before merging:
+```bash
+gh pr comment <pr-number> --repo <owner>/<repo> --body "$(cat <<'EOF'
+## Verification
+
+### Functional Test
+- Visited: <staging/preview URL tested>
+- Golden path: <what was tested and result>
+- Edge cases: <what was tested and result>
+
+### Test Suite
+<test commands run and pass/fail summary>
+
+### Conclusion
+All checks pass — merging.
+EOF
+)"
+```
+
+If the PR has merge conflicts, reject instead of merging — the worker agent will rebase, fix, and resubmit:
+```bash
+ak task reject <task-id> --reason "merge conflicts with main — rebase and resubmit"
+```
+
+Then merge:
 ```bash
 gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
 ```
 The daemon's PR Monitor will mark the task done — do NOT manually `ak task complete`.
 
-If a PR has merge conflicts, reject the task — the worker agent will rebase, fix, and resubmit:
+#### Cleanup after merge
+Remove local review artifacts from the repo root:
 ```bash
-ak task reject <task-id> --reason "merge conflicts with main — rebase and resubmit"
+rm -rf /tmp/ak-review-* playwright-report/ test-results/
 ```
 
 ## Phase 3: Exception Handling
