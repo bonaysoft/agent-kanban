@@ -20,21 +20,52 @@ function isDaemonAlive(): boolean {
   }
 }
 
-async function ensureIdentity(runtime: AgentRuntime, client: MachineClient): Promise<StoredIdentity> {
-  const existing = loadIdentity(runtime);
-  if (existing) return existing;
+function missingIdentityMessage(runtime: AgentRuntime): string {
+  return [
+    `No identity found for runtime "${runtime}".`,
+    "",
+    "Create one explicitly with:",
+    "  ak identity create --username <username> [--name <name>]",
+    "",
+    "Choose the identity values yourself:",
+    "  --username  required, user-like handle chosen by the agent",
+    "  --name      optional full name shown in the UI",
+    "",
+    `This identity is reused for the same api-url + machine + runtime (${runtime}).`,
+    "",
+    "Examples:",
+    "  ak identity create --username alex",
+    '  ak identity create --username alex --name "Alex Chen"',
+  ].join("\n");
+}
 
+async function restoreIdentity(runtime: AgentRuntime, client: MachineClient): Promise<StoredIdentity | null> {
   const agents = (await client.listAgents()) as Agent[];
-  const match = agents.find((a) => a.runtime === runtime && a.kind === "leader");
-  if (match) {
-    const identity: StoredIdentity = { agent_id: match.id, name: match.name, fingerprint: match.fingerprint };
-    saveIdentity(runtime, identity);
-    return identity;
+  const leaders = agents.filter((agent) => agent.kind === "leader" && agent.runtime === runtime);
+  if (leaders.length !== 1) return null;
+  const leader = leaders[0];
+  const identity: StoredIdentity = { agent_id: leader.id, name: leader.name, fingerprint: leader.fingerprint };
+  saveIdentity(runtime, identity);
+  return identity;
+}
+
+export async function createIdentity(input: { runtime: AgentRuntime; username: string; name?: string }): Promise<StoredIdentity> {
+  const existing = loadIdentity(input.runtime);
+  if (existing) {
+    throw new Error(`Identity for runtime "${input.runtime}" already exists.`);
   }
 
-  const agent = (await client.createAgent({ name: runtime, runtime, kind: "leader" })) as Agent;
+  const client = new MachineClient();
+  const payload: { username: string; name?: string; runtime: AgentRuntime; kind: "leader" } = {
+    username: input.username,
+    runtime: input.runtime,
+    kind: "leader",
+  };
+  if (input.name) payload.name = input.name;
+
+  const agent = (await client.createAgent(payload)) as Agent;
   const identity: StoredIdentity = { agent_id: agent.id, name: agent.name, fingerprint: agent.fingerprint };
-  saveIdentity(runtime, identity);
+  saveIdentity(input.runtime, identity);
   return identity;
 }
 
@@ -72,13 +103,20 @@ export async function createClient(): Promise<ApiClient> {
     return cachedLeaderClient;
   }
 
+  let identity = loadIdentity(runtime);
+  const machineClient = new MachineClient();
+  if (!identity) {
+    identity = await restoreIdentity(runtime, machineClient);
+  }
+  if (!identity) {
+    throw new Error(missingIdentityMessage(runtime));
+  }
+
   if (!isDaemonAlive()) {
     throw new Error("Daemon is not running. Start it with: ak start");
   }
 
-  // First call — auto-init leader session
-  const machineClient = new MachineClient();
-  const identity = await ensureIdentity(runtime, machineClient);
+  // First call — create a leader session for an existing identity
   const { publicKey, privateKey } = (await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"])) as CryptoKeyPair;
   const pubJwk = await crypto.subtle.exportKey("jwk", publicKey);
   const privJwk = await crypto.subtle.exportKey("jwk", privateKey);

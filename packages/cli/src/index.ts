@@ -1,6 +1,7 @@
+import { AGENT_RUNTIMES, type AgentRuntime } from "@agent-kanban/shared";
 import { Command } from "commander";
 import { loadIdentity } from "./agent/identity.js";
-import { createClient } from "./agent/leader.js";
+import { createClient, createIdentity } from "./agent/leader.js";
 import { detectRuntime } from "./agent/runtime.js";
 import { registerApplyCommand } from "./commands/apply.js";
 import { registerCreateCommand } from "./commands/create.js";
@@ -202,17 +203,56 @@ registerWaitCommand(program);
 
 // ─── Identity ───
 
+const identityCmd = program.command("identity").description("Manage leader identity for the current runtime");
+
+identityCmd
+  .command("create")
+  .description("Create and save a leader identity for the current runtime")
+  .requiredOption("--username <username>", "User-like handle chosen by the agent")
+  .option("--name <name>", "Optional full name shown in the UI")
+  .option("--runtime <runtime>", `Agent runtime: ${AGENT_RUNTIMES.join(", ")}`)
+  .action(async (opts) => {
+    const runtime = (opts.runtime || detectRuntime()) as string | null;
+    if (!runtime) {
+      console.error("No agent runtime found. Install claude, codex, or gemini CLI, or pass --runtime explicitly.");
+      process.exit(1);
+    }
+    if (!AGENT_RUNTIMES.includes(runtime as AgentRuntime)) {
+      console.error(`Unknown runtime "${runtime}" — must be one of: ${AGENT_RUNTIMES.join(", ")}`);
+      process.exit(1);
+    }
+
+    const identity = await createIdentity({
+      runtime: runtime as AgentRuntime,
+      username: opts.username,
+      name: opts.name,
+    });
+    console.log(`Created identity for ${runtime}`);
+    console.log(`Agent ID:    ${identity.agent_id}`);
+    console.log(`Name:        ${identity.name}`);
+    console.log(`Fingerprint: ${identity.fingerprint}`);
+  });
+
 program
   .command("whoami")
   .description("Show agent identity for the current runtime")
-  .action(async () => {
-    // Trigger auto-init so whoami works as first command
-    await createClient();
+  .action(() => {
     const runtime = detectRuntime();
     const runtimeKey = runtime ?? "default";
     const identity = loadIdentity(runtimeKey);
     if (!identity) {
-      console.error("Failed to resolve identity.");
+      console.error(
+        [
+          `No identity found for runtime "${runtimeKey}".`,
+          "",
+          "Create one explicitly with:",
+          "  ak identity create --username <username> [--name <name>]",
+          "",
+          "Choose the identity values yourself:",
+          "  --username  required, user-like handle chosen by the agent",
+          "  --name      optional full name shown in the UI",
+        ].join("\n"),
+      );
       process.exit(1);
     }
     console.log(`Runtime:     ${runtimeKey}`);

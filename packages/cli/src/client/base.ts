@@ -148,8 +148,8 @@ export abstract class ApiClient {
     return this.request<any[]>("GET", `/api/agents/${agentId}/sessions`);
   }
   createAgent(input: {
-    name: string;
-    username?: string;
+    name?: string;
+    username: string;
     bio?: string;
     soul?: string;
     role?: string;

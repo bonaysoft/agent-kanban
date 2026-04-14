@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync,
 import { join } from "node:path";
 import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
-import { DAEMON_STATE_FILE, IDENTITIES_DIR, LOGS_DIR, PID_FILE, SESSIONS_DIR, STATE_DIR } from "../paths.js";
+import { DAEMON_STATE_FILE, LOGS_DIR, PID_FILE, SESSIONS_DIR, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 import { listSessions } from "../session/store.js";
 import { getVersion } from "../version.js";
@@ -131,14 +131,11 @@ export function registerStartCommand(program: Command) {
         process.exit(1);
       }
 
-      // Clear identity/session cache if API URL changed. This is the ONLY
-      // place that is allowed to bulk-delete sessions — identities from the
-      // old backend are meaningless under a new apiUrl. Never add other
-      // callers: in_review session files are reject-resume entry points and
-      // must survive every other kind of restart.
+      // Clear session cache if API URL changed. Sessions are backend-specific
+      // and must not survive environment switches. Identities are now scoped
+      // by api-url + machine + runtime, so they remain valid side by side.
       const prevState = readDaemonState();
       if (prevState && prevState.apiUrl !== apiUrl) {
-        rmSync(IDENTITIES_DIR, { recursive: true, force: true });
         rmSync(SESSIONS_DIR, { recursive: true, force: true });
       }
       if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
