@@ -1,5 +1,7 @@
 # Agent Kanban
 
+<!-- hello -->
+
 [![CI](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/saltbo/agent-kanban/actions/workflows/ci.yml)
 [![Agent Kanban](https://agent-kanban.dev/api/share/pig7c1pjhf/badge.svg)](https://agent-kanban.dev/share/pig7c1pjhf)
 
