@@ -57,6 +57,19 @@ task_session_exists() {
     | xargs grep -l "\"taskId\": *\"$task_id\"" 2>/dev/null | head -1
 }
 
+wait_session_cleanup() {
+  local task_id="$1" timeout_secs="${2:-120}"
+  local elapsed=0
+  while [ "$elapsed" -lt "$timeout_secs" ]; do
+    if [ -z "$(task_session_exists "$task_id")" ]; then
+      return 0
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  return 1
+}
+
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
@@ -122,9 +135,6 @@ echo ""
 echo "[Test 3/4] Complete — mark task done, verify cleanup"
 ak task complete "$T1" >/dev/null 2>&1
 
-# Give daemon a poll cycle to clean up
-sleep 15
-
 STATUS_AFTER_COMPLETE=$(task_status "$T1")
 if [ "$STATUS_AFTER_COMPLETE" = "done" ]; then
   pass "task is done"
@@ -132,10 +142,10 @@ else
   fail "expected done, got: $STATUS_AFTER_COMPLETE"
 fi
 
-if [ -z "$(task_session_exists "$T1")" ]; then
+if wait_session_cleanup "$T1" 120; then
   pass "session cleaned up after completion"
 else
-  fail "session still exists after completion"
+  fail "session still exists after completion timeout"
 fi
 echo ""
 
@@ -155,9 +165,6 @@ fi
 # Cancel while agent is running
 sleep 3
 ak task cancel "$T4" >/dev/null 2>&1
-
-# Give daemon a poll cycle to detect and kill
-sleep 12
 
 STATUS_AFTER_CANCEL=$(task_status "$T4")
 if [ "$STATUS_AFTER_CANCEL" = "cancelled" ]; then
@@ -184,9 +191,11 @@ echo "  Failed: $FAIL"
 echo "==============================="
 
 # Cleanup test tasks
-for tid in "${TASKS[@]}"; do
-  ak task cancel "$tid" >/dev/null 2>&1 || true
-done
+if [ "${#TASKS[@]}" -gt 0 ]; then
+  for tid in "${TASKS[@]}"; do
+    ak task cancel "$tid" >/dev/null 2>&1 || true
+  done
+fi
 
 if [ "$FAIL" -gt 0 ]; then
   exit 1

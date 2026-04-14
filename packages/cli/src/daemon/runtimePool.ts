@@ -44,6 +44,7 @@ export interface SpawnRequest {
   provider: AgentProvider;
   taskId: string;
   sessionId: string;
+  resumeToken?: string;
   cwd: string;
   taskContext: string;
   agentClient: AgentClient;
@@ -118,6 +119,7 @@ export class RuntimePool {
     const handle: AgentHandle = await providerExecute(provider.name, () =>
       provider.execute({
         sessionId,
+        resumeToken: req.resumeToken,
         cwd: req.cwd,
         env: { ...(process.env as Record<string, string>), ...req.agentEnv },
         taskContext: req.taskContext,
@@ -431,6 +433,7 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
   //   - in_progress + no reject → release (agent forgot to submit review)
   //   - done/cancelled → cleanup
   const taskInReview = agent.resultReceived && !opts.crashed;
+  const providerResumeToken = agent.handle.getResumeToken?.();
 
   const event: SessionEvent = classifyIteratorEnd({
     resultReceived: agent.resultReceived,
@@ -440,7 +443,7 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     transient,
   });
 
-  const next = await sessions.applyEvent(sessionId, event).catch((e) => {
+  const next = await sessions.applyEvent(sessionId, event, providerResumeToken ? { providerResumeToken } : undefined).catch((e) => {
     logger.error(`State transition failed for ${sessionId}: ${errMessage(e)}`);
     return null;
   });

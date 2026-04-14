@@ -1,10 +1,16 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:fs so readFileSync never touches disk (gemini reads system prompt file, codex reads auth)
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn().mockImplementation(() => {
     throw new Error("ENOENT");
+  }),
+}));
+
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn().mockImplementation(() => {
+    throw new Error("missing");
   }),
 }));
 
@@ -61,6 +67,18 @@ import {
 } from "../src/providers/gemini.js";
 import { getAvailableProviders, getProvider, registerProvider } from "../src/providers/registry.js";
 import type { AgentProvider } from "../src/providers/types.js";
+
+beforeEach(async () => {
+  const fsModule = await import("node:fs");
+  vi.mocked(fsModule.readFileSync).mockImplementation(() => {
+    throw new Error("ENOENT");
+  });
+
+  const childProcess = await import("node:child_process");
+  vi.mocked(childProcess.execSync).mockImplementation(() => {
+    throw new Error("missing");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // mapSDKMessage — rate_limit_event
@@ -591,6 +609,8 @@ describe("codexProvider.execute — handle shape", () => {
 describe("codexProvider.execute — thread selection", () => {
   it("calls startThread when resume is false or absent", async () => {
     const { Codex } = await import("@openai/codex-sdk");
+    const childProcess = await import("node:child_process");
+    vi.mocked(childProcess.execSync).mockReturnValueOnce("/opt/homebrew/bin/codex\n" as any);
     const startThreadSpy = vi.fn().mockReturnValue({
       runStreamed: vi.fn().mockResolvedValue({ events: (async function* () {})() }),
     });
@@ -603,10 +623,15 @@ describe("codexProvider.execute — thread selection", () => {
     );
     await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     expect(startThreadSpy).toHaveBeenCalledOnce();
+    expect(vi.mocked(Codex)).toHaveBeenCalledWith(expect.objectContaining({ codexPathOverride: "/opt/homebrew/bin/codex" }));
   });
 
   it("calls resumeThread when resume is true", async () => {
     const { Codex } = await import("@openai/codex-sdk");
+    const childProcess = await import("node:child_process");
+    vi.mocked(childProcess.execSync).mockImplementationOnce(() => {
+      throw new Error("missing");
+    });
     const resumeThreadSpy = vi.fn().mockReturnValue({
       runStreamed: vi.fn().mockResolvedValue({ events: (async function* () {})() }),
     });
@@ -617,8 +642,63 @@ describe("codexProvider.execute — thread selection", () => {
           resumeThread: resumeThreadSpy,
         }) as any,
     );
-    await codexProvider.execute({ sessionId: "sess-77", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true });
-    expect(resumeThreadSpy).toHaveBeenCalledWith("sess-77", expect.any(Object));
+    await codexProvider.execute({
+      sessionId: "sess-77",
+      resumeToken: "codex-thread-1",
+      cwd: "/tmp",
+      env: {},
+      taskContext: "ctx",
+      resume: true,
+    });
+    expect(resumeThreadSpy).toHaveBeenCalledWith("codex-thread-1", expect.any(Object));
+  });
+
+  it("omits explicit model for ChatGPT-backed Codex sessions", async () => {
+    const { Codex } = await import("@openai/codex-sdk");
+    const fsModule = await import("node:fs");
+    const childProcess = await import("node:child_process");
+    vi.mocked(childProcess.execSync).mockReturnValueOnce("/opt/homebrew/bin/codex\n" as any);
+    vi.mocked(fsModule.readFileSync).mockReturnValue(JSON.stringify({ tokens: { access_token: "chatgpt-token" } }) as any);
+    const startThreadSpy = vi.fn().mockReturnValue({
+      runStreamed: vi.fn().mockResolvedValue({ events: (async function* () {})() }),
+    });
+    vi.mocked(Codex).mockImplementationOnce(
+      () =>
+        ({
+          startThread: startThreadSpy,
+          resumeThread: vi.fn(),
+        }) as any,
+    );
+
+    await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx", model: "o3" });
+
+    expect(startThreadSpy).toHaveBeenCalledWith(expect.objectContaining({ model: undefined }));
+  });
+
+  it("keeps explicit model when using API-key-backed Codex sessions", async () => {
+    const { Codex } = await import("@openai/codex-sdk");
+    const childProcess = await import("node:child_process");
+    vi.mocked(childProcess.execSync).mockReturnValueOnce("/opt/homebrew/bin/codex\n" as any);
+    const startThreadSpy = vi.fn().mockReturnValue({
+      runStreamed: vi.fn().mockResolvedValue({ events: (async function* () {})() }),
+    });
+    vi.mocked(Codex).mockImplementationOnce(
+      () =>
+        ({
+          startThread: startThreadSpy,
+          resumeThread: vi.fn(),
+        }) as any,
+    );
+
+    await codexProvider.execute({
+      sessionId: "s1",
+      cwd: "/tmp",
+      env: { OPENAI_API_KEY: "sk-test" },
+      taskContext: "ctx",
+      model: "o3",
+    });
+
+    expect(startThreadSpy).toHaveBeenCalledWith(expect.objectContaining({ model: "o3" }));
   });
 
   it("events yields mapped AgentEvents from SDK thread events", async () => {
@@ -644,6 +724,29 @@ describe("codexProvider.execute — thread selection", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toEqual({ type: "turn.start" });
     expect(events[1]).toEqual({ type: "block.done", block: { type: "text", text: "codex message" } });
+  });
+
+  it("captures the Codex thread id as a resume token from thread.started", async () => {
+    const { Codex } = await import("@openai/codex-sdk");
+    vi.mocked(Codex).mockImplementationOnce(
+      () =>
+        ({
+          startThread: vi.fn().mockReturnValue({
+            runStreamed: vi.fn().mockResolvedValue({
+              events: (async function* () {
+                yield { type: "thread.started", thread_id: "thread-123" } as any;
+                yield { type: "turn.completed", usage: {} } as any;
+              })(),
+            }),
+          }),
+          resumeThread: vi.fn(),
+        }) as any,
+    );
+    const handle = await codexProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    for await (const _ev of handle.events) {
+      // Drain the stream so thread.started is observed.
+    }
+    expect(handle.getResumeToken?.()).toBe("thread-123");
   });
 
   it("send() throws not-implemented error", async () => {

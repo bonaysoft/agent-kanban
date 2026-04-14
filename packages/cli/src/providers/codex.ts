@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +43,27 @@ function parseRateLimitReset(msg: string): string | null {
 function calcCost(model: string, inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
   const price = CODEX_PRICING[model] ?? CODEX_PRICING.o3;
   return (inputTokens * price.input + cachedInputTokens * price.cached_input + outputTokens * price.output) / 1_000_000;
+}
+
+function resolveCodexPath(): string | undefined {
+  try {
+    const path = execSync("which codex", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return path || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveCodexModel(opts: ExecuteOpts): string | undefined {
+  if (!opts.model) {
+    return readAccessToken() ? undefined : "o3";
+  }
+  if (readAccessToken() && !opts.env.OPENAI_API_KEY) {
+    // ChatGPT-backed Codex accounts reject explicit model overrides like "o3".
+    // Let the CLI choose the account-compatible default model.
+    return undefined;
+  }
+  return opts.model;
 }
 
 /** Map a single Codex thread event to an AgentEvent (or null to skip). */
@@ -174,16 +196,17 @@ export const codexProvider: AgentProvider = {
   label: "Codex CLI",
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    const model = opts.model ?? "o3";
+    const model = resolveCodexModel(opts) ?? "o3";
+    let resumeToken: string | undefined = opts.resumeToken;
 
-    const codex = new Codex({ env: opts.env });
+    const codex = new Codex({ env: opts.env, codexPathOverride: resolveCodexPath() });
     const threadOpts = {
-      model: opts.model,
+      model: resolveCodexModel(opts),
       workingDirectory: opts.cwd,
       sandboxMode: "danger-full-access" as const,
       approvalPolicy: "never" as const,
     };
-    const thread = opts.resume ? codex.resumeThread(opts.sessionId, threadOpts) : codex.startThread(threadOpts);
+    const thread = opts.resume ? codex.resumeThread(opts.resumeToken ?? opts.sessionId, threadOpts) : codex.startThread(threadOpts);
 
     const abortController = new AbortController();
     const streamed = await thread.runStreamed(opts.taskContext, { signal: abortController.signal });
@@ -191,6 +214,7 @@ export const codexProvider: AgentProvider = {
     const events = (async function* () {
       const turnOpen = { value: false };
       for await (const event of streamed.events) {
+        if (event.type === "thread.started") resumeToken = event.thread_id;
         yield* mapThreadEventStream(event, model, turnOpen);
       }
     })();
@@ -205,6 +229,9 @@ export const codexProvider: AgentProvider = {
       },
       async send() {
         throw new Error("Codex multi-turn send not implemented");
+      },
+      getResumeToken() {
+        return resumeToken;
       },
     };
   },

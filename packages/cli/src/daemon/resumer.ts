@@ -7,7 +7,6 @@
  */
 
 import { existsSync } from "node:fs";
-import type { AgentInfo } from "../agent/systemPrompt.js";
 import { AgentClient, type ApiClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
 import { createLogger } from "../logger.js";
@@ -75,6 +74,7 @@ export async function resumeSession(session: SessionFile, message: string, clien
     provider,
     taskId,
     sessionId: session.sessionId,
+    resumeToken: session.providerResumeToken,
     cwd: workspace.cwd,
     taskContext: message,
     agentClient,

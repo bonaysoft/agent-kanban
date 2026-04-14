@@ -4,6 +4,7 @@ export type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow };
 
 export interface ExecuteOpts {
   sessionId: string;
+  resumeToken?: string;
   cwd: string;
   env: Record<string, string>;
   taskContext: string;
@@ -28,6 +29,7 @@ export interface AgentHandle {
   events: AsyncIterable<AgentEvent>;
   abort(): Promise<void>;
   send(message: string): Promise<void>;
+  getResumeToken?(): string | undefined;
 }
 
 export interface AgentProvider {
