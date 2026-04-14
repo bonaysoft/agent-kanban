@@ -47,6 +47,7 @@ async function applyMigrations(db: D1Database) {
     "0014_agent_mailbox_token.sql",
     "0015_username_global_unique.sql",
     "0016_task_actions_session_id.sql",
+    "0017_unique_leader_per_runtime.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");

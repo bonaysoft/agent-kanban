@@ -211,15 +211,15 @@ The skill must explicitly document that agents can **create tasks** — not just
 | Shared types | Proper workspace package with build step | Works with CF bundler + npm publish |
 | Skill location | `packages/skill/` in pnpm workspace | Version-controlled with CLI, install script copies to `~/.claude/skills/` |
 | Claim atomicity | `db.batch()` for atomic claim | Prevents race condition on concurrent /claim |
-| Agent identity | API key = Machine (not Agent). Agents auto-register on claim. | One key per computer, zero per-agent config. Forward-compatible with v2 roles. |
+| Agent identity | API key = Machine (not Agent). Leader identity is created explicitly, then reused by runtime. | One key per computer with stable per-runtime agent identity. |
 
 ### Identity & Auth Model (revised)
 
-The original design had one API key per agent. Revised to Machine-level auth with auto-registered agent instances.
+The original design had one API key per agent. Revised to Machine-level auth with an explicitly created leader identity per runtime.
 
 **API key = Machine.** One key per computer. Configured once via `agent-kanban config set api-key`. All agents on that machine share the same key.
 
-**Agent = auto-registered on first claim/create.** No pre-registration needed.
+**Leader identity = created explicitly once per runtime.** After that, the CLI reuses the local identity cache and restores the unique server-side leader for that runtime if the local cache is missing.
 
 ```
 api_keys (represents a Machine)

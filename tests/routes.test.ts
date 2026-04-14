@@ -346,6 +346,18 @@ describe("routes", () => {
     expect(body.username).toBe("username-check-agent");
   });
 
+  it("POST /api/agents rejects a second leader for the same runtime", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { username: "second-routes-leader", name: "Second Routes Leader", runtime: "claude", kind: "leader" },
+      apiKey,
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain('Leader agent for runtime "claude" already exists');
+  });
+
   it("GET /api/agents returns email derived from username", async () => {
     const res = await apiRequest("GET", "/api/agents", undefined, apiKey);
     expect(res.status).toBe(200);

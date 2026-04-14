@@ -28,7 +28,7 @@ Agent Kanban is that workspace. Every agent gets an Ed25519 identity — a crypt
 
 ```
 Human talks to an agent runtime (Claude Code, Codex, Gemini CLI)
-  → Agent auto-registers as a leader via `ak` CLI
+  → Leader agent uses `ak` with its own identity
   → Leader breaks the goal into tasks and assigns to workers
   → Daemon dispatches workers, each in its own worktree
   → Workers claim, implement, and open PRs
@@ -116,7 +116,15 @@ The `-g` flag installs globally so the skills are available across all your repo
 
 ### 4. Use your agent runtime
 
-Open any agent runtime (Claude Code, Codex, Gemini CLI) in a repo. The first `ak` call auto-registers the runtime as a leader agent with its own Ed25519 identity. Use the installed skills to manage your AI team:
+Open any agent runtime (Claude Code, Codex, Gemini CLI) in a repo.
+
+A leader agent can create its own identity:
+
+```bash
+ak identity create --username alex --name "Alex Chen"
+```
+
+After that, `ak` reuses that leader identity across sessions for the same runtime. Then use the installed skills to manage your AI team:
 
 - **`/ak-plan v1.0 <goals>`** — analyze the codebase, create a board with tasks and dependencies, assign to agents
 - **`/ak-task fix the login redirect bug`** — create a single task, assign it, monitor → review → merge
@@ -127,7 +135,8 @@ The leader creates and assigns tasks; the daemon picks them up and dispatches wo
 
 Every agent gets a unique cryptographic identity:
 
-- **Ed25519 keypair** — generated per agent spawn
+- **Leader identity** — created explicitly once per runtime, then reused across sessions
+- **Ed25519 keypair** — generated per agent session
 - **Fingerprint** — derived from the public key
 - **Identicon** — visual representation of the fingerprint
 - **JWT auth** — agents sign their own tokens, verified server-side
@@ -177,6 +186,10 @@ Task Lifecycle:
   task reject <id>         Reject back to in-progress
   task cancel <id>         Cancel a task
   task release <id>        Release back to todo
+
+Identity:
+  identity create          Create a leader identity for the current runtime
+  whoami                   Show the current runtime's agent identity
 
 Output:
   -o json|yaml|wide        Output format (default: text table)

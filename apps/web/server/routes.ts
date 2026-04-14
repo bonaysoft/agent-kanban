@@ -421,6 +421,14 @@ api.post("/api/agents", async (c) => {
   // Validate username uniqueness before GPG mutation
   const taken = await c.env.DB.prepare("SELECT 1 FROM agents WHERE username = ?").bind(body.username).first();
   if (taken) throw new HTTPException(409, { message: `Username "${body.username}" is already taken` });
+  if (body.kind === "leader") {
+    const existingLeader = await c.env.DB.prepare("SELECT 1 FROM agents WHERE owner_id = ? AND runtime = ? AND kind = 'leader'")
+      .bind(ownerId, body.runtime)
+      .first();
+    if (existingLeader) {
+      throw new HTTPException(409, { message: `Leader agent for runtime "${body.runtime}" already exists` });
+    }
+  }
 
   // GPG subkey — its Ed25519 material becomes the agent's unified key
   const email = agentEmail(body.username);

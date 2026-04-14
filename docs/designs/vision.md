@@ -197,21 +197,21 @@ Agent Instance Layer (execution)
 
 ## Identity & Auth Architecture
 
-### v1 (current): Machine-Level Auth + Auto-Registered Agents
+### v1 (current): Machine-Level Auth + Explicit Leader Identity
 
 ```
 api_keys (represents a Machine, not an Agent)
   id, key_hash, name (machine name), created_at
 
-agents (lightweight, auto-registered on claim)
-  id, machine_id → api_keys.id, name (auto-generated), role_id (null), created_at
+agents
+  id, name, username, runtime, kind, created_at
 
 tasks
   assigned_to → agents.id (not api_key name)
   created_by  → agents.id or "human"
 ```
 
-One API key per Machine. One Machine can have many concurrent agent instances. Agent instances are auto-created when they first claim or create a task — zero manual setup.
+One API key per Machine. One Machine can have many concurrent agent instances. Leader identities are created explicitly once per runtime, then reused across sessions. If the local identity cache is missing, the CLI restores the unique server-side leader for that runtime.
 
 ### v2: Add Roles
 

@@ -22,6 +22,18 @@ allowed-tools:
 
 Plan and create a board with tasks — for a new version release or a new product from scratch.
 
+## Identity
+
+This is a leader workflow.
+
+If `ak` says no leader identity exists for the current runtime, create one first:
+
+```bash
+ak identity create --username <username> [--name <name>]
+```
+
+The leader chooses its own username and optional full name.
+
 ## Input
 
 Parse the user's input:
