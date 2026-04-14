@@ -318,9 +318,16 @@ export const claudeProvider: AgentProvider = {
     const events = (async function* () {
       const turnOpen = { value: false };
       const rateLimitSeen = { value: false };
+      let activeSubtasks = 0;
+      let resultSeen = false;
       for await (const msg of q) {
+        if (msg.type === "system" && (msg as any).subtype === "task_started") activeSubtasks++;
+        if (msg.type === "system" && (msg as any).subtype === "task_notification") activeSubtasks = Math.max(0, activeSubtasks - 1);
         yield* mapSDKMessageStream(msg, turnOpen, rateLimitSeen);
+        if (msg.type === "result") resultSeen = true;
+        if (resultSeen && activeSubtasks <= 0) break;
       }
+      q.close();
     })();
 
     let aborted = false;

@@ -17,6 +17,29 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// ---- Mock paths to avoid polluting production sessions dir ------------------
+vi.mock("../packages/cli/src/paths.js", () => {
+  const { join } = require("node:path");
+  const { tmpdir } = require("node:os");
+  const base = join(tmpdir(), `ak-test-runtimepool-fin-${process.pid}`);
+  return {
+    STATE_DIR: base,
+    CONFIG_DIR: base,
+    DATA_DIR: base,
+    LOGS_DIR: join(base, "logs"),
+    CONFIG_FILE: join(base, "config.json"),
+    PID_FILE: join(base, "daemon.pid"),
+    DAEMON_STATE_FILE: join(base, "daemon-state.json"),
+    REPOS_DIR: join(base, "repos"),
+    WORKTREES_DIR: join(base, "worktrees"),
+    SESSIONS_DIR: join(base, "sessions"),
+    TRACKED_TASKS_FILE: join(base, "tracked-tasks.json"),
+    IDENTITIES_DIR: join(base, "identities"),
+    LEGACY_SAVED_SESSIONS_FILE: join(base, "saved-sessions.json"),
+    LEGACY_SESSION_PIDS_FILE: join(base, "session-pids.json"),
+  };
+});
+
 // ---- Mock logger (avoid pino noise in test output) -------------------------
 vi.mock("../packages/cli/src/logger.js", () => ({
   createLogger: () => ({
