@@ -1,4 +1,4 @@
-import { AGENT_RUNTIMES, type AgentRuntime } from "@agent-kanban/shared";
+import type { AgentRuntime } from "@agent-kanban/shared";
 import { Command } from "commander";
 import { loadIdentity } from "./agent/identity.js";
 import { createClient, createIdentity } from "./agent/leader.js";
@@ -210,15 +210,10 @@ identityCmd
   .description("Create and save a leader identity for the current runtime")
   .requiredOption("--username <username>", "User-like handle chosen by the agent")
   .option("--name <name>", "Optional full name shown in the UI")
-  .option("--runtime <runtime>", `Agent runtime: ${AGENT_RUNTIMES.join(", ")}`)
   .action(async (opts) => {
-    const runtime = (opts.runtime || detectRuntime()) as string | null;
+    const runtime = detectRuntime();
     if (!runtime) {
-      console.error("No agent runtime found. Install claude, codex, or gemini CLI, or pass --runtime explicitly.");
-      process.exit(1);
-    }
-    if (!AGENT_RUNTIMES.includes(runtime as AgentRuntime)) {
-      console.error(`Unknown runtime "${runtime}" — must be one of: ${AGENT_RUNTIMES.join(", ")}`);
+      console.error("No supported agent runtime found. Run this command from inside an agent runtime.");
       process.exit(1);
     }
 

@@ -8,7 +8,7 @@ import { getAvailableProviders } from "../providers/registry.js";
 function detectRuntime(): string {
   const available = getAvailableProviders();
   if (available.length === 0) {
-    console.error("No agent runtime found. Install claude, codex, or gemini CLI, or pass --runtime explicitly.");
+    console.error("No supported agent runtime found. Install a supported agent runtime, or pass --runtime explicitly.");
     process.exit(1);
   }
   return available[0].name;
