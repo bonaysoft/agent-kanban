@@ -193,13 +193,46 @@ export async function waitForBoard(boardId: string, opts: BoardWaitOpts): Promis
 
 // ─── ak wait pr ───
 
+const PR_CHECK_RETRY_INTERVAL_MS = 10_000;
+const PR_CHECK_MAX_RETRIES = 18; // ~3 minutes of retrying before giving up
+
 export async function waitForPr(num: string, timeoutMs: number): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+
+  for (let attempt = 0; attempt <= PR_CHECK_MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return EXIT_TIMEOUT;
+
+    const { code, stderr } = await runGhChecks(num, remaining);
+
+    if (code === 0) return EXIT_OK;
+    if (code === EXIT_TIMEOUT) return EXIT_TIMEOUT;
+
+    // "no checks reported" means CI hasn't created check runs yet — retry.
+    const noChecks = stderr.includes("no checks reported");
+    if (!noChecks) return EXIT_ERROR;
+
+    if (attempt < PR_CHECK_MAX_RETRIES) {
+      process.stderr.write(`No checks yet, retrying in ${PR_CHECK_RETRY_INTERVAL_MS / 1000}s...\n`);
+      await sleep(Math.min(PR_CHECK_RETRY_INTERVAL_MS, remaining));
+    }
+  }
+
+  process.stderr.write("Gave up waiting for checks to appear\n");
+  return EXIT_ERROR;
+}
+
+function runGhChecks(num: string, timeoutMs: number): Promise<{ code: number; stderr: string }> {
   return new Promise((resolve) => {
-    const child = spawn("gh", ["pr", "checks", num, "--watch", "--fail-fast"], { stdio: "inherit" });
+    const chunks: Buffer[] = [];
+    const child = spawn("gh", ["pr", "checks", num, "--watch", "--fail-fast"], {
+      stdio: ["pipe", "inherit", "pipe"],
+    });
+    child.stderr?.on("data", (chunk: Buffer) => chunks.push(chunk));
     const timer = Number.isFinite(timeoutMs)
       ? setTimeout(() => {
           child.kill("SIGTERM");
-          resolve(EXIT_TIMEOUT);
+          resolve({ code: EXIT_TIMEOUT, stderr: "" });
         }, timeoutMs)
       : null;
     child.on("error", (err: NodeJS.ErrnoException) => {
@@ -209,11 +242,11 @@ export async function waitForPr(num: string, timeoutMs: number): Promise<number>
       } else {
         process.stderr.write(`failed to spawn gh: ${err.message}\n`);
       }
-      resolve(EXIT_ERROR);
+      resolve({ code: EXIT_ERROR, stderr: "" });
     });
-    child.on("exit", (code) => {
+    child.on("exit", (exitCode) => {
       if (timer) clearTimeout(timer);
-      resolve(code === 0 ? EXIT_OK : EXIT_ERROR);
+      resolve({ code: exitCode === 0 ? EXIT_OK : EXIT_ERROR, stderr: Buffer.concat(chunks).toString() });
     });
   });
 }

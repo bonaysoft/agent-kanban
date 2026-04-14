@@ -28,7 +28,8 @@ export interface AgentProcess {
   timeoutTimer?: ReturnType<typeof setTimeout>;
   rateLimited: boolean;
   resultReceived: boolean;
-  taskInReview: boolean;
+  /** Cumulative cost reported by the last SDK result event. */
+  lastCostUsd: number;
   onCleanup?: () => void;
 }
 
@@ -63,8 +64,7 @@ export interface AgentFlags {
   providerName: string;
   rateLimited: boolean;
   resultReceived: boolean;
-  taskInReview: boolean;
-  handle: { abort(): Promise<void> };
+  lastCostUsd: number;
 }
 
 export interface RateLimitSink {
@@ -135,7 +135,7 @@ export class RuntimePool {
       agentClient,
       rateLimited: false,
       resultReceived: false,
-      taskInReview: false,
+      lastCostUsd: 0,
       onCleanup: req.onCleanup,
     };
     this.agents.set(taskId, agent);
@@ -254,7 +254,7 @@ async function routeEvent(
       archiveBlock(agentClient, agent.taskId, event);
       return;
     case "turn.end":
-      await routeTurnEnd(agent, event, agentClient);
+      routeTurnEnd(agent, event, agentClient);
       return;
     default:
       return;
@@ -287,37 +287,47 @@ function routeRateLimit(agent: AgentFlags, event: Extract<AgentEvent, { type: "t
   sink.onRateLimitResumed(runtime);
 }
 
-async function routeTurnEnd(agent: AgentFlags, event: Extract<AgentEvent, { type: "turn.end" }>, agentClient: AgentClient): Promise<void> {
+/**
+ * Handle a turn.end (SDK result) event.
+ *
+ * A single query() call can yield multiple result events when background tasks
+ * are in flight — each segment gets its own result. This handler:
+ *   1. Reports per-segment token usage (server accumulates correctly).
+ *   2. Stores the cumulative cost (overwritten each time; finalize reports once).
+ *   3. Marks resultReceived so finalize knows a result was produced.
+ *
+ * Task status check and cost reporting happen in finalize() after the iterator
+ * ends, not here — intermediate results don't reflect the final task state.
+ */
+function routeTurnEnd(agent: AgentFlags, event: Extract<AgentEvent, { type: "turn.end" }>, agentClient: AgentClient): void {
   const cost = event.cost || 0;
   const usage = event.usage || {};
-  logger.info(`Agent result for task ${agent.taskId} (${agent.providerName}): cost=$${cost.toFixed(4)}`);
 
-  apiFireAndForget(
-    "updateSessionUsage",
-    () =>
-      agentClient.updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
-        input_tokens: usage.input_tokens || 0,
-        output_tokens: usage.output_tokens || 0,
-        cache_read_tokens: usage.cache_read_input_tokens || 0,
-        cache_creation_tokens: usage.cache_creation_input_tokens || 0,
-        cost_micro_usd: Math.round(cost * 1_000_000),
-      }),
-    (msg) => logger.error(`Failed to report usage for task ${agent.taskId}: ${msg}`),
-  );
+  logger.info(`Turn ended for task ${agent.taskId} (${agent.providerName}): cumulative_cost=$${cost.toFixed(4)}`);
 
-  agent.resultReceived = true;
-
-  const task = (await apiCallOptional("getTask", () => agentClient.getTask(agent.taskId))) as { status?: string } | null;
-  agent.taskInReview = task?.status === "in_review";
-  if (agent.taskInReview) {
-    logger.info(`Task ${agent.taskId} will preserve worktree for review`);
+  // Tokens are per-segment — safe to accumulate on the server.
+  // Cost is cumulative across segments — store it and report once in finalize.
+  const inputTokens = usage.input_tokens || 0;
+  const outputTokens = usage.output_tokens || 0;
+  const cacheReadTokens = usage.cache_read_input_tokens || 0;
+  const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+  if (inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens > 0) {
+    apiFireAndForget(
+      "updateSessionUsage",
+      () =>
+        agentClient.updateSessionUsage(agentClient.getAgentId(), agentClient.getSessionId(), {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_read_tokens: cacheReadTokens,
+          cache_creation_tokens: cacheCreationTokens,
+          cost_micro_usd: 0,
+        }),
+      (msg) => logger.error(`Failed to report usage for task ${agent.taskId}: ${msg}`),
+    );
   }
 
-  apiFireAndForget(
-    "abort-after-result",
-    () => agent.handle.abort(),
-    (msg) => logger.warn(`Abort after result failed: ${msg}`),
-  );
+  agent.resultReceived = true;
+  agent.lastCostUsd = cost;
 }
 
 function archiveMessage(agentClient: AgentClient, taskId: string, event: Extract<AgentEvent, { type: "message" }>): void {
@@ -350,8 +360,7 @@ async function consumeEvents(agent: AgentProcess, ctx: RuntimeContext): Promise<
     providerName: agent.providerName,
     rateLimited: agent.rateLimited,
     resultReceived: agent.resultReceived,
-    taskInReview: agent.taskInReview,
-    handle: agent.handle,
+    lastCostUsd: agent.lastCostUsd,
   };
 
   try {
@@ -363,11 +372,11 @@ async function consumeEvents(agent: AgentProcess, ctx: RuntimeContext): Promise<
   } catch (err) {
     return { crashed: true, error: err };
   } finally {
-    // Always sync flags back so finalize() sees rate-limit / result state
-    // even when the iterator throws (e.g. CLI exits with rate-limit error).
+    // Sync mutable flags back — routeEvent receives AgentFlags (not AgentProcess)
+    // to decouple event routing from the full process record.
     agent.rateLimited = flags.rateLimited;
     agent.resultReceived = flags.resultReceived;
-    agent.taskInReview = flags.taskInReview;
+    agent.lastCostUsd = flags.lastCostUsd;
   }
 }
 
@@ -395,13 +404,40 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
     }
     if (err?.stderr) logger.warn(`stderr: ${err.stderr}`);
   } else {
-    logger.info(`Agent finished task ${taskId}`);
+    logger.info(`Agent finished task ${taskId} (${agent.providerName}): cost=$${agent.lastCostUsd.toFixed(4)}`);
+  }
+
+  // Report cumulative cost once now that the iterator is done.
+  if (agent.lastCostUsd > 0) {
+    apiFireAndForget(
+      "updateSessionUsage:cost",
+      () =>
+        agent.agentClient.updateSessionUsage(agent.agentClient.getAgentId(), agent.agentClient.getSessionId(), {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+          cost_micro_usd: Math.round(agent.lastCostUsd * 1_000_000),
+        }),
+      (msg) => logger.error(`Failed to report cost for task ${taskId}: ${msg}`),
+    );
+  }
+
+  // Check task status after the iterator ends — only now is the state final.
+  let taskInReview = false;
+  if (agent.resultReceived) {
+    try {
+      const task = (await apiCallOptional("getTask", () => agent.agentClient.getTask(taskId))) as { status?: string } | null;
+      taskInReview = task?.status === "in_review";
+    } catch (e) {
+      logger.warn(`Failed to check task status for ${taskId}, assuming not in review: ${errMessage(e)}`);
+    }
   }
 
   const event: SessionEvent = classifyIteratorEnd({
     resultReceived: agent.resultReceived,
     rateLimited: agent.rateLimited,
-    taskInReview: agent.taskInReview,
+    taskInReview,
     crashed: opts.crashed,
     transient,
   });
@@ -415,12 +451,15 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
 
   if (nextStatus === "completing") {
     if (opts.crashed) {
-      apiFireAndForget(
-        "releaseTask",
-        () => ctx.client.releaseTask(taskId),
-        (msg) => logger.warn(`Failed to release crashed task ${taskId}: ${msg}`),
-      );
+      logger.warn(`Releasing task ${taskId}: agent crashed`);
+    } else {
+      logger.info(`Releasing task ${taskId}: agent finished without moving task to review`);
     }
+    apiFireAndForget(
+      "releaseTask",
+      () => ctx.client.releaseTask(taskId),
+      (msg) => logger.warn(`Failed to release task ${taskId}: ${msg}`),
+    );
     runCleanup(agent, ctx.tunnel);
     await sessions.applyEvent(sessionId, { type: "cleanup_done" }).catch((e) => {
       logger.warn(`Cleanup transition failed for ${sessionId}: ${errMessage(e)}`);
