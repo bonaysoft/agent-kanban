@@ -64,6 +64,7 @@ After every significant code change, follow this sequence:
 3. **Regression** — run build + type check + full test suite to catch breakage.
    - `pnpm build && pnpm tsc --noEmit && npx vitest run`
    - Any failure → fix and re-run. If fix touches source code, go back to step 1.
+4. **Daemon smoke test** — if changes touch daemon code (`packages/cli/src/daemon/`), run `./scripts/daemon-smoke-test.sh` and ensure it passes before considering the task done.
 
 ## Testing
 - Framework: vitest (root `vitest.config.ts`)
