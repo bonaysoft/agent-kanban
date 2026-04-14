@@ -253,6 +253,7 @@ Investigate the failure. If it's a source bug, reject with details. If it's flak
 
 ## Rules
 
+- **Workflow completion is mandatory** — once this skill is invoked, the full lifecycle (create → assign → monitor → review → merge/reject) MUST run to completion. If you are interrupted mid-workflow (user asks a side question, chat drifts to another topic, tool fails, etc.), handle the interruption and then **immediately resume the workflow from where you left off**. Never ask "should I continue monitoring?" or "do you want me to keep going?" — the answer is always yes. The only way to exit the workflow early is if the user explicitly says to stop, cancel, or abort.
 - **Follow CONTRIBUTING.md** — read the target repo's CONTRIBUTING.md before creating tasks; check PR compliance during review
 - **Investigate before creating** — read the code first, don't create vague tasks
 - **One task per invocation** — if the user describes multiple things, create one and suggest splitting
