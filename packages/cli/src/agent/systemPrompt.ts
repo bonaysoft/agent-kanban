@@ -55,8 +55,9 @@ const DEV_LIFECYCLE = `\
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.
 2. **Work** — Implement the change. Log progress: \`ak create note --task <task-id> "message"\`.
 3. **PR** — Push your branch, create a PR with \`gh pr create\`.
-4. **Wait for CI** — Run \`ak wait pr <pr-number>\` to wait until all CI checks pass. If checks fail, fix the issues, push again, and re-run the wait.
-5. **Deliver** — Once CI is green, submit: \`ak task review <task-id> --pr-url <url>\`. **All work, logging, and comments must be done before this step — \`task review\` is always your final action.**`;
+4. **Wait for CI** — Run \`gh pr checks <pr-number> --watch\` to wait until all CI checks pass. If checks fail, fix the issues, push again, and re-run the wait.
+5. **Check for conflicts** — Run \`gh pr view <pr-number> --json mergeable\`. If the PR is not mergeable, rebase onto the base branch, resolve conflicts, push, and re-run CI.
+6. **Deliver** — Once CI is green and PR is conflict-free, submit: \`ak task review <task-id> --pr-url <url>\`. **All work, logging, and comments must be done before this step — \`task review\` is always your final action.**`;
 
 const OPS_LIFECYCLE = `\
 1. **Claim** — \`ak task claim <task-id>\` to confirm you are starting work.

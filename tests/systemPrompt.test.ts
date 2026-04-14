@@ -34,9 +34,14 @@ describe("generateSystemPrompt — dev board", () => {
     expect(prompt).not.toContain("ak task log");
   });
 
-  it("contains ak wait pr in the dev lifecycle", () => {
+  it("contains gh pr checks in the dev lifecycle", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("ak wait pr");
+    expect(prompt).toContain("gh pr checks");
+  });
+
+  it("contains conflict check step in the dev lifecycle", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev");
+    expect(prompt).toContain("Check for conflicts");
   });
 
   it("dev lifecycle has a PR step (gh pr create)", () => {
@@ -52,15 +57,14 @@ describe("generateSystemPrompt — dev board", () => {
   it("dev lifecycle has 5 numbered steps", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
     // Steps 1–5 must all appear in the lifecycle constant
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 6; i++) {
       expect(prompt).toContain(`${i}.`);
     }
   });
 
-  it("dev lifecycle does NOT have a 6th numbered lifecycle step", () => {
+  it("dev lifecycle does NOT have a 7th numbered lifecycle step", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    // The lifecycle constant ends at step 5 — step 6 is not a lifecycle step
-    expect(prompt).not.toMatch(/^6\.\s+\*\*/m);
+    expect(prompt).not.toMatch(/^7\.\s+\*\*/m);
   });
 
   it("includes agent identity with correct id", () => {
@@ -103,9 +107,9 @@ describe("generateSystemPrompt — dev board", () => {
     expect(prompt).toMatch(/4\.\s+\*\*Wait for CI\*\*/);
   });
 
-  it("Deliver step is step 5", () => {
+  it("Deliver step is step 6", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/5\.\s+\*\*Deliver\*\*/);
+    expect(prompt).toMatch(/6\.\s+\*\*Deliver\*\*/);
   });
 
   it("Handoff is described in its own section, not as a numbered lifecycle step", () => {
@@ -129,9 +133,9 @@ describe("generateSystemPrompt — ops board", () => {
     expect(prompt).not.toContain("ak task log");
   });
 
-  it("does NOT contain ak wait pr (ops has no PR step)", () => {
+  it("does NOT contain gh pr checks (ops has no PR step)", () => {
     const prompt = generateSystemPrompt(makeAgent(), "ops");
-    expect(prompt).not.toContain("ak wait pr");
+    expect(prompt).not.toContain("gh pr checks");
   });
 
   it("does NOT contain gh pr create (ops has no PR step)", () => {
