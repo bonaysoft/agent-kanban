@@ -109,42 +109,62 @@ Run `ak wait task --help` for the full flag list.
 
 ### Step 7: Review PR
 
+**Pre-check: CI status.** Before reviewing, verify CI has passed on the PR:
+```bash
+gh pr checks <pr-number> --repo <owner>/<repo>
+```
+If CI is pending or failed, reject immediately — worker must wait for CI to pass before submitting for review:
+```bash
+ak task reject <task-id> --reason "CI not green — wait for CI to pass before submitting for review"
+```
+
+Two gates — both must pass before merging. Reject as soon as either fails.
+
+#### Gate 1: Code Review
+
 Read the full PR diff and review against the task spec:
 ```bash
 gh pr view <pr-number> --repo <owner/repo> --json title,body,additions,deletions,changedFiles
 gh pr diff <pr-number> --repo <owner/repo>
 ```
 
-Review in two parts:
-
-**Code review** — read the diff and check:
+Check:
 - Does the implementation match the task spec?
 - Code quality — logic errors, bad abstractions, security issues
 - Boundary awareness — CLI user-facing output vs internal logging, public API vs private
 - Missing or broken test updates
 - Dropped functionality (lost stack traces, removed useful info, etc.)
 
-**CONTRIBUTING.md review process** — follow whatever review steps the target repo's CONTRIBUTING.md defines. This may include visiting a preview/staging environment for functional verification, running specific checks, or other project-specific review procedures.
+**Fails → reject immediately**, don't proceed to Gate 2.
+
+#### Gate 2: Functional Acceptance
+
+Follow the target repo's CONTRIBUTING.md review process. This typically includes:
+- Visit the preview/staging deployment and manually verify the feature works end-to-end
+- Test the golden path and edge cases described in the task spec
+- Check for regressions in related features
+- Run any project-specific verification steps defined in CONTRIBUTING.md
+
+**Fails → reject with specific repro steps.**
 
 ### Step 8: Decide — act immediately, do not ask the user
 
-**Issues found → Reject.** List all issues in the reason.
+**Either gate fails → Reject.** List all issues in the reason.
 ```bash
 ak task reject <task-id> --reason "<all issues, specific and actionable>"
 ```
-After reject, go back to Step 5 and keep monitoring.
+After reject, go back to Step 6 and keep monitoring.
 
-**All good → Wait for CI, merge the PR, daemon auto-completes the task.**
+**Both gates pass → Merge the PR, daemon auto-completes the task.**
+CI was already verified by the worker agent before submitting for review.
 ```bash
-ak wait pr <pr-number> --timeout 10m && \
-  gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
+gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
 ```
 The daemon's PR Monitor will mark the task done — do NOT manually `ak task complete`.
 
-If a PR has merge conflicts, rebase it:
+If a PR has merge conflicts, reject the task — the worker agent will rebase, fix, and resubmit:
 ```bash
-git fetch origin && git checkout <branch> && git rebase origin/main
-git push --force-with-lease origin <branch>
+ak task reject <task-id> --reason "merge conflicts with main — rebase and resubmit"
 ```
 
 ## Phase 3: Exception Handling
