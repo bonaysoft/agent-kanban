@@ -355,7 +355,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
             </div>
 
             {/* Chat panel body */}
-            <div className="flex flex-col flex-1 min-h-0 p-4">
+            <div className="flex flex-col flex-1 min-h-0 pl-4 pb-4">
               <ChatPanel
                 taskId={taskId}
                 agentId={task.assigned_to}

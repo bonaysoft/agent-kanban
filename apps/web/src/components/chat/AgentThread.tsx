@@ -16,7 +16,7 @@ interface AgentThreadProps {
 export const AgentThread: FC<AgentThreadProps> = ({ taskDone }) => {
   return (
     <ThreadPrimitive.Root className="aui-root aui-thread-root flex h-full flex-col">
-      <ThreadPrimitive.Viewport className="aui-thread-viewport flex flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-1">
+      <ThreadPrimitive.Viewport className="aui-thread-viewport flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden scroll-smooth pr-3">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-content-tertiary">{taskDone ? "No activity recorded." : "Waiting for agent activity..."}</p>

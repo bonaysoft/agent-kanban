@@ -159,6 +159,36 @@ const MOCK_MESSAGES: ThreadMessageLike[] = [
       },
       {
         type: "tool-call",
+        toolCallId: "tc-task-typed",
+        toolName: "Agent",
+        args: {
+          description: "Review changed code for quality",
+          prompt:
+            "Review the Edit to packages/cli/src/commands/assign.ts for logic errors, naming, and security issues. Report PASS or REVISE with specific line-level feedback.",
+          subagent_type: "clean-code-reviewer",
+        },
+        result: {
+          text: "PASS — the dry-run branch is clean. One minor note: consider extracting the preview URL to a constant.",
+          children: [],
+          meta: { tokens: 1840, duration_ms: 12400, last_tool: "Read" },
+        },
+      },
+      {
+        type: "tool-call",
+        toolCallId: "tc-task-generic",
+        toolName: "Agent",
+        args: {
+          description: "Search for all assign-related test files",
+          prompt: "Find all test files that reference the assign command or assign endpoint. Report file paths and what each tests.",
+        },
+        result: {
+          text: "Found 2 test files:\n- `tests/assign.test.ts` — unit tests for assignCmd\n- `tests/api/assign.test.ts` — integration tests for /assign endpoint",
+          children: [],
+          meta: { tokens: 920, duration_ms: 4200, last_tool: "Glob" },
+        },
+      },
+      {
+        type: "tool-call",
         toolCallId: "tc-plan",
         toolName: "ExitPlanMode",
         args: {

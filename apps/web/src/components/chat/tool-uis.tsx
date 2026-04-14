@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import type { SubtaskChild, TaskToolResult } from "../RelayRuntimeProvider";
 
 // ─── Shared shell ───────────────────────────────────────────────────────────
-// Compact collapsible row: [chevron] [status icon] [tool-icon] LABEL summary…
+// Compact collapsible row: [status icon] [tool-icon] LABEL summary…
 // Built directly on Collapsible primitive so the trigger row is fully custom.
 
 interface ToolShellProps {
@@ -54,14 +54,13 @@ const ToolShell: FC<ToolShellProps> = ({ icon, label, summary, status, children 
   return (
     <Collapsible className={cn("group/tool w-full", isCancelled && "opacity-60")}>
       <CollapsibleTrigger className="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/40">
-        <ChevronRight className="size-3 shrink-0 text-content-tertiary transition-transform group-data-[state=open]/tool:rotate-90" />
         <StatusIcon status={status} />
         <span className="shrink-0 text-content-tertiary">{icon}</span>
         <span className="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-wide text-content-secondary">{label}</span>
-        <span className={cn("min-w-0 flex-1 truncate font-mono text-content-primary", isCancelled && "line-through")}>{summary}</span>
+        <span className={cn("min-w-0 flex-1 font-mono text-content-primary break-words", isCancelled && "line-through")}>{summary}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-        <div className="pl-6 pr-1.5 pt-2 pb-2">
+        <div className="pl-6 pr-1.5 pt-2 pb-2 overflow-x-hidden">
           {errorText && (
             <div className="mb-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[11px] text-destructive">{errorText}</div>
           )}
@@ -539,20 +538,16 @@ const SubtaskChildren: FC<{ items: SubtaskChild[] }> = ({ items: children }) => 
 };
 
 export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | string>({
-  toolName: "Task",
+  toolName: "Agent",
   render: ({ args, result, status }) => {
     const r = coerceTaskResult(result);
     const metaParts: string[] = [];
     if (r.meta?.tokens != null) metaParts.push(`${r.meta.tokens} tok`);
     if (r.meta?.duration_ms != null) metaParts.push(`${Math.round(r.meta.duration_ms / 1000)}s`);
     if (r.meta?.last_tool) metaParts.push(r.meta.last_tool);
+    const agentLabel = args?.subagent_type || "agent";
     return (
-      <ToolShell
-        icon={<Brain className="size-3.5" />}
-        label={args?.subagent_type ? `task:${args.subagent_type}` : "task"}
-        status={status}
-        summary={args?.description}
-      >
+      <ToolShell icon={<Brain className="size-3.5" />} label={agentLabel} status={status} summary={args?.description}>
         <div className="mb-1 text-[11px] text-content-tertiary">prompt:</div>
         <Mono>{args?.prompt}</Mono>
         {r.children && r.children.length > 0 && <SubtaskChildren items={r.children} />}

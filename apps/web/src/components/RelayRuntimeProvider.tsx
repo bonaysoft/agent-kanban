@@ -7,7 +7,7 @@ import { useSessionRelay } from "../hooks/useSessionRelay";
 
 type ContentPart = { type: "text"; text: string } | { type: "reasoning"; text: string } | ToolCallPart;
 
-// Subtask (subagent) child events captured inside a Task tool call. Not assistant-ui
+// Subtask (subagent) child events captured inside a Agent tool call. Not assistant-ui
 // parts — just a serializable summary rendered by TaskToolUI.
 export type SubtaskChild =
   | { kind: "text"; text: string }
@@ -39,10 +39,10 @@ type ToolCallPart = {
 export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): ThreadMessageLike[] {
   const messages: ThreadMessageLike[] = [];
   const toolCallMap = new Map<string, ToolCallPart>();
-  // Nested subtasks: when a subagent spawns another subagent, the inner Task's
+  // Nested subtasks: when a subagent spawns another subagent, the inner Agent's
   // tool_use lives inside the outer Task's children (not in toolCallMap). Map
-  // any nested tool_use_id we observe → its top-level Task id, so subsequent
-  // descendant blocks can still be routed to the outermost Task card.
+  // any nested tool_use_id we observe → its top-level Agent id, so subsequent
+  // descendant blocks can still be routed to the outermost Agent card.
   const subtaskRoot = new Map<string, string>();
 
   function resolveTaskRoot(parentId: string): string | undefined {
@@ -68,8 +68,8 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
   function appendSubtaskChild(parentId: string, child: SubtaskChild) {
     const rootId = resolveTaskRoot(parentId);
     if (!rootId) {
-      // Parent Task tool_use is unknown. Shouldn't happen in a well-ordered
-      // stream (block.done for the Task arrives before its subagent's blocks),
+      // Parent Agent tool_use is unknown. Shouldn't happen in a well-ordered
+      // stream (block.done for the Agent arrives before its subagent's blocks),
       // but log so data loss is diagnosable rather than silent.
       console.warn("[convertEvents] subtask block dropped — unknown parent", parentId, child.kind);
       return;
@@ -77,8 +77,8 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     const tc = toolCallMap.get(rootId)!;
     const r = ensureTaskResult(tc);
     r.children.push(child);
-    // If this child is itself a tool_use (potentially another Task), record a
-    // redirect so its descendants flatten into the same top-level Task card.
+    // If this child is itself a tool_use (potentially another Agent), record a
+    // redirect so its descendants flatten into the same top-level Agent card.
     if (child.kind === "tool_use") {
       subtaskRoot.set(child.id, rootId);
     }
@@ -112,7 +112,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
   }
 
   // If a block belongs to a subtask (parent_id set), route it into the parent
-  // Task tool card's `children` instead of the main turn. Returns true if handled.
+  // Agent tool card's `children` instead of the main turn. Returns true if handled.
   function routeSubtaskBlock(block: { type: string; [k: string]: any }): boolean {
     const parentId: string | undefined = block.parent_id;
     if (!parentId) return false;
@@ -164,8 +164,8 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     if (block.type === "tool_result") {
       const tc = toolCallMap.get(block.tool_use_id);
       if (tc) {
-        // For Task tool: stamp the subagent's final text into result.text (keep children/meta)
-        if (tc.toolName === "Task") {
+        // For Agent tool: stamp the subagent's final text into result.text (keep children/meta)
+        if (tc.toolName === "Agent") {
           const r = ensureTaskResult(tc);
           r.text = block.output;
           r.error = block.error;
@@ -235,7 +235,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
       continue;
     }
 
-    // ── Subtask lifecycle (attach meta to parent Task tool card) ──
+    // ── Subtask lifecycle (attach meta to parent Agent tool card) ──
     if (event.type === "subtask.start" || event.type === "subtask.progress" || event.type === "subtask.end") {
       const tc = toolCallMap.get(event.tool_use_id);
       if (tc) {
@@ -251,7 +251,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
           if (event.duration_ms != null) r.meta.duration_ms = event.duration_ms;
         } else {
           // subtask.end — the canonical final text arrives separately via the
-          // outer Task's tool_result. Only fall back to `summary` for non-success
+          // outer Agent's tool_result. Only fall back to `summary` for non-success
           // terminations (failed/stopped) where no tool_result will follow.
           r.meta.status = event.status;
           if (event.tokens != null) r.meta.tokens = event.tokens;
