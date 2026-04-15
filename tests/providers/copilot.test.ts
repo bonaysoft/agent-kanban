@@ -64,7 +64,7 @@ describe("assistant.reasoning", () => {
     const event = { type: "assistant.reasoning", data: { content: "I am thinking" } } as SessionEvent;
     const events = collect(mapCopilotEvent(event, state));
     expect(events).toEqual([
-      { type: "block.start", block: { type: "thinking", text: "I am thinking" } },
+      { type: "block.start", block: { type: "thinking", text: "" } },
       { type: "block.done", block: { type: "thinking", text: "I am thinking" } },
     ]);
   });
@@ -107,7 +107,7 @@ describe("assistant.message with content only", () => {
     const state = makeState({ turnOpen: true });
     const event = { type: "assistant.message", data: { content: "Hello" } } as SessionEvent;
     const events = collect(mapCopilotEvent(event, state));
-    expect(events).toContainEqual({ type: "block.start", block: { type: "text", text: "Hello" } });
+    expect(events).toContainEqual({ type: "block.start", block: { type: "text", text: "" } });
     expect(events).toContainEqual({ type: "block.done", block: { type: "text", text: "Hello" } });
   });
 
@@ -143,7 +143,7 @@ describe("assistant.message with reasoningText and content", () => {
     } as SessionEvent;
     const events = collect(mapCopilotEvent(event, state)) as { type: string; block?: { type: string; text: string } }[];
     const thinkingStart = events.find((e) => e.type === "block.start" && e.block?.type === "thinking");
-    expect(thinkingStart?.block?.text).toBe("Thinking...");
+    expect(thinkingStart?.block?.text).toBe("");
   });
 
   it("emits block.start text with content", () => {
@@ -154,7 +154,7 @@ describe("assistant.message with reasoningText and content", () => {
     } as SessionEvent;
     const events = collect(mapCopilotEvent(event, state)) as { type: string; block?: { type: string; text: string } }[];
     const textStart = events.find((e) => e.type === "block.start" && e.block?.type === "text");
-    expect(textStart?.block?.text).toBe("Answer");
+    expect(textStart?.block?.text).toBe("");
   });
 });
 

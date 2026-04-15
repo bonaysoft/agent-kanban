@@ -108,9 +108,8 @@ export function* mapCopilotEvent(event: SessionEvent, state: MapState): Generato
     case "assistant.reasoning": {
       const text = event.data.content;
       if (text) {
-        const block: ContentBlock = { type: "thinking", text };
-        yield { type: "block.start", block };
-        yield { type: "block.done", block };
+        yield { type: "block.start", block: { type: "thinking", text: "" } };
+        yield { type: "block.done", block: { type: "thinking", text } };
       }
       return;
     }
@@ -124,15 +123,15 @@ export function* mapCopilotEvent(event: SessionEvent, state: MapState): Generato
       }
 
       if (reasoningText) {
-        const block: ContentBlock = { type: "thinking", text: reasoningText };
-        yield { type: "block.start", block };
-        yield { type: "block.done", block };
+        // block.start with empty text → block.done with full text, matching the streaming
+        // contract that RelayRuntimeProvider expects (it fills in text on block.done)
+        yield { type: "block.start", block: { type: "thinking", text: "" } };
+        yield { type: "block.done", block: { type: "thinking", text: reasoningText } };
       }
 
       if (content) {
-        const block: ContentBlock = { type: "text", text: content };
-        yield { type: "block.start", block };
-        yield { type: "block.done", block };
+        yield { type: "block.start", block: { type: "text", text: "" } };
+        yield { type: "block.done", block: { type: "text", text: content } };
       }
 
       if (toolRequests) {
