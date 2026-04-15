@@ -8,7 +8,7 @@ import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
 import { registerDescribeCommand } from "./commands/describe.js";
 import { registerGetCommand } from "./commands/get.js";
-import { registerLogsCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
+import { registerLogsCommand, registerRestartCommand, registerStartCommand, registerStatusCommand, registerStopCommand } from "./commands/start.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { registerUpgradeCommand } from "./commands/upgrade.js";
 import { registerWaitCommand } from "./commands/wait.js";
@@ -260,6 +260,7 @@ program
 
 registerStartCommand(program);
 registerStopCommand(program);
+registerRestartCommand(program);
 registerStatusCommand(program);
 registerLogsCommand(program);
 registerUpgradeCommand(program);

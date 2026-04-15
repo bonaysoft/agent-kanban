@@ -1,5 +1,18 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
@@ -282,6 +295,186 @@ export function registerStatusCommand(program: Command) {
     });
 }
 
+export function registerRestartCommand(program: Command) {
+  program
+    .command("restart")
+    .description("Restart the Machine daemon (stop + start with saved or new options)")
+    .option("--api-url <url>", "API server URL")
+    .option("--api-key <key>", "Machine API key")
+    .option("--max-concurrent <n>", "Max concurrent agents")
+    .option("--poll-interval <ms>", "Poll interval in ms")
+    .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)")
+    .action(async (opts) => {
+      // Stop existing daemon if running
+      const pid = readDaemonPid();
+      if (pid) {
+        process.kill(pid, "SIGTERM");
+
+        const deadline = Date.now() + 10_000;
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        while (Date.now() < deadline) {
+          try {
+            process.kill(pid, 0);
+          } catch {
+            break;
+          }
+          await sleep(200);
+        }
+
+        let alive = false;
+        try {
+          process.kill(pid, 0);
+          alive = true;
+        } catch {
+          // dead — good
+        }
+
+        if (alive) {
+          process.kill(pid, "SIGKILL");
+          console.log(`● Daemon force-killed (PID ${pid})`);
+        } else {
+          console.log(`● Daemon stopped (PID ${pid})`);
+        }
+      } else {
+        console.log("○ Daemon was not running");
+      }
+
+      // Resolve credentials — opts override saved state override config
+      const prevState = readDaemonState();
+
+      if (opts.apiUrl && opts.apiKey) {
+        saveCredentials(opts.apiUrl, opts.apiKey);
+      } else if (opts.apiUrl) {
+        try {
+          setCurrent(opts.apiUrl);
+        } catch {
+          console.error(`No saved credentials for ${opts.apiUrl}. Pass --api-key as well.`);
+          process.exit(1);
+        }
+      }
+
+      let creds: { apiUrl: string; apiKey: string };
+      try {
+        creds = getCredentials();
+      } catch {
+        console.error("API URL and key required. Pass --api-url and --api-key, or run `ak start` first.");
+        process.exit(1);
+      }
+      const apiUrl = creds.apiUrl;
+
+      // Clear session cache if API URL changed
+      if (prevState && prevState.apiUrl !== apiUrl) {
+        rmSync(SESSIONS_DIR, { recursive: true, force: true });
+      }
+      if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+
+      // Resolve options: CLI opts → saved state → defaults
+      const maxConcurrent = opts.maxConcurrent ?? String(prevState?.maxConcurrent ?? 3);
+      const pollInterval = opts.pollInterval ?? String(prevState?.pollInterval ?? 10000);
+      const taskTimeout = opts.taskTimeout ?? String(prevState?.taskTimeout ?? 7200000);
+
+      rotateLogs();
+
+      const logFile = join(LOGS_DIR, "daemon.log");
+      const logFd = openSync(logFile, "a");
+
+      const available = getAvailableProviders();
+
+      const child = spawn(
+        process.execPath,
+        [
+          process.argv[1],
+          "__daemon",
+          "--max-concurrent",
+          String(maxConcurrent),
+          "--poll-interval",
+          String(pollInterval),
+          "--task-timeout",
+          String(taskTimeout),
+        ],
+        { detached: true, stdio: ["ignore", logFd, logFd] },
+      );
+
+      mkdirSync(STATE_DIR, { recursive: true });
+      writeFileSync(PID_FILE, String(child.pid));
+
+      const state: DaemonState = {
+        providers: available.map((p) => p.name),
+        maxConcurrent: parseInt(String(maxConcurrent), 10),
+        pollInterval: parseInt(String(pollInterval), 10),
+        taskTimeout: parseInt(String(taskTimeout), 10),
+        apiUrl,
+        startedAt: new Date().toISOString(),
+      };
+      writeFileSync(DAEMON_STATE_FILE, JSON.stringify(state, null, 2));
+
+      child.unref();
+
+      const timeoutLabel = state.taskTimeout === 0 ? "none" : `${state.taskTimeout / 1000}s`;
+      const providersLabel = formatProviders(state.providers);
+      console.log(`● Daemon started (PID ${child.pid}, v${getVersion()})`);
+      console.log(`  Providers:   ${providersLabel}`);
+      console.log(`  Concurrency: ${state.maxConcurrent}`);
+      console.log(`  Poll:        ${state.pollInterval / 1000}s`);
+      console.log(`  Timeout:     ${timeoutLabel}`);
+      console.log(`  API:         ${maskApiUrl(state.apiUrl)}`);
+      console.log(`  Logs:        ak logs -f`);
+      process.exit(0);
+    });
+}
+
+const LOG_DIVIDER = "\n──────────────────────── daemon restarted ────────────────────────\n\n";
+const FOLLOW_POLL_MS = 500;
+
+function followLogFile(logFile: string): void {
+  let currentInode: number | null = null;
+  let currentOffset = 0;
+
+  // Initialise inode/offset from current file end
+  try {
+    const stat = statSync(logFile);
+    currentInode = stat.ino;
+    currentOffset = stat.size;
+  } catch {
+    // File may not exist yet; will pick it up on first poll
+  }
+
+  const poll = (): void => {
+    try {
+      const stat = statSync(logFile);
+
+      if (currentInode !== null && stat.ino !== currentInode) {
+        // File was rotated — new daemon.log created
+        process.stdout.write(LOG_DIVIDER);
+        currentOffset = 0;
+      }
+
+      currentInode = stat.ino;
+
+      if (stat.size > currentOffset) {
+        const fd = openSync(logFile, "r");
+        const buf = Buffer.alloc(stat.size - currentOffset);
+        readSync(fd, buf, 0, buf.length, currentOffset);
+        closeSync(fd);
+        process.stdout.write(buf);
+        currentOffset = stat.size;
+      }
+    } catch {
+      // File temporarily absent during rotation — retry next tick
+    }
+  };
+
+  const timer = setInterval(poll, FOLLOW_POLL_MS);
+  process.on("SIGINT", () => {
+    clearInterval(timer);
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    clearInterval(timer);
+    process.exit(0);
+  });
+}
+
 export function registerLogsCommand(program: Command) {
   program
     .command("logs")
@@ -295,9 +488,13 @@ export function registerLogsCommand(program: Command) {
         return;
       }
 
-      const args = opts.follow ? ["-n", String(opts.lines), "-f", logFile] : ["-n", String(opts.lines), logFile];
-
-      const tail = spawn("tail", args, { stdio: "inherit" });
-      tail.on("exit", (code) => process.exit(code ?? 0));
+      if (opts.follow) {
+        // Print last N lines via tail, then hand off to our inode-aware follower
+        const init = spawn("tail", ["-n", String(opts.lines), logFile], { stdio: "inherit" });
+        init.on("exit", () => followLogFile(logFile));
+      } else {
+        const tail = spawn("tail", ["-n", String(opts.lines), logFile], { stdio: "inherit" });
+        tail.on("exit", (code) => process.exit(code ?? 0));
+      }
     });
 }
