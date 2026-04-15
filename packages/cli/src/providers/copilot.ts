@@ -45,6 +45,9 @@ interface MapState {
  * (matching Claude/Codex tool_use names). Copilot CLI uses lowercase snake_case;
  * known tools are mapped to PascalCase; unknown tools pass through for the fallback UI.
  * Returns `{ name: null }` for internal CLI tools that should not be surfaced.
+ *
+ * TODO: tool arg field shapes (file_path, content, etc.) are defined only in the
+ * frontend's tool-uis.tsx. Move them to packages/shared so this mapping can be typed.
  */
 function normalizeCopilotTool(name: string, input: Record<string, unknown>): { name: string | null; input: Record<string, unknown> } {
   switch (name) {
@@ -52,14 +55,35 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
       return { name: "Bash", input };
     case "read":
     case "view":
-      return { name: "Read", input };
+      // Copilot: { path } → Claude: { file_path }
+      return { name: "Read", input: { ...input, file_path: input.path ?? input.file_path } };
     case "write":
     case "create":
-      return { name: "Write", input };
+      // Copilot: { path, file_text } → Claude: { file_path, content }
+      return { name: "Write", input: { ...input, file_path: input.path ?? input.file_path, content: input.file_text ?? input.content } };
     case "edit":
-      return { name: "Edit", input };
+      // Copilot: { path, old_str, new_str } → Claude: { file_path, old_string, new_string }
+      return {
+        name: "Edit",
+        input: {
+          ...input,
+          file_path: input.path ?? input.file_path,
+          old_string: input.old_str ?? input.old_string,
+          new_string: input.new_str ?? input.new_string,
+        },
+      };
     case "multi_edit":
-      return { name: "MultiEdit", input };
+      // Copilot: { path, edits: [{old_str, new_str}] } → Claude: { file_path, edits: [{old_string, new_string}] }
+      return {
+        name: "MultiEdit",
+        input: {
+          ...input,
+          file_path: input.path ?? input.file_path,
+          edits: Array.isArray(input.edits)
+            ? input.edits.map((e: any) => ({ ...e, old_string: e.old_str ?? e.old_string, new_string: e.new_str ?? e.new_string }))
+            : input.edits,
+        },
+      };
     case "glob":
       return { name: "Glob", input };
     case "grep":
@@ -97,6 +121,14 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
  */
 export function* mapCopilotEvent(event: SessionEvent, state: MapState): Generator<AgentEvent> {
   switch (event.type) {
+    case "user.message": {
+      // The user's prompt sent to the session — surface as message.user
+      if (event.data.content) {
+        yield { type: "message.user", text: event.data.content };
+      }
+      return;
+    }
+
     case "assistant.turn_start": {
       if (!state.turnOpen) {
         state.turnOpen = true;

@@ -621,3 +621,85 @@ describe("unknown event type", () => {
     expect(events).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// user.message
+// ---------------------------------------------------------------------------
+
+describe("user.message", () => {
+  it("emits message.user event with content when data.content is present", () => {
+    const state = makeState();
+    const event = { type: "user.message", data: { content: "Hello from user" } } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as { type: string; text?: string }[];
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "message.user", text: "Hello from user" });
+  });
+
+  it("emits no events when data.content is empty string", () => {
+    const state = makeState();
+    const event = { type: "user.message", data: { content: "" } } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state));
+    expect(events).toHaveLength(0);
+  });
+
+  it("emits no events when data.content is undefined (falsy)", () => {
+    const state = makeState();
+    const event = { type: "user.message", data: {} } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state));
+    expect(events).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeCopilotTool field remapping
+// ---------------------------------------------------------------------------
+
+describe("normalizeCopilotTool field remapping", () => {
+  it("write: remaps path → file_path and file_text → content in block input", () => {
+    const state = makeState({ turnOpen: true });
+    const event = {
+      type: "assistant.message",
+      data: {
+        toolRequests: [{ toolCallId: "tw1", name: "write", arguments: { path: "/tmp/f.ts", file_text: "hello" } }],
+      },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as {
+      type: string;
+      block?: { type: string; name: string; input: Record<string, unknown> };
+    }[];
+    const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
+    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts", content: "hello" });
+  });
+
+  it("edit: remaps path → file_path, old_str → old_string, new_str → new_string in block input", () => {
+    const state = makeState({ turnOpen: true });
+    const event = {
+      type: "assistant.message",
+      data: {
+        toolRequests: [{ toolCallId: "te1", name: "edit", arguments: { path: "/tmp/f.ts", old_str: "a", new_str: "b" } }],
+      },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as {
+      type: string;
+      block?: { type: string; name: string; input: Record<string, unknown> };
+    }[];
+    const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
+    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts", old_string: "a", new_string: "b" });
+  });
+
+  it("read: remaps path → file_path in block input", () => {
+    const state = makeState({ turnOpen: true });
+    const event = {
+      type: "assistant.message",
+      data: {
+        toolRequests: [{ toolCallId: "tr1", name: "read", arguments: { path: "/tmp/f.ts" } }],
+      },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as {
+      type: string;
+      block?: { type: string; name: string; input: Record<string, unknown> };
+    }[];
+    const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
+    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts" });
+  });
+});
