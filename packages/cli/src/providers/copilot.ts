@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { EditArgs, GlobArgs, GrepArgs, MultiEditArgs, ReadArgs, WriteArgs } from "@agent-kanban/shared";
+import { ToolName } from "@agent-kanban/shared";
 import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import { approveAll, CopilotClient } from "@github/copilot-sdk";
 import { createLogger } from "../logger.js";
@@ -51,7 +52,7 @@ interface MapState {
 function normalizeCopilotTool(name: string, input: Record<string, unknown>): { name: string | null; input: Record<string, unknown> } {
   switch (name) {
     case "bash":
-      return { name: "Bash", input };
+      return { name: ToolName.Bash, input };
     case "read":
     case "view": {
       const args: ReadArgs = {
@@ -59,12 +60,12 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
         offset: input.offset as number | undefined,
         limit: input.limit as number | undefined,
       };
-      return { name: "Read", input: args };
+      return { name: ToolName.Read, input: args };
     }
     case "write":
     case "create": {
       const args: WriteArgs = { file_path: String(input.path ?? input.file_path ?? ""), content: String(input.file_text ?? input.content ?? "") };
-      return { name: "Write", input: args };
+      return { name: ToolName.Write, input: args };
     }
     case "edit": {
       const args: EditArgs = {
@@ -73,7 +74,7 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
         new_string: String(input.new_str ?? input.new_string ?? ""),
         replace_all: input.replace_all as boolean | undefined,
       };
-      return { name: "Edit", input: args };
+      return { name: ToolName.Edit, input: args };
     }
     case "multi_edit": {
       const args: MultiEditArgs = {
@@ -86,11 +87,11 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
             }))
           : [],
       };
-      return { name: "MultiEdit", input: args };
+      return { name: ToolName.MultiEdit, input: args };
     }
     case "glob": {
       const args: GlobArgs = { pattern: String(input.pattern ?? ""), path: input.path as string | undefined };
-      return { name: "Glob", input: args };
+      return { name: ToolName.Glob, input: args };
     }
     case "grep": {
       const args: GrepArgs = {
@@ -100,20 +101,20 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
         type: input.type as string | undefined,
         output_mode: input.output_mode as string | undefined,
       };
-      return { name: "Grep", input: args };
+      return { name: ToolName.Grep, input: args };
     }
     case "web_fetch":
-      return { name: "WebFetch", input };
+      return { name: ToolName.WebFetch, input };
     case "web_search":
-      return { name: "WebSearch", input };
+      return { name: ToolName.WebSearch, input };
     case "ask_user":
-      return { name: "AskUserQuestion", input };
+      return { name: ToolName.AskUserQuestion, input };
     case "task":
-      return { name: "Agent", input };
+      return { name: ToolName.Agent, input };
     case "todo_write":
-      return { name: "TodoWrite", input };
+      return { name: ToolName.TodoWrite, input };
     case "notebook_edit":
-      return { name: "NotebookEdit", input };
+      return { name: ToolName.NotebookEdit, input };
     // Internal CLI tools with no frontend equivalent — skip
     case "report_intent":
     case "stop_bash":

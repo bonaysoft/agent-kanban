@@ -5,4 +5,5 @@ export * from "./semver.js";
 export * from "./taskStateMachine.js";
 export * from "./templates.js";
 export * from "./toolArgs.js";
+export * from "./tools.js";
 export * from "./types.js";

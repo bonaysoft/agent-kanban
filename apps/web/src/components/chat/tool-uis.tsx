@@ -16,6 +16,7 @@ import type {
   WebSearchResult,
   WriteArgs,
 } from "@agent-kanban/shared";
+import { ToolName } from "@agent-kanban/shared";
 import { makeAssistantToolUI, type ToolCallMessagePartStatus } from "@assistant-ui/react";
 import {
   AlertCircleIcon,
@@ -221,7 +222,7 @@ function resultText(result: unknown): string | null {
 // ─── Bash ────────────────────────────────────────────────────────────────────
 
 export const BashToolUI = makeAssistantToolUI<BashArgs, string>({
-  toolName: "Bash",
+  toolName: ToolName.Bash,
   render: ({ args, result, status }) => {
     const cmd = args?.command ?? "";
     const out = resultText(result);
@@ -237,7 +238,7 @@ export const BashToolUI = makeAssistantToolUI<BashArgs, string>({
 // ─── Read ────────────────────────────────────────────────────────────────────
 
 export const ReadToolUI = makeAssistantToolUI<ReadArgs, string>({
-  toolName: "Read",
+  toolName: ToolName.Read,
   render: ({ args, result, status }) => {
     const range = args?.offset ? `:${args.offset}${args.limit ? `-${args.offset + args.limit}` : ""}` : "";
     const out = resultText(result);
@@ -349,7 +350,7 @@ const FileDiff: FC<{ oldStr: string; newStr: string }> = ({ oldStr, newStr }) =>
 };
 
 export const EditToolUI = makeAssistantToolUI<EditArgs, string>({
-  toolName: "Edit",
+  toolName: ToolName.Edit,
   render: ({ args, result, status }) => {
     const oldCount = (args?.old_string ?? "").split("\n").length;
     const newCount = (args?.new_string ?? "").split("\n").length;
@@ -378,7 +379,7 @@ export const EditToolUI = makeAssistantToolUI<EditArgs, string>({
 // ─── MultiEdit ───────────────────────────────────────────────────────────────
 
 export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
-  toolName: "MultiEdit",
+  toolName: ToolName.MultiEdit,
   render: ({ args, result, status }) => {
     const edits = args?.edits ?? [];
     const out = resultText(result);
@@ -410,7 +411,7 @@ export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
 // ─── Write ───────────────────────────────────────────────────────────────────
 
 export const WriteToolUI = makeAssistantToolUI<WriteArgs, string>({
-  toolName: "Write",
+  toolName: ToolName.Write,
   render: ({ args, status }) => {
     const content = args?.content ?? "";
     const lineCount = content.split("\n").length;
@@ -434,7 +435,7 @@ export const WriteToolUI = makeAssistantToolUI<WriteArgs, string>({
 // ─── Grep ────────────────────────────────────────────────────────────────────
 
 export const GrepToolUI = makeAssistantToolUI<GrepArgs, string>({
-  toolName: "Grep",
+  toolName: ToolName.Grep,
   render: ({ args, result, status }) => {
     const out = resultText(result);
     return (
@@ -459,7 +460,7 @@ export const GrepToolUI = makeAssistantToolUI<GrepArgs, string>({
 // ─── Glob ────────────────────────────────────────────────────────────────────
 
 export const GlobToolUI = makeAssistantToolUI<GlobArgs, string>({
-  toolName: "Glob",
+  toolName: ToolName.Glob,
   render: ({ args, result, status }) => {
     const out = resultText(result);
     return (
@@ -537,7 +538,7 @@ const SubtaskChildren: FC<{ items: SubtaskChild[] }> = ({ items: children }) => 
 };
 
 export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | string>({
-  toolName: "Agent",
+  toolName: ToolName.Agent,
   render: ({ args, result, status }) => {
     const r = coerceTaskResult(result);
     const metaParts: string[] = [];
@@ -565,7 +566,7 @@ export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | st
 // ─── TodoWrite ───────────────────────────────────────────────────────────────
 
 export const TodoWriteToolUI = makeAssistantToolUI<TodoArgs, string>({
-  toolName: "TodoWrite",
+  toolName: ToolName.TodoWrite,
   render: ({ args, status }) => {
     const todos = args?.todos ?? [];
     const done = todos.filter((t) => t.status === "completed").length;
@@ -605,7 +606,7 @@ export const TodoWriteToolUI = makeAssistantToolUI<TodoArgs, string>({
 // ─── WebFetch ────────────────────────────────────────────────────────────────
 
 export const WebFetchToolUI = makeAssistantToolUI<WebFetchArgs, string>({
-  toolName: "WebFetch",
+  toolName: ToolName.WebFetch,
   render: ({ args, result, status }) => {
     const out = resultText(result);
     let host = "";
@@ -637,7 +638,7 @@ export const WebFetchToolUI = makeAssistantToolUI<WebFetchArgs, string>({
 // ─── WebSearch ───────────────────────────────────────────────────────────────
 
 export const WebSearchToolUI = makeAssistantToolUI<WebSearchArgs, WebSearchResult>({
-  toolName: "WebSearch",
+  toolName: ToolName.WebSearch,
   render: ({ args, result, status }) => {
     const results = Array.isArray(result) ? result : null;
     return (
@@ -668,7 +669,7 @@ export const WebSearchToolUI = makeAssistantToolUI<WebSearchArgs, WebSearchResul
 // ─── AskUserQuestion ─────────────────────────────────────────────────────────
 
 export const AskUserQuestionToolUI = makeAssistantToolUI<AskUserQuestionArgs, string>({
-  toolName: "AskUserQuestion",
+  toolName: ToolName.AskUserQuestion,
   render: ({ args, status }) => {
     const questions = args?.questions ?? [];
     return (
@@ -707,7 +708,7 @@ export const AskUserQuestionToolUI = makeAssistantToolUI<AskUserQuestionArgs, st
 // ─── ExitPlanMode ────────────────────────────────────────────────────────────
 
 export const ExitPlanModeToolUI = makeAssistantToolUI<ExitPlanModeArgs, string>({
-  toolName: "ExitPlanMode",
+  toolName: ToolName.ExitPlanMode,
   render: ({ args, status }) => (
     <ToolShell
       icon={<ClipboardList className="size-3.5" />}
@@ -723,7 +724,7 @@ export const ExitPlanModeToolUI = makeAssistantToolUI<ExitPlanModeArgs, string>(
 // ─── SlashCommand ────────────────────────────────────────────────────────────
 
 export const SlashCommandToolUI = makeAssistantToolUI<SlashCommandArgs, string>({
-  toolName: "SlashCommand",
+  toolName: ToolName.SlashCommand,
   render: ({ args, result, status }) => {
     const out = resultText(result);
     return (
@@ -742,7 +743,7 @@ export const SlashCommandToolUI = makeAssistantToolUI<SlashCommandArgs, string>(
 // ─── NotebookEdit ────────────────────────────────────────────────────────────
 
 export const NotebookEditToolUI = makeAssistantToolUI<NotebookEditArgs, string>({
-  toolName: "NotebookEdit",
+  toolName: ToolName.NotebookEdit,
   render: ({ args, status }) => {
     const mode = args?.edit_mode ?? "replace";
     return (

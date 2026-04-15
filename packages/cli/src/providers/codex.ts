@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BashArgs, ReadArgs } from "@agent-kanban/shared";
+import { ToolName } from "@agent-kanban/shared";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
 import { parseRetryAfterMs, UsageFetchError } from "./types.js";
@@ -79,12 +80,12 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
       if (item.type === "command_execution") {
         return {
           type: "message",
-          blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Bash", input: { command: item.command } }],
+          blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: ToolName.Bash, input: { command: item.command } }],
         };
       }
       if (item.type === "file_change") {
         const files = item.changes.map((c) => `${c.kind} ${c.path}`).join(", ");
-        return { type: "message", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Edit", input: { files } }] };
+        return { type: "message", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: ToolName.Edit, input: { files } }] };
       }
       if (item.type === "reasoning" && item.text) {
         return { type: "message", blocks: [{ type: "thinking", text: item.text }] };
@@ -132,15 +133,15 @@ function mapItemToBlock(item: { id?: string; type: string; [k: string]: any }): 
     case "agent_message":
       return item.text ? { type: "text", text: item.text } : null;
     case "command_execution":
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Bash", input: { command: item.command } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: ToolName.Bash, input: { command: item.command } };
     case "file_change": {
       const files = item.changes?.map((c: any) => `${c.kind} ${c.path}`).join(", ") ?? "";
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Edit", input: { files } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: ToolName.Edit, input: { files } };
     }
     case "mcp_tool_call":
       return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: item.name ?? "mcp_tool", input: item.arguments ?? {} };
     case "web_search":
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "WebSearch", input: { query: item.query ?? "" } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: ToolName.WebSearch, input: { query: item.query ?? "" } };
     case "reasoning":
       return item.text ? { type: "thinking", text: item.text } : null;
     default:
@@ -325,34 +326,34 @@ function normalizeFunctionCall(name: string, rawArgs: Record<string, unknown>): 
   switch (name) {
     case "exec_command": {
       const args: BashArgs = { command: String(rawArgs.cmd ?? "") };
-      return { name: "Bash", input: args };
+      return { name: ToolName.Bash, input: args };
     }
     case "shell": {
       const cmd = Array.isArray(rawArgs.command) ? rawArgs.command.join(" ") : String(rawArgs.command ?? "");
       const args: BashArgs = { command: cmd };
-      return { name: "Bash", input: args };
+      return { name: ToolName.Bash, input: args };
     }
     case "shell_command": {
       const args: BashArgs = { command: String(rawArgs.command ?? "") };
-      return { name: "Bash", input: args };
+      return { name: ToolName.Bash, input: args };
     }
     case "write_stdin": {
       // write_stdin with empty chars is a poll for command output — skip it
       const chars = String(rawArgs.chars ?? "");
       if (!chars) return null;
       const args: BashArgs = { command: chars };
-      return { name: "Bash", input: args };
+      return { name: ToolName.Bash, input: args };
     }
 
     // Image viewing → Read (closest frontend equivalent)
     case "view_image": {
       const args: ReadArgs = { file_path: String(rawArgs.path ?? "") };
-      return { name: "Read", input: args };
+      return { name: ToolName.Read, input: args };
     }
 
     // User interaction → AskUserQuestion
     case "request_user_input":
-      return { name: "AskUserQuestion", input: rawArgs };
+      return { name: ToolName.AskUserQuestion, input: rawArgs };
 
     // Internal planner — no specific UI, keep original name for fallback
     case "update_plan":
