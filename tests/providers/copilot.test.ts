@@ -170,7 +170,7 @@ describe("assistant.message with toolRequests", () => {
       data: {
         toolRequests: [
           { toolCallId: "tc1", name: "bash", arguments: { command: "ls" } },
-          { toolCallId: "tc2", name: "read_file", arguments: { path: "/tmp/x" } },
+          { toolCallId: "tc2", name: "glob", arguments: { pattern: "**/*.ts" } },
         ],
       },
     } as SessionEvent;
@@ -196,7 +196,7 @@ describe("assistant.message with toolRequests", () => {
     }[];
     const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
     expect(toolStart?.block?.id).toBe("tc1");
-    expect(toolStart?.block?.name).toBe("bash");
+    expect(toolStart?.block?.name).toBe("Bash");
     expect(toolStart?.block?.input).toEqual({ command: "ls" });
   });
 
@@ -324,7 +324,7 @@ describe("tool.execution_complete failure", () => {
 // ---------------------------------------------------------------------------
 
 describe("tool.execution_complete with no matching pending tool_use", () => {
-  it("emits only block.done with type tool_result when no pending tool_use exists", () => {
+  it("emits no events when toolCallId has no matching pending tool_use", () => {
     const state = makeState();
     const event = {
       type: "tool.execution_complete",
@@ -334,9 +334,7 @@ describe("tool.execution_complete with no matching pending tool_use", () => {
       type: string;
       block?: { type: string; tool_use_id: string; output: string; error?: boolean };
     }[];
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe("block.done");
-    expect(events[0].block?.type).toBe("tool_result");
+    expect(events).toHaveLength(0);
   });
 
   it("does not emit block.done for tool_use when toolCallId does not match any pending entry", () => {
@@ -350,8 +348,7 @@ describe("tool.execution_complete with no matching pending tool_use", () => {
       type: string;
       block?: { type: string };
     }[];
-    expect(events).toHaveLength(1);
-    expect(events[0].block?.type).toBe("tool_result");
+    expect(events).toHaveLength(0);
   });
 });
 
@@ -556,6 +553,59 @@ describe("session.error", () => {
     } as SessionEvent;
     const events = collect(mapCopilotEvent(event, state)) as { type: string; code?: string; detail?: string }[];
     expect(events[0]?.detail).toBe("Unknown error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// internal tool skipping
+// ---------------------------------------------------------------------------
+
+describe("internal tool skipping", () => {
+  it("emits no block.start events when all tool requests are internal tools", () => {
+    const state = makeState({ turnOpen: true });
+    const event = {
+      type: "assistant.message",
+      data: {
+        toolRequests: [{ toolCallId: "tc-skip", name: "report_intent", arguments: {} }],
+      },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as {
+      type: string;
+      block?: { type: string };
+    }[];
+    const blockStarts = events.filter((e) => e.type === "block.start");
+    expect(blockStarts).toHaveLength(0);
+  });
+
+  it("emits no events for tool.execution_complete when toolCallId has no matching pending entry", () => {
+    const state = makeState();
+    // No pending tool_use registered — simulates a skipped tool whose tc-skip was never stored
+    const event = {
+      type: "tool.execution_complete",
+      data: { toolCallId: "tc-skip", result: { content: "ok" }, success: true },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state));
+    expect(events).toHaveLength(0);
+  });
+
+  it("emits exactly one block.start for bash and skips report_intent in a mixed toolRequests list", () => {
+    const state = makeState({ turnOpen: true });
+    const event = {
+      type: "assistant.message",
+      data: {
+        toolRequests: [
+          { toolCallId: "tc-bash", name: "bash", arguments: { command: "ls" } },
+          { toolCallId: "tc-skip", name: "report_intent", arguments: {} },
+        ],
+      },
+    } as SessionEvent;
+    const events = collect(mapCopilotEvent(event, state)) as {
+      type: string;
+      block?: { type: string; name: string };
+    }[];
+    const blockStarts = events.filter((e) => e.type === "block.start" && e.block?.type === "tool_use");
+    expect(blockStarts).toHaveLength(1);
+    expect(blockStarts[0].block?.name).toBe("Bash");
   });
 });
 

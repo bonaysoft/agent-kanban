@@ -41,6 +41,57 @@ interface MapState {
 }
 
 /**
+ * Normalize Copilot CLI tool names to the canonical names the frontend recognizes
+ * (matching Claude/Codex tool_use names). Copilot CLI uses lowercase snake_case;
+ * known tools are mapped to PascalCase; unknown tools pass through for the fallback UI.
+ * Returns `{ name: null }` for internal CLI tools that should not be surfaced.
+ */
+function normalizeCopilotTool(name: string, input: Record<string, unknown>): { name: string | null; input: Record<string, unknown> } {
+  switch (name) {
+    case "bash":
+      return { name: "Bash", input };
+    case "read":
+    case "view":
+      return { name: "Read", input };
+    case "write":
+    case "create":
+      return { name: "Write", input };
+    case "edit":
+      return { name: "Edit", input };
+    case "multi_edit":
+      return { name: "MultiEdit", input };
+    case "glob":
+      return { name: "Glob", input };
+    case "grep":
+      return { name: "Grep", input };
+    case "web_fetch":
+      return { name: "WebFetch", input };
+    case "web_search":
+      return { name: "WebSearch", input };
+    // Copilot CLI tool name differs from Claude's canonical name
+    case "ask_user":
+      return { name: "AskUserQuestion", input };
+    // Copilot CLI tool name differs from Claude's canonical name
+    case "task":
+      return { name: "Agent", input };
+    case "todo_write":
+      return { name: "TodoWrite", input };
+    case "notebook_edit":
+      return { name: "NotebookEdit", input };
+    // ExitPlanMode / SlashCommand are Claude-only tools; Copilot CLI never emits them
+    // Internal CLI tools with no frontend equivalent — skip
+    case "report_intent":
+    case "stop_bash":
+    case "read_bash":
+    case "write_bash":
+    case "list_bash":
+      return { name: null, input };
+    default:
+      return { name, input };
+  }
+}
+
+/**
  * Map a single Copilot SDK SessionEvent to zero or more AgentEvents.
  * Mutates `state` for turn/usage tracking.
  */
@@ -86,11 +137,14 @@ export function* mapCopilotEvent(event: SessionEvent, state: MapState): Generato
 
       if (toolRequests) {
         for (const tr of toolRequests) {
+          const normalized = normalizeCopilotTool(tr.name, (tr.arguments as Record<string, unknown>) ?? {});
+          // Skip internal CLI tools that have no frontend representation
+          if (normalized.name === null) continue;
           const block: ContentBlock & { type: "tool_use" } = {
             type: "tool_use",
             id: tr.toolCallId,
-            name: tr.name,
-            input: (tr.arguments as Record<string, unknown>) ?? {},
+            name: normalized.name,
+            input: normalized.input,
           };
           // Cache so tool.execution_complete can close the same block
           state.pendingToolUses.set(tr.toolCallId, block);
@@ -107,16 +161,20 @@ export function* mapCopilotEvent(event: SessionEvent, state: MapState): Generato
       if (toolUseBlock) {
         state.pendingToolUses.delete(toolCallId);
         yield { type: "block.done", block: toolUseBlock };
+        // Only emit tool_result for tools that were surfaced to the frontend
+        const output = result?.content ?? (success ? "" : "Tool execution failed");
+        const resultBlock: ContentBlock = {
+          type: "tool_result",
+          tool_use_id: toolCallId,
+          output,
+          error: !success || undefined,
+        };
+        yield { type: "block.done", block: resultBlock };
+      } else {
+        // No pending entry: either the tool was an internal tool (skipped intentionally)
+        // or an unexpected toolCallId mismatch — log for diagnosability
+        logger.debug(`tool.execution_complete: no pending tool_use for toolCallId=${toolCallId} (skipped or mismatch)`);
       }
-      // Emit the tool result as a separate block
-      const output = result?.content ?? (success ? "" : "Tool execution failed");
-      const resultBlock: ContentBlock = {
-        type: "tool_result",
-        tool_use_id: toolCallId,
-        output,
-        error: !success || undefined,
-      };
-      yield { type: "block.done", block: resultBlock };
       return;
     }
 
