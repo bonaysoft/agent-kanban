@@ -51,17 +51,28 @@ task_status() {
   ak describe task "$1" 2>/dev/null | sed -n 's/^Status: *//p'
 }
 
-task_session_exists() {
+task_session_file() {
   local task_id="$1"
   ls ~/.local/state/agent-kanban/sessions/*.json 2>/dev/null \
     | xargs grep -l "\"taskId\": *\"$task_id\"" 2>/dev/null | head -1
 }
 
+task_session_status() {
+  local task_id="$1"
+  local file
+  file="$(task_session_file "$task_id")"
+  [ -n "$file" ] && python3 -c "import json,sys; print(json.load(open('$file')).get('status',''))" 2>/dev/null || echo ""
+}
+
+# Sessions are retained as "closed" after cleanup (for history lookup).
+# "cleaned up" means: session reached "closed" state (or file is gone).
 wait_session_cleanup() {
   local task_id="$1" timeout_secs="${2:-120}"
   local elapsed=0
   while [ "$elapsed" -lt "$timeout_secs" ]; do
-    if [ -z "$(task_session_exists "$task_id")" ]; then
+    local status
+    status="$(task_session_status "$task_id")"
+    if [ -z "$status" ] || [ "$status" = "closed" ]; then
       return 0
     fi
     sleep 2
@@ -173,13 +184,13 @@ else
   fail "expected cancelled, got: $STATUS_AFTER_CANCEL"
 fi
 
-# Check the cancelled task's session file is gone (not global count — other tests may have sessions)
-T4_SESSION=$(ls ~/.local/state/agent-kanban/sessions/*.json 2>/dev/null \
-  | xargs grep -l "\"taskId\": *\"$T4\"" 2>/dev/null || true)
-if [ -z "$T4_SESSION" ]; then
-  pass "cancelled task session cleaned up"
+# Wait for cancelled task's session to reach "closed" state
+if wait_session_cleanup "$T4" 60; then
+  T4_STATUS="$(task_session_status "$T4")"
+  pass "cancelled task session cleaned up (status=${T4_STATUS:-gone})"
 else
-  fail "cancelled task session still exists: $T4_SESSION"
+  T4_STATUS="$(task_session_status "$T4")"
+  fail "cancelled task session not cleaned up after 60s (status=$T4_STATUS)"
 fi
 echo ""
 
