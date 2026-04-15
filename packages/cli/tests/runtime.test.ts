@@ -32,6 +32,7 @@ function clearRuntimeEnv() {
   delete process.env.CLAUDECODE;
   delete process.env.CODEX_CI;
   delete process.env.GEMINI_CLI;
+  delete process.env.COPILOT_CLI;
 }
 
 beforeEach(() => {
@@ -63,6 +64,11 @@ describe("detectRuntime", () => {
   it("returns 'gemini' when GEMINI_CLI is set", () => {
     process.env.GEMINI_CLI = "1";
     expect(detectRuntime()).toBe("gemini");
+  });
+
+  it("returns 'copilot' when COPILOT_CLI is set", () => {
+    process.env.COPILOT_CLI = "1";
+    expect(detectRuntime()).toBe("copilot");
   });
 
   it("prioritises CLAUDECODE over CODEX_CI when both are set", () => {

@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.96",
     "@auth/agent": "^0.3.0",
+    "@github/copilot-sdk": "^0.2.2",
     "@openai/codex-sdk": "^0.118.0",
     "commander": "^13.1.0",
     "jose": "^6.2.2",

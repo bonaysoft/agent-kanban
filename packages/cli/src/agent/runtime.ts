@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 
 interface RuntimeSpec {
+  /** Environment variable set by the runtime when it spawns subprocesses. */
   envVar: string;
   commandPattern: RegExp;
 }
@@ -9,6 +10,7 @@ const RUNTIMES: Record<string, RuntimeSpec> = {
   claude: { envVar: "CLAUDECODE", commandPattern: /(^|\/)claude(\s|$)/ },
   codex: { envVar: "CODEX_CI", commandPattern: /(^|\/)codex(\s|$)/ },
   gemini: { envVar: "GEMINI_CLI", commandPattern: /(^|\/)gemini(\s|$)/ },
+  copilot: { envVar: "COPILOT_CLI", commandPattern: /(^|\/)copilot(\s|$)/ },
 };
 
 export function detectRuntime(): string | null {

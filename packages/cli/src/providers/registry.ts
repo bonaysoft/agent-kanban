@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { type AgentRuntime, normalizeRuntime } from "@agent-kanban/shared";
 import { claudeProvider } from "./claude.js";
 import { codexProvider } from "./codex.js";
+import { copilotProvider } from "./copilot.js";
 import { geminiProvider } from "./gemini.js";
 import type { AgentProvider } from "./types.js";
 
@@ -14,6 +15,7 @@ const RUNTIME_COMMANDS: Record<AgentRuntime, string> = {
   claude: "claude",
   codex: "codex",
   gemini: "gemini",
+  copilot: "copilot",
 };
 
 export function registerProvider(provider: AgentProvider): void {
@@ -44,3 +46,4 @@ export function getAvailableProviders(): AgentProvider[] {
 registerProvider(claudeProvider);
 registerProvider(geminiProvider);
 registerProvider(codexProvider);
+registerProvider(copilotProvider);
