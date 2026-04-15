@@ -72,10 +72,9 @@ function formatUptime(startMs: number): string {
 }
 
 function countActiveSessions(): number {
-  // Count worker sessions in any non-terminal status. Terminal sessions have
-  // their files removed by SessionManager, so anything still on disk is
-  // either active / rate_limited / in_review / completing.
-  return listSessions({ type: "worker" }).length;
+  // Count worker sessions that are still doing work. "closed" sessions stay
+  // on disk for history lookup but are no longer active.
+  return listSessions({ type: "worker" }).filter((s) => s.status !== "closed").length;
 }
 
 function formatProviders(all: string[]): string {
