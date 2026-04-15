@@ -250,9 +250,9 @@ describe("getCodexHistory — function_call payload", () => {
       const block = events[0].event.blocks[0];
       expect(block.type).toBe("tool_use");
       if (block.type === "tool_use") {
-        expect(block.name).toBe("exec_command");
+        expect(block.name).toBe("Bash");
         expect(block.id).toBe("call-1");
-        expect(block.input).toEqual({ cmd: "ls -la" });
+        expect(block.input).toEqual({ command: "ls -la" });
       }
     }
   });
@@ -265,7 +265,7 @@ describe("getCodexHistory — function_call payload", () => {
         payload: {
           type: "function_call",
           name: "exec_command",
-          arguments: JSON.stringify({ command: "git status", cwd: "/tmp" }),
+          arguments: JSON.stringify({ cmd: "git status", cwd: "/tmp" }),
           call_id: "c2",
         },
       },
@@ -274,7 +274,9 @@ describe("getCodexHistory — function_call payload", () => {
     if (events[0].event.type === "message") {
       const block = events[0].event.blocks[0];
       if (block.type === "tool_use") {
-        expect(block.input).toEqual({ command: "git status", cwd: "/tmp" });
+        // exec_command is normalized: name → "Bash", cmd field → command field
+        expect(block.name).toBe("Bash");
+        expect(block.input).toEqual({ command: "git status" });
       }
     }
   });

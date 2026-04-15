@@ -78,12 +78,12 @@ export function mapThreadEvent(event: ThreadEvent, model = "o3"): AgentEvent | n
       if (item.type === "command_execution") {
         return {
           type: "message",
-          blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "command", input: { command: item.command } }],
+          blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Bash", input: { command: item.command } }],
         };
       }
       if (item.type === "file_change") {
         const files = item.changes.map((c) => `${c.kind} ${c.path}`).join(", ");
-        return { type: "message", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } }] };
+        return { type: "message", blocks: [{ type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Edit", input: { files } }] };
       }
       if (item.type === "reasoning" && item.text) {
         return { type: "message", blocks: [{ type: "thinking", text: item.text }] };
@@ -131,15 +131,15 @@ function mapItemToBlock(item: { id?: string; type: string; [k: string]: any }): 
     case "agent_message":
       return item.text ? { type: "text", text: item.text } : null;
     case "command_execution":
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "command", input: { command: item.command } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Bash", input: { command: item.command } };
     case "file_change": {
       const files = item.changes?.map((c: any) => `${c.kind} ${c.path}`).join(", ") ?? "";
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "file_change", input: { files } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "Edit", input: { files } };
     }
     case "mcp_tool_call":
       return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: item.name ?? "mcp_tool", input: item.arguments ?? {} };
     case "web_search":
-      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "web_search", input: { query: item.query ?? "" } };
+      return { type: "tool_use", id: item.id ?? `codex-${Date.now()}`, name: "WebSearch", input: { query: item.query ?? "" } };
     case "reasoning":
       return item.text ? { type: "thinking", text: item.text } : null;
     default:
@@ -311,6 +311,52 @@ function findSessionFile(threadId: string): string | null {
   return null;
 }
 
+/**
+ * Normalize a JSONL function_call to the same name/input shape as live
+ * streaming (`mapItemToBlock`). This ensures the frontend renders history
+ * and live events identically.
+ */
+/**
+ * Normalize a JSONL function_call to the canonical tool names the frontend
+ * recognizes (Bash, Edit, Read, WebSearch, etc.), matching live streaming output.
+ */
+function normalizeFunctionCall(name: string, rawArgs: Record<string, unknown>): { name: string; input: Record<string, unknown> } | null {
+  switch (name) {
+    // Shell execution — multiple Codex generations use different names/shapes
+    case "exec_command":
+      return { name: "Bash", input: { command: String(rawArgs.cmd ?? "") } };
+    case "shell": {
+      const cmd = Array.isArray(rawArgs.command) ? rawArgs.command.join(" ") : String(rawArgs.command ?? "");
+      return { name: "Bash", input: { command: cmd } };
+    }
+    case "shell_command":
+      return { name: "Bash", input: { command: String(rawArgs.command ?? "") } };
+    case "write_stdin": {
+      // write_stdin with empty chars is a poll for command output — skip it
+      const chars = String(rawArgs.chars ?? "");
+      if (!chars) return null;
+      return { name: "Bash", input: { command: chars } };
+    }
+
+    // Image viewing → Read (closest frontend equivalent)
+    case "view_image":
+      return { name: "Read", input: { file_path: String(rawArgs.path ?? "") } };
+
+    // User interaction → AskUserQuestion
+    case "request_user_input":
+      return { name: "AskUserQuestion", input: rawArgs };
+
+    // Internal planner — no specific UI, keep original name for fallback
+    case "update_plan":
+    case "list_mcp_resources":
+    case "read_mcp_resource":
+      return { name, input: rawArgs };
+
+    default:
+      return { name, input: rawArgs };
+  }
+}
+
 function mapResponseItem(payload: Record<string, any>): AgentEvent | null {
   switch (payload.type) {
     case "message": {
@@ -327,17 +373,19 @@ function mapResponseItem(payload: Record<string, any>): AgentEvent | null {
       return null;
     }
     case "function_call": {
-      let input: Record<string, unknown> = {};
+      let rawArgs: Record<string, unknown> = {};
       if (payload.arguments) {
         try {
-          input = JSON.parse(payload.arguments);
+          rawArgs = JSON.parse(payload.arguments);
         } catch {
-          input = { raw: payload.arguments };
+          rawArgs = { raw: payload.arguments };
         }
       }
+      const normalized = normalizeFunctionCall(payload.name ?? "tool", rawArgs);
+      if (!normalized) return null;
       return {
         type: "message",
-        blocks: [{ type: "tool_use", id: payload.call_id ?? `codex-hist-${Date.now()}`, name: payload.name ?? "tool", input }],
+        blocks: [{ type: "tool_use", id: payload.call_id ?? `codex-hist-${Date.now()}`, name: normalized.name, input: normalized.input }],
       };
     }
     case "function_call_output":

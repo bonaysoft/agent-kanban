@@ -363,7 +363,7 @@ describe("mapThreadEvent — item.completed", () => {
     const result = mapThreadEvent(event);
     expect(result?.type).toBe("message");
     if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "tool_use", id: "i1", name: "command", input: { command: "ls" } });
+      expect(result.blocks[0]).toEqual({ type: "tool_use", id: "i1", name: "Bash", input: { command: "ls" } });
     }
   });
 
