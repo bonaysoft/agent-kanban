@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { BashArgs, ReadArgs } from "@agent-kanban/shared";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
 import { parseRetryAfterMs, UsageFetchError } from "./types.js";
@@ -322,25 +323,32 @@ function findSessionFile(threadId: string): string | null {
  */
 function normalizeFunctionCall(name: string, rawArgs: Record<string, unknown>): { name: string; input: Record<string, unknown> } | null {
   switch (name) {
-    // Shell execution — multiple Codex generations use different names/shapes
-    case "exec_command":
-      return { name: "Bash", input: { command: String(rawArgs.cmd ?? "") } };
+    case "exec_command": {
+      const args: BashArgs = { command: String(rawArgs.cmd ?? "") };
+      return { name: "Bash", input: args };
+    }
     case "shell": {
       const cmd = Array.isArray(rawArgs.command) ? rawArgs.command.join(" ") : String(rawArgs.command ?? "");
-      return { name: "Bash", input: { command: cmd } };
+      const args: BashArgs = { command: cmd };
+      return { name: "Bash", input: args };
     }
-    case "shell_command":
-      return { name: "Bash", input: { command: String(rawArgs.command ?? "") } };
+    case "shell_command": {
+      const args: BashArgs = { command: String(rawArgs.command ?? "") };
+      return { name: "Bash", input: args };
+    }
     case "write_stdin": {
       // write_stdin with empty chars is a poll for command output — skip it
       const chars = String(rawArgs.chars ?? "");
       if (!chars) return null;
-      return { name: "Bash", input: { command: chars } };
+      const args: BashArgs = { command: chars };
+      return { name: "Bash", input: args };
     }
 
     // Image viewing → Read (closest frontend equivalent)
-    case "view_image":
-      return { name: "Read", input: { file_path: String(rawArgs.path ?? "") } };
+    case "view_image": {
+      const args: ReadArgs = { file_path: String(rawArgs.path ?? "") };
+      return { name: "Read", input: args };
+    }
 
     // User interaction → AskUserQuestion
     case "request_user_input":

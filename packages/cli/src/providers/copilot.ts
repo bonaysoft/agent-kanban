@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import type { EditArgs, GlobArgs, GrepArgs, MultiEditArgs, ReadArgs, WriteArgs } from "@agent-kanban/shared";
 import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import { approveAll, CopilotClient } from "@github/copilot-sdk";
 import { createLogger } from "../logger.js";
@@ -41,68 +42,78 @@ interface MapState {
 }
 
 /**
- * Normalize Copilot CLI tool names to the canonical names the frontend recognizes
- * (matching Claude/Codex tool_use names). Copilot CLI uses lowercase snake_case;
- * known tools are mapped to PascalCase; unknown tools pass through for the fallback UI.
+ * Normalize Copilot CLI tool names and input fields to the canonical shapes
+ * the frontend expects (matching Claude/Codex tool_use conventions).
+ * Copilot CLI uses lowercase snake_case names and different field names;
+ * unknown tools pass through for the fallback UI.
  * Returns `{ name: null }` for internal CLI tools that should not be surfaced.
- *
- * TODO: tool arg field shapes (file_path, content, etc.) are defined only in the
- * frontend's tool-uis.tsx. Move them to packages/shared so this mapping can be typed.
  */
 function normalizeCopilotTool(name: string, input: Record<string, unknown>): { name: string | null; input: Record<string, unknown> } {
   switch (name) {
     case "bash":
       return { name: "Bash", input };
     case "read":
-    case "view":
-      // Copilot: { path } → Claude: { file_path }
-      return { name: "Read", input: { ...input, file_path: input.path ?? input.file_path } };
+    case "view": {
+      const args: ReadArgs = {
+        file_path: String(input.path ?? input.file_path ?? ""),
+        offset: input.offset as number | undefined,
+        limit: input.limit as number | undefined,
+      };
+      return { name: "Read", input: args };
+    }
     case "write":
-    case "create":
-      // Copilot: { path, file_text } → Claude: { file_path, content }
-      return { name: "Write", input: { ...input, file_path: input.path ?? input.file_path, content: input.file_text ?? input.content } };
-    case "edit":
-      // Copilot: { path, old_str, new_str } → Claude: { file_path, old_string, new_string }
-      return {
-        name: "Edit",
-        input: {
-          ...input,
-          file_path: input.path ?? input.file_path,
-          old_string: input.old_str ?? input.old_string,
-          new_string: input.new_str ?? input.new_string,
-        },
+    case "create": {
+      const args: WriteArgs = { file_path: String(input.path ?? input.file_path ?? ""), content: String(input.file_text ?? input.content ?? "") };
+      return { name: "Write", input: args };
+    }
+    case "edit": {
+      const args: EditArgs = {
+        file_path: String(input.path ?? input.file_path ?? ""),
+        old_string: String(input.old_str ?? input.old_string ?? ""),
+        new_string: String(input.new_str ?? input.new_string ?? ""),
+        replace_all: input.replace_all as boolean | undefined,
       };
-    case "multi_edit":
-      // Copilot: { path, edits: [{old_str, new_str}] } → Claude: { file_path, edits: [{old_string, new_string}] }
-      return {
-        name: "MultiEdit",
-        input: {
-          ...input,
-          file_path: input.path ?? input.file_path,
-          edits: Array.isArray(input.edits)
-            ? input.edits.map((e: any) => ({ ...e, old_string: e.old_str ?? e.old_string, new_string: e.new_str ?? e.new_string }))
-            : input.edits,
-        },
+      return { name: "Edit", input: args };
+    }
+    case "multi_edit": {
+      const args: MultiEditArgs = {
+        file_path: String(input.path ?? input.file_path ?? ""),
+        edits: Array.isArray(input.edits)
+          ? input.edits.map((e: Record<string, unknown>) => ({
+              old_string: String(e.old_str ?? e.old_string ?? ""),
+              new_string: String(e.new_str ?? e.new_string ?? ""),
+              replace_all: e.replace_all as boolean | undefined,
+            }))
+          : [],
       };
-    case "glob":
-      return { name: "Glob", input };
-    case "grep":
-      return { name: "Grep", input };
+      return { name: "MultiEdit", input: args };
+    }
+    case "glob": {
+      const args: GlobArgs = { pattern: String(input.pattern ?? ""), path: input.path as string | undefined };
+      return { name: "Glob", input: args };
+    }
+    case "grep": {
+      const args: GrepArgs = {
+        pattern: String(input.pattern ?? ""),
+        path: input.path as string | undefined,
+        glob: input.glob as string | undefined,
+        type: input.type as string | undefined,
+        output_mode: input.output_mode as string | undefined,
+      };
+      return { name: "Grep", input: args };
+    }
     case "web_fetch":
       return { name: "WebFetch", input };
     case "web_search":
       return { name: "WebSearch", input };
-    // Copilot CLI tool name differs from Claude's canonical name
     case "ask_user":
       return { name: "AskUserQuestion", input };
-    // Copilot CLI tool name differs from Claude's canonical name
     case "task":
       return { name: "Agent", input };
     case "todo_write":
       return { name: "TodoWrite", input };
     case "notebook_edit":
       return { name: "NotebookEdit", input };
-    // ExitPlanMode / SlashCommand are Claude-only tools; Copilot CLI never emits them
     // Internal CLI tools with no frontend equivalent — skip
     case "report_intent":
     case "stop_bash":

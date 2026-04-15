@@ -1,3 +1,4 @@
+import type { BashArgs, EditArgs, GlobArgs, GrepArgs, MultiEditArgs, ReadArgs, WriteArgs } from "@agent-kanban/shared";
 import { makeAssistantToolUI, type ToolCallMessagePartStatus } from "@assistant-ui/react";
 import {
   AlertCircleIcon,
@@ -202,8 +203,6 @@ function resultText(result: unknown): string | null {
 
 // ─── Bash ────────────────────────────────────────────────────────────────────
 
-type BashArgs = { command: string; description?: string; timeout?: number };
-
 export const BashToolUI = makeAssistantToolUI<BashArgs, string>({
   toolName: "Bash",
   render: ({ args, result, status }) => {
@@ -219,8 +218,6 @@ export const BashToolUI = makeAssistantToolUI<BashArgs, string>({
 });
 
 // ─── Read ────────────────────────────────────────────────────────────────────
-
-type ReadArgs = { file_path: string; offset?: number; limit?: number };
 
 export const ReadToolUI = makeAssistantToolUI<ReadArgs, string>({
   toolName: "Read",
@@ -246,8 +243,6 @@ export const ReadToolUI = makeAssistantToolUI<ReadArgs, string>({
 });
 
 // ─── Edit ────────────────────────────────────────────────────────────────────
-
-type EditArgs = { file_path: string; old_string: string; new_string: string; replace_all?: boolean };
 
 // Palettes for the diff viewer. Keyed on dark-mode flag. Intentionally
 // ignores the rdv built-in themes because they use flat reds/greens that
@@ -365,11 +360,6 @@ export const EditToolUI = makeAssistantToolUI<EditArgs, string>({
 
 // ─── MultiEdit ───────────────────────────────────────────────────────────────
 
-type MultiEditArgs = {
-  file_path: string;
-  edits: { old_string: string; new_string: string; replace_all?: boolean }[];
-};
-
 export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
   toolName: "MultiEdit",
   render: ({ args, result, status }) => {
@@ -402,8 +392,6 @@ export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
 
 // ─── Write ───────────────────────────────────────────────────────────────────
 
-type WriteArgs = { file_path: string; content: string };
-
 export const WriteToolUI = makeAssistantToolUI<WriteArgs, string>({
   toolName: "Write",
   render: ({ args, status }) => {
@@ -427,8 +415,6 @@ export const WriteToolUI = makeAssistantToolUI<WriteArgs, string>({
 });
 
 // ─── Grep ────────────────────────────────────────────────────────────────────
-
-type GrepArgs = { pattern: string; path?: string; glob?: string; type?: string; output_mode?: string };
 
 export const GrepToolUI = makeAssistantToolUI<GrepArgs, string>({
   toolName: "Grep",
@@ -454,8 +440,6 @@ export const GrepToolUI = makeAssistantToolUI<GrepArgs, string>({
 });
 
 // ─── Glob ────────────────────────────────────────────────────────────────────
-
-type GlobArgs = { pattern: string; path?: string };
 
 export const GlobToolUI = makeAssistantToolUI<GlobArgs, string>({
   toolName: "Glob",
