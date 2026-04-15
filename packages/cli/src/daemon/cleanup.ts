@@ -50,7 +50,9 @@ export async function cleanupStaleSessions(client: MachineClient, machineId: str
         // orphaned at boot time (no live handle can exist yet).
         // Leader sessions: pid liveness.
         if (local?.type === "worker") {
-          if (local.status === "in_review") continue;
+          // in_review survives restarts (reject-resume entry point).
+          // closed sessions are intentionally retained for history lookup — skip.
+          if (local.status === "in_review" || local.status === "closed") continue;
         } else if (local?.type === "leader") {
           if (isPidAlive(local.pid)) continue;
         }
@@ -79,7 +81,7 @@ export async function cleanupStaleSessions(client: MachineClient, machineId: str
 // the right action depends on context (release vs cancel vs manual merge).
 export async function auditOrphanedTasks(client: MachineClient, _machineId: string): Promise<void> {
   try {
-    const workers = listSessions({ type: "worker" });
+    const workers = listSessions({ type: "worker" }).filter((s) => s.status !== "closed");
     let resumeQueued = 0;
     let diverged = 0;
 
