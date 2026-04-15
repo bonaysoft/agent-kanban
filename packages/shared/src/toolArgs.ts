@@ -49,3 +49,67 @@ export type GlobArgs = {
   pattern: string;
   path?: string;
 };
+
+export type TaskArgs = {
+  description: string;
+  prompt: string;
+  subagent_type?: string;
+};
+
+export type TodoItem = {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+};
+
+export type TodoArgs = {
+  todos: TodoItem[];
+};
+
+export type WebFetchArgs = {
+  url: string;
+  prompt: string;
+};
+
+export type WebSearchArgs = {
+  query: string;
+};
+
+export type WebSearchResultItem = {
+  title?: string;
+  url?: string;
+  snippet?: string;
+};
+
+export type WebSearchResult = WebSearchResultItem[] | string;
+
+export type AskUserQuestionOption = {
+  label?: string;
+  description?: string;
+};
+
+export type AskUserQuestion = {
+  header?: string;
+  question: string;
+  multiSelect?: boolean;
+  options?: AskUserQuestionOption[];
+};
+
+export type AskUserQuestionArgs = {
+  questions: AskUserQuestion[];
+};
+
+export type ExitPlanModeArgs = {
+  plan: string;
+};
+
+export type SlashCommandArgs = {
+  command: string;
+};
+
+export type NotebookEditArgs = {
+  notebook_path: string;
+  cell_id?: string;
+  cell_type?: "code" | "markdown";
+  edit_mode?: "replace" | "insert" | "delete";
+  new_source: string;
+};

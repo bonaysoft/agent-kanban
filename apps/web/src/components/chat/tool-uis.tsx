@@ -1,4 +1,21 @@
-import type { BashArgs, EditArgs, GlobArgs, GrepArgs, MultiEditArgs, ReadArgs, WriteArgs } from "@agent-kanban/shared";
+import type {
+  AskUserQuestionArgs,
+  BashArgs,
+  EditArgs,
+  ExitPlanModeArgs,
+  GlobArgs,
+  GrepArgs,
+  MultiEditArgs,
+  NotebookEditArgs,
+  ReadArgs,
+  SlashCommandArgs,
+  TaskArgs,
+  TodoArgs,
+  WebFetchArgs,
+  WebSearchArgs,
+  WebSearchResult,
+  WriteArgs,
+} from "@agent-kanban/shared";
 import { makeAssistantToolUI, type ToolCallMessagePartStatus } from "@assistant-ui/react";
 import {
   AlertCircleIcon,
@@ -465,8 +482,6 @@ export const GlobToolUI = makeAssistantToolUI<GlobArgs, string>({
 
 // ─── Task (sub-agent) ────────────────────────────────────────────────────────
 
-type TaskArgs = { description: string; prompt: string; subagent_type?: string };
-
 type TaskToolResultShape = Partial<TaskToolResult>;
 
 // Normalize result: may be legacy string or rich TaskToolResult.
@@ -549,9 +564,6 @@ export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | st
 
 // ─── TodoWrite ───────────────────────────────────────────────────────────────
 
-type TodoItem = { content: string; status: "pending" | "in_progress" | "completed" };
-type TodoArgs = { todos: TodoItem[] };
-
 export const TodoWriteToolUI = makeAssistantToolUI<TodoArgs, string>({
   toolName: "TodoWrite",
   render: ({ args, status }) => {
@@ -592,8 +604,6 @@ export const TodoWriteToolUI = makeAssistantToolUI<TodoArgs, string>({
 
 // ─── WebFetch ────────────────────────────────────────────────────────────────
 
-type WebFetchArgs = { url: string; prompt: string };
-
 export const WebFetchToolUI = makeAssistantToolUI<WebFetchArgs, string>({
   toolName: "WebFetch",
   render: ({ args, result, status }) => {
@@ -626,9 +636,6 @@ export const WebFetchToolUI = makeAssistantToolUI<WebFetchArgs, string>({
 
 // ─── WebSearch ───────────────────────────────────────────────────────────────
 
-type WebSearchArgs = { query: string };
-type WebSearchResult = Array<{ title?: string; url?: string; snippet?: string }> | string;
-
 export const WebSearchToolUI = makeAssistantToolUI<WebSearchArgs, WebSearchResult>({
   toolName: "WebSearch",
   render: ({ args, result, status }) => {
@@ -659,15 +666,6 @@ export const WebSearchToolUI = makeAssistantToolUI<WebSearchArgs, WebSearchResul
 });
 
 // ─── AskUserQuestion ─────────────────────────────────────────────────────────
-
-type AskUserQuestionArgs = {
-  questions: Array<{
-    header?: string;
-    question: string;
-    multiSelect?: boolean;
-    options?: Array<{ label?: string; description?: string }>;
-  }>;
-};
 
 export const AskUserQuestionToolUI = makeAssistantToolUI<AskUserQuestionArgs, string>({
   toolName: "AskUserQuestion",
@@ -708,8 +706,6 @@ export const AskUserQuestionToolUI = makeAssistantToolUI<AskUserQuestionArgs, st
 
 // ─── ExitPlanMode ────────────────────────────────────────────────────────────
 
-type ExitPlanModeArgs = { plan: string };
-
 export const ExitPlanModeToolUI = makeAssistantToolUI<ExitPlanModeArgs, string>({
   toolName: "ExitPlanMode",
   render: ({ args, status }) => (
@@ -725,8 +721,6 @@ export const ExitPlanModeToolUI = makeAssistantToolUI<ExitPlanModeArgs, string>(
 });
 
 // ─── SlashCommand ────────────────────────────────────────────────────────────
-
-type SlashCommandArgs = { command: string };
 
 export const SlashCommandToolUI = makeAssistantToolUI<SlashCommandArgs, string>({
   toolName: "SlashCommand",
@@ -746,14 +740,6 @@ export const SlashCommandToolUI = makeAssistantToolUI<SlashCommandArgs, string>(
 });
 
 // ─── NotebookEdit ────────────────────────────────────────────────────────────
-
-type NotebookEditArgs = {
-  notebook_path: string;
-  cell_id?: string;
-  cell_type?: "code" | "markdown";
-  edit_mode?: "replace" | "insert" | "delete";
-  new_source: string;
-};
 
 export const NotebookEditToolUI = makeAssistantToolUI<NotebookEditArgs, string>({
   toolName: "NotebookEdit",
