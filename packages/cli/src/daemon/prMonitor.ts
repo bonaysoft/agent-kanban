@@ -34,7 +34,9 @@ export class PrMonitor {
     // in_progress), we still observe it.
     const sm = getSessionManager();
     for (const s of sm.list({ type: "worker" })) {
-      if (s.taskId) this.trackedTasks.add(s.taskId);
+      if (s.taskId && s.status !== "closed" && s.status !== "completing") {
+        this.trackedTasks.add(s.taskId);
+      }
     }
     saveTrackedTasks(this.trackedTasks);
     this.timer = setInterval(() => this.check(), PR_CHECK_INTERVAL);
