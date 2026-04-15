@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import type { SubtaskStatus } from "@agent-kanban/shared";
+import { ToolName } from "@agent-kanban/shared";
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getSessionMessages, query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
@@ -56,13 +57,60 @@ function withParent<T extends ContentBlock>(block: T, parentId: string | null | 
   return parentId ? ({ ...block, parent_id: parentId } as T) : block;
 }
 
+/** Remap Claude's native snake_case tool input fields to our camelCase canonical format. */
+function normalizeClaudeToolInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
+  switch (name) {
+    case ToolName.Read:
+      return { ...input, filePath: input.file_path ?? input.filePath };
+    case ToolName.Write:
+      return { ...input, filePath: input.file_path ?? input.filePath, content: input.content };
+    case ToolName.Edit:
+      return {
+        ...input,
+        filePath: input.file_path ?? input.filePath,
+        oldString: input.old_string ?? input.oldString,
+        newString: input.new_string ?? input.newString,
+        replaceAll: input.replace_all ?? input.replaceAll,
+      };
+    case ToolName.MultiEdit: {
+      const edits = Array.isArray(input.edits)
+        ? input.edits.map((e: Record<string, unknown>) => ({
+            ...e,
+            oldString: e.old_string ?? e.oldString,
+            newString: e.new_string ?? e.newString,
+            replaceAll: e.replace_all ?? e.replaceAll,
+          }))
+        : input.edits;
+      return { ...input, filePath: input.file_path ?? input.filePath, edits };
+    }
+    case ToolName.Grep:
+      return { ...input, outputMode: input.output_mode ?? input.outputMode };
+    case ToolName.Agent:
+      return { ...input, subagentType: input.subagent_type ?? input.subagentType };
+    case ToolName.NotebookEdit:
+      return {
+        ...input,
+        notebookPath: input.notebook_path ?? input.notebookPath,
+        cellId: input.cell_id ?? input.cellId,
+        cellType: input.cell_type ?? input.cellType,
+        editMode: input.edit_mode ?? input.editMode,
+        newSource: input.new_source ?? input.newSource,
+      };
+    default:
+      return input;
+  }
+}
+
 /** Map a single SDK message to an AgentEvent (or null to skip). */
 function mapContentBlock(block: SDKAssistantMessage["message"]["content"][number], parentId: string | null | undefined): ContentBlock | null {
   switch (block.type) {
     case "thinking":
       return block.thinking ? withParent({ type: "thinking", text: block.thinking }, parentId) : null;
     case "tool_use":
-      return withParent({ type: "tool_use", id: block.id, name: block.name, input: block.input as Record<string, unknown> }, parentId);
+      return withParent(
+        { type: "tool_use", id: block.id, name: block.name, input: normalizeClaudeToolInput(block.name, block.input as Record<string, unknown>) },
+        parentId,
+      );
     case "text":
       return block.text ? withParent({ type: "text", text: block.text }, parentId) : null;
     default:
@@ -194,7 +242,12 @@ function mapStreamBlock(block: { type: string; [k: string]: unknown }, parentId:
   switch (block.type) {
     case "tool_use":
       return withParent(
-        { type: "tool_use", id: block.id as string, name: block.name as string, input: block.input as Record<string, unknown> },
+        {
+          type: "tool_use",
+          id: block.id as string,
+          name: block.name as string,
+          input: normalizeClaudeToolInput(block.name as string, block.input as Record<string, unknown>),
+        },
         parentId,
       );
     case "thinking":

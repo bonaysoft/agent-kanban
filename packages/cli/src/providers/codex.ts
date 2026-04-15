@@ -347,7 +347,7 @@ function normalizeFunctionCall(name: string, rawArgs: Record<string, unknown>): 
 
     // Image viewing → Read (closest frontend equivalent)
     case "view_image": {
-      const args: ReadArgs = { file_path: String(rawArgs.path ?? "") };
+      const args: ReadArgs = { filePath: String(rawArgs.path ?? "") };
       return { name: ToolName.Read, input: args };
     }
 

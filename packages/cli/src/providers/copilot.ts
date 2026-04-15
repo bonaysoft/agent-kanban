@@ -56,7 +56,7 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
     case "read":
     case "view": {
       const args: ReadArgs = {
-        file_path: String(input.path ?? input.file_path ?? ""),
+        filePath: String(input.path ?? input.file_path ?? ""),
         offset: input.offset as number | undefined,
         limit: input.limit as number | undefined,
       };
@@ -64,26 +64,26 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
     }
     case "write":
     case "create": {
-      const args: WriteArgs = { file_path: String(input.path ?? input.file_path ?? ""), content: String(input.file_text ?? input.content ?? "") };
+      const args: WriteArgs = { filePath: String(input.path ?? input.file_path ?? ""), content: String(input.file_text ?? input.content ?? "") };
       return { name: ToolName.Write, input: args };
     }
     case "edit": {
       const args: EditArgs = {
-        file_path: String(input.path ?? input.file_path ?? ""),
-        old_string: String(input.old_str ?? input.old_string ?? ""),
-        new_string: String(input.new_str ?? input.new_string ?? ""),
-        replace_all: input.replace_all as boolean | undefined,
+        filePath: String(input.path ?? input.file_path ?? ""),
+        oldString: String(input.old_str ?? input.old_string ?? ""),
+        newString: String(input.new_str ?? input.new_string ?? ""),
+        replaceAll: input.replace_all as boolean | undefined,
       };
       return { name: ToolName.Edit, input: args };
     }
     case "multi_edit": {
       const args: MultiEditArgs = {
-        file_path: String(input.path ?? input.file_path ?? ""),
+        filePath: String(input.path ?? input.file_path ?? ""),
         edits: Array.isArray(input.edits)
           ? input.edits.map((e: Record<string, unknown>) => ({
-              old_string: String(e.old_str ?? e.old_string ?? ""),
-              new_string: String(e.new_str ?? e.new_string ?? ""),
-              replace_all: e.replace_all as boolean | undefined,
+              oldString: String(e.old_str ?? e.old_string ?? ""),
+              newString: String(e.new_str ?? e.new_string ?? ""),
+              replaceAll: e.replace_all as boolean | undefined,
             }))
           : [],
       };
@@ -99,7 +99,7 @@ function normalizeCopilotTool(name: string, input: Record<string, unknown>): { n
         path: input.path as string | undefined,
         glob: input.glob as string | undefined,
         type: input.type as string | undefined,
-        output_mode: input.output_mode as string | undefined,
+        outputMode: input.output_mode as string | undefined,
       };
       return { name: ToolName.Grep, input: args };
     }

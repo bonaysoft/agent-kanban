@@ -7,7 +7,7 @@
  *  - ToolShell: applies cancelled styling when status is incomplete+cancelled
  *  - parseMcpToolName: parses MCP-style tool names correctly
  *  - langFromPath: maps file extensions to language identifiers
- *  - agentLabel derivation: subagent_type used as label, "agent" as fallback
+ *  - agentLabel derivation: subagentType used as label, "agent" as fallback
  */
 
 import { render, screen } from "@testing-library/react";
@@ -272,34 +272,34 @@ describe("langFromPath — file extension to language mapping", () => {
 });
 
 // ── agentLabel derivation (TaskToolUI contract) ───────────────────────────────
-// The render function computes: agentLabel = args?.subagent_type || "agent"
-// This was changed from `task:${subagent_type}` — test the new contract directly.
+// The render function computes: agentLabel = args?.subagentType || "agent"
+// This was changed from `task:${subagentType}` — test the new contract directly.
 
 describe("agentLabel derivation — TaskToolUI label contract", () => {
-  it("uses subagent_type as label when provided", () => {
+  it("uses subagentType as label when provided", () => {
     const agentLabel = (subagentType: string | undefined) => subagentType || "agent";
     expect(agentLabel("clean-code-reviewer")).toBe("clean-code-reviewer");
   });
 
-  it("uses subagent_type verbatim without task: prefix", () => {
+  it("uses subagentType verbatim without task: prefix", () => {
     const agentLabel = (subagentType: string | undefined) => subagentType || "agent";
-    // Old behavior was `task:${subagent_type}`. New behavior must NOT have that prefix.
+    // Old behavior was `task:${subagentType}`. New behavior must NOT have that prefix.
     const label = agentLabel("test-writer");
     expect(label).toBe("test-writer");
     expect(label).not.toMatch(/^task:/);
   });
 
-  it("falls back to 'agent' when subagent_type is undefined", () => {
+  it("falls back to 'agent' when subagentType is undefined", () => {
     const agentLabel = (subagentType: string | undefined) => subagentType || "agent";
     expect(agentLabel(undefined)).toBe("agent");
   });
 
-  it("falls back to 'agent' when subagent_type is empty string", () => {
+  it("falls back to 'agent' when subagentType is empty string", () => {
     const agentLabel = (subagentType: string | undefined) => subagentType || "agent";
     expect(agentLabel("")).toBe("agent");
   });
 
-  it("renders ToolShell with subagent_type as label text", () => {
+  it("renders ToolShell with subagentType as label text", () => {
     // Verify the contract end-to-end via ToolShell rendering
     render(
       React.createElement(ToolShell, {

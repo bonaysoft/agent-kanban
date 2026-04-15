@@ -24,25 +24,25 @@ export type BashArgs = {
 };
 
 export type ReadArgs = {
-  file_path: string;
+  filePath: string;
   offset?: number;
   limit?: number;
 };
 
 export type EditArgs = {
-  file_path: string;
-  old_string: string;
-  new_string: string;
-  replace_all?: boolean;
+  filePath: string;
+  oldString: string;
+  newString: string;
+  replaceAll?: boolean;
 };
 
 export type MultiEditArgs = {
-  file_path: string;
-  edits: { old_string: string; new_string: string; replace_all?: boolean }[];
+  filePath: string;
+  edits: { oldString: string; newString: string; replaceAll?: boolean }[];
 };
 
 export type WriteArgs = {
-  file_path: string;
+  filePath: string;
   content: string;
 };
 
@@ -51,7 +51,7 @@ export type GrepArgs = {
   path?: string;
   glob?: string;
   type?: string;
-  output_mode?: string;
+  outputMode?: string;
 };
 
 export type GlobArgs = {
@@ -62,7 +62,7 @@ export type GlobArgs = {
 export type TaskArgs = {
   description: string;
   prompt: string;
-  subagent_type?: string;
+  subagentType?: string;
 };
 
 export type TodoItem = {
@@ -116,11 +116,11 @@ export type SlashCommandArgs = {
 };
 
 export type NotebookEditArgs = {
-  notebook_path: string;
-  cell_id?: string;
-  cell_type?: "code" | "markdown";
-  edit_mode?: "replace" | "insert" | "delete";
-  new_source: string;
+  notebookPath: string;
+  cellId?: string;
+  cellType?: "code" | "markdown";
+  editMode?: "replace" | "insert" | "delete";
+  newSource: string;
 };
 
 // ─── Tool registry (discriminated union) ──────────────────────────────────────

@@ -655,7 +655,7 @@ describe("user.message", () => {
 // ---------------------------------------------------------------------------
 
 describe("normalizeCopilotTool field remapping", () => {
-  it("write: remaps path → file_path and file_text → content in block input", () => {
+  it("write: remaps path → filePath and file_text → content in block input", () => {
     const state = makeState({ turnOpen: true });
     const event = {
       type: "assistant.message",
@@ -668,10 +668,10 @@ describe("normalizeCopilotTool field remapping", () => {
       block?: { type: string; name: string; input: Record<string, unknown> };
     }[];
     const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
-    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts", content: "hello" });
+    expect(toolStart?.block?.input).toMatchObject({ filePath: "/tmp/f.ts", content: "hello" });
   });
 
-  it("edit: remaps path → file_path, old_str → old_string, new_str → new_string in block input", () => {
+  it("edit: remaps path → filePath, old_str → oldString, new_str → newString in block input", () => {
     const state = makeState({ turnOpen: true });
     const event = {
       type: "assistant.message",
@@ -684,10 +684,10 @@ describe("normalizeCopilotTool field remapping", () => {
       block?: { type: string; name: string; input: Record<string, unknown> };
     }[];
     const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
-    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts", old_string: "a", new_string: "b" });
+    expect(toolStart?.block?.input).toMatchObject({ filePath: "/tmp/f.ts", oldString: "a", newString: "b" });
   });
 
-  it("read: remaps path → file_path in block input", () => {
+  it("read: remaps path → filePath in block input", () => {
     const state = makeState({ turnOpen: true });
     const event = {
       type: "assistant.message",
@@ -700,6 +700,6 @@ describe("normalizeCopilotTool field remapping", () => {
       block?: { type: string; name: string; input: Record<string, unknown> };
     }[];
     const toolStart = events.find((e) => e.type === "block.start" && e.block?.type === "tool_use");
-    expect(toolStart?.block?.input).toMatchObject({ file_path: "/tmp/f.ts" });
+    expect(toolStart?.block?.input).toMatchObject({ filePath: "/tmp/f.ts" });
   });
 });

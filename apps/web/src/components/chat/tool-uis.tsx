@@ -249,12 +249,12 @@ export const ReadToolUI = makeAssistantToolUI<ReadArgs, string>({
         status={status}
         summary={
           <>
-            {args?.file_path}
+            {args?.filePath}
             <span className="text-content-tertiary">{range}</span>
           </>
         }
       >
-        {out && <CodeBlock lang={langFromPath(args?.file_path)}>{out}</CodeBlock>}
+        {out && <CodeBlock lang={langFromPath(args?.filePath)}>{out}</CodeBlock>}
       </ToolShell>
     );
   },
@@ -352,8 +352,8 @@ const FileDiff: FC<{ oldStr: string; newStr: string }> = ({ oldStr, newStr }) =>
 export const EditToolUI = makeAssistantToolUI<EditArgs, string>({
   toolName: ToolName.Edit,
   render: ({ args, result, status }) => {
-    const oldCount = (args?.old_string ?? "").split("\n").length;
-    const newCount = (args?.new_string ?? "").split("\n").length;
+    const oldCount = (args?.oldString ?? "").split("\n").length;
+    const newCount = (args?.newString ?? "").split("\n").length;
     const out = resultText(result);
     return (
       <ToolShell
@@ -362,14 +362,14 @@ export const EditToolUI = makeAssistantToolUI<EditArgs, string>({
         status={status}
         summary={
           <>
-            {args?.file_path}{" "}
+            {args?.filePath}{" "}
             <span className="text-content-tertiary">
               −{oldCount} +{newCount}
             </span>
           </>
         }
       >
-        <FileDiff oldStr={args?.old_string ?? ""} newStr={args?.new_string ?? ""} />
+        <FileDiff oldStr={args?.oldString ?? ""} newStr={args?.newString ?? ""} />
         {out && <div className="mt-1 text-[11px] text-content-tertiary">{out}</div>}
       </ToolShell>
     );
@@ -390,7 +390,7 @@ export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
         status={status}
         summary={
           <>
-            {args?.file_path} <span className="text-content-tertiary">{edits.length} edits</span>
+            {args?.filePath} <span className="text-content-tertiary">{edits.length} edits</span>
           </>
         }
       >
@@ -398,7 +398,7 @@ export const MultiEditToolUI = makeAssistantToolUI<MultiEditArgs, string>({
           {edits.map((e, i) => (
             <div key={i}>
               <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-content-tertiary">edit {i + 1}</div>
-              <FileDiff oldStr={e.old_string} newStr={e.new_string} />
+              <FileDiff oldStr={e.oldString} newStr={e.newString} />
             </div>
           ))}
         </div>
@@ -422,11 +422,11 @@ export const WriteToolUI = makeAssistantToolUI<WriteArgs, string>({
         status={status}
         summary={
           <>
-            {args?.file_path} <span className="text-content-tertiary">+{lineCount}</span>
+            {args?.filePath} <span className="text-content-tertiary">+{lineCount}</span>
           </>
         }
       >
-        <CodeBlock lang={langFromPath(args?.file_path)}>{content}</CodeBlock>
+        <CodeBlock lang={langFromPath(args?.filePath)}>{content}</CodeBlock>
       </ToolShell>
     );
   },
@@ -545,7 +545,7 @@ export const TaskToolUI = makeAssistantToolUI<TaskArgs, TaskToolResultShape | st
     if (r.meta?.tokens != null) metaParts.push(`${r.meta.tokens} tok`);
     if (r.meta?.duration_ms != null) metaParts.push(`${Math.round(r.meta.duration_ms / 1000)}s`);
     if (r.meta?.last_tool) metaParts.push(r.meta.last_tool);
-    const agentLabel = args?.subagent_type || "agent";
+    const agentLabel = args?.subagentType || "agent";
     return (
       <ToolShell icon={<Brain className="size-3.5" />} label={agentLabel} status={status} summary={args?.description}>
         <div className="mb-1 text-[11px] text-content-tertiary">prompt:</div>
@@ -745,7 +745,7 @@ export const SlashCommandToolUI = makeAssistantToolUI<SlashCommandArgs, string>(
 export const NotebookEditToolUI = makeAssistantToolUI<NotebookEditArgs, string>({
   toolName: ToolName.NotebookEdit,
   render: ({ args, status }) => {
-    const mode = args?.edit_mode ?? "replace";
+    const mode = args?.editMode ?? "replace";
     return (
       <ToolShell
         icon={<Notebook className="size-3.5" />}
@@ -753,12 +753,12 @@ export const NotebookEditToolUI = makeAssistantToolUI<NotebookEditArgs, string>(
         status={status}
         summary={
           <>
-            {args?.notebook_path}
-            {args?.cell_id && <span className="text-content-tertiary"> #{args.cell_id}</span>}
+            {args?.notebookPath}
+            {args?.cellId && <span className="text-content-tertiary"> #{args.cellId}</span>}
           </>
         }
       >
-        <CodeBlock lang={args?.cell_type === "markdown" ? "markdown" : "python"}>{args?.new_source ?? ""}</CodeBlock>
+        <CodeBlock lang={args?.cellType === "markdown" ? "markdown" : "python"}>{args?.newSource ?? ""}</CodeBlock>
       </ToolShell>
     );
   },
