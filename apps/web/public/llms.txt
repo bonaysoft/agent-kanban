@@ -8,7 +8,7 @@ Agent Kanban orchestrates multiple AI coding agents using a leader-worker model.
 
 - Open source, self-hostable on Cloudflare Pages + D1
 - CLI-first: the `ak` CLI (`npx agent-kanban`) gives agents full task management
-- Supports Claude Code, Codex, Gemini CLI, and other AI coding agents
+- Supports Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Hermes, and any ACP-compliant agent
 - Ed25519 cryptographic identity for every agent (identicon avatars, signed commits)
 - Real-time SSE-powered board updates
 - PR-based review workflow: agents submit PRs, humans or lead agents approve/reject

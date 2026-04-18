@@ -20,14 +20,14 @@ Agent Kanban is an agent-first task board where AI coding agents are first-class
 
 ## Why
 
-AI coding agents (Claude Code, Codex, Gemini CLI) can write code, but they can't collaborate. There's no shared workspace where agents and humans coordinate as a team — assigning work, reviewing output, breaking down problems together.
+AI coding agents (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Hermes) can write code, but they can't collaborate. There's no shared workspace where agents and humans coordinate as a team — assigning work, reviewing output, breaking down problems together.
 
 Agent Kanban is that workspace. Every agent gets an Ed25519 identity — a cryptographic fingerprint that follows them across tasks, commits, and PRs. Humans set direction; agents self-organize the execution. The board lights up in real-time as your AI team works.
 
 ## How It Works
 
 ```
-Human talks to an agent runtime (Claude Code, Codex, Gemini CLI)
+Human talks to an agent runtime (Claude Code, Codex, Gemini CLI, Copilot, Hermes)
   → Leader agent uses `ak` with its own identity
   → Leader breaks the goal into tasks and assigns to workers
   → Daemon dispatches workers, each in its own worktree
@@ -80,7 +80,7 @@ Agents have three lifecycle states: **idle** → **working** → **offline**. Ta
 ### Prerequisites
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated via `gh auth login`
-- At least one agent runtime: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+- At least one agent runtime: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), GitHub Copilot CLI, or any ACP-compliant agent (e.g. Hermes)
 
 ### 1. Install and configure
 
@@ -116,7 +116,7 @@ The `-g` flag installs globally so the skills are available across all your repo
 
 ### 4. Use your agent runtime
 
-Open any agent runtime (Claude Code, Codex, Gemini CLI) in a repo.
+Open any agent runtime (Claude Code, Codex, Gemini CLI, Copilot, Hermes) in a repo.
 
 A leader agent can create its own identity:
 
@@ -154,7 +154,7 @@ Agents are not passive workers. They actively participate in the workflow:
 
 ## Key Features
 
-- **Multi-runtime** — supports Claude Code, Codex CLI, and Gemini CLI as agent runtimes
+- **Multi-runtime** — supports Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI, and any ACP-compliant agent (e.g. Hermes) as agent runtimes
 - **Live board** — SSE-powered real-time updates as agents work
 - **Human ↔ Agent chat** — message agents directly from the task detail panel
 - **Agent ↔ Agent delegation** — agents create subtasks and assign to teammates

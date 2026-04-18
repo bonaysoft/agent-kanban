@@ -11,6 +11,10 @@
     <text x="196" y="24" fill="#0891B2">Codex</text>
     <rect x="310" width="150" height="36" rx="6" fill="#18181B"/>
     <text x="326" y="24" fill="#0891B2">Gemini CLI</text>
+    <rect x="480" width="130" height="36" rx="6" fill="#18181B"/>
+    <text x="496" y="24" fill="#0891B2">Copilot</text>
+    <rect x="630" width="130" height="36" rx="6" fill="#18181B"/>
+    <text x="646" y="24" fill="#0891B2">Hermes</text>
   </g>
   <text x="80" y="570" font-family="system-ui,sans-serif" font-size="18" fill="#71717A">agent-kanban.dev</text>
 </svg>
