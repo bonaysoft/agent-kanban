@@ -169,7 +169,56 @@ const MOCK_MESSAGES: ThreadMessageLike[] = [
         },
         result: {
           text: "PASS — the dry-run branch is clean. One minor note: consider extracting the preview URL to a constant.",
-          children: [],
+          children: [
+            { kind: "thinking", text: "Starting review. I'll read the changed file and look at its test coverage before judging." },
+            { kind: "text", text: "Reading the modified command handler first." },
+            {
+              kind: "tool_use",
+              id: "sub-tu-1",
+              name: "Read",
+              input: { filePath: "packages/cli/src/commands/assign.ts", offset: 1, limit: 30 },
+            },
+            {
+              kind: "tool_result",
+              tool_use_id: "sub-tu-1",
+              output:
+                "import { Command } from 'commander';\nimport { api } from '../api';\n\nexport const assignCmd = new Command('assign')\n  .argument('<taskId>')\n  .argument('<agentId>')\n  .option('--dry-run', 'preview without committing')\n  .action(async (taskId, agentId, opts) => {\n    const path = opts.dryRun ? `/tasks/${taskId}/assign/preview` : `/tasks/${taskId}/assign`;\n    const res = await api.post(path, { agentId });\n    console.log('assigned', res.id);\n  });",
+            },
+            {
+              kind: "tool_use",
+              id: "sub-tu-2",
+              name: "Grep",
+              input: { pattern: "assign/preview", path: "packages/cli/src" },
+            },
+            {
+              kind: "tool_result",
+              tool_use_id: "sub-tu-2",
+              output: "packages/cli/src/commands/assign.ts:9",
+            },
+            {
+              kind: "tool_use",
+              id: "sub-tu-3",
+              name: "Bash",
+              input: { command: "cd packages/cli && pnpm tsc --noEmit", description: "Type-check the package" },
+            },
+            {
+              kind: "tool_result",
+              tool_use_id: "sub-tu-3",
+              output: "✓ no errors",
+            },
+            {
+              kind: "tool_use",
+              id: "sub-tu-4",
+              name: "mcp__context7__resolve-library-id",
+              input: { libraryName: "commander" },
+            },
+            {
+              kind: "tool_result",
+              tool_use_id: "sub-tu-4",
+              output: "commander → /commanderjs/commander",
+            },
+            { kind: "text", text: "Verdict: PASS with a minor style note." },
+          ],
           meta: { tokens: 1840, duration_ms: 12400, last_tool: "Read" },
         },
       },
