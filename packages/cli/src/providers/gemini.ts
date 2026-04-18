@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createLogger } from "../logger.js";
 import { spawnAgent } from "./spawnHelper.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts } from "./types.js";
+import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, HistoryEvent } from "./types.js";
 
 const logger = createLogger("gemini");
 
@@ -93,5 +93,11 @@ export const geminiProvider: AgentProvider = {
         parseEvent,
       }),
     );
+  },
+
+  // Gemini CLI does not expose a stable on-disk session format we can parse,
+  // and its `--resume latest` flow gives us no per-session identifier to key on.
+  async getHistory(): Promise<HistoryEvent[]> {
+    return [];
   },
 };

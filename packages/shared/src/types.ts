@@ -137,7 +137,7 @@ export interface MachineWithAgents extends Machine {
 
 export type AgentStatus = "online" | "offline";
 export type AgentKind = "worker" | "leader";
-export type AgentRuntime = "claude" | "codex" | "gemini" | "copilot";
+export type AgentRuntime = "claude" | "codex" | "gemini" | "copilot" | "hermes";
 
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$/;
 
@@ -155,13 +155,14 @@ export function deriveUsername(name: string): string {
   return derived || "agent";
 }
 
-export const AGENT_RUNTIMES: readonly AgentRuntime[] = ["claude", "codex", "gemini", "copilot"] as const;
+export const AGENT_RUNTIMES: readonly AgentRuntime[] = ["claude", "codex", "gemini", "copilot", "hermes"] as const;
 
 export const RUNTIME_LABELS: Record<AgentRuntime, string> = {
   claude: "Claude Code",
   codex: "Codex CLI",
   gemini: "Gemini CLI",
   copilot: "GitHub Copilot",
+  hermes: "Hermes",
 };
 
 const RUNTIME_ALIASES: Record<string, AgentRuntime> = {
@@ -169,6 +170,7 @@ const RUNTIME_ALIASES: Record<string, AgentRuntime> = {
   "codex-cli": "codex",
   "github-copilot": "copilot",
   "copilot-cli": "copilot",
+  "hermes-agent": "hermes",
 };
 
 export function normalizeRuntime(runtime: string): AgentRuntime {

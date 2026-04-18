@@ -24,7 +24,7 @@ const logger = createLogger("daemon");
 async function fetchSessionHistory(sessionId: string): Promise<HistoryEvent[]> {
   const session = getSessionManager().read(sessionId);
   const provider = session ? getProvider(session.runtime) : getProvider("claude");
-  return provider.getHistory?.(sessionId, session?.providerResumeToken) ?? [];
+  return provider.getHistory(sessionId, session?.providerResumeToken);
 }
 
 export interface DaemonOptions {

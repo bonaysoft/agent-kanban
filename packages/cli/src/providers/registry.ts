@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { type AgentRuntime, normalizeRuntime } from "@agent-kanban/shared";
+import { type AcpRuntimeConfig, createAcpProvider } from "./acp.js";
 import { claudeProvider } from "./claude.js";
 import { codexProvider } from "./codex.js";
 import { copilotProvider } from "./copilot.js";
@@ -10,12 +11,19 @@ export { normalizeRuntime };
 
 const providers = new Map<AgentRuntime, AgentProvider>();
 
+/**
+ * ACP-based runtimes. Adding a new ACP-compliant agent is a one-row entry:
+ * the generic `createAcpProvider` handles spawn, protocol, event mapping.
+ */
+const ACP_RUNTIMES: AcpRuntimeConfig[] = [{ runtime: "hermes", label: "Hermes", command: "hermes", args: ["acp"] }];
+
 /** Binary name used to detect availability per runtime */
 const RUNTIME_COMMANDS: Record<AgentRuntime, string> = {
   claude: "claude",
   codex: "codex",
   gemini: "gemini",
   copilot: "copilot",
+  hermes: "hermes",
 };
 
 export function registerProvider(provider: AgentProvider): void {
@@ -47,3 +55,6 @@ registerProvider(claudeProvider);
 registerProvider(geminiProvider);
 registerProvider(codexProvider);
 registerProvider(copilotProvider);
+for (const cfg of ACP_RUNTIMES) {
+  registerProvider(createAcpProvider(cfg));
+}

@@ -47,8 +47,11 @@ export interface AgentProvider {
    * Retrieve session history from this provider's local storage.
    * `sessionId` is the AK session ID; `resumeToken` is the provider-specific
    * identifier (e.g. Codex thread_id) stored in the session file.
+   *
+   * Providers that cannot expose session history MUST still implement this
+   * method and return an empty array — the caller relies on a uniform contract.
    */
-  getHistory?(sessionId: string, resumeToken?: string): Promise<HistoryEvent[]>;
+  getHistory(sessionId: string, resumeToken?: string): Promise<HistoryEvent[]>;
   /**
    * Fetch current usage windows for this provider. Pure HTTP request — no
    * caching, no swallowing. Throws `UsageFetchError` on HTTP failure so the
