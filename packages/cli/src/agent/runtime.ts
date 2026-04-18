@@ -11,6 +11,7 @@ const RUNTIMES: Record<string, RuntimeSpec> = {
   codex: { envVar: "CODEX_CI", commandPattern: /(^|\/)codex(\s|$)/ },
   gemini: { envVar: "GEMINI_CLI", commandPattern: /(^|\/)gemini(\s|$)/ },
   copilot: { envVar: "COPILOT_CLI", commandPattern: /(^|\/)copilot(\s|$)/ },
+  hermes: { envVar: "HERMES_INTERACTIVE", commandPattern: /(^|\/)hermes(\s|$)/ },
 };
 
 export function detectRuntime(): string | null {

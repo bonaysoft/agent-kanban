@@ -233,12 +233,15 @@ program
   .description("Show agent identity for the current runtime")
   .action(() => {
     const runtime = detectRuntime();
-    const runtimeKey = runtime ?? "default";
-    const identity = loadIdentity(runtimeKey);
+    if (!runtime) {
+      console.error("No supported agent runtime found. Run this command from inside an agent runtime.");
+      process.exit(1);
+    }
+    const identity = loadIdentity(runtime);
     if (!identity) {
       console.error(
         [
-          `No identity found for runtime "${runtimeKey}".`,
+          `No identity found for runtime "${runtime}".`,
           "",
           "Create one explicitly with:",
           "  ak identity create --username <username> [--name <name>]",
@@ -250,7 +253,7 @@ program
       );
       process.exit(1);
     }
-    console.log(`Runtime:     ${runtimeKey}`);
+    console.log(`Runtime:     ${runtime}`);
     console.log(`Agent ID:    ${identity.agent_id}`);
     console.log(`Name:        ${identity.name}`);
     console.log(`Fingerprint: ${identity.fingerprint}`);

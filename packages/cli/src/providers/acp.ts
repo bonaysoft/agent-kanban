@@ -16,6 +16,7 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import { ToolName } from "@agent-kanban/shared";
 import {
@@ -77,7 +78,8 @@ async function acpExecute(config: AcpRuntimeConfig, opts: ExecuteOpts): Promise<
   await conn.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
 
   const sessionId = await openSession(conn, opts);
-  const promptDone = runPromptLoop(conn, sessionId, opts.taskContext, queue, mapState, runtimeState, logger);
+  const systemPrompt = opts.systemPromptFile ? readFileSync(opts.systemPromptFile, "utf-8") : undefined;
+  const promptDone = runPromptLoop(conn, sessionId, opts.taskContext, systemPrompt, queue, mapState, runtimeState, logger);
 
   proc.once("exit", (code) => {
     if (!runtimeState.aborted && code !== 0 && !queue.done) {
@@ -125,15 +127,25 @@ async function runPromptLoop(
   conn: ClientSideConnection,
   sessionId: string,
   taskContext: string,
+  systemPrompt: string | undefined,
   queue: EventQueue,
   mapState: MapState,
   runtime: RuntimeState,
   logger: ReturnType<typeof createLogger>,
 ): Promise<void> {
+  // ACP has no dedicated system-message channel; combine the daemon's agent
+  // work protocol with the task context so the agent gets claim/review
+  // lifecycle instructions before the task description.
+  const prompt = systemPrompt
+    ? [
+        { type: "text" as const, text: systemPrompt },
+        { type: "text" as const, text: taskContext },
+      ]
+    : [{ type: "text" as const, text: taskContext }];
   try {
     const resp: PromptResponse = await conn.prompt({
       sessionId,
-      prompt: [{ type: "text", text: taskContext }],
+      prompt,
     });
     // If abort() has already taken the wheel, let it drive finalization.
     if (runtime.aborted) return;
