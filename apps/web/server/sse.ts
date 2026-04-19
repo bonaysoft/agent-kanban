@@ -1,3 +1,4 @@
+import { MAX_TASK_PARTITION_ROWS } from "./db";
 import { listMessages } from "./messageRepo";
 import { getTaskActions } from "./taskRepo";
 import type { Env } from "./types";
@@ -57,16 +58,39 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
     return writer.write(encoder.encode(msg));
   };
 
-  const run = async () => {
-    const [initialNotes, initialMessages] = await Promise.all([getTaskActions(db, taskId, since), listMessages(db, taskId, since)]);
+  // Signal the client that their catch-up window hit the hard row cap and
+  // older rows were silently truncated. Client should drop its cursor and
+  // reload the task via HTTP. Unknown SSE event types are ignored by older
+  // clients, so this is backward-compatible.
+  const writeGap = (reason: string) => {
+    const msg = `event: gap\ndata: ${JSON.stringify({ reason })}\n\n`;
+    return writer.write(encoder.encode(msg));
+  };
 
-    const noteEvents: SSEEvent[] = (since ? initialNotes : initialNotes.slice(-50)).map((l) => ({
+  const run = async () => {
+    // Without `since`, fetch the 50 most recent — repo layer already returns
+    // them in ASC order. With `since`, cap catch-up at the partition ceiling
+    // so reconnects after long offline periods can't detonate D1 reads.
+    const initialLimit = since ? MAX_TASK_PARTITION_ROWS : 50;
+    const [initialNotes, initialMessages] = await Promise.all([
+      getTaskActions(db, taskId, since, initialLimit),
+      listMessages(db, taskId, since, initialLimit),
+    ]);
+
+    // When catching up and either feed returned exactly the cap, older rows
+    // were truncated. Emit a gap signal before the rows we do have so the
+    // client can decide to reload via HTTP instead of silently missing data.
+    if (since && (initialNotes.length === initialLimit || initialMessages.length === initialLimit)) {
+      await writeGap("initial_truncated");
+    }
+
+    const noteEvents: SSEEvent[] = initialNotes.map((l) => ({
       id: l.id,
       type: "note" as const,
       data: JSON.stringify(l),
       created_at: l.created_at,
     }));
-    const msgEvents: SSEEvent[] = (since ? initialMessages : initialMessages.slice(-50)).map((m) => ({
+    const msgEvents: SSEEvent[] = initialMessages.map((m) => ({
       id: m.id,
       type: "message" as const,
       data: JSON.stringify(m),
@@ -85,7 +109,17 @@ export async function createSSEResponse(env: Env, taskId: string, lastEventId: s
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const [newNotes, newMessages] = await Promise.all([getTaskActions(db, taskId, lastSeen), listMessages(db, taskId, lastSeen)]);
+      const [newNotes, newMessages] = await Promise.all([
+        getTaskActions(db, taskId, lastSeen, MAX_TASK_PARTITION_ROWS),
+        listMessages(db, taskId, lastSeen, MAX_TASK_PARTITION_ROWS),
+      ]);
+
+      // Same ceiling signal during live polling — a 2s window with >500 new
+      // rows means the client's cursor is behind reality and the tail is at
+      // risk of silent truncation on the next tick. Tell the client to reload.
+      if (newNotes.length === MAX_TASK_PARTITION_ROWS || newMessages.length === MAX_TASK_PARTITION_ROWS) {
+        await writeGap("poll_truncated");
+      }
 
       const newNoteEvents = newNotes.map((l) => ({
         id: l.id,

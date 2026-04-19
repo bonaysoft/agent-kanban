@@ -2,7 +2,7 @@ import type { BoardAction, CreateTaskInput, IdentityType, Task, TaskAction, Task
 import { validateTransition } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
 import { getDefaultBoard } from "./boardRepo";
-import { type D1, newLongId, parseJsonFields } from "./db";
+import { type D1, MAX_TASK_PARTITION_ROWS, newLongId, parseJsonFields } from "./db";
 import { computeBlocked, detectCycle, getDependencies, setDependencies } from "./taskDeps";
 
 const parseTask = <T extends Task>(row: T) => parseJsonFields(row, ["labels", "input"]);
@@ -236,21 +236,12 @@ export async function getTask(db: D1, taskId: string, ownerId: string): Promise<
   if (!task) return null;
   parseTask(task);
 
-  const [actions, deps, blockedSet] = await Promise.all([
-    db
-      .prepare(
-        "SELECT n.*, ag.name as actor_name, ag.public_key as actor_public_key FROM task_actions n LEFT JOIN agents ag ON n.actor_type LIKE 'agent:%' AND n.actor_id = ag.id WHERE n.task_id = ? ORDER BY n.created_at ASC",
-      )
-      .bind(taskId)
-      .all<TaskAction>(),
-    getDependencies(db, taskId),
-    computeBlocked(db, [taskId]),
-  ]);
+  const [actions, deps, blockedSet] = await Promise.all([getTaskActions(db, taskId), getDependencies(db, taskId), computeBlocked(db, [taskId])]);
 
-  const duration = computeDuration(actions.results);
+  const duration = computeDuration(actions);
   task.blocked = blockedSet.has(taskId);
 
-  return { ...task, notes: actions.results, duration_minutes: duration, depends_on: deps, subtask_count: task.subtask_count };
+  return { ...task, notes: actions, duration_minutes: duration, depends_on: deps, subtask_count: task.subtask_count };
 }
 
 export async function updateTask(
@@ -551,23 +542,25 @@ export async function addTaskAction(
   };
 }
 
-export async function getTaskActions(db: D1, taskId: string, since?: string): Promise<TaskAction[]> {
-  let query =
+// When `since` is provided, returns up to `limit` rows after the cursor in
+// ASC order (incremental catch-up). Without `since`, returns the most recent
+// `limit` rows — fetched DESC then reversed so callers always see ASC order.
+// A hard LIMIT protects against tasks with runaway action counts.
+//
+// KNOWN LIMITATION: `since` uses `n.created_at > ?`, which skips rows sharing
+// the cursor's millisecond. `newLongId()` is random (not monotonic) so the id
+// can't serve as a tiebreaker today. Tracked for follow-up — fix requires
+// either a monotonic sequence column or cursor-pair semantics.
+export async function getTaskActions(db: D1, taskId: string, since?: string, limit: number = MAX_TASK_PARTITION_ROWS): Promise<TaskAction[]> {
+  const base =
     "SELECT n.*, ag.name as actor_name, ag.public_key as actor_public_key FROM task_actions n LEFT JOIN agents ag ON n.actor_type LIKE 'agent:%' AND n.actor_id = ag.id WHERE n.task_id = ?";
-  const binds: unknown[] = [taskId];
 
   if (since) {
-    query += " AND n.created_at > ?";
-    binds.push(since);
+    const result = await db.prepare(`${base} AND n.created_at > ? ORDER BY n.created_at ASC LIMIT ?`).bind(taskId, since, limit).all<TaskAction>();
+    return result.results;
   }
-
-  query += " ORDER BY n.created_at ASC";
-
-  const result = await db
-    .prepare(query)
-    .bind(...binds)
-    .all<TaskAction>();
-  return result.results;
+  const result = await db.prepare(`${base} ORDER BY n.created_at DESC LIMIT ?`).bind(taskId, limit).all<TaskAction>();
+  return result.results.reverse();
 }
 
 export async function getBoardActionsByBoardId(db: D1, boardId: string, since: string): Promise<BoardAction[]> {

@@ -207,4 +207,41 @@ describe("createSSEResponse", () => {
     expect(text).not.toContain("Bulk log 0");
     expect(text).toContain("Bulk log 54");
   });
+
+  it("emits gap event with initial_truncated when catch-up window hits the 500-row cap", async () => {
+    const { createTask, getTaskActions } = await import("../apps/web/server/taskRepo");
+    const { MAX_TASK_PARTITION_ROWS } = await import("../apps/web/server/db");
+
+    const gapTask = await createTask(env.DB, "sse-user", {
+      title: "Gap SSE Task",
+      board_id: boardId,
+    });
+
+    // Get the "created" action that serves as our Last-Event-ID cursor
+    const initialActions = await getTaskActions(env.DB, gapTask.id);
+    const cursorAction = initialActions[0];
+    const cursorTime = new Date(cursorAction.created_at).getTime();
+
+    // Insert MAX_TASK_PARTITION_ROWS rows directly with manufactured timestamps
+    // so we hit the cap exactly when querying with `since = cursorAction.created_at`
+    const { newLongId } = await import("../apps/web/server/db");
+    const stmts = [];
+    for (let i = 0; i < MAX_TASK_PARTITION_ROWS; i++) {
+      const ts = new Date(cursorTime + (i + 1)).toISOString();
+      stmts.push(
+        env.DB.prepare(
+          "INSERT INTO task_actions (id, task_id, actor_type, actor_id, action, detail, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+        ).bind(newLongId(), gapTask.id, "machine", "system", "commented", `gap-action-${i}`, ts),
+      );
+    }
+    await env.DB.batch(stmts);
+
+    const { createSSEResponse } = await import("../apps/web/server/sse");
+    const response = await createSSEResponse(env as any, gapTask.id, cursorAction.id);
+
+    const text = await readSSEUntil(response.body!, (t) => t.includes("event: gap"), 5000);
+
+    expect(text).toContain("event: gap");
+    expect(text).toContain('"reason":"initial_truncated"');
+  }, 15000);
 });
