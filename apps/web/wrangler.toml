@@ -15,6 +15,11 @@ CF_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 [observability]
 enabled = true
 
+# Cap CPU time per request. Normal handlers are <100ms; 1000ms leaves
+# headroom for the heaviest real query while killing runaway loops.
+[limits]
+cpu_ms = 1000
+
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
@@ -51,6 +56,9 @@ CF_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 
 [env.staging.durable_objects]
 bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
+
+[env.staging.limits]
+cpu_ms = 1000
 
 [[env.staging.analytics_engine_datasets]]
 binding = "AE"
