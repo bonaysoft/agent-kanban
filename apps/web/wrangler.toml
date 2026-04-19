@@ -20,6 +20,13 @@ enabled = true
 [limits]
 cpu_ms = 1000
 
+# Stale-sweep cron. Replaces per-request stale detection on hot paths.
+# Every-minute cadence keeps the detection window aligned with
+# MACHINE_STALE_TIMEOUT_MS (60s) — worst-case "online zombie" is ~2 min
+# (one stale interval plus one cron period).
+[triggers]
+crons = ["* * * * *"]
+
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
@@ -59,6 +66,9 @@ bindings = [{ name = "TUNNEL_RELAY", class_name = "TunnelRelay" }]
 
 [env.staging.limits]
 cpu_ms = 1000
+
+[env.staging.triggers]
+crons = ["* * * * *"]
 
 [[env.staging.analytics_engine_datasets]]
 binding = "AE"

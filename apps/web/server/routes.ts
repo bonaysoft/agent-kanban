@@ -46,7 +46,6 @@ import {
   reviewTask,
   updateTask,
 } from "./taskRepo";
-import { detectAndReleaseStale } from "./taskStale";
 import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
@@ -648,11 +647,6 @@ api.post("/api/tasks/:id/assign", async (c) => {
   const targetAgentId = body.agent_id;
   if (!targetAgentId) throw new HTTPException(400, { message: "agent_id is required" });
 
-  const existing = await c.env.DB.prepare("SELECT board_id FROM tasks WHERE id = ?").bind(c.req.param("id")).first<{ board_id: string }>();
-  if (existing) {
-    await detectAndReleaseStale(c.env.DB, existing.board_id);
-  }
-
   const { actorType, actorId, sessionId } = resolveActor(c);
   const task = await assignTask(c.env.DB, c.req.param("id"), targetAgentId, actorType, actorId, sessionId);
   return c.json(task);
@@ -778,7 +772,6 @@ api.get("/api/boards", async (c) => {
 });
 
 api.get("/api/boards/:id", async (c) => {
-  await detectAndReleaseStale(c.env.DB, c.req.param("id"));
   const board = await getBoard(c.env.DB, c.req.param("id"));
   if (!board) throw new HTTPException(404, { message: "Board not found" });
   return c.json(board);

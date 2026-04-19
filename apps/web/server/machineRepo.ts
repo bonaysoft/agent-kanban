@@ -65,8 +65,6 @@ export async function updateMachine(db: D1, machineId: string, ownerId: string, 
 }
 
 export async function listMachines(db: D1, ownerId: string): Promise<MachineWithAgents[]> {
-  await detectStaleMachines(db);
-
   const result = await db
     .prepare(`
     SELECT m.*,
@@ -82,8 +80,6 @@ export async function listMachines(db: D1, ownerId: string): Promise<MachineWith
 }
 
 export async function getMachine(db: D1, machineId: string, ownerId: string): Promise<(MachineWithAgents & { agents: any[] }) | null> {
-  await detectStaleMachines(db);
-
   const machine = await db
     .prepare(`
     SELECT m.*,
@@ -119,8 +115,6 @@ export interface AdminMachine extends MachineWithAgents {
 }
 
 export async function listAllMachines(db: D1): Promise<AdminMachine[]> {
-  await detectStaleMachines(db);
-
   const result = await db
     .prepare(`
     SELECT m.*,
