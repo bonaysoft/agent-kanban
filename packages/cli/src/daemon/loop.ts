@@ -29,6 +29,13 @@ const logger = createLogger("loop");
 
 const RATE_LIMIT_RESUME_PROMPT = "Rate limit window has reset. Continue working on the task where you left off.";
 
+// Idle exponential backoff: each tick that does no work slows the next
+// tick down by this multiplier up to MAX_IDLE_BACKOFF_MS. Any real event
+// — a dispatched task, a reap, a slot freed, a rate-limit resume —
+// snaps the daemon back to the base pollInterval.
+const IDLE_BACKOFF_MULTIPLIER = 1.5;
+const MAX_IDLE_BACKOFF_MS = 120_000;
+
 export interface LoopOpts {
   maxConcurrent: number;
   pollInterval: number;
@@ -39,7 +46,8 @@ export interface LoopOpts {
 export class DaemonLoop {
   private running = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private backoffMs: number;
+  private errorBackoffMs: number;
+  private idleBackoffMs: number;
   private sessions = getSessionManager();
 
   constructor(
@@ -49,7 +57,8 @@ export class DaemonLoop {
     private prMonitor: PrMonitor,
     private opts: LoopOpts,
   ) {
-    this.backoffMs = opts.pollInterval;
+    this.errorBackoffMs = opts.pollInterval;
+    this.idleBackoffMs = opts.pollInterval;
   }
 
   start(): void {
@@ -63,6 +72,7 @@ export class DaemonLoop {
   }
 
   onSlotFreed(): void {
+    this.resetIdleBackoff();
     this.schedulePoll(this.opts.pollInterval);
   }
 
@@ -80,7 +90,16 @@ export class DaemonLoop {
       if (s.resumeAfter && s.resumeAfter > now) continue;
       await resumeOneSession(s, RATE_LIMIT_RESUME_PROMPT, this.client, this.pool);
     }
+    this.resetIdleBackoff();
     this.schedulePoll(0);
+  }
+
+  private resetIdleBackoff(): void {
+    this.idleBackoffMs = this.opts.pollInterval;
+  }
+
+  private bumpIdleBackoff(): void {
+    this.idleBackoffMs = Math.min(this.idleBackoffMs * IDLE_BACKOFF_MULTIPLIER, MAX_IDLE_BACKOFF_MS);
   }
 
   /**
@@ -97,14 +116,15 @@ export class DaemonLoop {
     }
   }
 
-  /** Pick the shorter of pollInterval and the nearest backoff expiry. */
+  /** Pick the shorter of idle backoff and the nearest rate-limit resume. */
   private nextPollDelay(): number {
     const now = Date.now();
     let earliest = Infinity;
     for (const s of this.sessions.list({ type: "worker", status: "rate_limited" })) {
       if (s.resumeAfter && s.resumeAfter > now) earliest = Math.min(earliest, s.resumeAfter - now);
     }
-    return Math.min(this.opts.pollInterval, earliest === Infinity ? this.opts.pollInterval : Math.max(earliest, 1000));
+    const rateLimitDelay = earliest === Infinity ? Infinity : Math.max(earliest, 1000);
+    return Math.min(this.idleBackoffMs, rateLimitDelay);
   }
 
   private schedulePoll(delayMs: number): void {
@@ -115,6 +135,11 @@ export class DaemonLoop {
 
   private async tick(): Promise<void> {
     if (!this.running) return;
+
+    // Pool size can shrink during the reap phases if any orphan / cancelled /
+    // cleanup-pending session reaches a terminal state. Treating that as work
+    // keeps the daemon responsive right after a cleanup.
+    const activeBefore = this.pool.activeCount;
 
     await this.killCancelledTasks();
     await reapOrphanWorkerSessions(this.sessions, this.pool, this.client);
@@ -129,17 +154,28 @@ export class DaemonLoop {
 
     await this.resumeBackoffSessions();
 
+    const reapedOrResumed = this.pool.activeCount !== activeBefore;
+
     if (this.pool.activeCount >= this.opts.maxConcurrent) {
+      // Pool saturated — wait for onSlotFreed. Don't touch idle backoff; this
+      // is "no capacity," not "nothing to do," so accelerating would just
+      // burn requests on a server that keeps saying 409.
       this.schedulePoll(this.nextPollDelay());
       return;
     }
 
-    await dispatchTasks(this.client, this.pool, this.rateLimiter, this.prMonitor, {
+    const dispatched = await dispatchTasks(this.client, this.pool, this.rateLimiter, this.prMonitor, {
       maxConcurrent: this.opts.maxConcurrent,
       pollInterval: this.opts.pollInterval,
     });
 
-    this.backoffMs = this.opts.pollInterval;
+    if (dispatched || reapedOrResumed) {
+      this.resetIdleBackoff();
+    } else {
+      this.bumpIdleBackoff();
+    }
+
+    this.errorBackoffMs = this.opts.pollInterval;
     this.schedulePoll(this.nextPollDelay());
   }
 
@@ -153,12 +189,12 @@ export class DaemonLoop {
   private handleTickError(err: any): void {
     if (err instanceof ApiError && err.status === 429) {
       logger.warn("Rate limited, backing off");
-      this.backoffMs = Math.min(Math.max(this.backoffMs * 2, 30000), 60000);
+      this.errorBackoffMs = Math.min(Math.max(this.errorBackoffMs * 2, 30000), 60000);
     } else {
       logger.warn(`Poll error: ${err.message}${err.cause ? ` — cause: ${err.cause.message ?? err.cause}` : ""}`);
-      this.backoffMs = Math.min(this.backoffMs * 2, 60000);
+      this.errorBackoffMs = Math.min(this.errorBackoffMs * 2, 60000);
     }
-    this.schedulePoll(this.backoffMs);
+    this.schedulePoll(this.errorBackoffMs);
   }
 }
 
