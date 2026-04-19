@@ -28,11 +28,13 @@ if (!ACCOUNT_ID || !API_TOKEN) {
   process.exit(2);
 }
 
+// GitHub Actions passes undefined repo vars as "", so use || to fall through
+// to defaults on both empty string and undefined.
 const thresholds = {
-  workerRequests: Number(process.env.DAILY_WORKER_REQUESTS ?? 1_000_000),
-  d1RowsRead: Number(process.env.DAILY_D1_ROWS_READ ?? 10_000_000),
-  doRequests: Number(process.env.DAILY_DO_REQUESTS ?? 500_000),
-  doDurationSec: Number(process.env.DAILY_DO_DURATION_SEC ?? 100_000),
+  workerRequests: Number(process.env.DAILY_WORKER_REQUESTS || 1_000_000),
+  d1RowsRead: Number(process.env.DAILY_D1_ROWS_READ || 10_000_000),
+  doRequests: Number(process.env.DAILY_DO_REQUESTS || 500_000),
+  doDurationSec: Number(process.env.DAILY_DO_DURATION_SEC || 100_000),
 };
 
 // UTC day window — CF billing resets at 00:00 UTC
