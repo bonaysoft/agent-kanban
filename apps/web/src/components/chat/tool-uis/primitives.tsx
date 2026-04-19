@@ -39,7 +39,7 @@ export const ToolShell: FC<ToolShellProps> = ({ icon, label, summary, status, ch
         <StatusIcon status={status} />
         <span className="shrink-0 text-content-tertiary">{icon}</span>
         <span className="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-wide text-content-secondary">{label}</span>
-        <span className={cn("min-w-0 flex-1 font-mono text-content-primary break-words", isCancelled && "line-through")}>{summary}</span>
+        <span className={cn("min-w-0 flex-1 truncate font-mono text-content-primary", isCancelled && "line-through")}>{summary}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         <div className="pl-6 pr-1.5 pt-2 pb-2 overflow-x-hidden">
