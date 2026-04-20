@@ -63,6 +63,8 @@ vi.mock("../packages/cli/src/logger.js", () => ({
 // ---- Imports after mocks are set up -----------------------------------------
 
 import { DaemonLoop } from "../packages/cli/src/daemon/loop.js";
+import { _setSessionManagerForTest, SessionManager } from "../packages/cli/src/session/manager.js";
+import { clearAllSessions, writeSession } from "../packages/cli/src/session/store.js";
 import type { SessionFile } from "../packages/cli/src/session/types.js";
 
 // ---- Minimal fakes ----------------------------------------------------------
@@ -225,6 +227,111 @@ describe("DaemonLoop — RATE_LIMIT_RESUME_PROMPT is non-empty", () => {
       const { loop } = makeLoop([session], { activeCount: 4 });
 
       await (loop as any).resumeBackoffSessions();
+
+      expect(resumeOneSessionMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("post-crash restart: resumeAfter on disk → fresh DaemonLoop resumes (full chain)", () => {
+    /**
+     * Integration test for the daemon-restart scenario described in the bug fix:
+     *
+     * 1. routeRateLimit writes a session file to disk with status="rate_limited"
+     *    and resumeAfter=<past epoch ms> — exactly what happens when an agent hits
+     *    the rate limit and then the daemon process is killed.
+     * 2. A fresh DaemonLoop is constructed with a brand-new SessionManager (no
+     *    in-memory rate-limit state) — simulating a daemon restart.
+     * 3. resumeBackoffSessions() scans disk, finds the expired session, and
+     *    calls resumeOneSession.
+     *
+     * This verifies the FULL CHAIN, not just either half in isolation.
+     * Note: DaemonLoop is constructed AFTER _setSessionManagerForTest so the
+     * class field `private sessions = getSessionManager()` picks up the real
+     * SessionManager from the singleton. No internal stomping is used.
+     */
+
+    afterEach(() => {
+      clearAllSessions();
+      _setSessionManagerForTest(null);
+    });
+
+    it("resumes a rate_limited session whose resumeAfter was written to disk before daemon restart", async () => {
+      // Step 1: write a rate_limited session to disk (simulating post-crash state)
+      const sessionId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+      const onDiskSession: SessionFile = {
+        type: "worker",
+        agentId: "agent-restart-test",
+        sessionId,
+        runtime: "claude" as any,
+        startedAt: Date.now() - 120_000,
+        apiUrl: "http://localhost",
+        privateKeyJwk: {} as any,
+        taskId: "task-restart-test",
+        status: "rate_limited",
+        resumeAfter: Date.now() - 5_000, // expired 5 seconds ago
+      };
+      writeSession(onDiskSession);
+
+      // Step 2: seed the singleton with a fresh SessionManager, then construct
+      // DaemonLoop so its class field `sessions = getSessionManager()` binds to it.
+      _setSessionManagerForTest(new SessionManager());
+
+      const pool = {
+        activeCount: 0,
+        hasTask: (_id: string) => false,
+        getActiveTaskIds: () => [],
+      } as any;
+
+      const freshLoop = new DaemonLoop(makeClient(), pool, makeRateLimiter(), makePrMonitor(), {
+        maxConcurrent: 4,
+        pollInterval: 1000,
+      });
+      (freshLoop as any).running = true;
+
+      // Step 3: call resumeBackoffSessions — must find the on-disk session
+      await (freshLoop as any).resumeBackoffSessions();
+
+      // Assert: resumeOneSession was called for the on-disk session
+      expect(resumeOneSessionMock).toHaveBeenCalledTimes(1);
+      const sessionArg: SessionFile = resumeOneSessionMock.mock.calls[0][0];
+      expect(sessionArg.sessionId).toBe(sessionId);
+      expect(sessionArg.taskId).toBe("task-restart-test");
+      expect(sessionArg.status).toBe("rate_limited");
+    });
+
+    it("does NOT resume a rate_limited session whose resumeAfter is still in the future after restart", async () => {
+      // Write a session whose backoff has NOT expired yet
+      const sessionId = "ffffffff-aaaa-bbbb-cccc-dddddddddddd";
+      const onDiskSession: SessionFile = {
+        type: "worker",
+        agentId: "agent-future-test",
+        sessionId,
+        runtime: "claude" as any,
+        startedAt: Date.now() - 60_000,
+        apiUrl: "http://localhost",
+        privateKeyJwk: {} as any,
+        taskId: "task-future-test",
+        status: "rate_limited",
+        resumeAfter: Date.now() + 600_000, // still 10 minutes away
+      };
+      writeSession(onDiskSession);
+
+      // Seed singleton before constructing DaemonLoop so the class field binds correctly.
+      _setSessionManagerForTest(new SessionManager());
+
+      const pool = {
+        activeCount: 0,
+        hasTask: (_id: string) => false,
+        getActiveTaskIds: () => [],
+      } as any;
+
+      const freshLoop = new DaemonLoop(makeClient(), pool, makeRateLimiter(), makePrMonitor(), {
+        maxConcurrent: 4,
+        pollInterval: 1000,
+      });
+      (freshLoop as any).running = true;
+
+      await (freshLoop as any).resumeBackoffSessions();
 
       expect(resumeOneSessionMock).not.toHaveBeenCalled();
     });

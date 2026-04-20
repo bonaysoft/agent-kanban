@@ -244,7 +244,7 @@ async function routeEvent(
 
   switch (event.type) {
     case "turn.rate_limit":
-      routeRateLimit(agent, event, rateLimitSink);
+      await routeRateLimit(agent, event, rateLimitSink);
       return;
     case "turn.error":
       logger.warn(`Agent error on task ${agent.taskId} (${agent.providerName}): ${event.detail}`);
@@ -263,20 +263,28 @@ async function routeEvent(
   }
 }
 
-function routeRateLimit(agent: AgentFlags, event: Extract<AgentEvent, { type: "turn.rate_limit" }>, sink: RateLimitSink): void {
+async function routeRateLimit(agent: AgentFlags, event: Extract<AgentEvent, { type: "turn.rate_limit" }>, sink: RateLimitSink): Promise<void> {
   const runtime = agent.providerName;
   if (event.status === "rejected") {
     const mainReset = event.resetAt;
     const overageReset = event.overage?.status === "rejected" ? event.overage.resetAt : undefined;
-    const candidates = [mainReset, overageReset].filter((x): x is string => !!x);
+    const resetTimestamps = [mainReset, overageReset].filter((x): x is string => !!x);
     const pauseUntil =
-      candidates.length > 0
-        ? candidates.reduce((a, b) => (new Date(a).getTime() >= new Date(b).getTime() ? a : b))
+      resetTimestamps.length > 0
+        ? resetTimestamps.reduce((a, b) => (new Date(a).getTime() >= new Date(b).getTime() ? a : b))
         : new Date(Date.now() + 60 * 60 * 1000).toISOString();
     logger.warn(
       `Rate limited on task ${agent.taskId} (${runtime}), pausing until ${pauseUntil}${event.isUsingOverage ? " — agent continues via overage" : ""}`,
     );
     agent.rateLimited = true;
+    // Persist first, then notify the in-memory sink. Reverse order would leave
+    // a crash window: if the daemon died between sink update and disk write,
+    // the session would come back up without resumeAfter and be stranded —
+    // exactly the bug this fix exists to prevent.
+    const resumeAfter = new Date(pauseUntil).getTime();
+    await getSessionManager()
+      .patch(agent.sessionId, { resumeAfter })
+      .catch((e) => logger.warn(`Failed to persist resumeAfter for ${agent.sessionId.slice(0, 8)}: ${errMessage(e)}`));
     sink.onRateLimited(runtime, pauseUntil);
     return;
   }

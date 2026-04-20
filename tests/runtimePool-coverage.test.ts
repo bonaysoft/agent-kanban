@@ -700,6 +700,74 @@ describe("routeRateLimit — rejected status", () => {
   });
 });
 
+describe("routeRateLimit — persists resumeAfter to session file", () => {
+  it("persists resumeAfter equal to new Date(pauseUntil).getTime() after a rejected rate_limit event", async () => {
+    const taskId = randomUUID();
+    const sessionId = randomUUID();
+    await seedActiveSession(sessions, sessionId, taskId);
+
+    const agentClient = makeAgentClient(null);
+    const rateLimitSink = { onRateLimited: vi.fn(), onRateLimitResumed: vi.fn() };
+    const resetAt = new Date(Date.now() + 60_000).toISOString();
+    const expectedResumeAfter = new Date(resetAt).getTime();
+    const events: AgentEvent[] = [makeRateLimitRejectedEvent(resetAt)];
+
+    await spawnAndWait(apiClient, { events, taskId, sessionId, agentClient, rateLimitSink });
+
+    const session = sessions.read(sessionId);
+    expect(session).not.toBeNull();
+    expect(session!.resumeAfter).toBe(expectedResumeAfter);
+  });
+
+  it("persists resumeAfter equal to the later overage resetAt when overage resets later than main", async () => {
+    const taskId = randomUUID();
+    const sessionId = randomUUID();
+    await seedActiveSession(sessions, sessionId, taskId);
+
+    const agentClient = makeAgentClient(null);
+    const rateLimitSink = { onRateLimited: vi.fn(), onRateLimitResumed: vi.fn() };
+
+    // Overage resets later — pauseUntil should be the later time
+    const earlier = new Date(Date.now() + 30_000).toISOString();
+    const later = new Date(Date.now() + 120_000).toISOString();
+    const expectedResumeAfter = new Date(later).getTime();
+    const events: AgentEvent[] = [makeRateLimitRejectedWithOverageEvent(earlier, later)];
+
+    await spawnAndWait(apiClient, { events, taskId, sessionId, agentClient, rateLimitSink });
+
+    const session = sessions.read(sessionId);
+    expect(session).not.toBeNull();
+    expect(session!.resumeAfter).toBe(expectedResumeAfter);
+  });
+
+  it("persists resumeAfter approximately 1h from now when resetAt is missing and no overage", async () => {
+    const taskId = randomUUID();
+    const sessionId = randomUUID();
+    await seedActiveSession(sessions, sessionId, taskId);
+
+    const agentClient = makeAgentClient(null);
+    const rateLimitSink = { onRateLimited: vi.fn(), onRateLimitResumed: vi.fn() };
+
+    // No resetAt and no overage → resetTimestamps.length === 0 → fallback: Date.now() + 3_600_000
+    const before = Date.now();
+    const event: AgentEvent = {
+      type: "turn.rate_limit",
+      status: "rejected",
+      resetAt: undefined as any,
+      isUsingOverage: false,
+    } as AgentEvent;
+
+    await spawnAndWait(apiClient, { events: [event], taskId, sessionId, agentClient, rateLimitSink });
+
+    const session = sessions.read(sessionId);
+    expect(session).not.toBeNull();
+    const delta = session!.resumeAfter! - before;
+    // Should be approximately 1 hour (3_600_000ms), within ±5s tolerance
+    expect(delta).toBeGreaterThanOrEqual(3_600_000 - 5_000);
+    expect(delta).toBeLessThanOrEqual(3_600_000 + 5_000);
+  });
+});
+
 describe("routeRateLimit — allowed status", () => {
   it("clears rateLimited flag and calls onRateLimitResumed when allowed without overage", async () => {
     const taskId = randomUUID();
