@@ -60,7 +60,8 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
   });
 
   it("includes resetAt as ISO string derived from resetsAt epoch", () => {
@@ -72,10 +73,11 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.resetAt).toBeDefined();
-      expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].resetAt).toBeDefined();
+      expect(new Date(result[0].resetAt!).getTime()).toBe(resetsAt * 1000);
     }
   });
 
@@ -87,8 +89,9 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.rateLimitType).toBe("five_hour");
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].rateLimitType).toBe("five_hour");
     }
   });
 
@@ -100,8 +103,9 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("rejected");
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("rejected");
     }
   });
 
@@ -113,9 +117,10 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.resetAt).toBeUndefined();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].resetAt).toBeUndefined();
     }
   });
 
@@ -133,8 +138,9 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.overage).toEqual({
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].overage).toEqual({
         status: "rejected",
         resetAt: new Date(1700003600 * 1000).toISOString(),
       });
@@ -151,10 +157,11 @@ describe("mapSDKMessage — rate_limit_event allowed", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("allowed");
-      expect(result.isUsingOverage).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("allowed");
+      expect(result[0].isUsingOverage).toBe(true);
     }
   });
 
@@ -166,31 +173,32 @@ describe("mapSDKMessage — rate_limit_event allowed", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("allowed");
-      expect(result.isUsingOverage).toBe(false);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("allowed");
+      expect(result[0].isUsingOverage).toBe(false);
     }
   });
 
-  it("returns null when status is allowed_warning (regression check)", () => {
+  it("returns empty array when status is allowed_warning (regression check)", () => {
     const msg = {
       type: "rate_limit_event",
       rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 
-  it("returns null for unrecognised status values", () => {
+  it("returns empty array for unrecognised status values", () => {
     const msg = {
       type: "rate_limit_event",
       rate_limit_info: { status: "unknown_status", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -209,9 +217,10 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "text", text: "hello" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({ type: "text", text: "hello" });
     }
   });
 
@@ -230,11 +239,12 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks).toHaveLength(2);
-      expect(result.blocks[0]).toEqual({ type: "text", text: "Line one" });
-      expect(result.blocks[1]).toEqual({ type: "text", text: "Line two" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks).toHaveLength(2);
+      expect(result[0].blocks[0]).toEqual({ type: "text", text: "Line one" });
+      expect(result[0].blocks[1]).toEqual({ type: "text", text: "Line two" });
     }
   });
 
@@ -248,13 +258,14 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0].type).toBe("tool_use");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0].type).toBe("tool_use");
     }
   });
 
-  it("returns null when message content is empty array", () => {
+  it("returns empty array when message content is empty array", () => {
     const msg = {
       type: "assistant",
       message: { content: [] },
@@ -263,7 +274,7 @@ describe("mapSDKMessage — assistant message", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -282,7 +293,8 @@ describe("mapSDKMessage — assistant with error field", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
   });
 
   it("rate_limit resetAt for string error is roughly 1 hour from now", () => {
@@ -297,9 +309,10 @@ describe("mapSDKMessage — assistant with error field", () => {
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
     const after = Date.now();
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      const resetMs = new Date(result.resetAt).getTime();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      const resetMs = new Date(result[0].resetAt).getTime();
       expect(resetMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000 - 100);
       expect(resetMs).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100);
     }
@@ -315,9 +328,10 @@ describe("mapSDKMessage — assistant with error field", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.error");
-    if (result?.type === "turn.error") {
-      expect(result.code).toBe("authentication_error");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.error");
+    if (result[0]?.type === "turn.error") {
+      expect(result[0].code).toBe("authentication_error");
     }
   });
 });
@@ -336,7 +350,7 @@ describe("mapSDKMessage — result", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("turn.end");
+    expect(mapSDKMessage(msg)[0]?.type).toBe("turn.end");
   });
 
   it("includes cost from total_cost_usd", () => {
@@ -349,8 +363,9 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.cost).toBe(0.12);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].cost).toBe(0.12);
     }
   });
 
@@ -363,8 +378,9 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.cost).toBe(0);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].cost).toBe(0);
     }
   });
 
@@ -379,8 +395,9 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.usage).toEqual(usage);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].usage).toEqual(usage);
     }
   });
 });
@@ -390,9 +407,9 @@ describe("mapSDKMessage — result", () => {
 // ---------------------------------------------------------------------------
 
 describe("mapSDKMessage — unknown type", () => {
-  it("returns null for unrecognized event type", () => {
+  it("returns empty array for unrecognized event type", () => {
     const msg = { type: "system_prompt", uuid: "u1", session_id: "s1" } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -412,9 +429,10 @@ describe("mapSDKMessage — assistant with parent_tool_use_id stamps parent_id o
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "text", text: "subagent says hi", parent_id: "toolu_X" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({ type: "text", text: "subagent says hi", parent_id: "toolu_X" });
     }
   });
 
@@ -429,9 +447,10 @@ describe("mapSDKMessage — assistant with parent_tool_use_id stamps parent_id o
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({
         type: "tool_use",
         id: "inner_tu1",
         name: "bash",
@@ -452,9 +471,10 @@ describe("mapSDKMessage — assistant with parent_tool_use_id stamps parent_id o
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "thinking", text: "inner thoughts", parent_id: "toolu_X" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({ type: "thinking", text: "inner thoughts", parent_id: "toolu_X" });
     }
   });
 
@@ -469,10 +489,11 @@ describe("mapSDKMessage — assistant with parent_tool_use_id stamps parent_id o
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "text", text: "main agent text" });
-      expect((result.blocks[0] as any).parent_id).toBeUndefined();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({ type: "text", text: "main agent text" });
+      expect((result[0].blocks[0] as any).parent_id).toBeUndefined();
     }
   });
 
@@ -492,10 +513,11 @@ describe("mapSDKMessage — assistant with parent_tool_use_id stamps parent_id o
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toHaveProperty("parent_id", "toolu_parent");
-      expect(result.blocks[1]).toHaveProperty("parent_id", "toolu_parent");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toHaveProperty("parent_id", "toolu_parent");
+      expect(result[0].blocks[1]).toHaveProperty("parent_id", "toolu_parent");
     }
   });
 });
@@ -517,15 +539,16 @@ describe("mapSDKMessage — system type task_started maps to subtask.start", () 
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.start");
-    if (result?.type === "subtask.start") {
-      expect(result.tool_use_id).toBe("toolu_abc");
-      expect(result.description).toBe("Build the feature");
-      expect(result.kind).toBe("worker");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.start");
+    if (result[0]?.type === "subtask.start") {
+      expect(result[0].tool_use_id).toBe("toolu_abc");
+      expect(result[0].description).toBe("Build the feature");
+      expect(result[0].kind).toBe("worker");
     }
   });
 
-  it("returns null when tool_use_id is missing", () => {
+  it("returns empty array when tool_use_id is missing", () => {
     const msg = {
       type: "system",
       subtype: "task_started",
@@ -533,7 +556,7 @@ describe("mapSDKMessage — system type task_started maps to subtask.start", () 
       session_id: "s1",
     } as unknown as SDKMessage;
 
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -551,13 +574,14 @@ describe("mapSDKMessage — system type task_progress maps to subtask.progress",
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.progress");
-    if (result?.type === "subtask.progress") {
-      expect(result.tool_use_id).toBe("toolu_abc");
-      expect(result.summary).toBe("Halfway there");
-      expect(result.last_tool).toBe("bash");
-      expect(result.tokens).toBe(350);
-      expect(result.duration_ms).toBe(2500);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.progress");
+    if (result[0]?.type === "subtask.progress") {
+      expect(result[0].tool_use_id).toBe("toolu_abc");
+      expect(result[0].summary).toBe("Halfway there");
+      expect(result[0].last_tool).toBe("bash");
+      expect(result[0].tokens).toBe(350);
+      expect(result[0].duration_ms).toBe(2500);
     }
   });
 
@@ -571,10 +595,11 @@ describe("mapSDKMessage — system type task_progress maps to subtask.progress",
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.progress");
-    if (result?.type === "subtask.progress") {
-      expect(result.tokens).toBeUndefined();
-      expect(result.duration_ms).toBeUndefined();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.progress");
+    if (result[0]?.type === "subtask.progress") {
+      expect(result[0].tokens).toBeUndefined();
+      expect(result[0].duration_ms).toBeUndefined();
     }
   });
 });
@@ -593,13 +618,14 @@ describe("mapSDKMessage — system type task_notification maps to subtask.end", 
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.end");
-    if (result?.type === "subtask.end") {
-      expect(result.tool_use_id).toBe("toolu_abc");
-      expect(result.status).toBe("completed");
-      expect(result.summary).toBe("Task done successfully");
-      expect(result.tokens).toBe(1000);
-      expect(result.duration_ms).toBe(8000);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.end");
+    if (result[0]?.type === "subtask.end") {
+      expect(result[0].tool_use_id).toBe("toolu_abc");
+      expect(result[0].status).toBe("completed");
+      expect(result[0].summary).toBe("Task done successfully");
+      expect(result[0].tokens).toBe(1000);
+      expect(result[0].duration_ms).toBe(8000);
     }
   });
 
@@ -614,9 +640,10 @@ describe("mapSDKMessage — system type task_notification maps to subtask.end", 
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.end");
-    if (result?.type === "subtask.end") {
-      expect(result.status).toBe("failed");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.end");
+    if (result[0]?.type === "subtask.end") {
+      expect(result[0].status).toBe("failed");
     }
   });
 
@@ -631,15 +658,16 @@ describe("mapSDKMessage — system type task_notification maps to subtask.end", 
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("subtask.end");
-    if (result?.type === "subtask.end") {
-      expect(result.status).toBe("stopped");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("subtask.end");
+    if (result[0]?.type === "subtask.end") {
+      expect(result[0].status).toBe("stopped");
     }
   });
 });
 
-describe("mapSDKMessage — system type unknown subtype returns null", () => {
-  it("returns null for unrecognized system subtype", () => {
+describe("mapSDKMessage — system type unknown subtype returns empty array", () => {
+  it("returns empty array for unrecognized system subtype", () => {
     const msg = {
       type: "system",
       subtype: "unknown_system_event",
@@ -648,7 +676,7 @@ describe("mapSDKMessage — system type unknown subtype returns null", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
 
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -794,33 +822,36 @@ describe("mapSDKMessage — user type maps tool results", () => {
     } as unknown as SDKMessage;
 
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0].type).toBe("tool_result");
-      if (result.blocks[0].type === "tool_result") {
-        expect(result.blocks[0].output).toBe("first line\nsecond line");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0].type).toBe("tool_result");
+      if (result[0].blocks[0].type === "tool_result") {
+        expect(result[0].blocks[0].output).toBe("first line\nsecond line");
       }
     }
   });
 
-  it("returns null when user message content is a string (no tool_result blocks)", () => {
+  it("returns message.user event when user message content is a string", () => {
     const msg = {
       type: "user",
       message: { role: "user", content: "plain user message" },
       parent_tool_use_id: null,
     } as unknown as SDKMessage;
 
-    expect(mapSDKMessage(msg)).toBeNull();
+    const result = mapSDKMessage(msg);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message.user");
   });
 
-  it("returns null when user message has empty content array", () => {
+  it("returns empty array when user message has empty content array", () => {
     const msg = {
       type: "user",
       message: { role: "user", content: [] },
       parent_tool_use_id: null,
     } as unknown as SDKMessage;
 
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 

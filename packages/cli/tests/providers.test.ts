@@ -92,7 +92,7 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("turn.rate_limit");
+    expect(mapSDKMessage(msg)[0]?.type).toBe("turn.rate_limit");
   });
 
   it("includes resetAt derived from resetsAt epoch", () => {
@@ -104,20 +104,21 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.resetAt).toBeDefined();
-      expect(new Date(result.resetAt!).getTime()).toBe(resetsAt * 1000);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].resetAt).toBeDefined();
+      expect(new Date(result[0].resetAt!).getTime()).toBe(resetsAt * 1000);
     }
   });
 
-  it("returns null when status is allowed_warning", () => {
+  it("returns empty array when status is allowed_warning", () => {
     const msg = {
       type: "rate_limit_event",
       rate_limit_info: { status: "allowed_warning", resetsAt: 1700000000, rateLimitType: "five_hour" },
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 
   it("returns turn.rate_limit event when status is allowed", () => {
@@ -128,9 +129,10 @@ describe("mapSDKMessage — rate_limit_event rejected", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("allowed");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("allowed");
     }
   });
 });
@@ -147,9 +149,10 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0].type).toBe("tool_result");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0].type).toBe("tool_result");
     }
   });
 
@@ -171,10 +174,11 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
   });
 
-  it("returns null for user message with no tool_result blocks", () => {
+  it("returns empty array for user message with only plain text (no tool_result blocks)", () => {
     const msg = {
       type: "user",
       message: {
@@ -185,10 +189,12 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result).toBeNull();
+    // plain text triggers a message.user event, not an empty array
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message.user");
   });
 
-  it("returns null for user message where content is a string", () => {
+  it("returns empty array for user message where content is a string", () => {
     const msg = {
       type: "user",
       message: { role: "user", content: "plain string content" },
@@ -196,7 +202,28 @@ describe("mapSDKMessage — user message (tool_result)", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result).toBeNull();
+    // string content also produces a message.user event
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message.user");
+  });
+
+  it("returns two events when user message has both plain text and tool_result blocks", () => {
+    const msg = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: "human reply" },
+          { type: "tool_result", tool_use_id: "tu1", content: "output", is_error: false },
+        ],
+      },
+      uuid: "u1",
+      session_id: "s1",
+    } as unknown as SDKMessage;
+    const result = mapSDKMessage(msg);
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe("message.user");
+    expect(result[1].type).toBe("message");
   });
 });
 
@@ -211,9 +238,10 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0]).toEqual({ type: "text", text: "Hello world" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0]).toEqual({ type: "text", text: "Hello world" });
     }
   });
 
@@ -227,9 +255,10 @@ describe("mapSDKMessage — assistant message", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("message");
-    if (result?.type === "message") {
-      expect(result.blocks[0].type).toBe("tool_use");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("message");
+    if (result[0]?.type === "message") {
+      expect(result[0].blocks[0].type).toBe("tool_use");
     }
   });
 
@@ -242,7 +271,7 @@ describe("mapSDKMessage — assistant message", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("turn.rate_limit");
+    expect(mapSDKMessage(msg)[0]?.type).toBe("turn.rate_limit");
   });
 
   it("returns turn.error event for non-rate-limit string error", () => {
@@ -254,7 +283,7 @@ describe("mapSDKMessage — assistant message", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("turn.error");
+    expect(mapSDKMessage(msg)[0]?.type).toBe("turn.error");
   });
 });
 
@@ -268,7 +297,7 @@ describe("mapSDKMessage — result", () => {
       uuid: "u1",
       session_id: "s1",
     } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)?.type).toBe("turn.end");
+    expect(mapSDKMessage(msg)[0]?.type).toBe("turn.end");
   });
 
   it("includes cost from total_cost_usd", () => {
@@ -281,8 +310,9 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.cost).toBe(0.12);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].cost).toBe(0.12);
     }
   });
 
@@ -295,8 +325,9 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.cost).toBe(0);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].cost).toBe(0);
     }
   });
 
@@ -311,16 +342,17 @@ describe("mapSDKMessage — result", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.end") {
-      expect(result.usage).toEqual(usage);
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.end") {
+      expect(result[0].usage).toEqual(usage);
     }
   });
 });
 
 describe("mapSDKMessage — unknown type", () => {
-  it("returns null for unrecognized event type", () => {
+  it("returns empty array for unrecognized event type", () => {
     const msg = { type: "system_prompt", uuid: "u1", session_id: "s1" } as unknown as SDKMessage;
-    expect(mapSDKMessage(msg)).toBeNull();
+    expect(mapSDKMessage(msg)).toEqual([]);
   });
 });
 
@@ -1342,11 +1374,12 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("allowed");
-      expect(result.isUsingOverage).toBe(true);
-      expect(result.resetAt).toBeUndefined();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("allowed");
+      expect(result[0].isUsingOverage).toBe(true);
+      expect(result[0].resetAt).toBeUndefined();
     }
   });
 
@@ -1358,10 +1391,11 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.status).toBe("allowed");
-      expect(result.isUsingOverage).toBe(false);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].status).toBe("allowed");
+      expect(result[0].isUsingOverage).toBe(false);
     }
   });
 
@@ -1373,9 +1407,10 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    expect(result?.type).toBe("turn.rate_limit");
-    if (result?.type === "turn.rate_limit") {
-      expect(result.resetAt).toBeUndefined();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe("turn.rate_limit");
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].resetAt).toBeUndefined();
     }
   });
 
@@ -1393,9 +1428,10 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.overage?.status).toBe("rejected");
-      expect(result.overage?.resetAt).toBe(new Date(1700003600 * 1000).toISOString());
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].overage?.status).toBe("rejected");
+      expect(result[0].overage?.resetAt).toBe(new Date(1700003600 * 1000).toISOString());
     }
   });
 
@@ -1407,8 +1443,9 @@ describe("mapSDKMessage — rate_limit allowed shape", () => {
       session_id: "s1",
     } as unknown as SDKMessage;
     const result = mapSDKMessage(msg);
-    if (result?.type === "turn.rate_limit") {
-      expect(result.overage).toBeUndefined();
+    expect(result).toHaveLength(1);
+    if (result[0]?.type === "turn.rate_limit") {
+      expect(result[0].overage).toBeUndefined();
     }
   });
 });

@@ -140,6 +140,20 @@ function mapToolResult(msg: SDKUserMessage): ContentBlock[] {
   return blocks;
 }
 
+// User messages from the Claude SDK carry either tool_result blocks (assistant
+// attribution) or plain text (real human input — initial prompt or chat reply).
+// Extract the latter so history can surface it as a role:user message.
+function extractUserText(msg: SDKUserMessage): string {
+  const content = msg.message.content;
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b): b is { type: "text"; text: string } => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+}
+
 /**
  * Map SDK system task_* messages → our subtask.* events.
  * SDK subtypes: task_started | task_progress | task_notification.
@@ -173,8 +187,16 @@ function mapTaskSystemMessage(msg: any): AgentEvent | null {
   }
 }
 
-/** Map a single SDK message to an AgentEvent (1:1, used for history fallback). */
-export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
+/**
+ * Map a single SDK message to a list of AgentEvents (0..N).
+ *
+ * Most SDK message types produce a single event, but `user` messages can
+ * contain both plain text (human input) and tool_result blocks (assistant
+ * attribution). Those must emit two events in order — user text first, then
+ * the tool_result-bearing message — so the UI can render human turn before
+ * the tool output that follows it.
+ */
+export function mapSDKMessage(msg: SDKMessage): AgentEvent[] {
   switch (msg.type) {
     case "rate_limit_event": {
       const info = msg.rate_limit_info;
@@ -186,24 +208,26 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
               resetAt: info.overageResetsAt ? new Date(info.overageResetsAt * 1000).toISOString() : undefined,
             }
           : undefined;
-        return {
-          type: "turn.rate_limit",
-          status: info.status,
-          resetAt,
-          rateLimitType: info.rateLimitType,
-          isUsingOverage: info.isUsingOverage,
-          overage,
-        };
+        return [
+          {
+            type: "turn.rate_limit",
+            status: info.status,
+            resetAt,
+            rateLimitType: info.rateLimitType,
+            isUsingOverage: info.isUsingOverage,
+            overage,
+          },
+        ];
       }
       if (info.status === "allowed_warning") {
         logger.warn(`Rate limit warning: ${info.rateLimitType} at ${((info.utilization ?? 0) * 100).toFixed(0)}%`);
       }
-      return null;
+      return [];
     }
 
     case "assistant": {
       if (msg.error === "rate_limit") {
-        return { type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+        return [{ type: "turn.rate_limit", status: "rejected", resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }];
       }
       if (msg.error) {
         const contentText = (msg.message?.content ?? [])
@@ -212,28 +236,36 @@ export function mapSDKMessage(msg: SDKMessage): AgentEvent | null {
           .join(" ")
           .slice(0, 500);
         const detail = contentText || msg.error;
-        return { type: "turn.error", code: msg.error, detail };
+        return [{ type: "turn.error", code: msg.error, detail }];
       }
       const parentId = msg.parent_tool_use_id;
       const blocks = (msg.message.content ?? []).map((b) => mapContentBlock(b, parentId)).filter((b): b is ContentBlock => b !== null);
-      return blocks.length > 0 ? { type: "message", blocks } : null;
+      return blocks.length > 0 ? [{ type: "message", blocks }] : [];
     }
 
     case "user": {
+      // Order matters: the human text precedes any tool_result blocks from
+      // the same SDK message so consumers render the user turn first.
+      const events: AgentEvent[] = [];
+      const userText = extractUserText(msg);
+      if (userText) events.push({ type: "message.user", text: userText });
       const blocks = mapToolResult(msg);
-      return blocks.length > 0 ? { type: "message", blocks } : null;
+      if (blocks.length > 0) events.push({ type: "message", blocks });
+      return events;
     }
 
     case "result": {
       const text = msg.subtype === "success" ? msg.result : undefined;
-      return { type: "turn.end", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> };
+      return [{ type: "turn.end", text, cost: msg.total_cost_usd || 0, usage: msg.usage as Record<string, any> }];
     }
 
-    case "system":
-      return mapTaskSystemMessage(msg);
+    case "system": {
+      const event = mapTaskSystemMessage(msg);
+      return event ? [event] : [];
+    }
 
     default:
-      return null;
+      return [];
   }
 }
 
@@ -295,8 +327,7 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
       if (assistantMsg.error === "rate_limit" && rateLimitSeen?.value) {
         return;
       }
-      const event = mapSDKMessage(msg);
-      if (event) yield event;
+      yield* mapSDKMessage(msg);
       return;
     }
 
@@ -335,8 +366,7 @@ export function* mapSDKMessageStream(msg: SDKMessage, turnOpen: { value: boolean
   }
 
   // Everything else (rate_limit_event, etc.) — delegate
-  const event = mapSDKMessage(msg);
-  if (event) {
+  for (const event of mapSDKMessage(msg)) {
     if (event.type === "turn.rate_limit" && rateLimitSeen !== undefined) {
       rateLimitSeen.value = true;
     }
@@ -445,9 +475,15 @@ export const claudeProvider: AgentProvider = {
     let counter = 0;
     for (const msg of messages) {
       const sdkLike = { ...msg, message: msg.message } as unknown as SDKMessage;
-      const event = mapSDKMessage(sdkLike);
-      if (event) {
-        events.push({ id: msg.uuid || `claude-hist-${++counter}`, event, timestamp: new Date().toISOString() });
+      const baseId = msg.uuid || `claude-hist-${++counter}`;
+      const timestamp = new Date().toISOString();
+      // User SDK messages can expand into two events (message.user + message
+      // with tool_result). Suffix their ids so both are stable even when only
+      // one of the two is emitted.
+      const isUser = sdkLike.type === "user";
+      for (const event of mapSDKMessage(sdkLike)) {
+        const id = isUser ? `${baseId}-${event.type === "message.user" ? "user" : "tool"}` : baseId;
+        events.push({ id, event, timestamp });
       }
     }
     return events;
