@@ -280,6 +280,29 @@ describe("session lifecycle", () => {
     agentId = agent.id;
   });
 
+  it("createSession auto-creates agentHost when it does not exist yet", async () => {
+    // Use a fresh machine with no pre-seeded agentHost to exercise the create-if-not-exists branch
+    const { upsertMachine } = await import("../apps/web/server/machineRepo");
+    const freshMachine = await upsertMachine(env.DB, userId, {
+      name: "fresh-machine-no-host",
+      os: "test",
+      version: "1.0",
+      runtimes: [],
+      device_id: "test-device-no-host",
+    });
+    const freshAgent = await createTestAgent(env.DB, userId, {
+      name: "FreshAgent",
+      username: "fresh-agent-no-host",
+      runtime: "claude",
+    });
+    const { createSession, getSession } = await import("../apps/web/server/agentSessionRepo");
+    const { publicKey } = await createSessionKeypair();
+    const freshSessionId = randomUUID();
+    await createSession(env.DB, env, freshAgent.id, freshMachine.id, freshSessionId, publicKey, userId);
+    const session = await getSession(env.DB, freshSessionId);
+    expect(session!.status).toBe("active");
+  });
+
   it("close session sets status and closed_at", async () => {
     const { createSession, closeSession, getSession } = await import("../apps/web/server/agentSessionRepo");
     const { publicKey } = await createSessionKeypair();

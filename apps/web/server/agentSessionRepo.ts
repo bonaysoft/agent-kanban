@@ -1,5 +1,6 @@
 import type { AgentSession, AgentSessionWithMachine, SessionUsageInput } from "@agent-kanban/shared";
 import { signDelegation } from "@agent-kanban/shared";
+import { HTTPException } from "hono/http-exception";
 import { getAgentPrivateKey } from "./agentRepo";
 import { createAuth } from "./betterAuth";
 import type { D1 } from "./db";
@@ -107,11 +108,10 @@ export async function closeSession(db: D1, sessionId: string): Promise<void> {
 }
 
 export async function reopenSession(db: D1, sessionId: string): Promise<void> {
-  const result = await db
-    .prepare("UPDATE agent_sessions SET status = 'active', closed_at = NULL WHERE id = ? AND status = 'closed'")
-    .bind(sessionId)
-    .run();
-  if (!result.meta.changes) throw new Error(`Session ${sessionId} not found or not closed`);
+  const row = await db.prepare("SELECT status FROM agent_sessions WHERE id = ?").bind(sessionId).first<{ status: string }>();
+  if (!row) throw new HTTPException(404, { message: `Session ${sessionId} not found` });
+  if (row.status === "active") return;
+  await db.prepare("UPDATE agent_sessions SET status = 'active', closed_at = NULL WHERE id = ?").bind(sessionId).run();
 }
 
 export async function updateSessionUsage(db: D1, sessionId: string, usage: SessionUsageInput): Promise<void> {

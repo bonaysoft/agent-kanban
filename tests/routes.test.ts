@@ -729,6 +729,62 @@ describe("routes", () => {
     expect(res.status).toBe(200);
   });
 
+  it("POST /api/agents/:agentId/sessions/:sessionId/reopen returns 404 for nonexistent session", async () => {
+    const nonexistentSessionId = randomUUID();
+    const res = await apiRequest("POST", `/api/agents/${agentId}/sessions/${nonexistentSessionId}/reopen`, {}, apiKey);
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/agents/:agentId/sessions/:sessionId/reopen is idempotent when session is already active", async () => {
+    // Create a fresh session that starts active (status='active', closed_at=NULL)
+    const freshSessionId = randomUUID();
+    const freshKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    const freshPubJwk = await crypto.subtle.exportKey("jwk", (freshKeypair as any).publicKey);
+    await apiRequest("POST", `/api/agents/${agentId}/sessions`, { session_id: freshSessionId, session_public_key: freshPubJwk.x! }, apiKey);
+
+    // Inject a sentinel closed_at while keeping status='active'. This state is not reachable
+    // via the public API — it exists solely to discriminate the no-op path from an erroneous
+    // UPDATE: if reopen runs the UPDATE it would set closed_at to NULL, failing the assertion;
+    // if it correctly skips the UPDATE the sentinel value survives unchanged.
+    const sentinelClosedAt = "2000-01-01T00:00:00.000Z";
+    await env.DB.prepare("UPDATE agent_sessions SET closed_at = ? WHERE id = ?").bind(sentinelClosedAt, freshSessionId).run();
+
+    const res = await apiRequest("POST", `/api/agents/${agentId}/sessions/${freshSessionId}/reopen`, {}, apiKey);
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare("SELECT status, closed_at FROM agent_sessions WHERE id = ?")
+      .bind(freshSessionId)
+      .first<{ status: string; closed_at: string | null }>();
+    expect(row?.status).toBe("active");
+    // The sentinel must survive — proves the UPDATE branch was skipped entirely
+    expect(row?.closed_at).toBe(sentinelClosedAt);
+  });
+
+  it("POST /api/agents/:agentId/sessions/:sessionId/reopen clears closed_at after close", async () => {
+    // Create a session, close it, then reopen and verify closed_at is cleared
+    const freshSessionId = randomUUID();
+    const freshKeypair = await crypto.subtle.generateKey({ name: "Ed25519" } as any, true, ["sign", "verify"]);
+    const freshPubJwk = await crypto.subtle.exportKey("jwk", (freshKeypair as any).publicKey);
+    await apiRequest("POST", `/api/agents/${agentId}/sessions`, { session_id: freshSessionId, session_public_key: freshPubJwk.x! }, apiKey);
+
+    await apiRequest("DELETE", `/api/agents/${agentId}/sessions/${freshSessionId}`, undefined, apiKey);
+
+    const closedRow = await env.DB.prepare("SELECT status, closed_at FROM agent_sessions WHERE id = ?")
+      .bind(freshSessionId)
+      .first<{ status: string; closed_at: string | null }>();
+    expect(closedRow?.status).toBe("closed");
+    expect(closedRow?.closed_at).not.toBeNull();
+
+    const res = await apiRequest("POST", `/api/agents/${agentId}/sessions/${freshSessionId}/reopen`, {}, apiKey);
+    expect(res.status).toBe(200);
+
+    const reopenedRow = await env.DB.prepare("SELECT status, closed_at FROM agent_sessions WHERE id = ?")
+      .bind(freshSessionId)
+      .first<{ status: string; closed_at: string | null }>();
+    expect(reopenedRow?.status).toBe("active");
+    expect(reopenedRow?.closed_at).toBeNull();
+  });
+
   // ─── Agent PATCH/DELETE ───
 
   it("PATCH /api/agents/:id returns 404 for nonexistent agent", async () => {
