@@ -1,20 +1,37 @@
 import type { CreateRepositoryInput, Repository } from "@agent-kanban/shared";
+import { HTTPException } from "hono/http-exception";
 import { type D1, newId } from "./db";
 
-/** Normalize git URL to canonical HTTPS form without .git suffix */
+/**
+ * Normalize git URL to canonical HTTPS form without .git suffix or trailing slash.
+ * Accepts: https://host/owner/repo, http://host/owner/repo, git@host:owner/repo.
+ * Rejects everything else (file://, local paths, single-segment paths, unknown schemes)
+ * with 400 — agents cannot invent URLs, users cannot paste local paths, and the daemon
+ * must never see an un-cloneable URL.
+ */
 export function normalizeGitUrl(url: string): string {
   const sshMatch = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (sshMatch) return `https://${sshMatch[1]}/${sshMatch[2]}`;
-  return url.replace(/\.git$/, "");
+  if (/^https?:\/\/[^/]+\/[^/]+\/.+/.test(url)) {
+    return url.replace(/(?:\.git|\/)+$/, "");
+  }
+  throw new HTTPException(400, {
+    message: `Invalid repository URL "${url}": only https://host/owner/repo, http://host/owner/repo, or git@host:owner/repo are accepted`,
+  });
 }
 
-/** Extract owner/repo from canonical HTTPS URL */
-function extractFullName(httpsUrl: string): string | null {
-  const match = httpsUrl.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?$/);
-  return match ? match[1] : null;
+/** Extract owner/repo from a canonicalized URL. Invariant: the URL has already passed normalizeGitUrl. */
+function extractFullName(canonicalUrl: string): string {
+  const match = canonicalUrl.match(/^https?:\/\/[^/]+\/(.+)$/);
+  if (!match) {
+    throw new HTTPException(500, {
+      message: `Repository URL "${canonicalUrl}" has no owner/repo — data invariant broken (bypassed normalizeGitUrl)`,
+    });
+  }
+  return match[1];
 }
 
-function withFullName<T extends { url: string }>(repo: T): T & { full_name: string | null } {
+function withFullName<T extends { url: string }>(repo: T): T & { full_name: string } {
   return { ...repo, full_name: extractFullName(repo.url) };
 }
 
@@ -32,16 +49,16 @@ export async function createRepository(db: D1, ownerId: string, input: CreateRep
 }
 
 export async function findOrCreateRepository(db: D1, ownerId: string, input: CreateRepositoryInput): Promise<Repository> {
+  const url = normalizeGitUrl(input.url);
   try {
     return await createRepository(db, ownerId, input);
-  } catch {
-    const existing = await db
-      .prepare("SELECT * FROM repositories WHERE owner_id = ? AND url = ?")
-      .bind(ownerId, normalizeGitUrl(input.url))
-      .first<Repository>();
-    if (existing) return existing;
-    throw new Error("Failed to create or find repository");
+  } catch (err) {
+    const isUniqueViolation = err instanceof Error && err.message.includes("UNIQUE constraint failed");
+    if (!isUniqueViolation) throw err;
   }
+  const existing = await db.prepare("SELECT * FROM repositories WHERE owner_id = ? AND url = ?").bind(ownerId, url).first<Repository>();
+  if (existing) return withFullName(existing);
+  throw new Error("Failed to create or find repository");
 }
 
 export async function listRepositories(db: D1, ownerId: string, filters?: { url?: string }): Promise<Repository[]> {

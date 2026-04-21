@@ -45,12 +45,19 @@ Parse the user's input:
 Check if this is an **existing project** or a **new product**:
 
 ```bash
-git remote -v 2>/dev/null    # has a repo? → existing project
+git remote -v 2>/dev/null    # has a remote? → existing project
 ak get repo                  # registered repos
 ```
 
-- **Existing project**: has git remote → skip to Phase 1
-- **New product**: no repo → go to Phase 0.5 (Scaffold)
+Three possible states:
+
+- **Existing project with remote** → skip to Phase 1
+- **New product (no git init yet)** → go to Phase 0.5 (Scaffold)
+- **Local-only project (git init done, no remote)** → STOP. A registered repo must have a real remote (`https://…` or `git@…`). Tell the user one of:
+  1. Push the project to GitHub first: `gh repo create <owner>/<name> --source . --push`
+  2. Or: ask them for the intended remote URL before proceeding.
+
+  **Never invent a URL** (no `file://`, no local paths, no placeholders). The agent-kanban server will reject non-http(s)/ssh URLs with 400, and even if it didn't, the daemon cannot clone local paths.
 
 ## Phase 0.5: Scaffold (new products only)
 
@@ -67,9 +74,9 @@ cd <repo-dir>
 git add -A && git commit -m "feat: project scaffold" && git push -u origin main
 ```
 
-Register with agent-kanban:
+Register with agent-kanban (URL MUST come from `git remote get-url origin` — never hand-crafted):
 ```bash
-ak create repo --name <name> --url <url>
+ak create repo --name <name> --url "$(git remote get-url origin)"
 ```
 
 The scaffold must contain enough structure for agents to start writing code immediately.
@@ -306,7 +313,7 @@ When all tasks are done, report the final summary to the user.
 - **Workflow completion is mandatory** — once this skill is invoked, the full lifecycle (plan → create → assign → monitor → review → merge all) MUST run to completion. If you are interrupted mid-workflow (user asks a side question, chat drifts to another topic, tool fails, etc.), handle the interruption and then **immediately resume the workflow from where you left off**. Never ask "should I continue monitoring?" or "do you want me to keep going?" — the answer is always yes. The only way to exit the workflow early is if the user explicitly says to stop, cancel, or abort.
 - **Follow CONTRIBUTING.md** — read the target repo's CONTRIBUTING.md before creating tasks; check PR compliance during review
 - **Prefer text output** — only use `-o json | jq` when extracting fields into variables (e.g. task IDs for `--depends-on`). For display, use default text output.
-- **Always get repo URL from `git remote -v`** — never guess
+- **Always get repo URL from `git remote get-url origin`** — never guess, never improvise. If there is no remote, stop and ask the user to push the repo first (see Phase 0). `file://`, local paths, and placeholder URLs will be rejected by the server with 400.
 - **Discuss the plan with the user before creating tasks** — don't just start creating
 - **Set depends-on at creation time** — don't leave deps for later
 - **Space API calls** — avoid triggering rate limits during batch creation

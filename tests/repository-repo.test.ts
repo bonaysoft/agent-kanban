@@ -33,9 +33,86 @@ describe("normalizeGitUrl", () => {
     expect(normalizeGitUrl("https://github.com/org/repo")).toBe("https://github.com/org/repo");
   });
 
-  it("passes through URL with trailing slash as-is", async () => {
+  it("strips trailing slash from HTTPS URL", async () => {
     const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
-    expect(normalizeGitUrl("https://github.com/org/repo/")).toBe("https://github.com/org/repo/");
+    expect(normalizeGitUrl("https://github.com/org/repo/")).toBe("https://github.com/org/repo");
+  });
+
+  it("accepts SSH git@ URL without .git suffix", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    expect(normalizeGitUrl("git@gitlab.com:myorg/myrepo")).toBe("https://gitlab.com/myorg/myrepo");
+  });
+
+  it("accepts http:// URL with owner/repo path", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    expect(normalizeGitUrl("http://github.example.com/owner/repo")).toBe("http://github.example.com/owner/repo");
+  });
+
+  it("rejects file:// URL with HTTPException 400", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      normalizeGitUrl("file:///Users/alice/proj");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("rejects bare local path with HTTPException 400", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      normalizeGitUrl("/Users/alice/proj");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("rejects plain string with no scheme with HTTPException 400", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      normalizeGitUrl("my-repo");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("rejects https:// URL with no owner/repo path with HTTPException 400", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      normalizeGitUrl("https://github.com");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("rejects single-segment HTTPS path with HTTPException 400", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      normalizeGitUrl("https://github.com/single-segment");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("strips .git and then trailing slash from https://github.com/org/repo/.git", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    // .git$ matches the end of "https://github.com/org/repo/.git", leaving "https://github.com/org/repo/"
+    // trailing-slash strip then removes the slash → "https://github.com/org/repo"
+    expect(normalizeGitUrl("https://github.com/org/repo/.git")).toBe("https://github.com/org/repo");
+  });
+
+  it("accepts nested group paths (gitlab.com/group/subgroup/project)", async () => {
+    const { normalizeGitUrl } = await import("../apps/web/server/repositoryRepo");
+    expect(normalizeGitUrl("https://gitlab.com/group/subgroup/project")).toBe("https://gitlab.com/group/subgroup/project");
   });
 });
 
@@ -101,11 +178,85 @@ describe("repositoryRepo", () => {
       url: "https://github.com/org/find-create-dup",
     });
     expect(second.id).toBe(first.id);
+    expect(second.full_name).toBe("org/find-create-dup");
   });
 
   it("repos are scoped to owner", async () => {
     const { listRepositories } = await import("../apps/web/server/repositoryRepo");
     const repos = await listRepositories(env.DB, "repo-test-user-2");
     expect(repos.length).toBe(0);
+  });
+
+  it("createRepository rejects a file:// URL with 400", async () => {
+    const { createRepository } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      await createRepository(env.DB, "repo-test-user", { name: "bad-repo", url: "file:///Users/xudawei/skill-lake" });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("findOrCreateRepository rejects a file:// URL with 400", async () => {
+    const { findOrCreateRepository } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      await findOrCreateRepository(env.DB, "repo-test-user", { name: "bad-repo", url: "file:///Users/xudawei/skill-lake" });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("listRepositories rejects a file:// url filter with 400", async () => {
+    const { listRepositories } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      await listRepositories(env.DB, "repo-test-user", { url: "file:///Users/xudawei/skill-lake" });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(400);
+  });
+
+  it("getRepository returns null for unknown id", async () => {
+    const { getRepository } = await import("../apps/web/server/repositoryRepo");
+    const result = await getRepository(env.DB, "nonexistent-id", "repo-test-user");
+    expect(result).toBeNull();
+  });
+
+  it("getRepository returns the repo for a known id", async () => {
+    const { createRepository, getRepository } = await import("../apps/web/server/repositoryRepo");
+    const repo = await createRepository(env.DB, "repo-test-user", { name: "get-repo", url: "https://github.com/org/get-repo" });
+    const result = await getRepository(env.DB, repo.id, "repo-test-user");
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(repo.id);
+    expect(result!.full_name).toBe("org/get-repo");
+  });
+
+  it("getRepository returns null when owner does not match", async () => {
+    const { createRepository, getRepository } = await import("../apps/web/server/repositoryRepo");
+    const repo = await createRepository(env.DB, "repo-test-user", { name: "scoped-repo", url: "https://github.com/org/scoped-repo" });
+    const result = await getRepository(env.DB, repo.id, "repo-test-user-2");
+    expect(result).toBeNull();
+  });
+
+  it("listRepositories throws 500 when a stored URL bypassed normalizeGitUrl", async () => {
+    // Directly insert a row with a file:// URL to simulate a corrupt DB row (invariant broken)
+    const now = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO repositories (id, owner_id, name, url, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind("corrupt-id-1", "repo-test-user", "corrupt-repo", "file:///bad/path", now)
+      .run();
+    const { listRepositories } = await import("../apps/web/server/repositoryRepo");
+    let thrown: unknown;
+    try {
+      await listRepositories(env.DB, "repo-test-user");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as any).status).toBe(500);
+    // Clean up the corrupt row so it doesn't affect other tests
+    await env.DB.prepare("DELETE FROM repositories WHERE id = ?").bind("corrupt-id-1").run();
   });
 });

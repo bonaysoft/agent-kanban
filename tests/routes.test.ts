@@ -285,6 +285,13 @@ describe("routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("POST /api/repositories rejects file:// URL with 400", async () => {
+    const res = await apiRequest("POST", "/api/repositories", { name: "x", url: "file:///tmp/x" }, userToken);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toMatch(/file:\/\/\/tmp\/x/);
+  });
+
   // ─── Agents ───
 
   it("GET /api/agents lists agents", async () => {
