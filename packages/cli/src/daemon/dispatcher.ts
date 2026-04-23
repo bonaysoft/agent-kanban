@@ -20,7 +20,7 @@ import { getProvider, normalizeRuntime } from "../providers/registry.js";
 import { getSessionManager } from "../session/manager.js";
 import type { SessionFile } from "../session/types.js";
 import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
-import { ensureLefthookTask, ensureSkills } from "../workspace/skills.js";
+import { ensureSkills } from "../workspace/skills.js";
 import { createRepoWorkspace, createTempWorkspace } from "../workspace/workspace.js";
 import { apiCallIdempotent, apiCallOptional, cryptoBoundary, execBoundary, fsSync } from "./boundaries.js";
 import type { PrMonitor } from "./prMonitor.js";
@@ -168,10 +168,6 @@ export async function dispatchTasks(
 
     if (!prepareRepo(dir)) {
       logger.error(`Repo not ready at ${dir}, skipping task ${task.id}`);
-      return false;
-    }
-
-    if (await ensureLefthookTask(client as any, task, dir, tasks)) {
       return false;
     }
   }

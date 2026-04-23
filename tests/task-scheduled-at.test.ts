@@ -15,7 +15,6 @@ vi.mock("../packages/cli/src/workspace/repoOps.js", () => ({
   repoDir: vi.fn().mockReturnValue(null),
 }));
 vi.mock("../packages/cli/src/workspace/skills.js", () => ({
-  ensureLefthookTask: vi.fn().mockResolvedValue(false),
   ensureSkills: vi.fn().mockReturnValue(true),
 }));
 vi.mock("../packages/cli/src/workspace/workspace.js", () => ({

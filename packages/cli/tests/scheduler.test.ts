@@ -53,11 +53,6 @@ vi.mock("../src/workspace/repoOps.js", () => ({
   repoDir: vi.fn().mockReturnValue(null),
 }));
 
-// ── skillManager mock ─────────────────────────────────────────────────────────
-vi.mock("../src/workspace/skills.js", () => ({
-  ensureLefthookTask: vi.fn().mockResolvedValue(false),
-}));
-
 // ── shared mock ───────────────────────────────────────────────────────────────
 vi.mock("@agent-kanban/shared", () => ({
   isBoardType: vi.fn().mockReturnValue(true),
