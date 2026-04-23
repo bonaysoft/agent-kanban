@@ -16,6 +16,7 @@ import {
 import { join } from "node:path";
 import type { Command } from "commander";
 import { getCredentials, saveCredentials, setCurrent } from "../config.js";
+import { assertDaemonDependencies } from "../daemon/preflight.js";
 import { DAEMON_STATE_FILE, LOGS_DIR, PID_FILE, SESSIONS_DIR, STATE_DIR } from "../paths.js";
 import { getAvailableProviders } from "../providers/registry.js";
 import { listSessions } from "../session/store.js";
@@ -142,6 +143,8 @@ export function registerStartCommand(program: Command) {
         console.error(`Daemon already running (PID ${existingPid}). Stop it first or remove ${PID_FILE}`);
         process.exit(1);
       }
+
+      assertDaemonDependencies();
 
       // Clear session cache if API URL changed. Sessions are backend-specific
       // and must not survive environment switches. Identities are now scoped
@@ -305,6 +308,8 @@ export function registerRestartCommand(program: Command) {
     .option("--poll-interval <ms>", "Poll interval in ms")
     .option("--task-timeout <ms>", "Task timeout in ms (0 to disable)")
     .action(async (opts) => {
+      assertDaemonDependencies();
+
       // Stop existing daemon if running
       const pid = readDaemonPid();
       if (pid) {
