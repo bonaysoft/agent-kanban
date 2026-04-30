@@ -34,7 +34,11 @@ export function ensureSkills(worktreeDir: string, agentSkills: string[]): boolea
     for (const entry of agentSkills) {
       const atIdx = entry.indexOf("@");
       if (atIdx === -1) {
-        logger.warn(`Skipping invalid skill entry (missing @): ${entry}`);
+        // Only warn for entries that look like skill references (contain '/').
+        // Free-form capability labels (e.g. "Full stack development") are silently skipped.
+        if (entry.includes("/")) {
+          logger.warn(`Skipping invalid skill entry (missing @): ${entry}`);
+        }
         continue;
       }
       const installed = installSkill(worktreeDir, entry.slice(0, atIdx), entry.slice(atIdx + 1));
