@@ -6,7 +6,7 @@ import { createLogger } from "../logger.js";
 
 const logger = createLogger("agents");
 
-const AGENT_GITIGNORE_ENTRIES = [".claude/agents/", ".codex/agents/"];
+const AGENT_GITIGNORE_ENTRIES = [".claude/agents/", ".codex/agents/", ".gemini/agents/"];
 
 export interface SubagentDefinition {
   id: string;
@@ -32,16 +32,16 @@ function promptFor(agent: SubagentDefinition): string {
   return sections.filter(Boolean).join("\n\n");
 }
 
-function claudeModel(agent: SubagentDefinition): string | null {
-  return agent.runtime === "claude" && agent.model ? agent.model : null;
+function markdownModel(runtime: AgentRuntime, agent: SubagentDefinition): string | null {
+  return runtime === "claude" && agent.runtime === "claude" && agent.model ? agent.model : null;
 }
 
-function renderClaudeAgent(agent: SubagentDefinition): string {
+function renderMarkdownAgent(runtime: AgentRuntime, agent: SubagentDefinition): string {
   const frontmatter: Record<string, string> = {
     name: agentName(agent),
     description: descriptionFor(agent),
   };
-  const model = claudeModel(agent);
+  const model = markdownModel(runtime, agent);
   if (model) frontmatter.model = model;
   return `---\n${stringify(frontmatter).trim()}\n---\n${promptFor(agent)}\n`;
 }
@@ -71,7 +71,8 @@ function renderCodexAgent(agent: SubagentDefinition): string {
 
 function renderAgent(runtime: AgentRuntime, agent: SubagentDefinition): { path: string; content: string } {
   const name = agentName(agent);
-  if (runtime === "claude") return { path: `.claude/agents/${name}.md`, content: renderClaudeAgent(agent) };
+  if (runtime === "claude" || runtime === "copilot") return { path: `.claude/agents/${name}.md`, content: renderMarkdownAgent(runtime, agent) };
+  if (runtime === "gemini") return { path: `.gemini/agents/${name}.md`, content: renderMarkdownAgent(runtime, agent) };
   if (runtime === "codex") return { path: `.codex/agents/${name}.toml`, content: renderCodexAgent(agent) };
   throw new Error(`Runtime "${runtime}" does not support task-local subagent installation yet`);
 }
@@ -112,6 +113,6 @@ export async function ensureSubagents(worktreeDir: string, runtime: AgentRuntime
 }
 
 export const testExports = {
-  renderClaudeAgent,
+  renderMarkdownAgent,
   renderCodexAgent,
 };

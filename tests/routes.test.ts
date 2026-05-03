@@ -430,6 +430,28 @@ describe("routes", () => {
     expect(body.subagents).toEqual([subagent.id]);
   });
 
+  it.each(["gemini", "copilot"] as const)("POST /api/agents allows %s agents with subagents", async (runtime) => {
+    const subagent = await createTestAgent(env.DB, userId, {
+      name: `Create ${runtime} Route Subagent`,
+      username: `create-${runtime}-route-subagent`,
+      runtime: "claude",
+    });
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      {
+        name: `${runtime} Subagent Route Agent`,
+        username: `${runtime}-subagent-route-agent`,
+        runtime,
+        subagents: [subagent.id],
+      },
+      apiKey,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as any;
+    expect(body.subagents).toEqual([subagent.id]);
+  });
+
   it("POST /api/agents rejects nonexistent subagent IDs", async () => {
     const res = await apiRequest(
       "POST",
@@ -480,12 +502,12 @@ describe("routes", () => {
     const res = await apiRequest(
       "POST",
       "/api/agents",
-      { name: "Gemini Subagents", username: "gemini-subagents", runtime: "gemini", subagents: [subagent.id] },
+      { name: "Hermes Subagents", username: "hermes-subagents", runtime: "hermes", subagents: [subagent.id] },
       apiKey,
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
-    expect(body.error.message).toContain('Runtime "gemini" does not support subagents yet');
+    expect(body.error.message).toContain('Runtime "hermes" does not support subagents yet');
   });
 
   it("PATCH /api/agents/:id rejects malformed skill refs", async () => {
@@ -526,6 +548,26 @@ describe("routes", () => {
     expect(body.subagents).toEqual([subagent.id]);
     expect(body).not.toHaveProperty("private_key");
     expect(body).not.toHaveProperty("mailbox_token");
+  });
+
+  it.each(["gemini", "copilot"] as const)("PATCH /api/agents/:id allows %s agents with subagents", async (runtime) => {
+    const jwt = await signLeaderSessionJWT();
+    const agent = await createTestAgent(env.DB, userId, {
+      name: `Patch ${runtime} Route Agent`,
+      username: `patch-${runtime}-route-agent`,
+      runtime: "claude",
+    });
+    const subagent = await createTestAgent(env.DB, userId, {
+      name: `Patch ${runtime} Route Subagent`,
+      username: `patch-${runtime}-route-subagent`,
+      runtime: "claude",
+    });
+    const res = await apiRequest("PATCH", `/api/agents/${agent.id}`, { runtime, subagents: [subagent.id] }, jwt);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.runtime).toBe(runtime);
+    expect(body.subagents).toEqual([subagent.id]);
   });
 
   it("PATCH /api/agents/:id rejects self-reference as a subagent", async () => {

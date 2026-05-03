@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe("workspace subagent installer", () => {
   it("renders Claude agent definitions with yaml frontmatter", async () => {
-    const content = testExports.renderClaudeAgent(subagent);
+    const content = testExports.renderMarkdownAgent("claude", subagent);
 
     expect(content).toContain("---\n");
     expect(content).toContain("name: test-writer");
@@ -76,9 +76,10 @@ describe("workspace subagent installer", () => {
     const installed = await ensureSubagents(worktree, "claude", [subagent]);
 
     expect(installed).toBe(true);
-    expect(readFileSync(join(worktree, ".claude/agents/test-writer.md"), "utf-8")).toBe(testExports.renderClaudeAgent(subagent));
+    expect(readFileSync(join(worktree, ".claude/agents/test-writer.md"), "utf-8")).toBe(testExports.renderMarkdownAgent("claude", subagent));
     expect(readFileSync(join(worktree, ".gitignore"), "utf-8")).toContain(".claude/agents/");
     expect(readFileSync(join(worktree, ".gitignore"), "utf-8")).toContain(".codex/agents/");
+    expect(readFileSync(join(worktree, ".gitignore"), "utf-8")).toContain(".gemini/agents/");
   });
 
   it("writes Codex subagents and keeps identical files stable", async () => {
@@ -101,9 +102,44 @@ describe("workspace subagent installer", () => {
     expect(statSync(filePath).mtimeMs).toBe(firstMtime);
   });
 
+  it("writes Gemini subagents as project markdown agent definitions", async () => {
+    const worktree = makeWorktree();
+    const geminiSubagent = { ...subagent, runtime: "gemini" as const, model: "gemini-3-pro" };
+
+    expect(await ensureSubagents(worktree, "gemini", [geminiSubagent])).toBe(true);
+    const content = readFileSync(join(worktree, ".gemini/agents/test-writer.md"), "utf-8");
+
+    expect(content).toBe(testExports.renderMarkdownAgent("gemini", geminiSubagent));
+    expect(content).toContain("name: test-writer");
+    expect(content).not.toContain("model:");
+  });
+
+  it("writes Copilot subagents through Claude-compatible project markdown agent definitions", async () => {
+    const worktree = makeWorktree();
+    const copilotSubagent = { ...subagent, runtime: "copilot" as const, model: "gpt-5.2" };
+
+    expect(await ensureSubagents(worktree, "copilot", [copilotSubagent])).toBe(true);
+    const content = readFileSync(join(worktree, ".claude/agents/test-writer.md"), "utf-8");
+
+    expect(content).toBe(testExports.renderMarkdownAgent("copilot", copilotSubagent));
+    expect(content).toContain("name: test-writer");
+    expect(content).not.toContain("model:");
+  });
+
+  it("does not leak Claude model frontmatter into Gemini or Copilot agent files", async () => {
+    const worktree = makeWorktree();
+    const claudeWorker = { ...subagent, runtime: "claude" as const, model: "claude-opus-4-6" };
+
+    expect(await ensureSubagents(worktree, "gemini", [claudeWorker])).toBe(true);
+    expect(await ensureSubagents(worktree, "copilot", [claudeWorker])).toBe(true);
+
+    expect(readFileSync(join(worktree, ".gemini/agents/test-writer.md"), "utf-8")).not.toContain("model:");
+    expect(readFileSync(join(worktree, ".claude/agents/test-writer.md"), "utf-8")).not.toContain("model:");
+  });
+
   it("returns false when the runtime does not support local subagent files", async () => {
     const worktree = makeWorktree();
 
-    await expect(ensureSubagents(worktree, "gemini", [subagent])).resolves.toBe(false);
+    await expect(ensureSubagents(worktree, "hermes", [subagent])).resolves.toBe(false);
   });
 });

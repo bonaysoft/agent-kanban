@@ -59,7 +59,7 @@ import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
-const SUBAGENT_RUNTIMES = new Set(["claude", "codex"]);
+const SUBAGENT_RUNTIMES = new Set(["claude", "codex", "gemini", "copilot"]);
 
 function assertValidSkillRefs(skills: unknown) {
   if (skills === undefined) return;
