@@ -36,6 +36,42 @@ Create workers only when needed for the current task:
 
 Do not create duplicate workers for hypothetical future work.
 
+Create workers by generating an Agent YAML from the current task context. Do not use role templates.
+
+```yaml
+kind: Agent
+metadata:
+  name: alex-chen
+  annotations:
+    agent-kanban.dev/display-name: "Alex Chen"
+spec:
+  runtime: codex
+  role: frontend reviewer
+  bio: Frontend reviewer focused on React, Tailwind, accessibility, and visual consistency.
+  skills:
+    - <source>@<skill>
+  handoff_to:
+    - <agent-id>
+  subagents:
+    - <worker-agent-id>
+```
+
+```bash
+ak apply -f agent.yaml
+ak get agent -o json
+```
+
+Agent creation rules:
+
+- `metadata.name` is the stable username. Use a human-like username such as `alex-chen`, not a role slug or temporary task name.
+- `metadata.annotations["agent-kanban.dev/display-name"]` is the human display name, such as `Alex Chen`.
+- `spec.role` carries the job responsibility. Do not encode the role into the name.
+- `role`, `bio`, and `soul` describe durable responsibility.
+- `skills` must be installable skill refs in `<source>@<skill>` format, matching what `npx skills add <source> --skill <skill>` can install.
+- `handoff_to` should list real delegation targets.
+- `subagents` should list worker agent IDs to install as task-local subagents for this agent.
+- Verify `runtime_available: true` before assigning any task to the new worker.
+
 ## Runtime Failure Handling
 
 If an assignment fails because the runtime is unavailable, refresh agent data and choose again:

@@ -141,7 +141,7 @@ Create all tasks? (y/n)
 
 The user must confirm before any `ak create task` calls are made. If the user requests changes, adjust and re-preview.
 
-## Phase 3: Create Board & Tasks
+## Phase 3: Create Board, Workers & Tasks
 
 Use the existing board for the project. One project = one board.
 
@@ -149,6 +149,32 @@ Use the existing board for the project. One project = one board.
 ak get board                   # find the project board
 # Only create a new board if this is a new product with no board yet
 ```
+
+Before creating tasks, choose or create the workers that will own them. Read `references/runtime-delegation.md`.
+
+Check existing agents. For a typical project you need:
+- **fullstack-developer** or backend + frontend split
+
+Only assign work to agents whose `runtime_available` is `true`. If the best role exists only on an unavailable runtime, create a new worker with the same role, soul, skills, and handoff settings on an available runtime.
+
+Create missing agents before task creation:
+```yaml
+kind: Agent
+metadata:
+  name: <human-username>
+  annotations:
+    agent-kanban.dev/display-name: "<Human Name>"
+spec:
+  runtime: <available-runtime>
+  role: "<role>"
+  bio: "<durable responsibility>"
+  skills:
+    - <source>@<skill>
+  subagents:
+    - <worker-agent-id>
+```
+
+The leader must generate the Agent YAML from the project context and apply it with `ak apply -f <file>`. Do not use role templates. After creation, run `ak get agent -o json` and confirm the new worker is visible and `runtime_available: true` before assigning tasks.
 
 Create tasks with full specs. For each task:
 
@@ -160,13 +186,24 @@ Create tasks with full specs. For each task:
 3. **`--repo <id>`** — from `ak repo list`
 4. **`--priority`** — urgent/high/medium/low
 5. **`--labels`** — include version label (e.g. `v1.4.0`) plus category (backend, frontend, cli, etc.)
-6. **`--depends-on`** — task IDs this depends on
+6. **`--assign-to <agent-id>`** — worker chosen before task creation
+7. **`--depends-on`** — task IDs this depends on
 
 Create tasks in dependency order so earlier task IDs can be referenced:
 ```bash
-T1=$(ak create task --board $BOARD --title "..." --repo $REPO --priority high -o json | jq -r .id)
-T2=$(ak create task --board $BOARD --title "..." --repo $REPO --depends-on $T1 -o json | jq -r .id)
+T1=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT --priority high -o json | jq -r .id)
+T2=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT --depends-on $T1 -o json | jq -r .id)
 ```
+
+### Task Creation Best Practices
+
+- Create one task for one reviewable outcome. Split unrelated backend, frontend, CLI, and infra work.
+- Make each task independently claimable: no hidden chat context, no "continue from above" descriptions.
+- Put the exact files, APIs, commands, UI states, and acceptance checks in `--description`.
+- Assign every task at creation with `--assign-to`.
+- Use `--depends-on` for real blockers or overlapping files. Tasks touching the same files should be sequential.
+- Keep parallel tasks independent by file ownership and data model boundary.
+- Use stable labels: version plus area, such as `v1.4.0,backend` or `v1.4.0,cli`.
 
 ### Task Description Quality
 
@@ -195,23 +232,7 @@ POST /api/items — create item
 
 Vague descriptions produce vague code. Be specific.
 
-## Phase 4: Assign
-
-Before choosing or creating workers, read `references/runtime-delegation.md`.
-
-Tasks should already be assigned via `--assign-to` on create. If not, use `ak update task <id>` or recreate.
-
-Check existing agents. For a typical project you need:
-- **fullstack-developer** or backend + frontend split
-
-Only assign work to agents whose `runtime_available` is `true`. If the best role exists only on an unavailable runtime, create a new worker with the same role, soul, skills, and handoff settings on an available runtime.
-
-Create missing agents if needed:
-```bash
-ak create agent --template <template> --name "<Name>"
-```
-
-## Phase 5: Monitor & Merge
+## Phase 4: Monitor & Merge
 
 **Block on `ak wait board` instead of writing polling loops.** It streams tasks one at a time as they reach the filter status. Exit codes: 0 condition met, 2 task cancelled, 124 timeout.
 
@@ -311,6 +332,43 @@ rm -rf /tmp/ak-review-* playwright-report/ test-results/
 
 ### Completion:
 When all tasks are done, report the final summary to the user.
+
+## AK Command or Product Issues
+
+If the blocker appears to be an `ak` bug, missing capability, confusing UX, or documentation gap, file an issue in the official repo after collecting a minimal reproduction:
+
+```bash
+gh issue create \
+  --repo saltbo/agent-kanban \
+  --title "ak: <short problem summary>" \
+  --body "$(cat <<'EOF'
+## Summary
+<what failed or what capability is missing>
+
+## Command
+ak <command and flags>
+
+## Expected
+<what should have happened>
+
+## Actual
+<exact error text or observed behavior>
+
+## Context
+- ak version:
+- OS:
+- Runtime:
+- Auth type: user | machine | agent
+- Board/task/repo IDs, if relevant:
+
+## Reproduction
+1. <step>
+2. <step>
+EOF
+)"
+```
+
+Never include API keys, session tokens, private keys, `.env` contents, or private repository data. If `gh` is unavailable, open `https://github.com/saltbo/agent-kanban/issues/new` and paste the same content.
 
 ## Rules
 

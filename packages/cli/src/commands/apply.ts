@@ -23,7 +23,7 @@ export function registerApplyCommand(program: Command) {
           console.error(`Missing or invalid 'spec' field in document (kind: ${doc.kind})`);
           process.exit(1);
         }
-        await applyResource(client, doc.kind, doc.spec, fmt);
+        await applyResource(client, doc.kind, doc.spec, fmt, doc.metadata);
       }
     });
 }

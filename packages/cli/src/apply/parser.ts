@@ -3,6 +3,7 @@ import { parseAllDocuments } from "yaml";
 
 export interface ResourceDoc {
   kind: string;
+  metadata?: Record<string, unknown>;
   spec: Record<string, unknown>;
 }
 
@@ -40,15 +41,17 @@ export function parseResourceDocs(file: string): ResourceDoc[] {
     const docs = Array.isArray(parsed) ? parsed : [parsed];
     return docs.map((d: any) => ({
       kind: d.kind as string,
+      metadata: d.metadata as Record<string, unknown> | undefined,
       spec: convertSpec(d.spec as Record<string, unknown>),
     }));
   }
 
   const documents = parseAllDocuments(content);
   return documents.map((doc) => {
-    const data = doc.toJS() as { kind: string; spec: Record<string, unknown> };
+    const data = doc.toJS() as { kind: string; metadata?: Record<string, unknown>; spec: Record<string, unknown> };
     return {
       kind: data.kind,
+      metadata: data.metadata,
       spec: convertSpec(data.spec),
     };
   });

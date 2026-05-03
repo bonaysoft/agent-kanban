@@ -130,6 +130,16 @@ ak create task \
 
 **Dependencies**: If this task touches files that overlap with other in-flight tasks, add `--depends-on <task-id>`. Create all related tasks upfront with DAG dependencies — don't wait for one to finish before creating the next.
 
+### Task Creation Best Practices
+
+- Create one task for one reviewable outcome. If the request has unrelated backend, frontend, and CLI work, split it.
+- Make the title an action phrase, not a vague topic.
+- Put implementation constraints and acceptance checks in `--description`; do not rely on chat context.
+- Include concrete files, commands, endpoints, UI states, and error cases when known.
+- Assign only to worker agents with `runtime_available: true`.
+- Use `--depends-on` for real blockers or overlapping files. Parallel tasks must not fight over the same files.
+- Prefer `medium` priority unless the work blocks other tasks, fixes production breakage, or is explicitly urgent.
+
 Report to user: task ID, title, assigned agent.
 
 ## Phase 2: Monitor & Review
@@ -264,6 +274,42 @@ If a rejected task stays `in_progress` without being picked up:
 
 ### CI failure
 Investigate the failure. If it's a source bug, reject with details. If it's flaky CI, re-trigger.
+
+### AK command or product issue
+If the blocker appears to be an `ak` bug, missing capability, confusing UX, or documentation gap, file an issue in the official repo after collecting a minimal reproduction:
+
+```bash
+gh issue create \
+  --repo saltbo/agent-kanban \
+  --title "ak: <short problem summary>" \
+  --body "$(cat <<'EOF'
+## Summary
+<what failed or what capability is missing>
+
+## Command
+ak <command and flags>
+
+## Expected
+<what should have happened>
+
+## Actual
+<exact error text or observed behavior>
+
+## Context
+- ak version:
+- OS:
+- Runtime:
+- Auth type: user | machine | agent
+- Board/task/repo IDs, if relevant:
+
+## Reproduction
+1. <step>
+2. <step>
+EOF
+)"
+```
+
+Never include API keys, session tokens, private keys, `.env` contents, or private repository data. If `gh` is unavailable, open `https://github.com/saltbo/agent-kanban/issues/new` and paste the same content.
 
 ## Rules
 

@@ -1,4 +1,4 @@
-import { fetchTemplate, isBoardType, parseScheduledAt } from "@agent-kanban/shared";
+import { isBoardType, parseScheduledAt } from "@agent-kanban/shared";
 import type { Command } from "commander";
 import { createClient } from "../agent/leader.js";
 import type { ApiClient } from "../client/index.js";
@@ -100,62 +100,31 @@ export function registerCreateCommand(program: Command) {
     .description("Create an agent")
     .option("--name <name>", "Agent display name")
     .option("--username <username>", "Agent username")
-    .option("--template <slug>", "Agent template slug")
     .option("--bio <bio>", "Agent bio")
     .option("--soul <soul>", "Agent soul — persistent behavior instructions")
     .option("--role <role>", "Agent role")
     .option("--runtime <runtime>", "Agent runtime")
     .option("--model <model>", "Model to use")
-    .option("--kind <kind>", "Agent kind: worker, leader")
     .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
-    .option("--skills <skills>", "Comma-separated skill slugs")
+    .option("--skills <skills>", "Comma-separated installable skill refs (<source>@<skill>)")
     .option("--subagents <ids>", "Comma-separated worker agent IDs to install as task-local subagents")
     .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       const client = await createClient();
-      let body: Record<string, unknown>;
-
-      if (opts.template) {
-        const template = await fetchTemplate(opts.template);
-        const runtime = opts.runtime || template.runtime;
-        if (!runtime) {
-          console.error("Template has no runtime. Pass --runtime explicitly.");
-          process.exit(1);
-        }
-        const username = opts.username || template.username;
-        if (!username) {
-          console.error("--username is required (template has no default username)");
-          process.exit(1);
-        }
-        body = {
-          name: opts.name || template.name || username,
-          username,
-          bio: opts.bio || template.bio,
-          soul: opts.soul || template.soul,
-          role: opts.role || template.role,
-          kind: opts.kind,
-          handoff_to: opts.handoffTo ? opts.handoffTo.split(",").map((s: string) => s.trim()) : template.handoff_to,
-          runtime,
-          model: opts.model || template.model,
-          skills: opts.skills ? opts.skills.split(",").map((s: string) => s.trim()) : template.skills,
-          subagents: opts.subagents ? opts.subagents.split(",").map((s: string) => s.trim()) : undefined,
-        };
-      } else {
-        if (!opts.username) {
-          console.error("--username is required");
-          process.exit(1);
-        }
-        const runtime = opts.runtime || detectRuntime();
-        body = { name: opts.name || opts.username, username: opts.username, runtime };
-        if (opts.bio) body.bio = opts.bio;
-        if (opts.soul) body.soul = opts.soul;
-        if (opts.role) body.role = opts.role;
-        if (opts.kind) body.kind = opts.kind;
-        if (opts.handoffTo) body.handoff_to = opts.handoffTo.split(",").map((s: string) => s.trim());
-        if (opts.model) body.model = opts.model;
-        if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
-        if (opts.subagents) body.subagents = opts.subagents.split(",").map((s: string) => s.trim());
+      if (!opts.username) {
+        console.error("--username is required");
+        process.exit(1);
       }
+      const runtime = opts.runtime || detectRuntime();
+      const body: Record<string, unknown> = { name: opts.name || opts.username, username: opts.username, runtime };
+      if (opts.bio) body.bio = opts.bio;
+      if (opts.soul) body.soul = opts.soul;
+      if (opts.role) body.role = opts.role;
+      body.kind = "worker";
+      if (opts.handoffTo) body.handoff_to = opts.handoffTo.split(",").map((s: string) => s.trim());
+      if (opts.model) body.model = opts.model;
+      if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
+      if (opts.subagents) body.subagents = opts.subagents.split(",").map((s: string) => s.trim());
 
       const agent = await client.createAgent(body as any);
       const fmt = getOutputFormat(opts.output);

@@ -21,7 +21,37 @@ async function resolveRepoField(client: ApiClient, spec: Record<string, unknown>
   }
 }
 
-export async function applyResource(client: ApiClient, kind: string, spec: Record<string, unknown>, fmt: OutputFormat): Promise<void> {
+function agentBody(spec: Record<string, unknown>, metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  if ("kind" in spec) {
+    console.error("Agent resources create worker agents only. Remove spec.kind.");
+    process.exit(1);
+  }
+  if ("username" in spec || "name" in spec) {
+    console.error("Agent identity belongs in metadata.name and metadata.annotations, not spec.");
+    process.exit(1);
+  }
+  const username = metadata?.name;
+  if (typeof username !== "string" || username.length === 0) {
+    console.error("Agent resources require metadata.name.");
+    process.exit(1);
+  }
+  const annotations = metadata?.annotations as Record<string, unknown> | undefined;
+  const name = annotations?.["agent-kanban.dev/display-name"];
+  return {
+    ...spec,
+    username,
+    ...(typeof name === "string" && name.length > 0 ? { name } : {}),
+    kind: "worker",
+  };
+}
+
+export async function applyResource(
+  client: ApiClient,
+  kind: string,
+  spec: Record<string, unknown>,
+  fmt: OutputFormat,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
   const id = spec.id as string | undefined;
 
   switch (kind.toLowerCase()) {
@@ -49,12 +79,13 @@ export async function applyResource(client: ApiClient, kind: string, spec: Recor
       break;
     }
     case "agent": {
+      const body = agentBody(spec, metadata);
       if (id) {
-        const { id: _, ...body } = spec;
-        const agent = (await client.updateAgent(id, body)) as any;
+        const { id: _, username: _username, kind: _kind, ...updates } = body;
+        const agent = (await client.updateAgent(id, updates)) as any;
         output(agent, fmt, (a) => `Updated agent ${a.id}: ${a.name}`, { kind: "agent" });
       } else {
-        const agent = (await client.createAgent(spec as any)) as any;
+        const agent = (await client.createAgent(body as any)) as any;
         output(agent, fmt, (a) => `Created agent ${a.id}: ${a.name} (${a.role || "no role"})`, { kind: "agent" });
       }
       break;

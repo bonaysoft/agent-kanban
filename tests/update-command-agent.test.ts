@@ -17,13 +17,23 @@ vi.mock("../packages/cli/src/output.js", () => ({
 
 type CommandAction = (id: string, opts: Record<string, string | undefined>) => Promise<void>;
 
-function buildProgram(captureAction: (action: CommandAction) => void): any {
+type CapturedCommand = {
+  action?: CommandAction;
+  options: string[];
+};
+
+function buildProgram(captureAgent: (command: CapturedCommand) => void): any {
   const makeCommand = (name?: string): any => {
+    const captured: CapturedCommand = { options: [] };
     const command = {
       description: () => command,
-      option: () => command,
+      option: (flags: string) => {
+        captured.options.push(flags);
+        return command;
+      },
       action: (action: CommandAction) => {
-        if (name === "agent <id>") captureAction(action);
+        captured.action = action;
+        if (name === "agent <id>") captureAgent(captured);
         return command;
       },
       command: (childName: string) => makeCommand(childName),
@@ -36,17 +46,28 @@ function buildProgram(captureAction: (action: CommandAction) => void): any {
   };
 }
 
-async function runUpdateAgent(opts: Record<string, string | undefined>): Promise<void> {
+async function registerUpdateAgent(): Promise<CapturedCommand> {
   const { registerUpdateCommand } = await import("../packages/cli/src/commands/update.js");
-  let action!: CommandAction;
-  registerUpdateCommand(buildProgram((registeredAction) => (action = registeredAction)));
-  await action("agent-1", opts);
+  let agentCommand!: CapturedCommand;
+  registerUpdateCommand(buildProgram((command) => (agentCommand = command)));
+  return agentCommand;
+}
+
+async function runUpdateAgent(opts: Record<string, string | undefined>): Promise<void> {
+  const command = await registerUpdateAgent();
+  await command.action!("agent-1", opts);
 }
 
 describe("registerUpdateCommand agent", () => {
   beforeEach(() => {
     updateAgent.mockReset();
     output.mockReset();
+  });
+
+  it("does not expose a kind option", async () => {
+    const command = await registerUpdateAgent();
+
+    expect(command.options.some((option) => option.includes("--kind"))).toBe(false);
   });
 
   it("sends subagents as an array in the update payload", async () => {
@@ -65,13 +86,13 @@ describe("registerUpdateCommand agent", () => {
 
     await runUpdateAgent({
       name: "Renamed Agent",
-      skills: "agent-kanban,reviewer",
+      skills: "saltbo/agent-kanban@agent-kanban,trailofbits/skills@differential-review",
       subagents: "worker-1",
     });
 
     expect(updateAgent).toHaveBeenCalledWith("agent-1", {
       name: "Renamed Agent",
-      skills: ["agent-kanban", "reviewer"],
+      skills: ["saltbo/agent-kanban@agent-kanban", "trailofbits/skills@differential-review"],
       subagents: ["worker-1"],
     });
   });

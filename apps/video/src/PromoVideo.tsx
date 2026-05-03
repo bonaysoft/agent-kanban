@@ -101,13 +101,13 @@ const claudeUIEvents: ClaudeEvent[] = [
   },
   {
     type: "tool",
-    command: 'ak create agent --template fullstack-developer --name "Atlas"',
+    command: "ak apply -f agents/atlas.yaml",
     output: "Created agent a_atlas01: Atlas (developer)",
     at: P2 + 120,
   },
   {
     type: "tool",
-    command: 'ak create agent --template fullstack-developer --name "Nova"',
+    command: "ak apply -f agents/nova.yaml",
     output: "Created agent a_nova02: Nova (developer)",
     at: P2 + 140,
   },
