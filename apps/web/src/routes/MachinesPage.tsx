@@ -1,3 +1,4 @@
+import { type MachineRuntime, RUNTIME_LABELS } from "@agent-kanban/shared";
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { AddMachineSteps } from "../components/AddMachineSteps";
@@ -11,6 +12,18 @@ const statusDotColors: Record<string, string> = {
   online: "bg-success",
   offline: "bg-content-tertiary",
 };
+
+const runtimeStatusColors: Record<string, string> = {
+  ready: "text-accent bg-accent-soft",
+  limited: "text-warning bg-warning/10",
+  unauthorized: "text-error bg-error/10",
+  unhealthy: "text-error bg-error/10",
+  missing: "text-content-tertiary bg-surface-tertiary",
+};
+
+function runtimeLabel(runtime: MachineRuntime): string {
+  return `${RUNTIME_LABELS[runtime.name] ?? runtime.name}:${runtime.status}`;
+}
 
 type DialogStep = "choose" | "waiting";
 
@@ -128,9 +141,9 @@ export function MachinesPage() {
                   </div>
                   <div className="flex gap-1 ml-auto">
                     {machine.runtimes?.length > 0 ? (
-                      machine.runtimes.map((r: string) => (
-                        <span key={r} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">
-                          {r}
+                      machine.runtimes.map((runtime: MachineRuntime) => (
+                        <span key={runtime.name} className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${runtimeStatusColors[runtime.status]}`}>
+                          {runtimeLabel(runtime)}
                         </span>
                       ))
                     ) : (

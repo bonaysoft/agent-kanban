@@ -3,6 +3,7 @@ import { validateTransition } from "@agent-kanban/shared";
 import { HTTPException } from "hono/http-exception";
 import { getDefaultBoard } from "./boardRepo";
 import { type D1, MAX_TASK_PARTITION_ROWS, newLongId, parseJsonFields } from "./db";
+import { isRuntimeAvailable } from "./machineRepo";
 import { computeBlocked, detectCycle, getDependencies, setDependencies } from "./taskDeps";
 
 const parseTask = <T extends Task>(row: T) => parseJsonFields(row, ["labels", "input"]);
@@ -15,10 +16,18 @@ function enforceTransition(action: TaskActionType, currentStatus: TaskStatus, id
   }
 }
 
-async function assertAssignableWorkerAgent(db: D1, agentId: string, missingStatus: 400 | 404): Promise<void> {
-  const agent = await db.prepare("SELECT kind FROM agents WHERE id = ?").bind(agentId).first<{ kind: string }>();
+async function assertAssignableWorkerAgent(db: D1, ownerId: string, agentId: string, missingStatus: 400 | 404): Promise<void> {
+  const agent = await db
+    .prepare("SELECT kind, runtime FROM agents WHERE id = ? AND owner_id = ?")
+    .bind(agentId, ownerId)
+    .first<{ kind: string; runtime: string }>();
   if (!agent) throw new HTTPException(missingStatus, { message: "Agent not found" });
   if (agent.kind === "leader") throw new HTTPException(400, { message: "Cannot assign tasks to leader agents" });
+  if (!(await isRuntimeAvailable(db, ownerId, agent.runtime))) {
+    throw new HTTPException(409, {
+      message: `Runtime "${agent.runtime}" is not available on any online machine. Choose or create a worker that uses an available runtime.`,
+    });
+  }
 }
 
 export async function createTask(
@@ -64,7 +73,7 @@ export async function createTask(
   }
 
   if (input.assigned_to) {
-    await assertAssignableWorkerAgent(db, input.assigned_to, 400);
+    await assertAssignableWorkerAgent(db, ownerId, input.assigned_to, 400);
   }
 
   // Atomically allocate the next seq number via RETURNING
@@ -349,12 +358,16 @@ export async function assignTask(
   actorId: string,
   sessionId: string | null = null,
 ): Promise<Task | null> {
-  const task = await db.prepare("SELECT * FROM tasks WHERE id = ?").bind(taskId).first<Task>();
+  const task = await db
+    .prepare("SELECT t.*, b.owner_id as board_owner_id FROM tasks t JOIN boards b ON t.board_id = b.id WHERE t.id = ?")
+    .bind(taskId)
+    .first<Task & { board_owner_id: string }>();
   if (!task) return null;
   if (task.status !== "todo") throw new HTTPException(409, { message: "Can only assign tasks in todo status" });
   if (task.assigned_to) throw new HTTPException(409, { message: "Task is already assigned" });
 
-  await assertAssignableWorkerAgent(db, targetAgentId, 404);
+  const { board_owner_id: ownerId, ...taskRow } = task;
+  await assertAssignableWorkerAgent(db, ownerId, targetAgentId, 404);
 
   const now = new Date().toISOString();
   const logId = newLongId();
@@ -368,7 +381,7 @@ export async function assignTask(
       .bind(logId, taskId, actorType, actorId, sessionId, now),
   ]);
 
-  return parseTask({ ...task, assigned_to: targetAgentId, updated_at: now } as Task);
+  return parseTask({ ...taskRow, assigned_to: targetAgentId, updated_at: now } as Task);
 }
 
 export async function completeTask(

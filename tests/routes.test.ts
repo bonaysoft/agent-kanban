@@ -88,13 +88,15 @@ describe("routes", () => {
         name: "routes-machine",
         os: "darwin",
         version: "1.0.0",
-        runtimes: ["Claude Code"],
+        runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
         device_id: "test-device-routes",
       },
       apiKey,
     );
     expect(machineRes.status).toBe(201);
     machineId = ((await machineRes.json()) as { id: string }).id;
+    const heartbeatRes = await apiRequest("POST", `/api/machines/${machineId}/heartbeat`, {}, apiKey);
+    expect(heartbeatRes.status).toBe(200);
 
     const agent = await createTestAgent(env.DB, userId, { name: "Routes Agent", username: "routes-agent", runtime: "claude" });
     agentId = agent.id;
@@ -507,6 +509,7 @@ describe("routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.assigned_to).toBe(agentId);
+    expect(body).not.toHaveProperty("board_owner_id");
   });
 
   it("POST /api/tasks/:id/assign rejects leader agents (400)", async () => {
@@ -715,14 +718,109 @@ describe("routes", () => {
     expect(res.status).toBe(200);
   });
 
+  it("POST /api/machines/:id/heartbeat rejects a machine API key bound to another machine without mutating the target", async () => {
+    const { upsertMachine } = await import("../apps/web/server/machineRepo");
+    const target = await upsertMachine(env.DB, userId, {
+      name: "routes-target-machine",
+      os: "linux",
+      version: "1.0.0",
+      runtimes: [{ name: "codex", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+      device_id: `routes-target-device-${randomUUID()}`,
+    });
+    const before = await env.DB.prepare("SELECT status, version, runtimes, last_heartbeat_at FROM machines WHERE id = ?")
+      .bind(target.id)
+      .first<any>();
+
+    const res = await apiRequest(
+      "POST",
+      `/api/machines/${target.id}/heartbeat`,
+      {
+        version: "9.9.9",
+        runtimes: [{ name: "claude", status: "limited", reset_at: "2026-03-21T11:00:00Z", checked_at: "2026-03-21T10:30:00Z" }],
+      },
+      apiKey,
+    );
+    const body = (await res.json()) as any;
+    const after = await env.DB.prepare("SELECT status, version, runtimes, last_heartbeat_at FROM machines WHERE id = ?").bind(target.id).first<any>();
+
+    expect(res.status).toBe(403);
+    expect(body.error.message).toContain("API key is bound to a different machine");
+    expect(after).toEqual(before);
+  });
+
+  it("POST /api/machines/:id/heartbeat rejects invalid runtime status with 400", async () => {
+    const res = await apiRequest(
+      "POST",
+      `/api/machines/${machineId}/heartbeat`,
+      { runtimes: [{ name: "claude", status: "busy", checked_at: "2026-03-21T10:00:00Z" }] },
+      apiKey,
+    );
+    const body = (await res.json()) as any;
+
+    expect(res.status).toBe(400);
+    expect(body.error.message).toContain('Invalid runtime status "busy"');
+  });
+
+  it("POST /api/machines/:id/heartbeat rejects invalid runtime name with 400", async () => {
+    const res = await apiRequest(
+      "POST",
+      `/api/machines/${machineId}/heartbeat`,
+      { runtimes: [{ name: "bad-runtime", status: "ready", checked_at: "2026-03-21T10:00:00Z" }] },
+      apiKey,
+    );
+    const body = (await res.json()) as any;
+
+    expect(res.status).toBe(400);
+    expect(body.error.message).toContain('Invalid runtime "bad-runtime"');
+  });
+
   it("POST /api/machines/:id/heartbeat returns 404 for unknown machine", async () => {
-    const res = await apiRequest("POST", "/api/machines/nonexistent/heartbeat", { version: "1.0.0" }, apiKey);
+    const unboundApiKey = await createApiKeyForUser(userId);
+    const res = await apiRequest("POST", "/api/machines/nonexistent/heartbeat", { version: "1.0.0" }, unboundApiKey);
     expect(res.status).toBe(404);
   });
 
   it("POST /api/machines requires name, os, version, runtimes", async () => {
     const res = await apiRequest("POST", "/api/machines", { name: "incomplete" }, apiKey);
     expect(res.status).toBe(400);
+  });
+
+  it("POST /api/machines rejects invalid runtime status with 400", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "invalid-runtime-status-machine",
+        os: "darwin",
+        version: "1.0.0",
+        runtimes: [{ name: "claude", status: "busy", checked_at: "2026-03-21T10:00:00Z" }],
+        device_id: "invalid-runtime-status-device",
+      },
+      apiKey,
+    );
+    const body = (await res.json()) as any;
+
+    expect(res.status).toBe(400);
+    expect(body.error.message).toContain('Invalid runtime status "busy"');
+  });
+
+  it("POST /api/machines rejects invalid runtime name with 400", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/machines",
+      {
+        name: "invalid-runtime-name-machine",
+        os: "darwin",
+        version: "1.0.0",
+        runtimes: [{ name: "bad-runtime", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+        device_id: "invalid-runtime-name-device",
+      },
+      apiKey,
+    );
+    const body = (await res.json()) as any;
+
+    expect(res.status).toBe(400);
+    expect(body.error.message).toContain('Invalid runtime "bad-runtime"');
   });
 
   // ─── Agent Sessions ───

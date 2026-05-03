@@ -1,4 +1,4 @@
-import { RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
+import { type MachineRuntime, RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
@@ -32,6 +32,18 @@ const agentStatusDotColors: Record<string, string> = {
   working: "bg-accent animate-pulse-glow",
   offline: "bg-warning",
 };
+
+const runtimeStatusColors: Record<string, string> = {
+  ready: "text-accent bg-accent-soft",
+  limited: "text-warning bg-warning/10",
+  unauthorized: "text-error bg-error/10",
+  unhealthy: "text-error bg-error/10",
+  missing: "text-content-tertiary bg-surface-tertiary",
+};
+
+function runtimeLabel(runtime: MachineRuntime): string {
+  return `${RUNTIME_LABELS[runtime.name] ?? runtime.name}:${runtime.status}`;
+}
 
 export function MachineDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -125,9 +137,9 @@ export function MachineDetailPage() {
             <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
             {runtimes.length > 0 ? (
               <div className="flex gap-1.5 flex-wrap">
-                {runtimes.map((r: string) => (
-                  <span key={r} className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded">
-                    {r}
+                {runtimes.map((runtime: MachineRuntime) => (
+                  <span key={runtime.name} className={`text-[11px] font-mono px-2 py-0.5 rounded ${runtimeStatusColors[runtime.status]}`}>
+                    {runtimeLabel(runtime)}
                   </span>
                 ))}
               </div>

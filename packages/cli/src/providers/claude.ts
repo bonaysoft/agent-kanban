@@ -378,6 +378,10 @@ export const claudeProvider: AgentProvider = {
   name: "claude",
   label: "Claude Code",
 
+  checkAvailability() {
+    return readOAuthToken() ? { status: "ready" } : { status: "unauthorized", detail: "Claude Code is not logged in" };
+  },
+
   execute(opts: ExecuteOpts): Promise<AgentHandle> {
     const systemPrompt = opts.systemPromptFile ? readFileSync(opts.systemPromptFile, "utf-8") : undefined;
     const abortController = new AbortController();

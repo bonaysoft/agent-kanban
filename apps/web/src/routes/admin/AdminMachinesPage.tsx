@@ -1,3 +1,4 @@
+import type { MachineRuntime } from "@agent-kanban/shared";
 import { useEffect, useState } from "react";
 import { formatRelative } from "../../components/TaskDetailFields";
 import { Skeleton } from "../../components/ui/skeleton";
@@ -16,7 +17,7 @@ interface AdminMachine {
   status: string;
   os: string;
   version: string;
-  runtimes: string[];
+  runtimes: MachineRuntime[];
   owner_name: string | null;
   owner_email: string | null;
   session_count: number;

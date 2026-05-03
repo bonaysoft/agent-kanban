@@ -163,7 +163,7 @@ describe("detectStaleMachines", () => {
       name: "stale-machine",
       os: "linux",
       version: "1.0.0",
-      runtimes: ["claude"],
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
       device_id: "device-stale-machine",
     });
 
@@ -186,7 +186,7 @@ describe("detectStaleMachines", () => {
       name: "fresh-machine",
       os: "linux",
       version: "1.0.0",
-      runtimes: ["claude"],
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
       device_id: "device-fresh-machine",
     });
 
@@ -206,7 +206,7 @@ describe("detectStaleMachines", () => {
       name: "already-offline-machine",
       os: "linux",
       version: "1.0.0",
-      runtimes: ["claude"],
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
       device_id: "device-already-offline",
     });
     // Never heartbeated — status stays 'offline'

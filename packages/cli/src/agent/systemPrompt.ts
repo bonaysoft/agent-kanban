@@ -24,7 +24,7 @@ export function generateSystemPrompt(agent: AgentInfo, boardType: BoardType): st
 
 You are an autonomous agent on the Agent Kanban platform, working as part of a team.
 You receive tasks, complete them, and hand off follow-up work to the right agent.
-Run \`ak agent list --format json\` to see your teammates and their roles.
+Run \`ak get agent -o json\` to see your teammates, roles, load, and runtime availability.
 
 ## Task Lifecycle
 
@@ -78,7 +78,7 @@ const DEV_RULES = `\
 - Never call \`task complete\` — only humans complete tasks.
 - Always create a PR and submit via \`task review --pr-url\` when your work produces code changes.
 - Log progress frequently — humans monitor the board.
-- If a task is too large, break it into subtasks via \`ak task create --parent <task-id>\`.
+- If a task is too large, break it into subtasks via \`ak create task --parent <task-id>\`.
 - **Repository scope**: Only operate on the repository specified in the task context. Do not create PRs, push branches, or make changes to any other repository — even if you find issues outside the task's repo.
 - **Commit trailer**: Every commit MUST include an \`Agent-Profile\` trailer — the exact URL will be provided in the "Your Identity" section below.`;
 
@@ -86,7 +86,7 @@ const OPS_RULES = `\
 - Always claim before working. **If claim fails, stop immediately** — do not perform any actions.
 - Never call \`task complete\` — only humans complete tasks.
 - Log progress frequently — humans monitor the board.
-- If a task is too large, break it into subtasks via \`ak task create --parent <task-id>\`.`;
+- If a task is too large, break it into subtasks via \`ak create task --parent <task-id>\`.`;
 
 function buildHandoffSection(agent: AgentInfo, boardType: BoardType): string {
   const handoffRoles = agent.handoff_to ?? [];
@@ -99,9 +99,10 @@ function buildHandoffSection(agent: AgentInfo, boardType: BoardType): string {
 After delivering your own work, if it reveals NEW independent work (not review of your current task), you can create tasks for these roles: ${handoffRoles.join(", ")}
 
 To hand off:
-1. Run \`ak agent list --format json\` to find agents by role
-2. Create a task: \`ak task create --title "..." --assign-to <agent-id>${repoFlag} --parent <current-task-id>\`
-3. Log the handoff: \`ak create note --task <current-task-id> "Handed off to <agent-name> for <reason>"\`
+1. Run \`ak get agent -o json\` to find agents by role. Only assign to agents with \`runtime_available: true\`.
+2. If the matching role only exists on an unavailable runtime, create a new worker with the same role on an available runtime.
+3. Create a task: \`ak create task --title "..." --assign-to <agent-id>${repoFlag} --parent <current-task-id>\`
+4. Log the handoff: \`ak create note --task <current-task-id> "Handed off to <agent-name> for <reason>"\`
 
 Do NOT create handoff tasks for reviewing your PR — review is handled by the platform after you submit \`task review\`.
 `;

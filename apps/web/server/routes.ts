@@ -4,6 +4,7 @@ import {
   findInvalidSkillRef,
   isBoardType,
   isValidUsername,
+  type MachineRuntime,
   parseScheduledAt,
   RESERVED_ROLES,
 } from "@agent-kanban/shared";
@@ -29,7 +30,7 @@ import { cliVersionMiddleware } from "./cliVersion";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
 import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
-import { deleteMachine, getMachine, listAllMachines, listMachines, updateMachine, upsertMachine } from "./machineRepo";
+import { deleteMachine, getMachine, listAllMachines, listMachines, normalizeMachineRuntimes, updateMachine, upsertMachine } from "./machineRepo";
 import { createMailbox, deleteMailbox, getEmail, getInbox } from "./mailsService";
 import { createMessage, listMessages } from "./messageRepo";
 import { metricsMiddleware } from "./metrics";
@@ -67,6 +68,17 @@ function assertValidSkillRefs(skills: unknown) {
   const invalid = findInvalidSkillRef(skills);
   if (invalid) {
     throw new HTTPException(400, { message: `Invalid skill "${invalid}". Use source/repo@skill-name format.` });
+  }
+}
+
+function assertValidMachineRuntimes(runtimes: unknown): void {
+  if (!Array.isArray(runtimes)) {
+    throw new HTTPException(400, { message: "runtimes must be an array" });
+  }
+  try {
+    normalizeMachineRuntimes(runtimes as MachineRuntime[], new Date().toISOString());
+  } catch (err) {
+    throw new HTTPException(400, { message: err instanceof Error ? err.message : "Invalid runtimes" });
   }
 }
 
@@ -313,16 +325,18 @@ api.use("/api/*", metricsMiddleware);
 // ─── Machines ───
 
 api.post("/api/machines/:id/heartbeat", async (c) => {
-  const body = await c.req.json<{ version?: string; runtimes?: string[]; usage_info?: any }>();
+  const body = await c.req.json<{ version?: string; runtimes?: MachineRuntime[]; usage_info?: any }>();
+  if (body.runtimes !== undefined) assertValidMachineRuntimes(body.runtimes);
   const machineId = c.req.param("id");
-  const updated = await updateMachine(c.env.DB, machineId, c.get("ownerId"), body);
-  if (!updated) throw new HTTPException(404, { message: "Machine not found" });
-
-  // Bind API key to this machine if unbound; reject if bound to a different machine
   const boundMachineId = c.get("machineId");
   if (boundMachineId && boundMachineId !== machineId) {
     throw new HTTPException(403, { message: "API key is bound to a different machine" });
   }
+
+  const updated = await updateMachine(c.env.DB, machineId, c.get("ownerId"), body);
+  if (!updated) throw new HTTPException(404, { message: "Machine not found" });
+
+  // Bind API key to this machine if unbound.
   if (!boundMachineId) {
     const auth = createAuth(c.env);
     const authCtx = await auth.$context;
@@ -348,10 +362,11 @@ api.get("/api/machines/:id", async (c) => {
 });
 
 api.post("/api/machines", async (c) => {
-  const body = await c.req.json<{ name: string; os: string; version: string; runtimes: string[]; device_id: string }>();
+  const body = await c.req.json<{ name: string; os: string; version: string; runtimes: MachineRuntime[]; device_id: string }>();
   if (!body.name || !body.os || !body.version || !body.runtimes || !body.device_id) {
     throw new HTTPException(400, { message: "name, os, version, runtimes, and device_id are required" });
   }
+  assertValidMachineRuntimes(body.runtimes);
   const machine = await upsertMachine(c.env.DB, c.get("ownerId"), body);
 
   // Registration always binds the API key to the upserted machine

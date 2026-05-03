@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type BoardType, isBoardType } from "@agent-kanban/shared";
+import { type AgentRuntime, type BoardType, isBoardType } from "@agent-kanban/shared";
 import { type AgentInfo, generateSystemPrompt, writePromptFile } from "../agent/systemPrompt.js";
 import { AgentClient, type ApiClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
@@ -138,22 +138,24 @@ export async function dispatchTasks(
 
   if (available.length === 0) return false;
 
-  const agentCache = new Map<string, string>();
+  const agentCache = new Map<string, { runtime: AgentRuntime | null; available: boolean }>();
   let task: any = null;
   for (const t of available) {
-    let runtime = agentCache.get(t.assigned_to);
-    if (runtime === undefined) {
+    let agentState = agentCache.get(t.assigned_to);
+    if (agentState === undefined) {
       const agent = (await apiCallOptional("getAgent", () => client.getAgent(t.assigned_to))) as any;
       if (!agent) {
         logger.warn(`Agent ${t.assigned_to} not found, skipping task ${t.id}`);
-        agentCache.set(t.assigned_to, "");
+        agentCache.set(t.assigned_to, { runtime: null, available: false });
         continue;
       }
-      runtime = normalizeRuntime(agent.runtime ?? "claude");
-      agentCache.set(t.assigned_to, runtime);
+      agentState = { runtime: normalizeRuntime(agent.runtime ?? "claude"), available: agent.runtime_available !== false };
+      agentCache.set(t.assigned_to, agentState);
     }
-    if (!runtime) continue;
-    if (!rateLimiter.isRuntimePaused(runtime)) {
+    if (!agentState.runtime || !agentState.available) continue;
+    const localAvailability = getProvider(agentState.runtime).checkAvailability?.();
+    if (localAvailability && localAvailability.status !== "ready") continue;
+    if (!rateLimiter.isRuntimePaused(agentState.runtime)) {
       task = t;
       break;
     }

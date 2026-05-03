@@ -85,9 +85,11 @@ export function formatAgentList(agents: any[]): string {
   const lines = agents.map((a) => {
     const status = `[${a.status}]`.padEnd(10);
     const role = a.role ? `(${a.role})` : "";
-    const runtime = a.runtime ?? "";
+    const runtime = a.runtime_available === false ? `${a.runtime ?? ""}:unavailable` : (a.runtime ?? "");
+    const load =
+      a.queued_task_count != null || a.active_task_count != null ? ` queued=${a.queued_task_count ?? 0} active=${a.active_task_count ?? 0}` : "";
     const bio = a.bio ? ` — ${a.bio}` : "";
-    return `  ${a.id}  ${status} ${a.name} ${role} ${runtime}${bio}`.trimEnd();
+    return `  ${a.id}  ${status} ${a.name} ${role} ${runtime}${load}${bio}`.trimEnd();
   });
 
   return lines.join("\n");
@@ -159,10 +161,13 @@ export function formatAgent(agent: any): string {
   if (agent.role) lines.push(`  Role:     ${agent.role}`);
   if (agent.bio) lines.push(`  Bio:      ${agent.bio}`);
   lines.push(`  Runtime:  ${agent.runtime}`);
+  if (agent.runtime_available !== undefined) lines.push(`  Runnable: ${agent.runtime_available ? "yes" : "no"}`);
   if (agent.model) lines.push(`  Model:    ${agent.model}`);
   if (agent.skills?.length) lines.push(`  Skills:   ${agent.skills.join(", ")}`);
   if (agent.handoff_to?.length) lines.push(`  Handoff:  ${agent.handoff_to.join(", ")}`);
   if (agent.task_count != null) lines.push(`  Tasks:    ${agent.task_count}`);
+  if (agent.queued_task_count != null) lines.push(`  Queued:   ${agent.queued_task_count}`);
+  if (agent.active_task_count != null) lines.push(`  Active:   ${agent.active_task_count}`);
   return lines.join("\n");
 }
 

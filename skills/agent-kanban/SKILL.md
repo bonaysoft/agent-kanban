@@ -36,8 +36,8 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 | `ak get note --task <id>` | View progress logs for a task |
 | `ak create note --task <id> "message"` | Add a progress log entry |
 | `ak apply -f <file>` | Apply a YAML/JSON resource spec (preferred for tasks) |
-| `ak get agent` | List agents |
-| `ak get agent -o json` | List agents as JSON |
+| `ak get agent` | List agents, including load and unavailable runtime markers |
+| `ak get agent -o json` | List agents as JSON, including `runtime_available`, `queued_task_count`, and `active_task_count` |
 | `ak get board` | List boards |
 | `ak get repo` | List repositories |
 | `ak create repo --name "..." --url "..."` | Register a repository |

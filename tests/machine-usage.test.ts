@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { UsageInfo } from "@agent-kanban/shared";
+import type { MachineRuntime, UsageInfo } from "@agent-kanban/shared";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -10,6 +10,10 @@ const MIGRATIONS_DIR = join(__dirname, "../apps/web/migrations");
 
 let db: D1Database;
 let mf: Miniflare;
+
+const checkedAt = "2026-03-21T10:00:00Z";
+const claudeRuntime: MachineRuntime = { name: "claude", status: "ready", checked_at: checkedAt };
+const codexRuntime: MachineRuntime = { name: "codex", status: "ready", checked_at: checkedAt };
 
 async function applyMigrations(db: D1Database) {
   const files = [
@@ -63,13 +67,13 @@ describe("machine usage tracking", () => {
       name: "test-machine",
       os: "darwin arm64",
       version: "1.0.0",
-      runtimes: ["Claude Code"],
+      runtimes: [claudeRuntime],
       device_id: "test-device-usage",
     });
     machineId = machine.id;
     expect(machine.os).toBe("darwin arm64");
     expect(machine.version).toBe("1.0.0");
-    expect(machine.runtimes).toEqual(["Claude Code"]);
+    expect(machine.runtimes).toEqual([claudeRuntime]);
     expect(machine.usage_info).toBeNull();
   });
 
@@ -103,7 +107,7 @@ describe("machine usage tracking", () => {
     const machine = await getMachine(db, machineId, "user-001");
 
     expect(machine).toBeTruthy();
-    expect(machine!.runtimes).toEqual(["Claude Code"]);
+    expect(machine!.runtimes).toEqual([claudeRuntime]);
     expect(typeof machine!.usage_info).toBe("object");
     expect(machine!.usage_info!.windows[0].utilization).toBe(23.5);
   });
@@ -139,11 +143,11 @@ describe("machine usage tracking", () => {
     const { updateMachine: heartbeat } = await import("../apps/web/server/machineRepo");
     const machine = await heartbeat(db, machineId, "user-001", {
       version: "2.0.0",
-      runtimes: ["Claude Code", "Codex"],
+      runtimes: [claudeRuntime, codexRuntime],
     });
 
     expect(machine.version).toBe("2.0.0");
-    expect(machine.runtimes).toEqual(["Claude Code", "Codex"]);
+    expect(machine.runtimes).toEqual([claudeRuntime, codexRuntime]);
   });
 
   it("heartbeat updating only version preserves runtimes", async () => {
@@ -151,7 +155,7 @@ describe("machine usage tracking", () => {
     const machine = await heartbeat(db, machineId, "user-001", { version: "2.1.0" });
 
     expect(machine.version).toBe("2.1.0");
-    expect(machine.runtimes).toEqual(["Claude Code", "Codex"]);
+    expect(machine.runtimes).toEqual([claudeRuntime, codexRuntime]);
   });
 
   it("runtimes are parsed as JSON array from DB reads", async () => {
@@ -159,7 +163,7 @@ describe("machine usage tracking", () => {
 
     const single = await getMachine(db, machineId, "user-001");
     expect(Array.isArray(single!.runtimes)).toBe(true);
-    expect(single!.runtimes).toEqual(["Claude Code", "Codex"]);
+    expect(single!.runtimes).toEqual([claudeRuntime, codexRuntime]);
 
     const list = await listMachines(db, "user-001");
     const m = list.find((m) => m.id === machineId)!;

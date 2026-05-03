@@ -1,13 +1,14 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { arch, hostname, platform, release } from "node:os";
+import type { MachineRuntime } from "@agent-kanban/shared";
 import { MachineClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
 import { generateDeviceId } from "../device.js";
 import { createLogger } from "../logger.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders, getProvider } from "../providers/registry.js";
-import type { HistoryEvent } from "../providers/types.js";
+import type { AgentProvider, HistoryEvent } from "../providers/types.js";
 import { getSessionManager } from "../session/manager.js";
 import { migrateLegacySessions } from "../session/store.js";
 import { getVersion } from "../version.js";
@@ -47,25 +48,40 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   }
 
   const client = new MachineClient();
+  const availableProviders = getAvailableProviders();
+  let loop: DaemonLoop;
+  let sendHeartbeat: (() => Promise<void>) | null = null;
+  const rateLimiter = new RateLimiter({
+    onResumed: (runtime) => {
+      sendHeartbeat?.().catch((e) => logger.warn(`Heartbeat failed after rate-limit resume: ${(e as Error).message}`));
+      loop.resumeRateLimitedSessions(runtime).catch((e) => logger.error(`Resume error: ${(e as Error).message}`));
+    },
+  });
 
-  const machineInfo = getMachineInfo();
+  const machineInfo = getMachineInfo(availableProviders, rateLimiter);
   const deviceId = generateDeviceId();
   const machine = await client.registerMachine({ ...machineInfo, device_id: deviceId });
   const machineId = machine.id;
   logger.info(`Machine ready: ${machineId} (device: ${deviceId})`);
 
-  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: machineInfo.runtimes });
+  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: buildRuntimeStates(availableProviders, rateLimiter) });
   migrateLegacySessions();
   await cleanupStaleSessions(client, machineId);
   await auditOrphanedTasks(client, machineId);
-  logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${machineInfo.runtimes.join(", ") || "none"})`);
+  logger.info(`Machine online: ${machineInfo.name} (${machineInfo.os}, runtimes: ${formatRuntimeNames(machineInfo.runtimes) || "none"})`);
 
   const MIN_POLL_INTERVAL = 5000;
   const pollInterval = Math.max(opts.pollInterval || 10000, MIN_POLL_INTERVAL);
-  const availableProviders = getAvailableProviders();
 
   const usageCollector = new UsageCollector({ providers: availableProviders });
   usageCollector.start();
+  sendHeartbeat = async () => {
+    await client.heartbeat(machineId, {
+      version: machineInfo.version,
+      runtimes: buildRuntimeStates(availableProviders, rateLimiter),
+      usage_info: usageCollector.getSnapshot(),
+    });
+  };
 
   const prMonitor = new PrMonitor(client);
 
@@ -77,17 +93,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     logger.warn(`Tunnel connection failed: ${err instanceof Error ? err.message : err}`);
   }
 
-  let loop: DaemonLoop;
-
-  const rateLimiter = new RateLimiter({
-    onResumed: (runtime) => loop.resumeRateLimitedSessions(runtime).catch((e) => logger.error(`Resume error: ${(e as Error).message}`)),
-  });
-
   const pool = new RuntimePool(
     client,
     { onSlotFreed: () => loop.onSlotFreed() },
     {
-      onRateLimited: (runtime, resetAt) => rateLimiter.pause(runtime, resetAt),
+      onRateLimited: (runtime, resetAt) => {
+        rateLimiter.pause(runtime, resetAt);
+        sendHeartbeat?.().catch((e) => logger.warn(`Heartbeat failed after rate limit: ${(e as Error).message}`));
+      },
       onRateLimitResumed: (runtime) => rateLimiter.resumeRateLimit(runtime),
     },
     opts.taskTimeout,
@@ -114,11 +127,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   const heartbeatInterval = setInterval(() => {
     (async () => {
-      await client.heartbeat(machineId!, {
-        version: machineInfo.version,
-        runtimes: machineInfo.runtimes,
-        usage_info: usageCollector.getSnapshot(),
-      });
+      await sendHeartbeat?.();
       await cleanupLeaderSessions(client);
     })().catch((err: any) => logger.warn(`Heartbeat failed: ${err.message}`));
   }, 30000);
@@ -141,7 +150,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   logger.info(
-    `Daemon started (PID ${process.pid}, v${machineInfo.version}, max_concurrent=${opts.maxConcurrent}, runtimes=${machineInfo.runtimes.join(",") || "none"})`,
+    `Daemon started (PID ${process.pid}, v${machineInfo.version}, max_concurrent=${opts.maxConcurrent}, runtimes=${formatRuntimeNames(machineInfo.runtimes) || "none"})`,
   );
 
   prMonitor.start();
@@ -156,8 +165,24 @@ function removePidFile(): void {
   }
 }
 
-function getMachineInfo() {
+function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter) {
   const os = `${platform()} ${arch()} ${release()}`;
-  const runtimes = getAvailableProviders().map((p) => p.label);
+  const runtimes = buildRuntimeStates(providers, rateLimiter);
   return { name: hostname(), os, version: getVersion(), runtimes };
+}
+
+function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateLimiter): MachineRuntime[] {
+  const checked_at = new Date().toISOString();
+  return providers.map((provider) => {
+    const reset_at = rateLimiter.pauseResetAt(provider.name);
+    if (reset_at) {
+      return { name: provider.name, status: "limited", detail: "runtime paused by rate limiter", reset_at, checked_at };
+    }
+    const availability = provider.checkAvailability?.() ?? { status: "ready" };
+    return { name: provider.name, ...availability, checked_at };
+  });
+}
+
+function formatRuntimeNames(runtimes: MachineRuntime[]): string {
+  return runtimes.map((runtime) => `${runtime.name}:${runtime.status}`).join(",");
 }

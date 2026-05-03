@@ -57,6 +57,11 @@ export class RateLimiter {
     return this.pausedRuntimes.has(runtime);
   }
 
+  pauseResetAt(runtime: string): string | null {
+    const pause = this.pausedRuntimes.get(runtime);
+    return pause ? new Date(pause.resumeMs).toISOString() : null;
+  }
+
   stop(): void {
     for (const p of this.pausedRuntimes.values()) clearTimeout(p.timer);
     this.pausedRuntimes.clear();

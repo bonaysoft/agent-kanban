@@ -922,7 +922,13 @@ describe("ApiClient method stubs", () => {
   it("registerMachine posts to /api/machines", async () => {
     const c = await makeAgentClient();
     stubOk({ id: "m1", name: "my-machine" });
-    await c.registerMachine({ name: "box", os: "linux", version: "1.0", runtimes: ["claude"], device_id: "dev-1" });
+    await c.registerMachine({
+      name: "box",
+      os: "linux",
+      version: "1.0",
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+      device_id: "dev-1",
+    });
     const [url, opts] = lastCall();
     expect(url).toContain("/api/machines");
     expect(opts.method).toBe("POST");

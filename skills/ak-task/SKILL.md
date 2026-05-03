@@ -44,7 +44,7 @@ Parse the user's input:
 
 ```bash
 ak get board                   # pick the right board
-ak get agent                   # available agents
+ak get agent -o json           # available agents, load, runtime_available
 ak get repo                    # registered repos
 ```
 
@@ -124,7 +124,7 @@ ak create task \
   --labels "<comma-separated>"
 ```
 
-**`--assign-to` is mandatory.** Always include it on create.
+**`--assign-to` is mandatory.** Always include it on create. Only assign to an agent whose `runtime_available` is `true`. If the right role only exists on an unavailable runtime, create a new worker with the same role on an available runtime and assign to that worker.
 
 **Dependencies**: If this task touches files that overlap with other in-flight tasks, add `--depends-on <task-id>`. Create all related tasks upfront with DAG dependencies — don't wait for one to finish before creating the next.
 

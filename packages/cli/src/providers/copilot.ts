@@ -277,6 +277,10 @@ export const copilotProvider: AgentProvider = {
   name: "copilot",
   label: "GitHub Copilot",
 
+  checkAvailability() {
+    return readGhToken() ? { status: "ready" } : { status: "unauthorized", detail: "GitHub CLI is not authenticated" };
+  },
+
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
     const systemPrompt = opts.systemPromptFile ? readFileSync(opts.systemPromptFile, "utf-8") : undefined;
 

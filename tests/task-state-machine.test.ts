@@ -292,6 +292,15 @@ describe("task lifecycle repo functions", () => {
     const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(env.DB, userId, "sm-board", "ops");
     boardId = board.id;
+    const { updateMachine, upsertMachine } = await import("../apps/web/server/machineRepo");
+    const machine = await upsertMachine(env.DB, userId, {
+      name: "sm-runtime-machine",
+      os: "darwin",
+      version: "1.0.0",
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+      device_id: "sm-runtime-machine-device",
+    });
+    await updateMachine(env.DB, machine.id, userId, {});
     const agent = await createTestAgent(env.DB, userId, { name: "SM Test Agent", username: "sm-test-agent", runtime: "claude" });
     testAgentId = agent.id;
     const agent2 = await createTestAgent(env.DB, userId, { name: "SM Agent 2", username: "sm-agent-2", runtime: "claude" });
@@ -630,12 +639,13 @@ describe("task lifecycle HTTP permissions", () => {
         name: "sm-machine",
         os: "darwin",
         version: "1.0.0",
-        runtimes: ["Claude Code"],
+        runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
         device_id: "test-device-state-machine",
       },
       apiKey,
     );
     _machineId = ((await res.json()) as any).id;
+    await apiRequest("POST", `/api/machines/${_machineId}/heartbeat`, {}, apiKey);
 
     // Create agent
     const agent = await createTestAgent(env.DB, userId, { name: "SM Agent", username: "sm-agent", runtime: "claude" });

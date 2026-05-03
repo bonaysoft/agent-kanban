@@ -454,7 +454,16 @@ describe("user assigns task to agent", () => {
   it("setup", async () => {
     const { createBoard } = await import("../apps/web/server/boardRepo");
     const { createTask } = await import("../apps/web/server/taskRepo");
+    const { updateMachine, upsertMachine } = await import("../apps/web/server/machineRepo");
     userId = await seedUser(env.DB, "user-assign", "assign@test.com");
+    const machine = await upsertMachine(env.DB, userId, {
+      name: "assign-runtime-machine",
+      os: "test",
+      version: "1.0",
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+      device_id: "test-device-redesign-assign-runtime",
+    });
+    await updateMachine(env.DB, machine.id, userId, {});
     const agent = await createTestAgent(env.DB, userId, { name: "AssignAgent", username: "assign-agent", runtime: "claude" });
     agentId = agent.id;
     const board = await createBoard(env.DB, userId, "assign-board", "ops");
@@ -466,6 +475,7 @@ describe("user assigns task to agent", () => {
     const { assignTask } = await import("../apps/web/server/taskRepo");
     const task = await assignTask(env.DB, taskId, agentId, "machine", "system");
     expect(task!.assigned_to).toBe(agentId);
+    expect(task).not.toHaveProperty("board_owner_id");
     expect(task!.status).toBe("todo"); // assign doesn't change status
   });
 

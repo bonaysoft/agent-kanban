@@ -85,7 +85,7 @@ The scaffold must contain enough structure for agents to start writing code imme
 
 ```bash
 ak get board                   # existing boards
-ak get agent                   # available agents
+ak get agent -o json           # available agents, load, runtime_available
 ak get repo                    # registered repos
 git remote -v                  # repo URL (use this, never guess)
 ```
@@ -201,6 +201,8 @@ Tasks should already be assigned via `--assign-to` on create. If not, use `ak up
 
 Check existing agents. For a typical project you need:
 - **fullstack-developer** or backend + frontend split
+
+Only assign work to agents whose `runtime_available` is `true`. If the best role exists only on an unavailable runtime, create a new worker with the same role, soul, skills, and handoff settings on an available runtime.
 
 Create missing agents if needed:
 ```bash

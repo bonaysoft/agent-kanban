@@ -198,6 +198,10 @@ export const codexProvider: AgentProvider = {
   name: "codex",
   label: "Codex CLI",
 
+  checkAvailability() {
+    return readAccessToken() || process.env.OPENAI_API_KEY ? { status: "ready" } : { status: "unauthorized", detail: "Codex is not logged in" };
+  },
+
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
     const model = resolveCodexModel(opts) ?? "o3";
     let resumeToken: string | undefined = opts.resumeToken;

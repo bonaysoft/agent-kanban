@@ -139,7 +139,7 @@ describe("machine → agent session flow", () => {
         name: "test-machine-01",
         os: "darwin arm64",
         version: "1.0.0",
-        runtimes: ["Claude Code"],
+        runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
         device_id: "test-device-agent-flow",
       },
       apiKey,

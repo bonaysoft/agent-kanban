@@ -136,13 +136,15 @@ describe("CLI ApiClient agent JWT passthrough", () => {
         name: "jwt-test-machine",
         os: "test",
         version: "1.0.0",
-        runtimes: ["claude"],
+        runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
         device_id: "test-device-cli-jwt",
       },
       apiKey,
     );
     expect(machineRes.status).toBe(201);
     _machineId = ((await machineRes.json()) as any).id;
+    const heartbeatRes = await honoRequest("POST", `/api/machines/${_machineId}/heartbeat`, {}, apiKey);
+    expect(heartbeatRes.status).toBe(200);
 
     // Create persistent agent (user-only, use repo directly)
     const agent = await createTestAgent(testEnv.DB, userId, { name: "JWT Test Agent", username: "jwt-test-agent", runtime: "claude" });

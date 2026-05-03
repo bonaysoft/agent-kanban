@@ -1,4 +1,4 @@
-import type { UsageInfo } from "../types.js";
+import type { MachineRuntime, UsageInfo } from "@agent-kanban/shared";
 import { getVersion } from "../version.js";
 
 export class ApiError extends Error {
@@ -121,10 +121,10 @@ export abstract class ApiClient {
   }
 
   // Machines
-  registerMachine(info: { name: string; os: string; version: string; runtimes: string[]; device_id: string }) {
+  registerMachine(info: { name: string; os: string; version: string; runtimes: MachineRuntime[]; device_id: string }) {
     return this.request<{ id: string; name: string }>("POST", "/api/machines", info);
   }
-  heartbeat(machineId: string, info: { version?: string; runtimes?: string[]; usage_info?: UsageInfo | null }) {
+  heartbeat(machineId: string, info: { version?: string; runtimes?: MachineRuntime[]; usage_info?: UsageInfo | null }) {
     return this.request("POST", `/api/machines/${machineId}/heartbeat`, info);
   }
 

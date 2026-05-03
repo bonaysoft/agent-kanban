@@ -1,7 +1,8 @@
 import type { Agent, AgentWithActivity, CreateAgentInput } from "@agent-kanban/shared";
-import { type AgentRuntime, BUILTIN_TEMPLATES } from "@agent-kanban/shared";
+import { type AgentRuntime, BUILTIN_TEMPLATES, MACHINE_STALE_TIMEOUT_MS } from "@agent-kanban/shared";
 import { type D1, parseJsonFields } from "./db";
 import { addSubkey, getOrCreateRootKey } from "./gpgKeyRepo";
+import { runtimeReadyPredicateSql } from "./machineRepo";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "handoff_to"]);
 
@@ -119,13 +120,23 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
 }
 
 export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
+  const runtimeCutoff = new Date(Date.now() - MACHINE_STALE_TIMEOUT_MS).toISOString();
   const result = await db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.username, a.gpg_subkey_id, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM machines m, json_each(m.runtimes) rt
+        WHERE m.owner_id = a.owner_id
+          AND m.status = 'online'
+          AND m.last_heartbeat_at >= ?
+          AND ${runtimeReadyPredicateSql("a.runtime")}
+      ) THEN 1 ELSE 0 END as runtime_available,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
+      (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id AND t.status = 'todo') as queued_task_count,
+      (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id AND t.status IN ('in_progress', 'in_review')) as active_task_count,
       COALESCE((SELECT SUM(s.input_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as input_tokens,
       COALESCE((SELECT SUM(s.output_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as output_tokens,
       COALESCE((SELECT SUM(s.cache_read_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as cache_read_tokens,
@@ -135,19 +146,29 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
     WHERE a.owner_id = ?
     ORDER BY a.created_at DESC
   `)
-    .bind(ownerId)
+    .bind(runtimeCutoff, ownerId)
     .all<AgentWithActivity>();
-  return result.results.map((r) => ({ ...parseAgent(r), email: `${r.username}@mails.agent-kanban.dev` }));
+  return result.results.map((r) => ({ ...parseAgent(r), runtime_available: !!r.runtime_available, email: `${r.username}@mails.agent-kanban.dev` }));
 }
 
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {
+  const runtimeCutoff = new Date(Date.now() - MACHINE_STALE_TIMEOUT_MS).toISOString();
   return db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.username, a.gpg_subkey_id, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM machines m, json_each(m.runtimes) rt
+        WHERE m.owner_id = a.owner_id
+          AND m.status = 'online'
+          AND m.last_heartbeat_at >= ?
+          AND ${runtimeReadyPredicateSql("a.runtime")}
+      ) THEN 1 ELSE 0 END as runtime_available,
       CASE WHEN EXISTS (SELECT 1 FROM agent_sessions s WHERE s.agent_id = a.id AND s.status = 'active') THEN 'online' ELSE 'offline' END as status,
       (SELECT MAX(tl.created_at) FROM task_actions tl WHERE tl.actor_id = a.id) as last_active_at,
       (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id) as task_count,
+      (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id AND t.status = 'todo') as queued_task_count,
+      (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = a.id AND t.status IN ('in_progress', 'in_review')) as active_task_count,
       COALESCE((SELECT SUM(s.input_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as input_tokens,
       COALESCE((SELECT SUM(s.output_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as output_tokens,
       COALESCE((SELECT SUM(s.cache_read_tokens) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as cache_read_tokens,
@@ -156,9 +177,9 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
     FROM agents a
     WHERE a.id = ? AND a.owner_id = ?
   `)
-    .bind(agentId, ownerId)
+    .bind(runtimeCutoff, agentId, ownerId)
     .first<AgentWithActivity>()
-    .then((r) => (r ? { ...parseAgent(r), email: `${r.username}@mails.agent-kanban.dev` } : null));
+    .then((r) => (r ? { ...parseAgent(r), runtime_available: !!r.runtime_available, email: `${r.username}@mails.agent-kanban.dev` } : null));
 }
 
 export async function updateAgent(

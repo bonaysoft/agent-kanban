@@ -1,9 +1,12 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createLogger } from "../logger.js";
 import { spawnAgent } from "./spawnHelper.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts, HistoryEvent } from "./types.js";
 
 const logger = createLogger("gemini");
+const OAUTH_CREDS_PATH = join(homedir(), ".gemini", "oauth_creds.json");
 
 /** Per 1M tokens, paid tier pricing */
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
@@ -80,6 +83,12 @@ export function buildResumeArgs(model?: string): string[] {
 export const geminiProvider: AgentProvider = {
   name: "gemini",
   label: "Gemini CLI",
+
+  checkAvailability() {
+    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || existsSync(OAUTH_CREDS_PATH)
+      ? { status: "ready" }
+      : { status: "unauthorized", detail: "Gemini CLI is not authenticated" };
+  },
 
   execute(opts: ExecuteOpts): Promise<AgentHandle> {
     const args = opts.resume ? buildResumeArgs(opts.model) : buildArgs(opts);

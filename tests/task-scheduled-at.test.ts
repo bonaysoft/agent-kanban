@@ -1,9 +1,13 @@
 // @vitest-environment node
 
 import { Miniflare } from "miniflare";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { RateLimiter } from "../packages/cli/src/daemon/rateLimiter.js";
 import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+
+const providerMocks = vi.hoisted(() => ({
+  availability: { status: "ready" as const },
+}));
 
 // ── Mocks required by dispatcher.ts / dispatchTasks for CLI unit tests ────────
 vi.mock("../packages/cli/src/logger.js", () => ({
@@ -35,6 +39,7 @@ vi.mock("../packages/cli/src/providers/registry.js", () => ({
   getProvider: vi.fn().mockReturnValue({
     name: "claude",
     label: "Claude",
+    checkAvailability: () => providerMocks.availability,
     execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }),
   }),
   normalizeRuntime: vi.fn().mockImplementation((r: string) => r),
@@ -188,6 +193,10 @@ describe("scheduled_at field — taskRepo", () => {
 // dispatchTasks is called directly (filter tests) or via DaemonLoop (loop tests).
 
 describe("dispatchTasks — scheduled_at filter", () => {
+  beforeEach(() => {
+    providerMocks.availability = { status: "ready" };
+  });
+
   function makeTask(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       id: "task-1",
@@ -217,7 +226,15 @@ describe("dispatchTasks — scheduled_at filter", () => {
     return {
       listTasks: async () => tasks,
       listRepositories: async () => repos,
-      getAgent: async () => ({ runtime: "claude", name: "Agent", model: null, skills: [], gpg_subkey_id: null, username: "agent-1" }),
+      getAgent: async () => ({
+        runtime: "claude",
+        runtime_available: true,
+        name: "Agent",
+        model: null,
+        skills: [],
+        gpg_subkey_id: null,
+        username: "agent-1",
+      }),
       getTask: async () => ({ status: "in_progress" }),
       releaseTask: async () => null,
       getTaskNotes: async () => [],
@@ -397,6 +414,62 @@ describe("dispatchTasks — scheduled_at filter", () => {
 
     const futureReset = new Date(Date.now() + 120_000).toISOString();
     rl.pause("claude", futureReset);
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("does not dispatch an assigned todo task when the agent runtime is unavailable", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-unavailable-runtime", assigned_to: "agent-unavailable", status: "todo" });
+    const client = {
+      ...makeClient([task]),
+      getAgent: async () => ({ runtime: "claude", runtime_available: false, name: "Agent", username: "agent-unavailable" }),
+    };
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    expect(rl.isRuntimePaused("claude")).toBe(false);
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("dispatches when an older API omits runtime availability", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-legacy-agent-shape", assigned_to: "agent-legacy", status: "todo" });
+    const client = {
+      ...makeClient([task]),
+      getAgent: async () => ({ runtime: "claude", name: "Agent", username: "agent-legacy" }),
+    };
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(true);
+    expect(spawnSpy).toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("does not dispatch when the local runtime is unauthorized", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    providerMocks.availability = { status: "unauthorized" };
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-local-runtime-unavailable", assigned_to: "agent-legacy", status: "todo" });
+    const client = {
+      ...makeClient([task]),
+      getAgent: async () => ({ runtime: "claude", name: "Agent", username: "agent-legacy" }),
+    };
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
 
     const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 

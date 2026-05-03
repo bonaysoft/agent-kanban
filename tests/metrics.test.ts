@@ -529,7 +529,7 @@ describe("GET /api/admin/machines", () => {
       name: "Test Machine",
       os: "linux",
       version: "1.0.0",
-      runtimes: ["claude"],
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
       device_id: "device-admin-machines-test",
     });
 

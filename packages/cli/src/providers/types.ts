@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow } from "@agent-kanban/shared";
+import type { AgentEvent, AgentRuntime, ContentBlock, MachineRuntimeStatus, UsageInfo, UsageWindow } from "@agent-kanban/shared";
 
 export type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow };
 
@@ -42,6 +42,7 @@ export interface AgentHandle {
 export interface AgentProvider {
   readonly name: AgentRuntime;
   readonly label: string;
+  checkAvailability?(): { status: MachineRuntimeStatus; detail?: string };
   execute(opts: ExecuteOpts): Promise<AgentHandle>;
   /**
    * Retrieve session history from this provider's local storage.

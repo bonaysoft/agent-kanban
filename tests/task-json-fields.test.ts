@@ -64,6 +64,15 @@ describe("task JSON field parsing (labels, input)", () => {
     const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(db, ownerId, "json-test-board", "ops");
     boardId = board.id;
+    const { updateMachine, upsertMachine } = await import("../apps/web/server/machineRepo");
+    const machine = await upsertMachine(db, ownerId, {
+      name: "json-runtime-machine",
+      os: "darwin",
+      version: "1.0.0",
+      runtimes: [{ name: "claude", status: "ready", checked_at: "2026-03-21T10:00:00Z" }],
+      device_id: "json-runtime-machine-device",
+    });
+    await updateMachine(db, machine.id, ownerId, {});
   });
 
   it("createTask returns labels as array and input as object", async () => {

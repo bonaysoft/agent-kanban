@@ -115,6 +115,16 @@ export interface UsageInfo {
   updated_at: string;
 }
 
+export type MachineRuntimeStatus = "missing" | "unauthorized" | "unhealthy" | "limited" | "ready";
+
+export interface MachineRuntime {
+  name: AgentRuntime;
+  status: MachineRuntimeStatus;
+  detail?: string;
+  reset_at?: string;
+  checked_at: string;
+}
+
 export interface Machine {
   id: string;
   owner_id: string;
@@ -122,7 +132,7 @@ export interface Machine {
   status: MachineStatus;
   os: string;
   version: string;
-  runtimes: string[];
+  runtimes: MachineRuntime[];
   usage_info: UsageInfo | null;
   last_heartbeat_at: string | null;
   created_at: string;
@@ -211,8 +221,11 @@ export interface Agent {
 export interface AgentWithActivity extends Agent {
   email: string;
   status: AgentStatus;
+  runtime_available: boolean;
   last_active_at: string | null;
   task_count: number;
+  queued_task_count: number;
+  active_task_count: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
