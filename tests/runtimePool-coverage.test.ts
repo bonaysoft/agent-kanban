@@ -295,6 +295,46 @@ describe("RuntimePool — getActiveTaskIds", () => {
   });
 });
 
+describe("RuntimePool — provider execute options", () => {
+  it("passes systemPromptFile through to the provider", async () => {
+    const taskId = randomUUID();
+    const sessionId = randomUUID();
+    await seedActiveSession(sessions, sessionId, taskId);
+
+    const agentClient = makeAgentClient({ status: "in_progress" });
+    let resolveEvents!: () => void;
+    const stuckHandle: AgentHandle = {
+      events: (async function* () {
+        await new Promise<void>((r) => {
+          resolveEvents = r;
+        });
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+    };
+    const provider = makeProvider(stuckHandle);
+    const pool = new RuntimePool(apiClient, { onSlotFreed: vi.fn() }, { onRateLimited: vi.fn(), onRateLimitResumed: vi.fn() }, 0, null);
+
+    await pool.spawnAgent({
+      provider,
+      taskId,
+      sessionId,
+      cwd: "/tmp",
+      taskContext: "test task",
+      agentClient,
+      agentEnv: {},
+      systemPromptFile: "/tmp/system-prompt.txt",
+    });
+
+    expect(provider.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPromptFile: "/tmp/system-prompt.txt",
+      }),
+    );
+    resolveEvents();
+  });
+});
+
 describe("RuntimePool — sendToAgent", () => {
   it("sends message to a running agent", async () => {
     const taskId = randomUUID();

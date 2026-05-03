@@ -20,6 +20,10 @@ import type { RuntimePool } from "./runtimePool.js";
 
 const logger = createLogger("resumer");
 
+function buildResumeTaskContext(message: string): string {
+  return `This is a resume of an already claimed task. The task is already assigned to you and in_progress; do not run \`ak task claim\` again. Continue from the message below.\n\n${message}`;
+}
+
 /**
  * Resume a saved session (rate-limited or rejected). Returns true on success.
  */
@@ -76,7 +80,7 @@ export async function resumeSession(session: SessionFile, message: string, clien
     sessionId: session.sessionId,
     resumeToken: session.providerResumeToken,
     cwd: workspace.cwd,
-    taskContext: message,
+    taskContext: buildResumeTaskContext(message),
     agentClient,
     agentEnv,
     resume: true,

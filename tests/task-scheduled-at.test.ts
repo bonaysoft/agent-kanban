@@ -521,6 +521,24 @@ describe("dispatchTasks — scheduled_at filter", () => {
     rl.stop();
   });
 
+  it("writes generated system prompt and passes its file to the runtime", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const { getSessionManager } = await import("../packages/cli/src/session/manager");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getSessionManager().create).mockClear();
+    const task = makeTask({ id: "task-system-prompt", assigned_to: "agent-system-prompt", status: "todo" });
+    const client = makeClient([task]);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(true);
+    expect(getSessionManager().create).toHaveBeenCalledWith(expect.not.objectContaining({ systemPrompt: expect.anything() }));
+    expect(spawnSpy).toHaveBeenCalledWith(expect.objectContaining({ systemPromptFile: "/tmp/prompt.txt" }));
+    rl.stop();
+  });
+
   it("does not dispatch when the local runtime is unauthorized", async () => {
     const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
     providerMocks.availability = { status: "unauthorized" };

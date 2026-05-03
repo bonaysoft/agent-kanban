@@ -685,6 +685,33 @@ describe("codexProvider.execute — thread selection", () => {
     expect(resumeThreadSpy).toHaveBeenCalledWith("codex-thread-1", expect.any(Object));
   });
 
+  it("passes system prompt content and task context to Codex", async () => {
+    const { Codex } = await import("@openai/codex-sdk");
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockImplementation((path) => {
+      if (path === "/tmp/system.txt") return "You are Codex with board rules." as any;
+      throw new Error("ENOENT");
+    });
+    const runStreamedSpy = vi.fn().mockResolvedValue({ events: (async function* () {})() });
+    vi.mocked(Codex).mockImplementationOnce(
+      () =>
+        ({
+          startThread: vi.fn().mockReturnValue({ runStreamed: runStreamedSpy }),
+          resumeThread: vi.fn(),
+        }) as any,
+    );
+
+    await codexProvider.execute({
+      sessionId: "s1",
+      cwd: "/tmp",
+      env: { OPENAI_API_KEY: "test-key" },
+      systemPromptFile: "/tmp/system.txt",
+      taskContext: "Implement the task.",
+    });
+
+    expect(runStreamedSpy).toHaveBeenCalledWith("You are Codex with board rules.\n\nImplement the task.", expect.any(Object));
+  });
+
   it("omits explicit model for ChatGPT-backed Codex sessions", async () => {
     const { Codex } = await import("@openai/codex-sdk");
     const fsModule = await import("node:fs");
@@ -1367,6 +1394,23 @@ describe("geminiProvider.execute — arg selection", () => {
     await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true });
     const call = vi.mocked(spawnAgent).mock.calls[0][0];
     expect(call.args).toContain("--resume");
+  });
+
+  it("uses task context only when resuming", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    vi.mocked(spawnAgent).mockClear();
+    await geminiProvider.execute({
+      sessionId: "s1",
+      cwd: "/tmp",
+      env: {},
+      systemPromptFile: "/tmp/system.txt",
+      taskContext: "Task rejected. Reason: fix it",
+      resume: true,
+    });
+    const call = vi.mocked(spawnAgent).mock.calls[0][0];
+    const promptIdx = call.args.indexOf("--prompt");
+
+    expect(call.args[promptIdx + 1]).toBe("Task rejected. Reason: fix it");
   });
 
   it("uses buildArgs when resume is false or absent", async () => {

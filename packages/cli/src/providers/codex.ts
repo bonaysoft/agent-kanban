@@ -21,6 +21,15 @@ function readAccessToken(): string | null {
   }
 }
 
+function readSystemPrompt(filePath?: string): string {
+  if (!filePath) return "";
+  return readFileSync(filePath, "utf-8");
+}
+
+function buildPrompt(opts: ExecuteOpts): string {
+  return [readSystemPrompt(opts.systemPromptFile), opts.taskContext].filter(Boolean).join("\n\n");
+}
+
 /** Per 1M tokens, OpenAI pricing */
 const CODEX_PRICING: Record<string, { input: number; cached_input: number; output: number }> = {
   o3: { input: 2.0, cached_input: 0.5, output: 8.0 },
@@ -223,7 +232,7 @@ export const codexProvider: AgentProvider = {
     const thread = opts.resume ? codex.resumeThread(opts.resumeToken ?? opts.sessionId, threadOpts) : codex.startThread(threadOpts);
 
     const abortController = new AbortController();
-    const streamed = await thread.runStreamed(opts.taskContext, { signal: abortController.signal });
+    const streamed = await thread.runStreamed(buildPrompt(opts), { signal: abortController.signal });
 
     const events = (async function* () {
       const turnOpen = { value: false };

@@ -115,7 +115,7 @@ import { resumeSession } from "../src/daemon/resumer.js";
 import { RuntimePool } from "../src/daemon/runtimePool.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ExecuteOpts } from "../src/providers/types.js";
 import type { SessionFile } from "../src/session/store.js";
-import { clearAllSessions, listSessions, readSession, writeSession } from "../src/session/store.js";
+import { clearAllSessions, readSession, writeSession } from "../src/session/store.js";
 
 // ── FakeProvider ──────────────────────────────────────────────────────────────
 
@@ -136,7 +136,6 @@ class FakeProvider implements AgentProvider {
   executeCalls: FakeExecuteCall[] = [];
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    let pushEvent!: (event: AgentEvent) => void;
     let endStream!: () => void;
 
     // The queue is implemented with a simple promise chain so events
@@ -145,7 +144,7 @@ class FakeProvider implements AgentProvider {
     const waiters: Array<(done: boolean) => void> = [];
     let done = false;
 
-    pushEvent = (event: AgentEvent) => {
+    const pushEvent = (event: AgentEvent) => {
       if (waiters.length > 0) {
         // a consumer is already waiting — deliver directly
         eventQueue.push(event);
@@ -643,9 +642,13 @@ describe("Scenario 5: full end-to-end reject-resume", () => {
     // (b) a new execute() call happened on FakeProvider
     expect(fake.executeCalls).toHaveLength(1);
 
-    // (c) taskContext passed in contains "fix it"
+    // (c) provider receives resume guard context plus the original rejection message
     const executeOpts = fake.executeCalls[0].opts;
-    expect(executeOpts.taskContext).toContain("fix it");
+    expect(executeOpts.taskContext).toContain("already claimed task");
+    expect(executeOpts.taskContext).toContain("already assigned to you and in_progress");
+    expect(executeOpts.taskContext).toContain("do not run `ak task claim` again");
+    expect(executeOpts.taskContext).toContain(message);
+    expect(executeOpts.resume).toBe(true);
 
     // (d) session status went back to "active"
     const afterResume = readSession(session.sessionId);
