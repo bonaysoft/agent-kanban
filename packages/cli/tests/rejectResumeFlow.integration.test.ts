@@ -642,12 +642,9 @@ describe("Scenario 5: full end-to-end reject-resume", () => {
     // (b) a new execute() call happened on FakeProvider
     expect(fake.executeCalls).toHaveLength(1);
 
-    // (c) provider receives resume guard context plus the original rejection message
+    // (c) provider receives the original rejection message unchanged
     const executeOpts = fake.executeCalls[0].opts;
-    expect(executeOpts.taskContext).toContain("already claimed task");
-    expect(executeOpts.taskContext).toContain("already assigned to you and in_progress");
-    expect(executeOpts.taskContext).toContain("do not run `ak task claim` again");
-    expect(executeOpts.taskContext).toContain(message);
+    expect(executeOpts.taskContext).toBe(message);
     expect(executeOpts.resume).toBe(true);
 
     // (d) session status went back to "active"
