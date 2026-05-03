@@ -155,6 +155,16 @@ export function deriveUsername(name: string): string {
   return derived || "agent";
 }
 
+const SKILL_REF_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+$/;
+
+export function isValidSkillRef(value: string): boolean {
+  return SKILL_REF_RE.test(value);
+}
+
+export function findInvalidSkillRef(skills: string[] | null | undefined): string | null {
+  return skills?.find((skill) => !isValidSkillRef(skill)) ?? null;
+}
+
 export const AGENT_RUNTIMES: readonly AgentRuntime[] = ["claude", "codex", "gemini", "copilot", "hermes"] as const;
 
 export const RUNTIME_LABELS: Record<AgentRuntime, string> = {

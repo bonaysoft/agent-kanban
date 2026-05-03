@@ -1,4 +1,12 @@
-import { AGENT_RUNTIMES, type CreateAgentInput, isBoardType, isValidUsername, parseScheduledAt, RESERVED_ROLES } from "@agent-kanban/shared";
+import {
+  AGENT_RUNTIMES,
+  type CreateAgentInput,
+  findInvalidSkillRef,
+  isBoardType,
+  isValidUsername,
+  parseScheduledAt,
+  RESERVED_ROLES,
+} from "@agent-kanban/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -50,6 +58,17 @@ import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
+
+function assertValidSkillRefs(skills: unknown) {
+  if (skills === undefined) return;
+  if (!Array.isArray(skills) || skills.some((skill) => typeof skill !== "string")) {
+    throw new HTTPException(400, { message: "skills must be an array of source/repo@skill-name strings" });
+  }
+  const invalid = findInvalidSkillRef(skills);
+  if (invalid) {
+    throw new HTTPException(400, { message: `Invalid skill "${invalid}". Use source/repo@skill-name format.` });
+  }
+}
 
 function resolveActor(c: { get: (key: string) => any }): { actorType: string; actorId: string; sessionId: string | null } {
   const identity: string = c.get("identityType") || "machine";
@@ -415,6 +434,7 @@ api.post("/api/agents", async (c) => {
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
+  assertValidSkillRefs(body.skills);
   const ownerId = c.get("ownerId");
 
   // Validate username uniqueness before GPG mutation
@@ -466,6 +486,7 @@ api.patch("/api/agents/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
   const body = await c.req.json();
+  assertValidSkillRefs(body.skills);
   const agent = await updateAgent(c.env.DB, c.req.param("id"), body);
   return c.json(agent);
 });

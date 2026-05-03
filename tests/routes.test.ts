@@ -394,6 +394,26 @@ describe("routes", () => {
     expect(res.status).toBe(403);
   });
 
+  it("POST /api/agents rejects malformed skill refs", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Bad Skill", username: "bad-skill", runtime: "claude", skills: ["agent-kanban"] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain('Invalid skill "agent-kanban"');
+  });
+
+  it("PATCH /api/agents/:id rejects malformed skill refs", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { skills: ["trailofbits/skills"] }, jwt);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain('Invalid skill "trailofbits/skills"');
+  });
+
   // ─── Tasks ───
 
   it("POST /api/tasks creates a task", async () => {

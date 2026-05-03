@@ -33,7 +33,7 @@ test.describe("Agents Page", () => {
 
     // expect: Workflow fieldset with 'Handoff to' and 'Skills' fields is visible
     await expect(page.getByRole("group", { name: "Workflow" })).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Type a skill and press Enter" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "owner/repo@skill-name" })).toBeVisible();
 
     // expect: A live preview card is shown on the right side
     await expect(page.getByText("Preview")).toBeVisible();
