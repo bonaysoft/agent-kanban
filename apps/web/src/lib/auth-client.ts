@@ -17,6 +17,23 @@ export function clearAuthToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+export async function refreshAuthToken(): Promise<string | null> {
+  const res = await fetch("/api/auth/get-session", { credentials: "include" });
+  if (!res.ok) {
+    clearAuthToken();
+    return null;
+  }
+
+  const data = (await res.json()) as { session?: { token?: string } } | null;
+  const token = data?.session?.token ?? null;
+  if (!token) {
+    clearAuthToken();
+    return null;
+  }
+  setAuthToken(token);
+  return token;
+}
+
 export const authClient = createAuthClient({
   plugins: [agentAuthClient(), apiKeyClient(), adminClient()],
   fetchOptions: {

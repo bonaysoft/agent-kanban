@@ -130,7 +130,22 @@ export class TunnelRelay implements DurableObject {
       return;
     }
 
-    // History response — send back to the requesting browser
+    // History response — prefer sessionId routing because Durable Object
+    // hibernation does not preserve in-memory pendingHistory entries.
+    if (type === "session:history" && typeof msg.sessionId === "string") {
+      const data = JSON.stringify(msg);
+      for (const browser of this.getBrowserSockets(msg.sessionId)) {
+        try {
+          browser.send(data);
+        } catch {
+          /* browser gone */
+        }
+      }
+      if (msg.requestId) this.pendingHistory.delete(msg.requestId as string);
+      return;
+    }
+
+    // Backward compatibility for older daemons that don't include sessionId.
     if (type === "session:history" && msg.requestId) {
       const browser = this.pendingHistory.get(msg.requestId as string);
       if (browser) {

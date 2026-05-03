@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../apps/web/src/lib/auth-client", () => ({
   getAuthToken: () => "mock-token",
+  refreshAuthToken: () => Promise.resolve("fresh-token"),
 }));
 
 let mockWebSocketInstance: MockWebSocket | null = null;
@@ -64,7 +65,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useSessionRelay } from "../apps/web/src/hooks/useSessionRelay.js";
 
 function getWs(): MockWebSocket {
@@ -75,8 +76,9 @@ function getWs(): MockWebSocket {
 // ---------------------------------------------------------------------------
 
 describe("useSessionRelay — session:history reads msg.events", () => {
-  it("populates events state from msg.events array", () => {
+  it("populates events state from msg.events array", async () => {
     const { result } = renderHook(() => useSessionRelay({ sessionId: "sess-1" }));
+    await waitFor(() => expect(mockWebSocketInstance).not.toBeNull());
 
     act(() => {
       getWs().simulateOpen();
@@ -94,8 +96,9 @@ describe("useSessionRelay — session:history reads msg.events", () => {
     expect(result.current.events[0].id).toBe("hist-1");
   });
 
-  it("ignores msg.messages — only reads msg.events", () => {
+  it("ignores msg.messages — only reads msg.events", async () => {
     const { result } = renderHook(() => useSessionRelay({ sessionId: "sess-2" }));
+    await waitFor(() => expect(mockWebSocketInstance).not.toBeNull());
 
     act(() => {
       getWs().simulateOpen();
@@ -111,8 +114,9 @@ describe("useSessionRelay — session:history reads msg.events", () => {
     expect(result.current.events).toHaveLength(0);
   });
 
-  it("replaces events with history, keeping only live events prepended", () => {
+  it("replaces events with history, keeping only live events prepended", async () => {
     const { result } = renderHook(() => useSessionRelay({ sessionId: "sess-3" }));
+    await waitFor(() => expect(mockWebSocketInstance).not.toBeNull());
 
     act(() => {
       getWs().simulateOpen();
@@ -147,8 +151,9 @@ describe("useSessionRelay — session:history reads msg.events", () => {
     expect(result.current.events[2].id).toBe(liveId);
   });
 
-  it("results in empty events when msg.events is an empty array", () => {
+  it("results in empty events when msg.events is an empty array", async () => {
     const { result } = renderHook(() => useSessionRelay({ sessionId: "sess-4" }));
+    await waitFor(() => expect(mockWebSocketInstance).not.toBeNull());
 
     act(() => {
       getWs().simulateOpen();
@@ -161,8 +166,9 @@ describe("useSessionRelay — session:history reads msg.events", () => {
     expect(result.current.events).toHaveLength(0);
   });
 
-  it("does not crash when session:history has no events field", () => {
+  it("does not crash when session:history has no events field", async () => {
     const { result } = renderHook(() => useSessionRelay({ sessionId: "sess-5" }));
+    await waitFor(() => expect(mockWebSocketInstance).not.toBeNull());
 
     act(() => {
       getWs().simulateOpen();

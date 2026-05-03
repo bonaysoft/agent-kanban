@@ -234,8 +234,8 @@ export class TunnelClient {
     this.send({ type: "agent:status", sessionId, status });
   }
 
-  sendHistory(events: unknown[], requestId: string): void {
-    this.send({ type: "session:history", events, requestId });
+  sendHistory(events: unknown[], requestId: string, sessionId?: string): void {
+    this.send({ type: "session:history", events, requestId, sessionId });
   }
 
   onHumanMessage(handler: (sessionId: string, content: string) => void): void {

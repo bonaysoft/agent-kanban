@@ -109,7 +109,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
 
   tunnel.onHistoryRequest((sessionId, requestId) => {
     fetchSessionHistory(sessionId)
-      .then((events) => tunnel.sendHistory(events, requestId))
+      .then((events) => tunnel.sendHistory(events, requestId, sessionId))
       .catch((e) => logger.warn(`History fetch failed for ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : e}`));
   });
 

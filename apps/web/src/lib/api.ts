@@ -1,13 +1,13 @@
 import type { AgentRuntime } from "@agent-kanban/shared";
-import { getAuthToken } from "./auth-client";
+import { getAuthToken, refreshAuthToken } from "./auth-client";
 
 const API_BASE = "/api";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = getAuthToken();
+  const token = getAuthToken() ?? (await refreshAuthToken());
   if (!token) throw new Error("NOT_AUTHENTICATED");
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  let res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -15,6 +15,20 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  if (res.status === 401) {
+    const freshToken = await refreshAuthToken();
+    if (freshToken) {
+      res = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${freshToken}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    }
+  }
 
   const data = (await res.json()) as any;
 

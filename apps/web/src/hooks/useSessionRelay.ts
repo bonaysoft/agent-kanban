@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@agent-kanban/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getAuthToken } from "../lib/auth-client";
+import { getAuthToken, refreshAuthToken } from "../lib/auth-client";
 
 export type { AgentEvent };
 
@@ -30,8 +30,6 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
 
   useEffect(() => {
     if (!enabled || !sessionId) return;
-    const token = getAuthToken();
-    if (!token) return;
 
     let closed = false;
     historyLoaded.current = false;
@@ -51,77 +49,92 @@ export function useSessionRelay({ sessionId, enabled = true }: UseSessionRelayOp
       }, 5000);
     }
 
-    const wsUrl = `${location.origin.replace(/^http/, "ws")}/api/tunnel/ws?role=browser&sessionId=${sessionId}&token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    let ws: WebSocket | null = null;
 
-    ws.onopen = () => {
+    function connect(token: string) {
       if (closed) return;
-      setWsConnected(true);
-      requestHistory(ws);
-    };
+      const wsUrl = `${location.origin.replace(/^http/, "ws")}/api/tunnel/ws?role=browser&sessionId=${sessionId}&token=${encodeURIComponent(token)}`;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onmessage = (rawEvent) => {
-      if (closed) return;
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(rawEvent.data);
-      } catch {
-        return;
-      }
+      ws.onopen = () => {
+        if (closed || !ws) return;
+        setWsConnected(true);
+        requestHistory(ws);
+      };
 
-      switch (msg.type) {
-        case "session:history": {
-          historyLoaded.current = true;
-          clearTimeout(historyRetryTimer.current);
-          const history = msg.events as RelayEvent[] | undefined;
-          if (Array.isArray(history)) {
-            setEvents((prev) => {
-              const liveEvents = prev.filter((e) => e.id.startsWith("live-"));
-              return [...history, ...liveEvents];
-            });
-          }
-          break;
+      ws.onmessage = (rawEvent) => {
+        if (closed) return;
+        let msg: Record<string, unknown>;
+        try {
+          msg = JSON.parse(rawEvent.data);
+        } catch {
+          return;
         }
-        case "agent:event": {
-          const id = `live-${++idCounter.current}`;
-          setEvents((prev) => [...prev, { id, event: msg.event as AgentEvent, timestamp: new Date().toISOString() }]);
-          break;
-        }
-        case "agent:status": {
-          const status = msg.status as string;
-          if (status === "working" || status === "done" || status === "rate_limited") {
-            setAgentStatus(status);
-          }
-          break;
-        }
-        case "daemon:connected":
-          setDaemonConnected(true);
-          setAgentStatus("idle");
-          // Re-request history if it was never loaded (e.g. the initial
-          // request was forwarded to a stale daemon socket that never replied).
-          if (!historyLoaded.current && ws.readyState === WebSocket.OPEN) {
-            historyRetries.current = 0;
-            requestHistory(ws);
-          }
-          break;
-        case "daemon:disconnected":
-          setDaemonConnected(false);
-          setAgentStatus("idle");
-          break;
-      }
-    };
 
-    ws.onclose = () => {
-      if (closed) return;
-      setWsConnected(false);
-      setDaemonConnected(false);
-    };
+        switch (msg.type) {
+          case "session:history": {
+            historyLoaded.current = true;
+            clearTimeout(historyRetryTimer.current);
+            const history = msg.events as RelayEvent[] | undefined;
+            if (Array.isArray(history)) {
+              setEvents((prev) => {
+                const liveEvents = prev.filter((e) => e.id.startsWith("live-"));
+                return [...history, ...liveEvents];
+              });
+            }
+            break;
+          }
+          case "agent:event": {
+            const id = `live-${++idCounter.current}`;
+            setEvents((prev) => [...prev, { id, event: msg.event as AgentEvent, timestamp: new Date().toISOString() }]);
+            break;
+          }
+          case "agent:status": {
+            const status = msg.status as string;
+            if (status === "working" || status === "done" || status === "rate_limited") {
+              setAgentStatus(status);
+            }
+            break;
+          }
+          case "daemon:connected":
+            setDaemonConnected(true);
+            setAgentStatus("idle");
+            // Re-request history if it was never loaded (e.g. the initial
+            // request was forwarded to a stale daemon socket that never replied).
+            if (!historyLoaded.current && ws?.readyState === WebSocket.OPEN) {
+              historyRetries.current = 0;
+              requestHistory(ws);
+            }
+            break;
+          case "daemon:disconnected":
+            setDaemonConnected(false);
+            setAgentStatus("idle");
+            break;
+        }
+      };
+
+      ws.onclose = () => {
+        if (closed) return;
+        setWsConnected(false);
+        setDaemonConnected(false);
+      };
+    }
+
+    const token = getAuthToken();
+    if (token) {
+      connect(token);
+      void refreshAuthToken();
+    } else {
+      void refreshAuthToken().then((freshToken) => {
+        if (freshToken) connect(freshToken);
+      });
+    }
 
     return () => {
       closed = true;
       clearTimeout(historyRetryTimer.current);
-      ws.close();
+      ws?.close();
       if (wsRef.current === ws) wsRef.current = null;
     };
   }, [sessionId, enabled]);

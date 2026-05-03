@@ -332,6 +332,27 @@ describe("TunnelRelay — daemon message routing", () => {
     expect(parsed.messages).toEqual(["msg1"]);
   });
 
+  it("routes session:history by sessionId without pending request state", async () => {
+    const { relay, state } = makeRelay();
+    const daemonWs = await connectDaemon(relay, state);
+    const browserA = await connectBrowser(relay, state, "session-A");
+    const browserB = await connectBrowser(relay, state, "session-B");
+    browserA.clearMessages();
+    browserB.clearMessages();
+
+    relay.webSocketMessage(
+      daemonWs as unknown as WebSocket,
+      JSON.stringify({ type: "session:history", requestId: "req-after-hibernation", sessionId: "session-A", events: ["msg1"] }),
+    );
+
+    expect(browserA.sentMessages).toHaveLength(1);
+    expect(browserB.sentMessages).toHaveLength(0);
+    const parsed = JSON.parse(browserA.sentMessages[0]);
+    expect(parsed.type).toBe("session:history");
+    expect(parsed.events).toEqual(["msg1"]);
+    expect(parsed.sessionId).toBe("session-A");
+  });
+
   it("ignores non-string (binary) messages", async () => {
     const { relay, state } = makeRelay();
     const daemonWs = await connectDaemon(relay, state);

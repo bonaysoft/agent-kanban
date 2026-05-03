@@ -30,6 +30,7 @@ export interface AgentProcess {
   resultReceived: boolean;
   /** Cumulative cost reported by the last SDK result event. */
   lastCostUsd: number;
+  persistedResumeToken?: string;
   onCleanup?: () => void;
 }
 
@@ -376,6 +377,7 @@ async function consumeEvents(agent: AgentProcess, ctx: RuntimeContext): Promise<
   try {
     for await (const event of agent.handle.events) {
       if (!ctx.isAlive(agent.taskId)) return { crashed: false };
+      await persistResumeToken(agent);
       await routeEvent(flags, event, agent.agentClient, ctx.rateLimitSink, ctx.tunnel);
     }
     return { crashed: false };
@@ -388,6 +390,15 @@ async function consumeEvents(agent: AgentProcess, ctx: RuntimeContext): Promise<
     agent.resultReceived = flags.resultReceived;
     agent.lastCostUsd = flags.lastCostUsd;
   }
+}
+
+async function persistResumeToken(agent: AgentProcess): Promise<void> {
+  const token = agent.handle.getResumeToken?.();
+  if (!token || token === agent.persistedResumeToken) return;
+  agent.persistedResumeToken = token;
+  await getSessionManager()
+    .patch(agent.sessionId, { providerResumeToken: token })
+    .catch((e) => logger.warn(`Failed to persist resume token for ${agent.sessionId.slice(0, 8)}: ${errMessage(e)}`));
 }
 
 async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: unknown }, ctx: RuntimeContext): Promise<void> {

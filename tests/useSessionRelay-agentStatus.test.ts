@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mock auth client first, before any imports
 vi.mock("../apps/web/src/lib/auth-client", () => ({
   getAuthToken: () => "mock-token",
+  refreshAuthToken: () => Promise.resolve("fresh-token"),
 }));
 
 // Global WebSocket instance for testing

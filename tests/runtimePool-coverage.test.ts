@@ -295,6 +295,35 @@ describe("RuntimePool — getActiveTaskIds", () => {
   });
 });
 
+describe("RuntimePool — provider resume token persistence", () => {
+  it("persists provider resume token while events are still streaming", async () => {
+    const taskId = randomUUID();
+    const sessionId = randomUUID();
+    await seedActiveSession(sessions, sessionId, taskId);
+
+    const token = "thread-live-123";
+    let yielded = false;
+    const handle: AgentHandle = {
+      events: (async function* () {
+        yielded = true;
+        yield makeMessageEvent("hello");
+      })(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      send: vi.fn().mockResolvedValue(undefined),
+      getResumeToken: () => (yielded ? token : undefined),
+    };
+
+    await spawnAndWait(apiClient, {
+      handle,
+      taskId,
+      sessionId,
+      agentClient: makeAgentClient({ status: "in_progress" }),
+    });
+
+    expect(sessions.read(sessionId)?.providerResumeToken).toBe(token);
+  });
+});
+
 describe("RuntimePool — provider execute options", () => {
   it("passes systemPromptFile through to the provider", async () => {
     const taskId = randomUUID();

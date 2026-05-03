@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getAuthToken } from "../lib/auth-client";
+import { getAuthToken, refreshAuthToken } from "../lib/auth-client";
 
 interface UseSSEOptions {
   taskId: string;
@@ -19,12 +19,12 @@ export function useSSE({ taskId, enabled = true }: UseSSEOptions) {
   useEffect(() => {
     if (!enabled) return;
 
-    const token = getAuthToken();
-    if (!token) return;
-
-    function connect() {
+    async function connect() {
       // Close previous connection if any
       esRef.current?.close();
+
+      const token = (await refreshAuthToken()) ?? getAuthToken();
+      if (!token) return;
 
       const url = `/api/tasks/${taskId}/stream?token=${encodeURIComponent(token!)}`;
       const es = new EventSource(url);

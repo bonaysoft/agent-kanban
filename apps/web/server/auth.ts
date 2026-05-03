@@ -101,11 +101,12 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   const header = c.req.header("Authorization");
   const queryToken = c.req.query("token");
   const token = header?.startsWith("Bearer ") ? header.slice(7) : queryToken;
-  if (!token) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Missing token" } }, 401);
-  }
 
   const auth = createAuth(c.env);
+  if (!token) {
+    return handleUserSession(c, auth, c.req.raw.headers, next, "Missing token");
+  }
+
   const type = detectTokenType(token);
 
   if (type === "apikey") {
@@ -135,7 +136,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 
   const authHeaders = new Headers({ Authorization: `Bearer ${token}` });
-  const session = await auth.api.getSession({ headers: authHeaders });
+  return handleUserSession(c, auth, authHeaders, next, "Invalid or expired token");
+}
+
+async function handleUserSession(c: Context<{ Bindings: Env }>, auth: any, headers: Headers, next: Next, errorMessage: string) {
+  const session = await auth.api.getSession({ headers });
   if (session) {
     c.set("ownerId", session.user.id);
     c.set("identityType", "user");
@@ -144,7 +149,18 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return enforceRouteRule(c, next);
   }
 
-  return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
+  if (headers !== c.req.raw.headers) {
+    const cookieSession = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (cookieSession) {
+      c.set("ownerId", cookieSession.user.id);
+      c.set("identityType", "user");
+      c.set("user", cookieSession.user);
+      c.set("session", cookieSession.session);
+      return enforceRouteRule(c, next);
+    }
+  }
+
+  return c.json({ error: { code: "UNAUTHORIZED", message: errorMessage } }, 401);
 }
 
 async function handleApiKey(c: Context<{ Bindings: Env }>, auth: any, token: string, next: Next) {

@@ -276,6 +276,13 @@ describe("TunnelClient — sendHistory()", () => {
     const msg = JSON.parse(lastCreatedWs!.sentMessages[0]);
     expect(msg.events).toEqual(messages);
   });
+
+  it("includes sessionId when provided", async () => {
+    const client = await makeConnected();
+    client.sendHistory([], "req-1", "sess-1");
+    const msg = JSON.parse(lastCreatedWs!.sentMessages[0]);
+    expect(msg.sessionId).toBe("sess-1");
+  });
 });
 
 // ── onHumanMessage handler ────────────────────────────────────────────────────
