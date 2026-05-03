@@ -166,7 +166,6 @@ export function deriveUsername(name: string): string {
 }
 
 const SKILL_REF_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+$/;
-
 export function isValidSkillRef(value: string): boolean {
   return SKILL_REF_RE.test(value);
 }
@@ -211,6 +210,7 @@ export interface Agent {
   runtime: AgentRuntime;
   model: string | null;
   skills: string[] | null;
+  subagents: string[] | null;
   public_key: string;
   fingerprint: string;
   builtin: number;
@@ -376,6 +376,7 @@ export interface CreateAgentInput {
   runtime: AgentRuntime;
   model?: string;
   skills?: string[];
+  subagents?: string[];
 }
 
 export interface CreateSessionInput {

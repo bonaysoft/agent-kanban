@@ -28,6 +28,7 @@ async function applyMigrations(db: D1Database) {
     "0015_username_global_unique.sql",
     "0016_task_actions_session_id.sql",
     "0017_unique_leader_per_runtime.sql",
+    "0018_agent_subagents.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -54,17 +55,26 @@ afterAll(async () => {
   await mf.dispose();
 });
 
-describe("agent JSON field parsing (skills, handoff_to)", () => {
+describe("agent JSON field parsing (skills, handoff_to, subagents)", () => {
   const ownerId = "user-json-agent";
   let agentId: string;
+  let subagentId: string;
 
-  it("createAgent returns skills and handoff_to as arrays", async () => {
+  it("createAgent returns skills, handoff_to, and subagents as arrays", async () => {
+    const subagent = await createTestAgent(db, ownerId, {
+      name: "JSON Subagent",
+      username: "json-subagent",
+      runtime: "claude",
+    });
+    subagentId = subagent.id;
+
     const agent = await createTestAgent(db, ownerId, {
       name: "Test Agent",
       username: "test-agent",
       runtime: "claude",
       skills: ["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"],
       handoff_to: ["quality-goalkeeper", "enduser"],
+      subagents: [subagentId],
     });
     agentId = agent.id;
 
@@ -72,13 +82,16 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     expect(agent.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
     expect(Array.isArray(agent.handoff_to)).toBe(true);
     expect(agent.handoff_to).toEqual(["quality-goalkeeper", "enduser"]);
+    expect(Array.isArray(agent.subagents)).toBe(true);
+    expect(agent.subagents).toEqual([subagentId]);
   });
 
-  it("createAgent with null skills/handoff_to returns null", async () => {
+  it("createAgent with null skills/handoff_to/subagents returns null", async () => {
     const agent = await createTestAgent(db, ownerId, { name: "Bare Agent", username: "bare-agent", runtime: "claude" });
 
     expect(agent.skills).toBeNull();
     expect(agent.handoff_to).toBeNull();
+    expect(agent.subagents).toBeNull();
   });
 
   it("listAgents returns parsed arrays", async () => {
@@ -90,6 +103,8 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     expect(agent.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
     expect(Array.isArray(agent.handoff_to)).toBe(true);
     expect(agent.handoff_to).toEqual(["quality-goalkeeper", "enduser"]);
+    expect(Array.isArray(agent.subagents)).toBe(true);
+    expect(agent.subagents).toEqual([subagentId]);
   });
 
   it("listAgents returns email derived from username", async () => {
@@ -109,6 +124,8 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
     expect(Array.isArray(agent!.skills)).toBe(true);
     expect(agent!.skills).toEqual(["trailofbits/skills@differential-review", "obra/superpowers@verification-before-completion"]);
     expect(Array.isArray(agent!.handoff_to)).toBe(true);
+    expect(Array.isArray(agent!.subagents)).toBe(true);
+    expect(agent!.subagents).toEqual([subagentId]);
   });
 
   it("getAgent returns email derived from username", async () => {
@@ -122,15 +139,33 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
 
   it("updateAgent accepts arrays and returns parsed arrays", async () => {
     const { updateAgent } = await import("../apps/web/server/agentRepo");
+    await db.prepare("UPDATE agents SET mailbox_token = ? WHERE id = ?").bind("mailbox-secret", agentId).run();
+
     const agent = await updateAgent(db, agentId, {
       skills: ["new/skill@code-review"],
       handoff_to: ["enduser"],
+      subagents: [subagentId],
     });
 
     expect(agent).toBeTruthy();
     expect(Array.isArray(agent!.skills)).toBe(true);
     expect(agent!.skills).toEqual(["new/skill@code-review"]);
     expect(agent!.handoff_to).toEqual(["enduser"]);
+    expect(agent!.subagents).toEqual([subagentId]);
+    expect(agent).not.toHaveProperty("private_key");
+    expect(agent).not.toHaveProperty("mailbox_token");
+  });
+
+  it("updateAgent does not report ignored update fields", async () => {
+    const { getAgent, updateAgent } = await import("../apps/web/server/agentRepo");
+    const agent = await updateAgent(db, agentId, { name: "Ignored Field Agent", kind: "leader" } as any);
+
+    expect(agent).toBeTruthy();
+    expect(agent!.name).toBe("Ignored Field Agent");
+    expect(agent!.kind).toBe("worker");
+
+    const persisted = await getAgent(db, agentId, ownerId);
+    expect(persisted!.kind).toBe("worker");
   });
 
   it("updated values persist through getAgent", async () => {
@@ -139,5 +174,6 @@ describe("agent JSON field parsing (skills, handoff_to)", () => {
 
     expect(agent!.skills).toEqual(["new/skill@code-review"]);
     expect(agent!.handoff_to).toEqual(["enduser"]);
+    expect(agent!.subagents).toEqual([subagentId]);
   });
 });

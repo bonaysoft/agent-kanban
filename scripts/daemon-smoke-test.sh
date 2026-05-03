@@ -4,22 +4,26 @@ set -euo pipefail
 # Daemon smoke test: covers the full task scheduling lifecycle.
 #
 # Scenarios tested:
-#   1. Dispatch    — create task → daemon claims → agent runs → in_review
+#   1. Dispatch    — create task → daemon claims → installs subagents → agent runs → in_review
 #   2. Reject/Resume — reject in_review task → daemon resumes agent → back to in_review
 #   3. Complete    — complete task → daemon cleans up session + worktree
 #   4. Cancel      — create task → cancel while agent is running → daemon kills agent
 #
-# Usage: ./scripts/daemon-smoke-test.sh <board_id> <agent_id> <repo_id>
-# All three arguments are required.
+# Usage: ./scripts/daemon-smoke-test.sh [board_id] [agent_id] [repo_id]
+# Missing arguments are discovered or created. Defaults target the Demo board
+# and the slink repository.
 
-BOARD_ID="${1:?Usage: $0 <board_id> <agent_id> <repo_id>}"
-AGENT_ID="${2:?Usage: $0 <board_id> <agent_id> <repo_id>}"
-REPO_ID="${3:?Usage: $0 <board_id> <agent_id> <repo_id>}"
+BOARD_ID="${1:-}"
+AGENT_ID="${2:-}"
+REPO_ID="${3:-}"
 
 PASS=0
 FAIL=0
 TASKS=()
 TIMESTAMP=$(date +%s)
+SUBAGENT_ID=""
+SUBAGENT_USERNAME=""
+AGENT_RUNTIME=""
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +68,129 @@ task_session_status() {
   [ -n "$file" ] && python3 -c "import json,sys; print(json.load(open('$file')).get('status',''))" 2>/dev/null || echo ""
 }
 
+json_query() {
+  local query="$1"
+  node -e "
+const fs = require('fs');
+const data = JSON.parse(fs.readFileSync(0, 'utf8'));
+const result = ($query);
+if (result === undefined || result === null) process.exit(1);
+if (typeof result === 'object') console.log(JSON.stringify(result));
+else console.log(result);
+"
+}
+
+discover_board() {
+  ak get board -o json | json_query "data.find((b) => b.id === 'k847fy7k')?.id || data.find((b) => b.name === 'Demo')?.id || data[0]?.id"
+}
+
+create_board() {
+  ak create board --name "Demo" --type dev -o json | json_query "data.id"
+}
+
+discover_repo() {
+  ak get repo -o json | json_query "data.find((r) => r.name === 'slink' || r.full_name === 'saltbo/slink')?.id || data[0]?.id"
+}
+
+create_repo() {
+  ak create repo --name "slink" --url "https://github.com/saltbo/slink" -o json | json_query "data.id"
+}
+
+discover_agent() {
+  ak get agent -o json | json_query "data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available)?.id || data.find((a) => a.builtin !== 1 && (a.runtime === 'codex' || a.runtime === 'claude') && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && (a.runtime === 'codex' || a.runtime === 'claude') && a.runtime_available)?.id"
+}
+
+discover_runtime() {
+  local status
+  status="$(ak status)"
+  if echo "$status" | grep -q "codex"; then
+    echo "codex"
+    return 0
+  fi
+  if echo "$status" | grep -q "claude"; then
+    echo "claude"
+    return 0
+  fi
+  return 1
+}
+
+create_agent() {
+  local runtime="$1"
+  local name username bio
+  if [ "$runtime" = "codex" ]; then
+    name="Codex Smoke NoModel"
+    username="codex-smoke-nomodel"
+    bio="Codex worker for daemon smoke tests"
+  else
+    name="Claude Smoke"
+    username="claude-smoke"
+    bio="Claude worker for daemon smoke tests"
+  fi
+  ak create agent \
+    --name "$name" \
+    --username "$username" \
+    --runtime "$runtime" \
+    --role "fullstack-developer" \
+    --bio "$bio" \
+    -o json | json_query "data.id"
+}
+
+agent_field() {
+  local agent_id="$1" field="$2"
+  ak get agent "$agent_id" -o json | json_query "data['$field']"
+}
+
+ensure_smoke_subagent() {
+  local runtime="$1"
+  local username="smoke-subagent-$runtime"
+  local existing
+  existing=$(ak get agent -o json | json_query "data.find((a) => a.username === '$username')?.id" 2>/dev/null || true)
+  if [ -n "$existing" ]; then
+    SUBAGENT_ID="$existing"
+  else
+    SUBAGENT_ID=$(ak create agent \
+      --name "Smoke Subagent $runtime" \
+      --username "$username" \
+      --runtime "$runtime" \
+      --role "smoke-subagent" \
+      --bio "Registered worker used by daemon smoke tests to verify task-local subagent installation" \
+      --soul "I am a smoke-test helper subagent. Keep answers short and verify delegated work precisely." \
+      -o json | json_query "data.id")
+  fi
+  SUBAGENT_USERNAME="$username"
+}
+
+ensure_agent_subagent_link() {
+  local current
+  current=$(ak get agent "$AGENT_ID" -o json | json_query "((data.subagents || []).includes('$SUBAGENT_ID') ? (data.subagents || []) : [...(data.subagents || []), '$SUBAGENT_ID']).join(',')")
+  ak update agent "$AGENT_ID" --subagents "$current" >/dev/null
+}
+
+wait_subagent_file() {
+  local task_id="$1" timeout_secs="${2:-120}"
+  local elapsed=0
+  local expected
+  case "$AGENT_RUNTIME" in
+    codex) expected=".codex/agents/$SUBAGENT_USERNAME.toml" ;;
+    claude) expected=".claude/agents/$SUBAGENT_USERNAME.md" ;;
+    *) fail "unsupported smoke runtime for subagent file check: $AGENT_RUNTIME"; return 1 ;;
+  esac
+
+  while [ "$elapsed" -lt "$timeout_secs" ]; do
+    local file cwd
+    file="$(task_session_file "$task_id")"
+    if [ -n "$file" ]; then
+      cwd=$(node -e "const s=require('$file'); console.log(s.workspace && s.workspace.cwd || '')" 2>/dev/null || true)
+      if [ -n "$cwd" ] && [ -f "$cwd/$expected" ]; then
+        return 0
+      fi
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  return 1
+}
+
 # Sessions are retained as "closed" after cleanup (for history lookup).
 # "cleaned up" means: session reached "closed" state (or file is gone).
 wait_session_cleanup() {
@@ -87,8 +214,40 @@ fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 # ── Preflight ────────────────────────────────────────────────────────────────
 
 echo "=== Daemon Smoke Test ==="
+
+if [ -z "$BOARD_ID" ]; then BOARD_ID="$(discover_board 2>/dev/null || true)"; fi
+if [ -z "$BOARD_ID" ]; then BOARD_ID="$(create_board)"; fi
+if [ -z "$REPO_ID" ]; then REPO_ID="$(discover_repo 2>/dev/null || true)"; fi
+if [ -z "$REPO_ID" ]; then REPO_ID="$(create_repo)"; fi
+if [ -z "$AGENT_ID" ]; then AGENT_ID="$(discover_agent 2>/dev/null || true)"; fi
+if [ -z "$AGENT_ID" ]; then
+  RUNTIME_TO_CREATE="$(discover_runtime 2>/dev/null || true)"
+  if [ -z "$RUNTIME_TO_CREATE" ]; then
+    echo "FATAL: no available subagent-capable runtime found (codex or claude). Start a daemon with one of those providers ready."
+    exit 1
+  fi
+  AGENT_ID="$(create_agent "$RUNTIME_TO_CREATE")"
+fi
+if [ -z "$BOARD_ID" ] || [ -z "$REPO_ID" ] || [ -z "$AGENT_ID" ]; then
+  echo "FATAL: failed to discover board, repo, or agent"
+  echo "  Board: ${BOARD_ID:-missing}"
+  echo "  Repo:  ${REPO_ID:-missing}"
+  echo "  Agent: ${AGENT_ID:-missing}"
+  exit 1
+fi
+
+AGENT_RUNTIME="$(agent_field "$AGENT_ID" runtime)"
+if [ "$AGENT_RUNTIME" != "codex" ] && [ "$AGENT_RUNTIME" != "claude" ]; then
+  echo "FATAL: smoke agent runtime must support subagents (codex or claude), got: $AGENT_RUNTIME"
+  exit 1
+fi
+ensure_smoke_subagent "$AGENT_RUNTIME"
+ensure_agent_subagent_link
+
 echo "  Board: $BOARD_ID"
 echo "  Agent: $AGENT_ID"
+echo "  Runtime: $AGENT_RUNTIME"
+echo "  Subagent: $SUBAGENT_ID ($SUBAGENT_USERNAME)"
 echo "  Repo:  $REPO_ID"
 echo ""
 
@@ -102,9 +261,20 @@ echo ""
 
 # ── Test 1: Dispatch (create → claim → in_review) ───────────────────────────
 
-echo "[Test 1/4] Dispatch — create task, wait for in_review"
-T1=$(create_task "smoke-dispatch-$TIMESTAMP" "Run pnpm install. Add file smoke-dispatch-$TIMESTAMP.txt with timestamp. Commit and PR.")
+echo "[Test 1/4] Dispatch — create task, verify subagent install, wait for in_review"
+T1=$(create_task "smoke-dispatch-$TIMESTAMP" "Run pnpm install. Verify that the smoke subagent definition is installed in this workspace. Add file smoke-dispatch-$TIMESTAMP.txt with timestamp. Commit and PR.")
 echo "  Task: $T1"
+
+if wait_status "$T1" in_progress 2m; then
+  pass "task reached in_progress"
+  if wait_subagent_file "$T1" 120; then
+    pass "subagent definition installed in task workspace"
+  else
+    fail "subagent definition was not installed in task workspace"
+  fi
+else
+  fail "task did not reach in_progress"
+fi
 
 if wait_status "$T1" in_review; then
   pass "task reached in_review"

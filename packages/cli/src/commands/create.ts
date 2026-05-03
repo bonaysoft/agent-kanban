@@ -109,6 +109,7 @@ export function registerCreateCommand(program: Command) {
     .option("--kind <kind>", "Agent kind: worker, leader")
     .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
     .option("--skills <skills>", "Comma-separated skill slugs")
+    .option("--subagents <ids>", "Comma-separated worker agent IDs to install as task-local subagents")
     .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (opts) => {
       const client = await createClient();
@@ -137,6 +138,7 @@ export function registerCreateCommand(program: Command) {
           runtime,
           model: opts.model || template.model,
           skills: opts.skills ? opts.skills.split(",").map((s: string) => s.trim()) : template.skills,
+          subagents: opts.subagents ? opts.subagents.split(",").map((s: string) => s.trim()) : undefined,
         };
       } else {
         if (!opts.username) {
@@ -152,6 +154,7 @@ export function registerCreateCommand(program: Command) {
         if (opts.handoffTo) body.handoff_to = opts.handoffTo.split(",").map((s: string) => s.trim());
         if (opts.model) body.model = opts.model;
         if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
+        if (opts.subagents) body.subagents = opts.subagents.split(",").map((s: string) => s.trim());
       }
 
       const agent = await client.createAgent(body as any);

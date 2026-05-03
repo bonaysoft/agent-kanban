@@ -6,18 +6,22 @@ import type { AgentRuntime, BoardType } from "@agent-kanban/shared";
 export interface AgentInfo {
   id: string;
   name: string;
+  username: string;
+  bio: string | null;
   role: string | null;
   soul: string | null;
   handoff_to: string[] | null;
   skills: string[] | null;
+  subagents: string[] | null;
   runtime: AgentRuntime;
   model: string | null;
 }
 
-export function generateSystemPrompt(agent: AgentInfo, boardType: BoardType): string {
+export function generateSystemPrompt(agent: AgentInfo, boardType: BoardType, subagents: AgentInfo[] = []): string {
   const lifecycle = boardType === "dev" ? DEV_LIFECYCLE : OPS_LIFECYCLE;
   const environment = boardType === "dev" ? DEV_ENVIRONMENT : OPS_ENVIRONMENT;
   const rules = boardType === "dev" ? DEV_RULES : OPS_RULES;
+  const subagentSection = buildSubagentSection(subagents);
   const handoffSection = buildHandoffSection(agent, boardType);
 
   return `# Agent Work Protocol
@@ -37,6 +41,7 @@ ${environment}
 ## Rules
 
 ${rules}
+${subagentSection}
 ${handoffSection}
 # Your Identity
 
@@ -87,6 +92,18 @@ const OPS_RULES = `\
 - Never call \`task complete\` — only humans complete tasks.
 - Log progress frequently — humans monitor the board.
 - If a task is too large, break it into subtasks via \`ak create task --parent <task-id>\`.`;
+
+function buildSubagentSection(subagents: AgentInfo[]): string {
+  if (subagents.length === 0) return "";
+
+  const mentions = subagents.map((agent) => `@${agent.username}`).join(", ");
+
+  return `
+## Available Subagents
+
+The following registered worker agents are installed as task-local subagents: ${mentions}
+`;
+}
 
 function buildHandoffSection(agent: AgentInfo, boardType: BoardType): string {
   const handoffRoles = agent.handoff_to ?? [];

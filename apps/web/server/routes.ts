@@ -59,6 +59,7 @@ import type { Env } from "./types";
 
 const api = new Hono<{ Bindings: Env }>();
 const logger = createLogger("api");
+const SUBAGENT_RUNTIMES = new Set(["claude", "codex"]);
 
 function assertValidSkillRefs(skills: unknown) {
   if (skills === undefined) return;
@@ -69,6 +70,71 @@ function assertValidSkillRefs(skills: unknown) {
   if (invalid) {
     throw new HTTPException(400, { message: `Invalid skill "${invalid}". Use source/repo@skill-name format.` });
   }
+}
+
+function assertJsonObject(value: unknown, name: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HTTPException(400, { message: `${name} must be a JSON object` });
+  }
+}
+
+function assertSubagentList(subagents: unknown) {
+  if (subagents === undefined) return;
+  if (!Array.isArray(subagents) || subagents.some((agent) => typeof agent !== "string" || agent.length === 0)) {
+    throw new HTTPException(400, { message: "subagents must be an array of worker agent IDs" });
+  }
+}
+
+function assertSubagentRuntime(runtime: string, subagents: string[] | null | undefined) {
+  if (!subagents || subagents.length === 0) return;
+  if (!SUBAGENT_RUNTIMES.has(runtime)) {
+    throw new HTTPException(400, { message: `Runtime "${runtime}" does not support subagents yet` });
+  }
+}
+
+function assertValidAgentRuntime(runtime: string | undefined): void {
+  if (runtime === undefined) return;
+  if (!AGENT_RUNTIMES.includes(runtime as any)) {
+    throw new HTTPException(400, { message: `Invalid runtime "${runtime}". Must be one of: ${AGENT_RUNTIMES.join(", ")}` });
+  }
+}
+
+async function assertRegisteredWorkerSubagents(
+  db: Env["DB"],
+  ownerId: string,
+  subagents: string[] | null | undefined,
+  currentAgentId?: string,
+): Promise<void> {
+  if (!subagents || subagents.length === 0) return;
+  const ids = [...new Set(subagents)];
+  if (currentAgentId && ids.includes(currentAgentId)) {
+    throw new HTTPException(400, { message: "Agent cannot include itself as a subagent" });
+  }
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const result = await db
+    .prepare(`SELECT id, kind FROM agents WHERE owner_id = ? AND id IN (${placeholders})`)
+    .bind(ownerId, ...ids)
+    .all<{ id: string; kind: string }>();
+  const found = new Map(result.results.map((agent) => [agent.id, agent.kind]));
+  for (const id of ids) {
+    const kind = found.get(id);
+    if (!kind) throw new HTTPException(400, { message: `Subagent "${id}" is not registered` });
+    if (kind !== "worker") throw new HTTPException(400, { message: `Subagent "${id}" must be a worker agent` });
+  }
+}
+
+async function assertAgentNotReferencedAsSubagent(db: Env["DB"], ownerId: string, agentId: string): Promise<void> {
+  const row = await db
+    .prepare(`
+      SELECT a.name
+      FROM agents a, json_each(a.subagents) ref
+      WHERE a.owner_id = ? AND ref.value = ?
+      LIMIT 1
+    `)
+    .bind(ownerId, agentId)
+    .first<{ name: string }>();
+  if (row) throw new HTTPException(409, { message: `Agent is referenced as a subagent by "${row.name}"` });
 }
 
 function assertValidMachineRuntimes(runtimes: unknown): void {
@@ -439,18 +505,21 @@ api.post("/api/agents", async (c) => {
     runtime: string;
     model?: string;
     skills?: string[];
+    subagents?: string[];
   }>();
+  assertJsonObject(body, "agent");
   if (!body.username) throw new HTTPException(400, { message: "username is required" });
   if (!body.runtime) throw new HTTPException(400, { message: "runtime is required" });
   if (!isValidUsername(body.username)) throw new HTTPException(400, { message: `Invalid username "${body.username}"` });
-  if (!AGENT_RUNTIMES.includes(body.runtime as any)) {
-    throw new HTTPException(400, { message: `Invalid runtime "${body.runtime}". Must be one of: ${AGENT_RUNTIMES.join(", ")}` });
-  }
+  assertValidAgentRuntime(body.runtime);
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
   }
   assertValidSkillRefs(body.skills);
+  assertSubagentList(body.subagents);
+  assertSubagentRuntime(body.runtime, body.subagents);
   const ownerId = c.get("ownerId");
+  await assertRegisteredWorkerSubagents(c.env.DB, ownerId, body.subagents);
 
   // Validate username uniqueness before GPG mutation
   const taken = await c.env.DB.prepare("SELECT 1 FROM agents WHERE username = ?").bind(body.username).first();
@@ -501,17 +570,25 @@ api.patch("/api/agents/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
   const body = await c.req.json();
-  assertValidSkillRefs(body.skills);
-  const agent = await updateAgent(c.env.DB, c.req.param("id"), body);
+  assertJsonObject(body, "agent update");
+  const updates = body as Partial<CreateAgentInput>;
+  assertValidAgentRuntime(updates.runtime);
+  assertValidSkillRefs(updates.skills);
+  assertSubagentList(updates.subagents);
+  assertSubagentRuntime(updates.runtime ?? existing.runtime, updates.subagents ?? existing.subagents);
+  await assertRegisteredWorkerSubagents(c.env.DB, ownerId, updates.subagents ?? existing.subagents, existing.id);
+  const agent = await updateAgent(c.env.DB, c.req.param("id"), updates);
   return c.json(agent);
 });
 
 api.delete("/api/agents/:id", async (c) => {
-  const agent = await c.env.DB.prepare("SELECT id, username, builtin FROM agents WHERE id = ?")
-    .bind(c.req.param("id"))
+  const ownerId = c.get("ownerId");
+  const agent = await c.env.DB.prepare("SELECT id, username, builtin FROM agents WHERE id = ? AND owner_id = ?")
+    .bind(c.req.param("id"), ownerId)
     .first<{ id: string; username: string; builtin: number }>();
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   if (agent.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
+  await assertAgentNotReferencedAsSubagent(c.env.DB, ownerId, agent.id);
   const email = agentEmail(agent.username);
   await deleteAgent(c.env.DB, agent.id);
   if (c.env.MAILS_ADMIN_TOKEN) {

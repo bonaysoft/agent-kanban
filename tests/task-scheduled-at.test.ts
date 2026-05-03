@@ -21,6 +21,9 @@ vi.mock("../packages/cli/src/workspace/repoOps.js", () => ({
 vi.mock("../packages/cli/src/workspace/skills.js", () => ({
   ensureSkills: vi.fn().mockReturnValue(true),
 }));
+vi.mock("../packages/cli/src/workspace/agents.js", () => ({
+  ensureSubagents: vi.fn().mockResolvedValue(true),
+}));
 vi.mock("../packages/cli/src/workspace/workspace.js", () => ({
   createTempWorkspace: vi.fn().mockReturnValue({ cwd: "/tmp/test-workspace", info: { type: "temp", cwd: "/tmp/test-workspace" }, cleanup: vi.fn() }),
   createRepoWorkspace: vi.fn().mockReturnValue({ cwd: "/tmp/test-workspace", info: { type: "temp", cwd: "/tmp/test-workspace" }, cleanup: vi.fn() }),
@@ -464,6 +467,57 @@ describe("dispatchTasks — scheduled_at filter", () => {
 
     expect(result).toBe(true);
     expect(spawnSpy).toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("passes resolved subagent details to the system prompt", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const { generateSystemPrompt } = await import("../packages/cli/src/agent/systemPrompt");
+    const { ensureSubagents } = await import("../packages/cli/src/workspace/agents");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-subagent-prompt", assigned_to: "lead-agent", status: "todo" });
+    const leadAgent = {
+      id: "lead-agent",
+      runtime: "claude",
+      runtime_available: true,
+      name: "Lead Agent",
+      username: "lead-agent",
+      bio: null,
+      role: "lead",
+      soul: null,
+      handoff_to: null,
+      skills: [],
+      subagents: ["worker-1"],
+      model: null,
+      gpg_subkey_id: null,
+    };
+    const workerAgent = {
+      id: "worker-1",
+      runtime: "claude",
+      runtime_available: true,
+      name: "Test Writer",
+      username: "test-writer",
+      bio: "Writes tests for changed code.",
+      role: "testing",
+      soul: null,
+      handoff_to: null,
+      skills: [],
+      subagents: null,
+      model: null,
+      gpg_subkey_id: null,
+    };
+    const client = {
+      ...makeClient([task]),
+      getAgent: vi.fn(async (id: string) => (id === "worker-1" ? workerAgent : leadAgent)),
+    };
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(true);
+    expect(ensureSubagents).toHaveBeenCalledWith("/tmp/test-workspace", "claude", [workerAgent]);
+    expect(generateSystemPrompt).toHaveBeenCalledWith(leadAgent, "ops", [workerAgent]);
     rl.stop();
   });
 

@@ -10,12 +10,12 @@ const BETTER_AUTH_URL = "http://localhost:8788";
 const env = createTestEnv();
 let mf: Miniflare;
 
-async function apiRequest(method: string, path: string, body?: Record<string, unknown>, token?: string) {
+async function apiRequest(method: string, path: string, body?: unknown, token?: string) {
   const { api } = await import("../apps/web/server/routes");
   const headers: Record<string, string> = { "Content-Type": "application/json", Host: "localhost:8788", "x-forwarded-proto": "http" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init: RequestInit = { method, headers };
-  if (body && method !== "GET") init.body = JSON.stringify(body);
+  if (body !== undefined && method !== "GET") init.body = JSON.stringify(body);
   return api.request(path, init, env);
 }
 
@@ -408,12 +408,132 @@ describe("routes", () => {
     expect(body.error.message).toContain('Invalid skill "agent-kanban"');
   });
 
+  it("POST /api/agents stores registered worker subagent IDs", async () => {
+    const subagent = await createTestAgent(env.DB, userId, {
+      name: "Create Route Subagent",
+      username: "create-route-subagent",
+      runtime: "claude",
+    });
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      {
+        name: "Subagent Route Agent",
+        username: "subagent-route-agent",
+        runtime: "claude",
+        subagents: [subagent.id],
+      },
+      apiKey,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as any;
+    expect(body.subagents).toEqual([subagent.id]);
+  });
+
+  it("POST /api/agents rejects nonexistent subagent IDs", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Missing Subagent", username: "missing-subagent", runtime: "claude", subagents: [randomUUID()] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("is not registered");
+  });
+
+  it("POST /api/agents rejects leader subagent IDs", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Leader Subagent", username: "leader-subagent", runtime: "claude", subagents: [leaderAgentId] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("must be a worker agent");
+  });
+
+  it("POST /api/agents rejects cross-owner subagent IDs", async () => {
+    const otherAgent = await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Other Owner Subagent",
+      username: "other-owner-subagent",
+      runtime: "claude",
+    });
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Cross Owner Subagent", username: "cross-owner-subagent", runtime: "claude", subagents: [otherAgent.id] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("is not registered");
+  });
+
+  it("POST /api/agents rejects unsupported runtimes with subagents", async () => {
+    const subagent = await createTestAgent(env.DB, userId, {
+      name: "Unsupported Runtime Subagent",
+      username: "unsupported-runtime-subagent",
+      runtime: "claude",
+    });
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Gemini Subagents", username: "gemini-subagents", runtime: "gemini", subagents: [subagent.id] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain('Runtime "gemini" does not support subagents yet');
+  });
+
   it("PATCH /api/agents/:id rejects malformed skill refs", async () => {
     const jwt = await signLeaderSessionJWT();
     const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { skills: ["trailofbits/skills"] }, jwt);
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
     expect(body.error.message).toContain('Invalid skill "trailofbits/skills"');
+  });
+
+  it("PATCH /api/agents/:id rejects invalid runtime", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { runtime: "bogus" }, jwt);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain('Invalid runtime "bogus"');
+  });
+
+  it.each([null, "name-only", 7])("PATCH /api/agents/:id rejects %s JSON body", async (body) => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, body, jwt);
+
+    expect(res.status).toBe(400);
+    const payload = (await res.json()) as any;
+    expect(payload.error.message).toBe("agent update must be a JSON object");
+  });
+
+  it("PATCH /api/agents/:id stores registered worker subagent IDs", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const subagent = await createTestAgent(env.DB, userId, {
+      name: "Patch Route Subagent",
+      username: "patch-route-subagent",
+      runtime: "claude",
+    });
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { subagents: [subagent.id] }, jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.subagents).toEqual([subagent.id]);
+    expect(body).not.toHaveProperty("private_key");
+    expect(body).not.toHaveProperty("mailbox_token");
+  });
+
+  it("PATCH /api/agents/:id rejects self-reference as a subagent", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { subagents: [agentId] }, jwt);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("Agent cannot include itself as a subagent");
   });
 
   // ─── Tasks ───
@@ -911,11 +1031,34 @@ describe("routes", () => {
   });
 
   it("DELETE /api/agents/:id deletes the agent", async () => {
-    const tempAgent = await createTestAgent(env.DB, userId, { name: "Temp Agent For Delete", username: "temp-agent-for-delete", runtime: "claude" });
+    const tempAgent = await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Temp Agent For Delete",
+      username: "temp-agent-for-delete",
+      runtime: "claude",
+    });
     const res = await apiRequest("DELETE", `/api/agents/${tempAgent.id}`, undefined, userToken);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
+  });
+
+  it("DELETE /api/agents/:id rejects agents referenced as subagents", async () => {
+    const referenced = await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Referenced Delete Subagent",
+      username: "referenced-delete-subagent",
+      runtime: "claude",
+    });
+    await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Referencing Delete Agent",
+      username: "referencing-delete-agent",
+      runtime: "claude",
+      subagents: [referenced.id],
+    });
+
+    const res = await apiRequest("DELETE", `/api/agents/${referenced.id}`, undefined, userToken);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("referenced as a subagent");
   });
 
   // ─── Task claim forbidden for machine identity ───

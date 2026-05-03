@@ -65,6 +65,9 @@ After every significant code change, follow this sequence:
    - `pnpm build && pnpm tsc --noEmit && npx vitest run`
    - Any failure → fix and re-run. If fix touches source code, go back to step 1.
 4. **Daemon smoke test** — if changes touch daemon code (`packages/cli/src/daemon/`), run `./scripts/daemon-smoke-test.sh` and ensure it passes before considering the task done.
+   - Before smoke, always refresh the local CLI with `bash scripts/install-cli.sh`.
+   - Smoke is mandatory. Missing arguments are not a reason to skip it: discover existing resources with `ak get board -o json`, `ak get repo -o json`, and `ak get agent -o json`, or create the missing resources.
+   - The default smoke target is the Demo board with the `slink` repository. The smoke script auto-discovers these defaults when arguments are omitted.
 
 ## Testing
 - Framework: vitest (root `vitest.config.ts`)

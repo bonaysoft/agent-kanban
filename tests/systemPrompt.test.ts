@@ -11,10 +11,13 @@ function makeAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
   return {
     id: "agent-1",
     name: "TestAgent",
+    username: "test-agent",
+    bio: null,
     role: "developer",
     soul: null,
     handoff_to: null,
     skills: null,
+    subagents: null,
     runtime: "claude-cli",
     model: null,
     ...overrides,
@@ -190,6 +193,45 @@ describe("generateSystemPrompt — handoff section", () => {
   it("does NOT include --repo flag in ops board handoff task create", () => {
     const prompt = generateSystemPrompt(makeAgent({ handoff_to: ["qa"] }), "ops");
     expect(prompt).not.toContain("--repo <repo>");
+  });
+});
+
+// ─── Subagent section ───────────────────────────────────────────────────────
+
+describe("generateSystemPrompt — subagent section", () => {
+  it("omits subagent section when no subagents are installed", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev");
+    expect(prompt).not.toContain("## Available Subagents");
+  });
+
+  it("lists registered subagent usernames as mentions", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev", [
+      makeAgent({
+        id: "subagent-1",
+        name: "Test Writer",
+        username: "test-writer",
+        role: "subagent-test-role",
+        bio: "Subagent test bio must not appear.",
+        soul: "Subagent soul must not appear.",
+      }),
+    ]);
+    expect(prompt).toContain("## Available Subagents");
+    expect(prompt).toContain("@test-writer");
+    expect(prompt).not.toContain("subagent-1");
+    expect(prompt).not.toContain("Test Writer");
+    expect(prompt).not.toContain("subagent-test-role");
+    expect(prompt).not.toContain("Subagent test bio must not appear.");
+    expect(prompt).not.toContain("Subagent soul must not appear.");
+  });
+
+  it("only injects subagent environment facts", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev", [makeAgent({ id: "subagent-1", name: "Reviewer", username: "reviewer" })]);
+    expect(prompt).toContain("The following registered worker agents are installed as task-local subagents: @reviewer");
+    expect(prompt).not.toContain("template");
+    expect(prompt).not.toContain("when to use");
+    expect(prompt).not.toContain("how to use");
+    expect(prompt).not.toContain("delegate");
+    expect(prompt).not.toContain("delegation");
   });
 });
 
