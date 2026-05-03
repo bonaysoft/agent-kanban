@@ -1056,12 +1056,21 @@ describe("geminiProvider.buildArgs", () => {
     expect(args[promptIdx + 1]).toBe("You are a helpful assistant.");
   });
 
-  it("uses empty string as prompt when systemPromptFile cannot be read", () => {
+  it("combines system prompt content and task context in --prompt", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce("You are a helpful assistant." as any);
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "Do the task.", systemPromptFile: "/tmp/system.txt" });
+    const promptIdx = args.indexOf("--prompt");
+
+    expect(args[promptIdx + 1]).toBe("You are a helpful assistant.\n\nDo the task.");
+  });
+
+  it("uses task context as prompt when systemPromptFile cannot be read", () => {
     // readFileSync is already mocked to throw by default
-    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "", systemPromptFile: "/nonexistent/file.txt" });
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "Do the task.", systemPromptFile: "/nonexistent/file.txt" });
     const promptIdx = args.indexOf("--prompt");
     expect(promptIdx).toBeGreaterThan(-1);
-    expect(args[promptIdx + 1]).toBe("");
+    expect(args[promptIdx + 1]).toBe("Do the task.");
   });
 });
 
@@ -1091,6 +1100,13 @@ describe("geminiProvider.buildResumeArgs", () => {
     const idx = args.indexOf("--resume");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("latest");
+  });
+
+  it("uses task context as resume prompt", () => {
+    const args = geminiBuildResumeArgs(undefined, "Address review feedback.");
+    const idx = args.indexOf("--prompt");
+
+    expect(args[idx + 1]).toBe("Address review feedback.");
   });
 
   it("includes --model when model is provided", () => {
@@ -1298,13 +1314,11 @@ describe("geminiProvider.parseEvent — error variants", () => {
 });
 
 // ---------------------------------------------------------------------------
-// geminiProvider.buildInput — Gemini passes context directly as input
+// geminiProvider.buildInput — Gemini passes context through --prompt
 // ---------------------------------------------------------------------------
 
 describe("geminiProvider.buildInput", () => {
-  it("execute passes task context directly as input (not wrapped)", () => {
-    // Gemini's input is the raw taskContext string — verified by the buildArgs/execute design.
-    // We verify this by confirming buildArgs does not add a JSON wrapper flag.
+  it("does not add stdin input flags", () => {
     const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "do the task" });
     expect(args).not.toContain("--input-format");
   });
@@ -1339,11 +1353,12 @@ describe("geminiProvider.execute — arg selection", () => {
     expect(spawnAgent).toHaveBeenCalled();
   });
 
-  it("passes taskContext as input to spawnAgent", async () => {
+  it("passes taskContext through --prompt instead of stdin", async () => {
     const { spawnAgent } = await import("../src/providers/spawnHelper.js");
     vi.mocked(spawnAgent).mockClear();
     await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "my task context" });
-    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(expect.objectContaining({ input: "my task context" }));
+    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(expect.not.objectContaining({ input: expect.any(String) }));
+    expect(vi.mocked(spawnAgent).mock.calls[0][0].args).toContain("my task context");
   });
 
   it("uses buildResumeArgs when resume is true", async () => {

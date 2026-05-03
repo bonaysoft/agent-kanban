@@ -97,7 +97,7 @@ create_repo() {
 }
 
 discover_agent() {
-  ak get agent -o json | json_query "data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available)?.id || data.find((a) => a.builtin !== 1 && (a.runtime === 'codex' || a.runtime === 'claude') && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && (a.runtime === 'codex' || a.runtime === 'claude') && a.runtime_available)?.id"
+  ak get agent -o json | json_query "data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available)?.id || data.find((a) => a.builtin !== 1 && ['codex', 'claude', 'gemini', 'copilot'].includes(a.runtime) && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && ['codex', 'claude', 'gemini', 'copilot'].includes(a.runtime) && a.runtime_available)?.id"
 }
 
 discover_runtime() {
@@ -111,21 +111,46 @@ discover_runtime() {
     echo "claude"
     return 0
   fi
+  if echo "$status" | grep -q "gemini"; then
+    echo "gemini"
+    return 0
+  fi
+  if echo "$status" | grep -q "copilot"; then
+    echo "copilot"
+    return 0
+  fi
   return 1
 }
 
 create_agent() {
   local runtime="$1"
   local name username bio
-  if [ "$runtime" = "codex" ]; then
-    name="Codex Smoke NoModel"
-    username="codex-smoke-nomodel"
-    bio="Codex worker for daemon smoke tests"
-  else
-    name="Claude Smoke"
-    username="claude-smoke"
-    bio="Claude worker for daemon smoke tests"
-  fi
+  case "$runtime" in
+    codex)
+      name="Codex Smoke NoModel"
+      username="codex-smoke-nomodel"
+      bio="Codex worker for daemon smoke tests"
+      ;;
+    claude)
+      name="Claude Smoke"
+      username="claude-smoke"
+      bio="Claude worker for daemon smoke tests"
+      ;;
+    gemini)
+      name="Gemini Smoke"
+      username="gemini-smoke"
+      bio="Gemini worker for daemon smoke tests"
+      ;;
+    copilot)
+      name="Copilot Smoke"
+      username="copilot-smoke"
+      bio="Copilot worker for daemon smoke tests"
+      ;;
+    *)
+      fail "unsupported smoke runtime for agent creation: $runtime"
+      return 1
+      ;;
+  esac
   ak create agent \
     --name "$name" \
     --username "$username" \
@@ -172,7 +197,8 @@ wait_subagent_file() {
   local expected
   case "$AGENT_RUNTIME" in
     codex) expected=".codex/agents/$SUBAGENT_USERNAME.toml" ;;
-    claude) expected=".claude/agents/$SUBAGENT_USERNAME.md" ;;
+    claude | copilot) expected=".claude/agents/$SUBAGENT_USERNAME.md" ;;
+    gemini) expected=".gemini/agents/$SUBAGENT_USERNAME.md" ;;
     *) fail "unsupported smoke runtime for subagent file check: $AGENT_RUNTIME"; return 1 ;;
   esac
 
@@ -223,7 +249,7 @@ if [ -z "$AGENT_ID" ]; then AGENT_ID="$(discover_agent 2>/dev/null || true)"; fi
 if [ -z "$AGENT_ID" ]; then
   RUNTIME_TO_CREATE="$(discover_runtime 2>/dev/null || true)"
   if [ -z "$RUNTIME_TO_CREATE" ]; then
-    echo "FATAL: no available subagent-capable runtime found (codex or claude). Start a daemon with one of those providers ready."
+    echo "FATAL: no available subagent-capable runtime found (codex, claude, gemini, or copilot). Start a daemon with one of those providers ready."
     exit 1
   fi
   AGENT_ID="$(create_agent "$RUNTIME_TO_CREATE")"
@@ -237,8 +263,8 @@ if [ -z "$BOARD_ID" ] || [ -z "$REPO_ID" ] || [ -z "$AGENT_ID" ]; then
 fi
 
 AGENT_RUNTIME="$(agent_field "$AGENT_ID" runtime)"
-if [ "$AGENT_RUNTIME" != "codex" ] && [ "$AGENT_RUNTIME" != "claude" ]; then
-  echo "FATAL: smoke agent runtime must support subagents (codex or claude), got: $AGENT_RUNTIME"
+if [ "$AGENT_RUNTIME" != "codex" ] && [ "$AGENT_RUNTIME" != "claude" ] && [ "$AGENT_RUNTIME" != "gemini" ] && [ "$AGENT_RUNTIME" != "copilot" ]; then
+  echo "FATAL: smoke agent runtime must support subagents (codex, claude, gemini, or copilot), got: $AGENT_RUNTIME"
   exit 1
 fi
 ensure_smoke_subagent "$AGENT_RUNTIME"

@@ -27,6 +27,10 @@ function readSystemPrompt(filePath?: string): string {
   }
 }
 
+function buildPrompt(opts: ExecuteOpts): string {
+  return [readSystemPrompt(opts.systemPromptFile), opts.taskContext].filter(Boolean).join("\n\n");
+}
+
 export function parseEvent(raw: string): AgentEvent | null {
   let event: any;
   try {
@@ -63,17 +67,16 @@ export function parseEvent(raw: string): AgentEvent | null {
 }
 
 export function buildArgs(opts: ExecuteOpts): string[] {
-  const systemPrompt = readSystemPrompt(opts.systemPromptFile);
-  const args = ["--prompt", systemPrompt, "--output-format", "stream-json", "--yolo"];
+  const args = ["--prompt", buildPrompt(opts), "--output-format", "stream-json", "--yolo"];
   if (opts.model) {
     args.push("--model", opts.model);
   }
   return args;
 }
 
-export function buildResumeArgs(model?: string): string[] {
+export function buildResumeArgs(model?: string, prompt = ""): string[] {
   logger.warn("Gemini CLI does not support resume by session ID — resuming latest session");
-  const args = ["--resume", "latest", "--prompt", "", "--output-format", "stream-json", "--yolo"];
+  const args = ["--resume", "latest", "--prompt", prompt, "--output-format", "stream-json", "--yolo"];
   if (model) {
     args.push("--model", model);
   }
@@ -91,14 +94,13 @@ export const geminiProvider: AgentProvider = {
   },
 
   execute(opts: ExecuteOpts): Promise<AgentHandle> {
-    const args = opts.resume ? buildResumeArgs(opts.model) : buildArgs(opts);
+    const args = opts.resume ? buildResumeArgs(opts.model, opts.taskContext) : buildArgs(opts);
     return Promise.resolve(
       spawnAgent({
         command: "gemini",
         args,
         cwd: opts.cwd,
         env: opts.env,
-        input: opts.taskContext,
         parseEvent,
       }),
     );
