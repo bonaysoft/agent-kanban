@@ -13,29 +13,28 @@ test.describe("Agents Page", () => {
 
     // expect: Skills tag input is visible with placeholder text
     const workflowGroup = page.getByRole("group", { name: "Workflow" });
-    const skillsInput = workflowGroup.getByRole("textbox", { name: "Type a skill and press Enter" });
+    const skillsInput = workflowGroup.getByRole("textbox", { name: "owner/repo@skill-name" });
     await expect(skillsInput).toBeVisible();
 
-    // 2. Click the Skills field, type 'typescript', and press Enter
+    // 2. Click the Skills field, type a valid skill ref, and press Enter
     await skillsInput.click();
-    await skillsInput.fill("typescript");
+    await skillsInput.fill("owner/skills@typescript");
     await page.keyboard.press("Enter");
 
-    // expect: A 'typescript' tag chip appears in the input
-    await expect(workflowGroup.getByText("typescript")).toBeVisible();
+    // expect: A skill tag chip appears in the input
+    await expect(workflowGroup.getByText("owner/skills@typescript")).toBeVisible();
 
     // expect: The text input clears for the next entry
     // After a tag is added, the placeholder is hidden but the input is still present
     const skillsInputAfterFirstTag = workflowGroup.locator('input[type="text"], input:not([type])').last();
     await expect(skillsInputAfterFirstTag).toHaveValue("");
 
-    // 3. Type 'react' and press Enter
-    await skillsInputAfterFirstTag.fill("react");
+    // 3. Type another valid skill ref and press Enter
+    await skillsInputAfterFirstTag.fill("owner/skills@react");
     await page.keyboard.press("Enter");
 
-    // expect: A 'react' tag chip also appears
-    // expect: Two skill tags are now visible: 'typescript' and 'react'
-    await expect(workflowGroup.getByText("typescript")).toBeVisible();
-    await expect(workflowGroup.getByText("react")).toBeVisible();
+    // expect: Two skill tags are now visible
+    await expect(workflowGroup.getByText("owner/skills@typescript")).toBeVisible();
+    await expect(workflowGroup.getByText("owner/skills@react")).toBeVisible();
   });
 });

@@ -1,4 +1,4 @@
-import { AGENT_RUNTIMES, type AgentRuntime, RUNTIME_LABELS } from "@agent-kanban/shared";
+import { AGENT_RUNTIMES, type AgentRuntime, findInvalidSkillRef, RUNTIME_LABELS } from "@agent-kanban/shared";
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AgentIdenticon } from "../components/AgentIdenticon";
@@ -67,6 +67,11 @@ export function AgentEditPage() {
   async function handleSave() {
     if (!name.trim()) return;
     setError(null);
+    const invalidSkill = findInvalidSkillRef(skills);
+    if (invalidSkill) {
+      setError(`Invalid skill "${invalidSkill}". Use source/repo@skill-name format.`);
+      return;
+    }
     try {
       await updateAgent.mutateAsync({
         id: agent!.id,
@@ -187,7 +192,7 @@ export function AgentEditPage() {
               <legend className="text-[11px] font-mono font-medium text-content-tertiary uppercase tracking-[0.08em] mb-3">Workflow</legend>
               <div className="space-y-1.5">
                 <Label>Skills</Label>
-                <TagInput tags={skills} onChange={setSkills} placeholder="Type a skill and press Enter" />
+                <TagInput tags={skills} onChange={setSkills} placeholder="owner/repo@skill-name" />
               </div>
             </fieldset>
 

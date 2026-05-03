@@ -1,4 +1,13 @@
-import { AGENT_STATUSES, deriveUsername, isValidUsername, PRIORITIES, STALE_TIMEOUT_MS, TASK_ACTIONS } from "@agent-kanban/shared";
+import {
+  AGENT_STATUSES,
+  deriveUsername,
+  findInvalidSkillRef,
+  isValidSkillRef,
+  isValidUsername,
+  PRIORITIES,
+  STALE_TIMEOUT_MS,
+  TASK_ACTIONS,
+} from "@agent-kanban/shared";
 import { describe, expect, it } from "vitest";
 
 describe("isValidUsername", () => {
@@ -61,6 +70,25 @@ describe("deriveUsername", () => {
   it("truncates to 40 characters", () => {
     const long = "a".repeat(50);
     expect(deriveUsername(long).length).toBeLessThanOrEqual(40);
+  });
+});
+
+describe("isValidSkillRef", () => {
+  it("accepts installable owner/repo@skill-name refs", () => {
+    expect(isValidSkillRef("trailofbits/skills@differential-review")).toBe(true);
+    expect(isValidSkillRef("obra/superpowers@verification-before-completion")).toBe(true);
+  });
+
+  it("rejects short names and malformed refs", () => {
+    expect(isValidSkillRef("agent-kanban")).toBe(false);
+    expect(isValidSkillRef("trailofbits/skills")).toBe(false);
+    expect(isValidSkillRef("trailofbits/skills@")).toBe(false);
+    expect(isValidSkillRef("trailofbits/skills@bad skill")).toBe(false);
+  });
+
+  it("returns the first invalid skill ref", () => {
+    expect(findInvalidSkillRef(["owner/repo@good", "browse", "other/repo@good"])).toBe("browse");
+    expect(findInvalidSkillRef(["owner/repo@good"])).toBeNull();
   });
 });
 

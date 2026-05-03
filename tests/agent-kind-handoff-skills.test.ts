@@ -103,11 +103,11 @@ describe("create agent: --skills flag", () => {
       name: "Test Skills",
       runtime: "claude",
       role: "dev",
-      skills: ["agent-kanban"],
+      skills: ["saltbo/agent-kanban@agent-kanban"],
     });
 
     expect(Array.isArray(agent.skills)).toBe(true);
-    expect(agent.skills).toEqual(["agent-kanban"]);
+    expect(agent.skills).toEqual(["saltbo/agent-kanban@agent-kanban"]);
   });
 
   it("multiple skills are stored as array", async () => {
@@ -115,11 +115,11 @@ describe("create agent: --skills flag", () => {
       username: "test-skills-multi",
       name: "Test Skills Multi",
       runtime: "claude",
-      skills: ["agent-kanban", "trailofbits/skills@differential-review"],
+      skills: ["saltbo/agent-kanban@agent-kanban", "trailofbits/skills@differential-review"],
     });
 
     expect(agent.skills).toHaveLength(2);
-    expect(agent.skills).toContain("agent-kanban");
+    expect(agent.skills).toContain("saltbo/agent-kanban@agent-kanban");
     expect(agent.skills).toContain("trailofbits/skills@differential-review");
   });
 });
@@ -146,21 +146,21 @@ describe("update agent: --handoff-to, --skills flags", () => {
 
   it("updates skills via updateAgent", async () => {
     const { updateAgent } = await import("../apps/web/server/agentRepo");
-    const updated = await updateAgent(db, agentId, { skills: ["agent-kanban"] });
+    const updated = await updateAgent(db, agentId, { skills: ["saltbo/agent-kanban@agent-kanban"] });
 
     expect(updated).toBeTruthy();
-    expect(updated!.skills).toEqual(["agent-kanban"]);
+    expect(updated!.skills).toEqual(["saltbo/agent-kanban@agent-kanban"]);
   });
 
   it("handoff_to and skills persist together", async () => {
     const { updateAgent, getAgent } = await import("../apps/web/server/agentRepo");
     await updateAgent(db, agentId, {
       handoff_to: ["final-leader"],
-      skills: ["agent-kanban", "browse"],
+      skills: ["saltbo/agent-kanban@agent-kanban", "trailofbits/skills@differential-review"],
     });
 
     const fetched = await getAgent(db, agentId, "owner-update");
     expect(fetched!.handoff_to).toEqual(["final-leader"]);
-    expect(fetched!.skills).toEqual(["agent-kanban", "browse"]);
+    expect(fetched!.skills).toEqual(["saltbo/agent-kanban@agent-kanban", "trailofbits/skills@differential-review"]);
   });
 });

@@ -4,6 +4,7 @@ import {
   type AgentTemplate,
   fetchTemplate,
   fetchTemplateIndex,
+  findInvalidSkillRef,
   RUNTIME_LABELS,
   type TemplateIndex,
 } from "@agent-kanban/shared";
@@ -72,6 +73,11 @@ export function AgentNewPage() {
   async function handleCreate() {
     if (!username.trim()) return;
     setError(null);
+    const invalidSkill = findInvalidSkillRef(skills);
+    if (invalidSkill) {
+      setError(`Invalid skill "${invalidSkill}". Use source/repo@skill-name format.`);
+      return;
+    }
     try {
       await createAgent.mutateAsync({
         name: name.trim() || undefined,
@@ -463,7 +469,7 @@ function FormStep(props: FormStepProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Skills</Label>
-              <TagInput tags={skills} onChange={setSkills} placeholder="Type a skill and press Enter" />
+              <TagInput tags={skills} onChange={setSkills} placeholder="owner/repo@skill-name" />
             </div>
           </fieldset>
 
