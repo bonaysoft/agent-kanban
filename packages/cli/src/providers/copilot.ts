@@ -6,7 +6,7 @@ import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import { approveAll, CopilotClient } from "@github/copilot-sdk";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
-import { parseRetryAfterMs, UsageFetchError } from "./types.js";
+import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const logger = createLogger("copilot");
 
@@ -277,8 +277,13 @@ export const copilotProvider: AgentProvider = {
   name: "copilot",
   label: "GitHub Copilot",
 
-  checkAvailability() {
-    return readGhToken() ? { status: "ready" } : { status: "unauthorized", detail: "GitHub CLI is not authenticated" };
+  async checkAvailability() {
+    if (!readGhToken()) return { status: "unauthorized" as const, detail: "GitHub CLI is not authenticated" };
+    try {
+      return availabilityFromUsage(await this.fetchUsage!());
+    } catch (err) {
+      return availabilityFromUsageError(err, "GitHub Copilot");
+    }
   },
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {

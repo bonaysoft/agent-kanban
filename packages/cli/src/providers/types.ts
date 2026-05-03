@@ -2,6 +2,12 @@ import type { AgentEvent, AgentRuntime, ContentBlock, MachineRuntimeStatus, Usag
 
 export type { AgentEvent, AgentRuntime, ContentBlock, UsageInfo, UsageWindow };
 
+export interface RuntimeAvailability {
+  status: MachineRuntimeStatus;
+  detail?: string;
+  reset_at?: string;
+}
+
 /** Normalized history entry returned by provider history readers. */
 export interface HistoryEvent {
   id: string;
@@ -42,7 +48,7 @@ export interface AgentHandle {
 export interface AgentProvider {
   readonly name: AgentRuntime;
   readonly label: string;
-  checkAvailability?(): { status: MachineRuntimeStatus; detail?: string };
+  checkAvailability?(): Promise<RuntimeAvailability>;
   execute(opts: ExecuteOpts): Promise<AgentHandle>;
   /**
    * Retrieve session history from this provider's local storage.
@@ -80,6 +86,31 @@ export class UsageFetchError extends Error {
     this.status = opts.status;
     this.retryAfterMs = opts.retryAfterMs;
   }
+}
+
+export function availabilityFromUsage(usage: UsageInfo | null): RuntimeAvailability {
+  const exhausted = usage?.windows.filter((window) => window.utilization >= 1) ?? [];
+  if (exhausted.length === 0) return { status: "ready" };
+
+  const reset_at = exhausted
+    .map((window) => window.resets_at)
+    .filter(Boolean)
+    .sort()[0];
+  return { status: "limited", detail: "runtime usage limit reached", reset_at };
+}
+
+export function availabilityFromUsageError(err: unknown, runtimeLabel: string): RuntimeAvailability {
+  if (!(err instanceof UsageFetchError)) {
+    return { status: "unhealthy", detail: `${runtimeLabel} usage probe failed: ${(err as Error).message}` };
+  }
+  if (err.status === 401 || err.status === 403) {
+    return { status: "unauthorized", detail: `${runtimeLabel} authentication failed` };
+  }
+  if (err.status === 429) {
+    const reset_at = err.retryAfterMs === undefined ? undefined : new Date(Date.now() + err.retryAfterMs).toISOString();
+    return { status: "limited", detail: `${runtimeLabel} usage limit reached`, reset_at };
+  }
+  return { status: "unhealthy", detail: err.message };
 }
 
 /**

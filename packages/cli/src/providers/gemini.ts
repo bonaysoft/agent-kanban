@@ -84,7 +84,7 @@ export const geminiProvider: AgentProvider = {
   name: "gemini",
   label: "Gemini CLI",
 
-  checkAvailability() {
+  async checkAvailability() {
     return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || existsSync(OAUTH_CREDS_PATH)
       ? { status: "ready" }
       : { status: "unauthorized", detail: "Gemini CLI is not authenticated" };

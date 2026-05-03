@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   heartbeat: vi.fn(),
   registerMachine: vi.fn(),
-  capturedRateLimitSink: null as null | { onRateLimited: (runtime: string, resetAt: string) => void; onRateLimitResumed: (runtime: string) => void },
+  capturedRateLimitSink: null as null | {
+    onRateLimited: (runtime: string, resetAt: string) => void | Promise<void>;
+    onRateLimitResumed: (runtime: string) => void;
+  },
   availability: null as null | Record<string, { status: "ready" | "unauthorized"; detail?: string }>,
 }));
 
@@ -41,14 +44,14 @@ vi.mock("../src/providers/registry.js", () => ({
     {
       name: "claude",
       label: "Claude",
-      checkAvailability: () => mocks.availability?.claude ?? { status: "ready" },
+      checkAvailability: async () => mocks.availability?.claude ?? { status: "ready" },
       execute: vi.fn(),
       getHistory: vi.fn().mockResolvedValue([]),
     },
     {
       name: "codex",
       label: "Codex",
-      checkAvailability: () => mocks.availability?.codex ?? { status: "ready" },
+      checkAvailability: async () => mocks.availability?.codex ?? { status: "ready" },
       execute: vi.fn(),
       getHistory: vi.fn().mockResolvedValue([]),
     },
@@ -154,8 +157,7 @@ describe("daemon heartbeat runtime states", () => {
     });
 
     const resetAt = "2026-03-21T10:30:00.000Z";
-    mocks.capturedRateLimitSink!.onRateLimited("claude", resetAt);
-    await Promise.resolve();
+    await mocks.capturedRateLimitSink!.onRateLimited("claude", resetAt);
 
     expect(mocks.heartbeat).toHaveBeenLastCalledWith("machine-1", {
       version: "1.2.3",

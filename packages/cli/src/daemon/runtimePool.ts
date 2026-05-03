@@ -69,7 +69,7 @@ export interface AgentFlags {
 }
 
 export interface RateLimitSink {
-  onRateLimited: (runtime: string, resetAt: string) => void;
+  onRateLimited: (runtime: string, resetAt: string) => void | Promise<void>;
   onRateLimitResumed: (runtime: string) => void;
 }
 
@@ -285,7 +285,7 @@ async function routeRateLimit(agent: AgentFlags, event: Extract<AgentEvent, { ty
     await getSessionManager()
       .patch(agent.sessionId, { resumeAfter })
       .catch((e) => logger.warn(`Failed to persist resumeAfter for ${agent.sessionId.slice(0, 8)}: ${errMessage(e)}`));
-    sink.onRateLimited(runtime, pauseUntil);
+    await sink.onRateLimited(runtime, pauseUntil);
     return;
   }
   if (event.isUsingOverage) {

@@ -197,6 +197,8 @@ Vague descriptions produce vague code. Be specific.
 
 ## Phase 4: Assign
 
+Before choosing or creating workers, read `references/runtime-delegation.md`.
+
 Tasks should already be assigned via `--assign-to` on create. If not, use `ak update task <id>` or recreate.
 
 Check existing agents. For a typical project you need:

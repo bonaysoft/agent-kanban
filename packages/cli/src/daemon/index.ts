@@ -58,13 +58,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     },
   });
 
-  const machineInfo = getMachineInfo(availableProviders, rateLimiter);
+  const machineInfo = await getMachineInfo(availableProviders, rateLimiter);
   const deviceId = generateDeviceId();
   const machine = await client.registerMachine({ ...machineInfo, device_id: deviceId });
   const machineId = machine.id;
   logger.info(`Machine ready: ${machineId} (device: ${deviceId})`);
 
-  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: buildRuntimeStates(availableProviders, rateLimiter) });
+  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: await buildRuntimeStates(availableProviders, rateLimiter) });
   migrateLegacySessions();
   await cleanupStaleSessions(client, machineId);
   await auditOrphanedTasks(client, machineId);
@@ -78,7 +78,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   sendHeartbeat = async () => {
     await client.heartbeat(machineId, {
       version: machineInfo.version,
-      runtimes: buildRuntimeStates(availableProviders, rateLimiter),
+      runtimes: await buildRuntimeStates(availableProviders, rateLimiter),
       usage_info: usageCollector.getSnapshot(),
     });
   };
@@ -97,9 +97,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     client,
     { onSlotFreed: () => loop.onSlotFreed() },
     {
-      onRateLimited: (runtime, resetAt) => {
+      onRateLimited: async (runtime, resetAt) => {
         rateLimiter.pause(runtime, resetAt);
-        sendHeartbeat?.().catch((e) => logger.warn(`Heartbeat failed after rate limit: ${(e as Error).message}`));
+        await sendHeartbeat?.().catch((e) => logger.warn(`Heartbeat failed after rate limit: ${(e as Error).message}`));
       },
       onRateLimitResumed: (runtime) => rateLimiter.resumeRateLimit(runtime),
     },
@@ -165,22 +165,24 @@ function removePidFile(): void {
   }
 }
 
-function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter) {
+async function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter) {
   const os = `${platform()} ${arch()} ${release()}`;
-  const runtimes = buildRuntimeStates(providers, rateLimiter);
+  const runtimes = await buildRuntimeStates(providers, rateLimiter);
   return { name: hostname(), os, version: getVersion(), runtimes };
 }
 
-function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateLimiter): MachineRuntime[] {
+async function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateLimiter): Promise<MachineRuntime[]> {
   const checked_at = new Date().toISOString();
-  return providers.map((provider) => {
-    const reset_at = rateLimiter.pauseResetAt(provider.name);
-    if (reset_at) {
-      return { name: provider.name, status: "limited", detail: "runtime paused by rate limiter", reset_at, checked_at };
-    }
-    const availability = provider.checkAvailability?.() ?? { status: "ready" };
-    return { name: provider.name, ...availability, checked_at };
-  });
+  return Promise.all(
+    providers.map(async (provider) => {
+      const reset_at = rateLimiter.pauseResetAt(provider.name);
+      if (reset_at) {
+        return { name: provider.name, status: "limited", detail: "runtime paused by rate limiter", reset_at, checked_at };
+      }
+      const availability = (await provider.checkAvailability?.()) ?? { status: "ready" };
+      return { name: provider.name, ...availability, checked_at };
+    }),
+  );
 }
 
 function formatRuntimeNames(runtimes: MachineRuntime[]): string {

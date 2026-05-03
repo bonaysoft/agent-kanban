@@ -42,6 +42,8 @@ Parse the user's input:
 
 ### Step 1: Context
 
+Before choosing or creating workers, read `references/runtime-delegation.md`.
+
 ```bash
 ak get board                   # pick the right board
 ak get agent -o json           # available agents, load, runtime_available

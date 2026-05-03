@@ -6,7 +6,7 @@ import type { BashArgs, ReadArgs } from "@agent-kanban/shared";
 import { ToolName } from "@agent-kanban/shared";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
-import { parseRetryAfterMs, UsageFetchError } from "./types.js";
+import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const AUTH_PATH = join(homedir(), ".codex", "auth.json");
 const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
@@ -198,8 +198,15 @@ export const codexProvider: AgentProvider = {
   name: "codex",
   label: "Codex CLI",
 
-  checkAvailability() {
-    return readAccessToken() || process.env.OPENAI_API_KEY ? { status: "ready" } : { status: "unauthorized", detail: "Codex is not logged in" };
+  async checkAvailability() {
+    const token = readAccessToken();
+    if (!token && !process.env.OPENAI_API_KEY) return { status: "unauthorized" as const, detail: "Codex is not logged in" };
+    if (!token) return { status: "ready" as const };
+    try {
+      return availabilityFromUsage(await this.fetchUsage!());
+    } catch (err) {
+      return availabilityFromUsageError(err, "Codex");
+    }
   },
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
@@ -273,7 +280,7 @@ export const codexProvider: AgentProvider = {
       windows.push({
         runtime: "codex",
         label: windowLabel(rl.primary_window.limit_window_seconds),
-        utilization: rl.primary_window.used_percent,
+        utilization: rl.primary_window.used_percent / 100,
         resets_at: new Date(rl.primary_window.reset_at * 1000).toISOString(),
       });
     }
@@ -281,7 +288,7 @@ export const codexProvider: AgentProvider = {
       windows.push({
         runtime: "codex",
         label: windowLabel(rl.secondary_window.limit_window_seconds),
-        utilization: rl.secondary_window.used_percent,
+        utilization: rl.secondary_window.used_percent / 100,
         resets_at: new Date(rl.secondary_window.reset_at * 1000).toISOString(),
       });
     }

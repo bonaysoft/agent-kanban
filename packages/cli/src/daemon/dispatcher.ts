@@ -16,7 +16,7 @@ import { type AgentInfo, generateSystemPrompt, writePromptFile } from "../agent/
 import { AgentClient, type ApiClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
 import { createLogger } from "../logger.js";
-import { getProvider, normalizeRuntime } from "../providers/registry.js";
+import { getAvailableProviders, getProvider, normalizeRuntime } from "../providers/registry.js";
 import { getSessionManager } from "../session/manager.js";
 import type { SessionFile } from "../session/types.js";
 import { ensureCloned, prepareRepo, repoDir } from "../workspace/repoOps.js";
@@ -138,6 +138,7 @@ export async function dispatchTasks(
 
   if (available.length === 0) return false;
 
+  const localRuntimes = new Set(getAvailableProviders().map((provider) => provider.name));
   const agentCache = new Map<string, { runtime: AgentRuntime | null; available: boolean }>();
   let task: any = null;
   for (const t of available) {
@@ -152,8 +153,8 @@ export async function dispatchTasks(
       agentState = { runtime: normalizeRuntime(agent.runtime ?? "claude"), available: agent.runtime_available !== false };
       agentCache.set(t.assigned_to, agentState);
     }
-    if (!agentState.runtime || !agentState.available) continue;
-    const localAvailability = getProvider(agentState.runtime).checkAvailability?.();
+    if (!agentState.runtime || !agentState.available || !localRuntimes.has(agentState.runtime)) continue;
+    const localAvailability = await getProvider(agentState.runtime).checkAvailability?.();
     if (localAvailability && localAvailability.status !== "ready") continue;
     if (!rateLimiter.isRuntimePaused(agentState.runtime)) {
       task = t;

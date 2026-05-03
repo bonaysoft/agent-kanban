@@ -36,10 +36,18 @@ vi.mock("../packages/cli/src/config.js", () => ({
   getCredentials: vi.fn().mockReturnValue({ apiUrl: "https://example.com" }),
 }));
 vi.mock("../packages/cli/src/providers/registry.js", () => ({
+  getAvailableProviders: vi.fn().mockReturnValue([
+    {
+      name: "claude",
+      label: "Claude",
+      checkAvailability: async () => providerMocks.availability,
+      execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }),
+    },
+  ]),
   getProvider: vi.fn().mockReturnValue({
     name: "claude",
     label: "Claude",
-    checkAvailability: () => providerMocks.availability,
+    checkAvailability: async () => providerMocks.availability,
     execute: vi.fn().mockResolvedValue({ events: (async function* () {})(), abort: vi.fn(), send: vi.fn() }),
   }),
   normalizeRuntime: vi.fn().mockImplementation((r: string) => r),
@@ -474,6 +482,28 @@ describe("dispatchTasks — scheduled_at filter", () => {
     const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
 
     expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+
+  it("does not dispatch when the runtime is not available on this daemon", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const { getAvailableProviders, getProvider } = await import("../packages/cli/src/providers/registry");
+    vi.mocked(getAvailableProviders).mockReturnValueOnce([]);
+    vi.mocked(getProvider).mockClear();
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-runtime-not-local", assigned_to: "agent-global-runtime", status: "todo" });
+    const client = {
+      ...makeClient([task]),
+      getAgent: async () => ({ runtime: "claude", runtime_available: true, name: "Agent", username: "agent-global-runtime" }),
+    };
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+
+    const result = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts);
+
+    expect(result).toBe(false);
+    expect(getProvider).not.toHaveBeenCalled();
     expect(spawnSpy).not.toHaveBeenCalled();
     rl.stop();
   });

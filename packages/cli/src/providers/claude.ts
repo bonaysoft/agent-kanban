@@ -8,7 +8,7 @@ import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUs
 import { getSessionMessages, query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
-import { parseRetryAfterMs, UsageFetchError } from "./types.js";
+import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const SUBTASK_STATUSES: readonly SubtaskStatus[] = ["completed", "failed", "stopped"] as const;
 
@@ -378,8 +378,13 @@ export const claudeProvider: AgentProvider = {
   name: "claude",
   label: "Claude Code",
 
-  checkAvailability() {
-    return readOAuthToken() ? { status: "ready" } : { status: "unauthorized", detail: "Claude Code is not logged in" };
+  async checkAvailability() {
+    if (!readOAuthToken()) return { status: "unauthorized" as const, detail: "Claude Code is not logged in" };
+    try {
+      return availabilityFromUsage(await this.fetchUsage!());
+    } catch (err) {
+      return availabilityFromUsageError(err, "Claude Code");
+    }
   },
 
   execute(opts: ExecuteOpts): Promise<AgentHandle> {

@@ -887,8 +887,8 @@ describe("codexProvider.fetchUsage — successful fetch", () => {
       headers: { get: () => null },
       json: async () => ({
         rate_limit: {
-          primary_window: { used_percent: 0.5, reset_at: 1700003600, limit_window_seconds: 18000 },
-          secondary_window: { used_percent: 0.2, reset_at: 1700604800, limit_window_seconds: 604800 },
+          primary_window: { used_percent: 50, reset_at: 1700003600, limit_window_seconds: 18000 },
+          secondary_window: { used_percent: 20, reset_at: 1700604800, limit_window_seconds: 604800 },
         },
       }),
     } as any);
@@ -897,7 +897,9 @@ describe("codexProvider.fetchUsage — successful fetch", () => {
     expect(Array.isArray(result!.windows)).toBe(true);
     expect(result!.windows.length).toBe(2);
     expect(result!.windows[0].label).toBe("5-Hour");
+    expect(result!.windows[0].utilization).toBe(0.5);
     expect(result!.windows[1].label).toBe("Weekly");
+    expect(result!.windows[1].utilization).toBe(0.2);
     expect(typeof result!.updated_at).toBe("string");
     fetchSpy.mockRestore();
   });
