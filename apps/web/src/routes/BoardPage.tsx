@@ -151,7 +151,7 @@ export function BoardPage() {
         }}
         taskId={chatTask?.id ?? null}
         task={chatTask}
-        className="!w-[45%] max-md:!w-full"
+        className="!w-[50%] max-md:!w-full"
       />
 
       {selectedAgent && (
