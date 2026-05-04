@@ -1,13 +1,13 @@
+import { Settings, Tags } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useBoards } from "../hooks/useBoard";
 import { api } from "../lib/api";
 import { clearAuthToken, signOut, useSession } from "../lib/auth-client";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
-import { BoardShareSettings } from "./BoardShareSettings";
 import { BoardSwitcher } from "./BoardSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Button } from "./ui/button";
+import { Button, buttonVariants } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -98,7 +98,34 @@ export function Header() {
               <Button variant="ghost" size="sm" onClick={() => setSwitcherOpen(true)}>
                 {activeBoard.name}
               </Button>
-              <BoardShareSettings board={activeBoard} />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Link
+                      to={`/boards/${activeBoard.id}/settings`}
+                      className={buttonVariants({ variant: "ghost", size: "icon-sm", className: "relative" })}
+                      aria-label="Board settings"
+                    >
+                      <Settings className="size-3.5" />
+                    </Link>
+                  }
+                />
+                <TooltipContent>Board settings</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Link
+                      to={`/boards/${activeBoard.id}/labels`}
+                      className={buttonVariants({ variant: "ghost", size: "icon-sm", className: "relative" })}
+                      aria-label="Labels"
+                    >
+                      <Tags className="size-3.5" />
+                    </Link>
+                  }
+                />
+                <TooltipContent>Labels</TooltipContent>
+              </Tooltip>
             </>
           )}
         </div>

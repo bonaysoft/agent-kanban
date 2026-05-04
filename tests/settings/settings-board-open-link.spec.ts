@@ -1,26 +1,23 @@
 // spec: specs/agent-kanban.plan.md
-// section: 5.9 Board item — Open link navigates to board
+// section: 5.9 Board settings links navigate to board settings routes
 
 import { expect, test } from "@playwright/test";
 import { signUpAndGetBoard } from "../helpers/auth";
 
 test.describe("Settings Page", () => {
-  test("Board item — Open link navigates to board", async ({ page }) => {
-    // 1. Sign in, navigate to /settings, find a board item in the list
+  test("Board header links navigate to settings and labels", async ({ page }) => {
     await signUpAndGetBoard(page, `settings_openlink_${Date.now()}@example.com`);
-    await page.goto("/settings");
+    const boardId = page.url().split("/boards/")[1];
 
-    // expect: An 'Open' link is visible on the right side of the collapsed board row
-    const openButton = page.getByRole("button", { name: "Open" });
-    await expect(openButton).toBeVisible();
+    await page.getByRole("link", { name: "Board settings" }).click();
 
-    // 2. Click 'Open'
-    await openButton.click();
+    await expect(page).toHaveURL(`/boards/${boardId}/settings`);
+    await expect(page.getByRole("heading", { name: "Board settings" })).toBeVisible();
 
-    // expect: The user is navigated to /boards/:boardId
-    await expect(page).toHaveURL(/\/boards\/.+/);
+    await page.goto(`/boards/${boardId}`);
+    await page.getByRole("link", { name: "Labels" }).click();
 
-    // expect: The board page for that board is displayed
-    await expect(page.locator(".hidden.md\\:grid")).toBeVisible();
+    await expect(page).toHaveURL(`/boards/${boardId}/labels`);
+    await expect(page.getByRole("heading", { name: "Labels", level: 1 })).toBeVisible();
   });
 });

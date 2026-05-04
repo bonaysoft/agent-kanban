@@ -11,8 +11,10 @@ import { AdminDashboardPage } from "./routes/admin/AdminDashboardPage";
 import { AdminLayout } from "./routes/admin/AdminLayout";
 import { AdminMachinesPage } from "./routes/admin/AdminMachinesPage";
 import { AdminUsersPage } from "./routes/admin/AdminUsersPage";
+import { BoardLabelsPage } from "./routes/BoardLabelsPage";
 import { BoardPage } from "./routes/BoardPage";
 import { BoardRedirect } from "./routes/BoardRedirect";
+import { BoardSettingsPage } from "./routes/BoardSettingsPage";
 import { LandingPage } from "./routes/LandingPage";
 import { MachineDetailPage } from "./routes/MachineDetailPage";
 import { MachinesPage } from "./routes/MachinesPage";
@@ -78,6 +80,22 @@ export function App() {
           element={
             <ProtectedRoute>
               <BoardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/boards/:boardId/settings"
+          element={
+            <ProtectedRoute>
+              <BoardSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/boards/:boardId/labels"
+          element={
+            <ProtectedRoute>
+              <BoardLabelsPage />
             </ProtectedRoute>
           }
         />

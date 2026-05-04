@@ -241,6 +241,32 @@ describe("routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("GET /api/share/:slug/badge.svg returns AK metric badges", async () => {
+    const { createBoard, updateBoard } = await import("../apps/web/server/boardRepo");
+    const { createTask } = await import("../apps/web/server/taskRepo");
+    const board = await createBoard(env.DB, userId, `badge-board-${Date.now()}`, "ops");
+    const publicBoard = await updateBoard(env.DB, board.id, { visibility: "public" });
+    const task = await createTask(env.DB, userId, { board_id: board.id, title: "Completed badge task" });
+    await env.DB.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").bind(task.id).run();
+    await env.DB.prepare(
+      "UPDATE agent_sessions SET input_tokens = 1000000, output_tokens = 200000, cache_read_tokens = 30000, cache_creation_tokens = 4000 WHERE id = ?",
+    )
+      .bind(sessionId)
+      .run();
+
+    const agentCount = await env.DB.prepare("SELECT COUNT(*) as count FROM agents WHERE owner_id = ? AND COALESCE(version, 'latest') = 'latest'")
+      .bind(userId)
+      .first<{ count: number }>();
+
+    const agents = await apiRequest("GET", `/api/share/${publicBoard!.share_slug}/badge.svg?type=agents`);
+    const tasks = await apiRequest("GET", `/api/share/${publicBoard!.share_slug}/badge.svg?type=tasks`);
+    const tokens = await apiRequest("GET", `/api/share/${publicBoard!.share_slug}/badge.svg?type=tokens`);
+
+    expect(await agents.text()).toContain(`${agentCount!.count} agents`);
+    expect(await tasks.text()).toContain("1 tasks");
+    expect(await tokens.text()).toContain("1.2M tokens");
+  });
+
   // ─── Repositories ───
 
   it("POST /api/repositories creates a repository", async () => {

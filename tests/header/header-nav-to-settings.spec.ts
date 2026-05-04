@@ -20,9 +20,10 @@ test.describe("Header and Navigation", () => {
     // expect: The user is navigated to /settings
     await expect(page).toHaveURL(/\/settings/);
 
-    // expect: The Settings page is displayed with Theme and Boards sections
+    // expect: The Settings page is displayed with account-level settings
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Theme" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "GitHub" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Boards" })).not.toBeVisible();
   });
 });

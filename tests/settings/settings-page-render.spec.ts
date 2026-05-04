@@ -1,11 +1,11 @@
 // spec: specs/agent-kanban.plan.md
-// section: 5.1 Settings page displays theme switcher and boards list
+// section: 5.1 Settings page displays account settings
 
 import { expect, test } from "@playwright/test";
 import { signUpAndGetBoard } from "../helpers/auth";
 
 test.describe("Settings Page", () => {
-  test("Settings page displays theme switcher and boards list", async ({ page }) => {
+  test("Settings page displays account-level settings only", async ({ page }) => {
     // 1. Sign in and navigate to /settings
     await signUpAndGetBoard(page, `settings_render_${Date.now()}@example.com`);
     await page.goto("/settings");
@@ -18,7 +18,9 @@ test.describe("Settings Page", () => {
     await expect(page.getByRole("button", { name: "dark" })).toBeVisible();
     await expect(page.getByRole("button", { name: "system" })).toBeVisible();
 
-    // expect: A 'Boards' section is visible listing all user boards
-    await expect(page.getByText("My Board")).toBeVisible();
+    // expect: Account settings do not include board management UI
+    await expect(page.getByRole("heading", { name: "GitHub" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Boards" })).not.toBeVisible();
+    await expect(page.getByText("My Board")).not.toBeVisible();
   });
 });

@@ -40,6 +40,7 @@ import {
 } from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { cliVersionMiddleware } from "./cliVersion";
+import type { D1 } from "./db";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
 import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
@@ -257,45 +258,8 @@ api.get("/api/share/:slug/badge.svg", async (c) => {
   const board = await getBoardBySlug(c.env.DB, c.req.param("slug"));
   if (!board) throw new HTTPException(404, { message: "Board not found" });
 
-  const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
-  for (const t of board.tasks) {
-    if (t.status === "todo") counts.todo++;
-    else if (t.status === "in_progress") counts.in_progress++;
-    else if (t.status === "in_review") counts.in_review++;
-    else if (t.status === "done") counts.done++;
-  }
-
-  function escapeXml(s: string): string {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-  }
-
-  const label = escapeXml(board.name);
-  const value = escapeXml(`${counts.todo} todo · ${counts.in_progress} active · ${counts.in_review} review · ${counts.done} done`);
-
-  const labelWidth = Math.max(label.length * 7 + 16, 60);
-  const valueWidth = value.length * 6.5 + 16;
-  const totalWidth = labelWidth + valueWidth;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
-  <linearGradient id="s" x2="0" y2="100%">
-    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-    <stop offset="1" stop-opacity=".1"/>
-  </linearGradient>
-  <clipPath id="r">
-    <rect width="${totalWidth}" height="20" rx="3" fill="#fff"/>
-  </clipPath>
-  <g clip-path="url(#r)">
-    <rect width="${labelWidth}" height="20" fill="#1e293b"/>
-    <rect x="${labelWidth}" width="${valueWidth}" height="20" fill="#0891b2"/>
-    <rect width="${totalWidth}" height="20" fill="url(#s)"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="${labelWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
-    <text x="${labelWidth / 2}" y="14">${label}</text>
-    <text x="${labelWidth + valueWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${value}</text>
-    <text x="${labelWidth + valueWidth / 2}" y="14">${value}</text>
-  </g>
-</svg>`;
+  const badge = await getShareBadge(c.env.DB, board.id, board.owner_id, c.req.query("type"));
+  const svg = renderMetricBadge("AK", badge.value);
 
   return new Response(svg, {
     headers: {
@@ -1095,6 +1059,87 @@ export { api };
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+type ShareBadgeType = "agents" | "tasks" | "tokens";
+
+const SHARE_BADGE_TYPES = new Set<ShareBadgeType>(["agents", "tasks", "tokens"]);
+
+async function getShareBadge(db: D1, boardId: string, ownerId: string, type: string | undefined): Promise<{ value: string }> {
+  const badgeType = SHARE_BADGE_TYPES.has(type as ShareBadgeType) ? (type as ShareBadgeType) : "agents";
+  if (badgeType === "agents") return { value: `${await countOwnerAgents(db, ownerId)} agents` };
+  if (badgeType === "tasks") return { value: `${await countDoneTasks(db, boardId)} tasks` };
+  return { value: `${formatMetric(await sumOwnerTokens(db, ownerId))} tokens` };
+}
+
+async function countOwnerAgents(db: D1, ownerId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) as count FROM agents WHERE owner_id = ? AND COALESCE(version, 'latest') = 'latest'")
+    .bind(ownerId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+async function countDoneTasks(db: D1, boardId: string): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) as count FROM tasks WHERE board_id = ? AND status = 'done'").bind(boardId).first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+async function sumOwnerTokens(db: D1, ownerId: string): Promise<number> {
+  const row = await db
+    .prepare(`
+      SELECT COALESCE(SUM(s.input_tokens + s.output_tokens + s.cache_read_tokens + s.cache_creation_tokens), 0) as tokens
+      FROM agent_sessions s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE a.owner_id = ?
+    `)
+    .bind(ownerId)
+    .first<{ tokens: number }>();
+  return row?.tokens ?? 0;
+}
+
+function formatMetric(value: number): string {
+  if (value >= 1_000_000_000) return `${trimMetric(value / 1_000_000_000)}B`;
+  if (value >= 1_000_000) return `${trimMetric(value / 1_000_000)}M`;
+  if (value >= 1_000) return `${trimMetric(value / 1_000)}K`;
+  return String(value);
+}
+
+function trimMetric(value: number): string {
+  return value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
+}
+
+function renderMetricBadge(label: string, value: string): string {
+  const safeLabel = escapeXml(label);
+  const safeValue = escapeXml(value);
+  const labelWidth = Math.max(safeLabel.length * 7 + 16, 32);
+  const valueWidth = Math.max(safeValue.length * 6.5 + 16, 64);
+  const totalWidth = labelWidth + valueWidth;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="${totalWidth}" height="20" rx="3" fill="#fff"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelWidth}" height="20" fill="#18181b"/>
+    <rect x="${labelWidth}" width="${valueWidth}" height="20" fill="#0891b2"/>
+    <rect width="${totalWidth}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${labelWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${safeLabel}</text>
+    <text x="${labelWidth / 2}" y="14">${safeLabel}</text>
+    <text x="${labelWidth + valueWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${safeValue}</text>
+    <text x="${labelWidth + valueWidth / 2}" y="14">${safeValue}</text>
+  </g>
+</svg>`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 function agentEmail(username: string): string {

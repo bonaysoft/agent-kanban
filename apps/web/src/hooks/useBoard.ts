@@ -13,6 +13,10 @@ export function setLastBoardId(id: string) {
   localStorage.setItem(LAST_BOARD_KEY, id);
 }
 
+export function clearLastBoardId(id: string) {
+  if (localStorage.getItem(LAST_BOARD_KEY) === id) localStorage.removeItem(LAST_BOARD_KEY);
+}
+
 /** Fetch a single board by ID (from URL params) */
 export function useBoard(boardId: string | undefined) {
   const {
@@ -118,7 +122,10 @@ export function useDeleteBoard() {
 
   return useMutation({
     mutationFn: (id: string) => api.boards.delete(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      clearLastBoardId(id);
+      queryClient.setQueryData<any[]>(["boards"], (boards) => boards?.filter((board) => board.id !== id) ?? []);
+      queryClient.removeQueries({ queryKey: ["board", id] });
       queryClient.invalidateQueries({ queryKey: ["boards"] });
     },
   });

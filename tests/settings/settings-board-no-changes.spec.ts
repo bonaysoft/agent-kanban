@@ -6,28 +6,27 @@ import { signUpAndGetBoard } from "../helpers/auth";
 
 test.describe("Settings Page", () => {
   test("Board item — save button hidden when no changes", async ({ page }) => {
-    // 1. Sign in, navigate to /settings, and expand a board item
     await signUpAndGetBoard(page, `settings_nochanges_${Date.now()}@example.com`);
-    await page.goto("/settings");
-    await page.getByText("My BoardOpen").click();
+    const boardId = page.url().split("/boards/")[1];
+    await page.goto(`/boards/${boardId}/settings`);
 
-    // expect: No 'Save' button is visible initially because no changes have been made
+    // expect: Save is disabled initially because no changes have been made
     const saveButton = page.getByRole("button", { name: "Save" });
-    await expect(saveButton).not.toBeVisible();
+    await expect(saveButton).toBeDisabled();
 
     // 2. Change the name field, then revert it back to the original name
-    const nameInput = page.locator("input");
+    const nameInput = page.getByLabel("Name");
     await nameInput.click();
     await page.keyboard.press("End");
     await page.keyboard.type("X");
 
-    // Save button should appear
-    await expect(saveButton).toBeVisible();
+    // Save button should become enabled
+    await expect(saveButton).toBeEnabled();
 
     // Revert: delete the 'X' we typed
     await page.keyboard.press("Backspace");
 
-    // expect: The 'Save' button disappears again because hasChanges returns to false
-    await expect(saveButton).not.toBeVisible();
+    // expect: The 'Save' button is disabled again because hasChanges returns to false
+    await expect(saveButton).toBeDisabled();
   });
 });

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { formatRelative } from "../../components/TaskDetailFields";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
@@ -11,7 +12,6 @@ import { SetRoleDialog } from "./SetRoleDialog";
 import { type DialogKind, type User } from "./types";
 import { RoleBadge, StatusBadge } from "./UserBadges";
 import { SkeletonRows, UserRowActions } from "./UserTableRows";
-import { ToastStack, useToasts } from "./useToasts";
 
 const PAGE_SIZE = 20;
 
@@ -28,7 +28,6 @@ export function AdminUsersPage() {
   const [activeDialog, setActiveDialog] = useState<{ kind: DialogKind; user: User } | null>(null);
   const [expandedSessions, setExpandedSessions] = useState<string | null>(null);
 
-  const { toasts, push: pushToast } = useToasts();
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchUsers = useCallback(async (offset: number, searchValue: string) => {
@@ -59,9 +58,9 @@ export function AdminUsersPage() {
   async function handleUnban(user: User) {
     const { error } = await (authClient.admin as any).unbanUser({ userId: user.id });
     if (error) {
-      pushToast("error", "Failed to unban user");
+      toast.error("Failed to unban user");
     } else {
-      pushToast("success", "User unbanned");
+      toast.success("User unbanned");
       fetchUsers(page * PAGE_SIZE, search);
     }
   }
@@ -80,8 +79,13 @@ export function AdminUsersPage() {
       ban: "User banned",
       delete: "User deleted",
     };
-    if (activeDialog) pushToast("success", messages[activeDialog.kind]);
+    if (activeDialog) toast.success(messages[activeDialog.kind]);
     fetchUsers(page * PAGE_SIZE, search);
+  }
+
+  function showSessionToast(type: "success" | "error", message: string) {
+    if (type === "success") toast.success(message);
+    else toast.error(message);
   }
 
   const offset = page * PAGE_SIZE;
@@ -158,7 +162,7 @@ export function AdminUsersPage() {
                       <td colSpan={5}>
                         <div className="pt-2">
                           <p className="px-4 pb-1 text-xs font-medium text-content-tertiary uppercase tracking-wider">Sessions</p>
-                          <SessionsPanel userId={user.id} onToast={pushToast} />
+                          <SessionsPanel userId={user.id} onToast={showSessionToast} />
                         </div>
                       </td>
                     </tr>
@@ -195,8 +199,6 @@ export function AdminUsersPage() {
       {activeDialog?.kind === "delete" && (
         <DeleteUserDialog user={activeDialog.user} open onClose={() => setActiveDialog(null)} onSuccess={onDialogSuccess} />
       )}
-
-      <ToastStack toasts={toasts} />
     </div>
   );
 }

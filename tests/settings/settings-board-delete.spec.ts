@@ -1,42 +1,47 @@
 // spec: specs/agent-kanban.plan.md
-// section: 5.8 Board item — delete with two-step confirmation
+// section: 5.8 Board settings — delete with ID confirmation dialog
 
 import { expect, test } from "@playwright/test";
 import { signUpAndGetBoard } from "../helpers/auth";
 
 test.describe("Settings Page", () => {
-  test("Board item — delete with two-step confirmation", async ({ page }) => {
-    // 1. Sign in, navigate to /settings, and expand a board item
+  test("Board settings — delete with ID confirmation dialog", async ({ page }) => {
     await signUpAndGetBoard(page, `settings_delete_${Date.now()}@example.com`);
-    await page.goto("/settings");
-    await page.getByText("My BoardOpen").click();
+    const boardId = page.url().split("/boards/")[1];
+    await page.goto(`/boards/${boardId}/settings`);
 
-    // expect: A 'Delete' button is visible in the expanded area
     const deleteButton = page.getByRole("button", { name: "Delete" });
     await expect(deleteButton).toBeVisible();
 
-    // 2. Click the 'Delete' button
     await deleteButton.click();
 
-    // expect: The delete button is replaced by 'Delete?', 'Yes', and 'No' inline confirmation options
-    await expect(page.getByText("Delete?")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Yes" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "No" })).toBeVisible();
-    await expect(deleteButton).not.toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "Delete board" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(boardId)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Delete board" })).toBeDisabled();
 
-    // 3. Click 'No'
-    await page.getByRole("button", { name: "No" }).click();
+    await dialog.getByLabel("Board ID confirmation").fill("wrong-id");
+    await expect(dialog.getByRole("button", { name: "Delete board" })).toBeDisabled();
 
-    // expect: The confirmation is dismissed and the 'Delete' button is shown again
-    await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
-    await expect(page.getByText("Delete?")).not.toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).not.toBeVisible();
 
-    // 4. Click 'Delete' again, then click 'Yes'
     await page.getByRole("button", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Yes" }).click();
+    await page.getByRole("dialog", { name: "Delete board" }).getByLabel("Board ID confirmation").fill(boardId);
+    await page.getByRole("dialog", { name: "Delete board" }).getByRole("button", { name: "Delete board" }).click();
 
-    // expect: The board is deleted
-    // expect: The board item disappears from the list
-    await expect(page.getByText("My Board")).not.toBeVisible();
+    await expect
+      .poll(async () => {
+        return page.evaluate(async () => {
+          const token = localStorage.getItem("auth-token");
+          const res = await fetch("/api/boards", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const boards = (await res.json()) as { id: string }[];
+          return boards.map((board) => board.id);
+        });
+      })
+      .not.toContain(boardId);
+    await expect(page).not.toHaveURL(`/boards/${boardId}/settings`);
   });
 });
