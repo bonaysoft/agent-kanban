@@ -9,13 +9,42 @@ set -euo pipefail
 #   3. Complete    — complete task → daemon cleans up session + worktree
 #   4. Cancel      — create task → cancel while agent is running → daemon kills agent
 #
-# Usage: ./scripts/daemon-smoke-test.sh [board_id] [agent_id] [repo_id]
+# Usage: ./scripts/daemon-smoke-test.sh <runtime> [board_id] [repo_id]
 # Missing arguments are discovered or created. Defaults target the Demo board
 # and the slink repository.
 
-BOARD_ID="${1:-}"
-AGENT_ID="${2:-}"
-REPO_ID="${3:-}"
+SMOKE_RUNTIME=""
+ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --runtime)
+      SMOKE_RUNTIME="${2:-}"
+      if [ -z "$SMOKE_RUNTIME" ]; then
+        echo "FATAL: --runtime requires a value"
+        exit 1
+      fi
+      shift 2
+      ;;
+    --runtime=*)
+      SMOKE_RUNTIME="${1#*=}"
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+BOARD_ID="${ARGS[0]:-}"
+if [ -z "$SMOKE_RUNTIME" ]; then
+  SMOKE_RUNTIME="$BOARD_ID"
+  BOARD_ID="${ARGS[1]:-}"
+  REPO_ID="${ARGS[2]:-}"
+else
+  REPO_ID="${ARGS[1]:-}"
+fi
+AGENT_ID=""
 
 PASS=0
 FAIL=0
@@ -24,6 +53,20 @@ TIMESTAMP=$(date +%s)
 SUBAGENT_ID=""
 SUBAGENT_USERNAME=""
 AGENT_RUNTIME=""
+CREATED_AGENT_IDS=()
+
+cleanup() {
+  if [ "${#TASKS[@]}" -gt 0 ]; then
+    for tid in "${TASKS[@]}"; do
+      ak task cancel "$tid" >/dev/null 2>&1 || true
+    done
+  fi
+  for agent_id in "${CREATED_AGENT_IDS[@]}"; do
+    ak delete agent "$agent_id" >/dev/null 2>&1 || true
+  done
+}
+
+trap cleanup EXIT
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,54 +139,28 @@ create_repo() {
   ak create repo --name "slink" --url "https://github.com/saltbo/slink" -o json | json_query "data.id"
 }
 
-discover_agent() {
-  ak get agent -o json | json_query "data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && a.username === 'codex-smoke-nomodel' && a.runtime_available)?.id || data.find((a) => a.builtin !== 1 && ['codex', 'claude', 'gemini', 'copilot'].includes(a.runtime) && a.runtime_available && a.active_task_count === 0)?.id || data.find((a) => a.builtin !== 1 && ['codex', 'claude', 'gemini', 'copilot'].includes(a.runtime) && a.runtime_available)?.id"
-}
-
-discover_runtime() {
-  local status
-  status="$(ak status)"
-  if echo "$status" | grep -q "codex"; then
-    echo "codex"
-    return 0
-  fi
-  if echo "$status" | grep -q "claude"; then
-    echo "claude"
-    return 0
-  fi
-  if echo "$status" | grep -q "gemini"; then
-    echo "gemini"
-    return 0
-  fi
-  if echo "$status" | grep -q "copilot"; then
-    echo "copilot"
-    return 0
-  fi
-  return 1
-}
-
 create_agent() {
   local runtime="$1"
   local name username bio
   case "$runtime" in
     codex)
-      name="Codex Smoke NoModel"
-      username="codex-smoke-nomodel"
+      name="Codex Smoke $TIMESTAMP"
+      username="codex-smoke-$TIMESTAMP"
       bio="Codex worker for daemon smoke tests"
       ;;
     claude)
-      name="Claude Smoke"
-      username="claude-smoke"
+      name="Claude Smoke $TIMESTAMP"
+      username="claude-smoke-$TIMESTAMP"
       bio="Claude worker for daemon smoke tests"
       ;;
     gemini)
-      name="Gemini Smoke"
-      username="gemini-smoke"
+      name="Gemini Smoke $TIMESTAMP"
+      username="gemini-smoke-$TIMESTAMP"
       bio="Gemini worker for daemon smoke tests"
       ;;
     copilot)
-      name="Copilot Smoke"
-      username="copilot-smoke"
+      name="Copilot Smoke $TIMESTAMP"
+      username="copilot-smoke-$TIMESTAMP"
       bio="Copilot worker for daemon smoke tests"
       ;;
     *)
@@ -151,13 +168,15 @@ create_agent() {
       return 1
       ;;
   esac
-  ak create agent \
+  local id
+  id=$(ak create agent \
     --name "$name" \
     --username "$username" \
     --runtime "$runtime" \
     --role "fullstack-developer" \
     --bio "$bio" \
-    -o json | json_query "data.id"
+    -o json | json_query "data.id")
+  echo "$id"
 }
 
 agent_field() {
@@ -167,21 +186,16 @@ agent_field() {
 
 ensure_smoke_subagent() {
   local runtime="$1"
-  local username="smoke-subagent-$runtime"
-  local existing
-  existing=$(ak get agent -o json | json_query "data.find((a) => a.username === '$username')?.id" 2>/dev/null || true)
-  if [ -n "$existing" ]; then
-    SUBAGENT_ID="$existing"
-  else
-    SUBAGENT_ID=$(ak create agent \
-      --name "Smoke Subagent $runtime" \
-      --username "$username" \
-      --runtime "$runtime" \
-      --role "smoke-subagent" \
-      --bio "Registered worker used by daemon smoke tests to verify task-local subagent installation" \
-      --soul "I am a smoke-test helper subagent. Keep answers short and verify delegated work precisely." \
-      -o json | json_query "data.id")
-  fi
+  local username="smoke-subagent-$runtime-$TIMESTAMP"
+  SUBAGENT_ID=$(ak create agent \
+    --name "Smoke Subagent $runtime $TIMESTAMP" \
+    --username "$username" \
+    --runtime "$runtime" \
+    --role "smoke-subagent" \
+    --bio "Registered worker used by daemon smoke tests to verify task-local subagent installation" \
+    --soul "I am a smoke-test helper subagent. Keep answers short and verify delegated work precisely." \
+    -o json | json_query "data.id")
+  CREATED_AGENT_IDS+=("$SUBAGENT_ID")
   SUBAGENT_USERNAME="$username"
 }
 
@@ -245,15 +259,16 @@ if [ -z "$BOARD_ID" ]; then BOARD_ID="$(discover_board 2>/dev/null || true)"; fi
 if [ -z "$BOARD_ID" ]; then BOARD_ID="$(create_board)"; fi
 if [ -z "$REPO_ID" ]; then REPO_ID="$(discover_repo 2>/dev/null || true)"; fi
 if [ -z "$REPO_ID" ]; then REPO_ID="$(create_repo)"; fi
-if [ -z "$AGENT_ID" ]; then AGENT_ID="$(discover_agent 2>/dev/null || true)"; fi
-if [ -z "$AGENT_ID" ]; then
-  RUNTIME_TO_CREATE="$(discover_runtime 2>/dev/null || true)"
-  if [ -z "$RUNTIME_TO_CREATE" ]; then
-    echo "FATAL: no available subagent-capable runtime found (codex, claude, gemini, or copilot). Start a daemon with one of those providers ready."
-    exit 1
-  fi
-  AGENT_ID="$(create_agent "$RUNTIME_TO_CREATE")"
+if [ -z "$SMOKE_RUNTIME" ]; then
+  echo "FATAL: runtime is required. Usage: ./scripts/daemon-smoke-test.sh <runtime> [board_id] [repo_id]"
+  exit 1
 fi
+case "$SMOKE_RUNTIME" in
+  codex | claude | gemini | copilot) ;;
+  *) echo "FATAL: smoke runtime must support subagents (codex, claude, gemini, or copilot), got: $SMOKE_RUNTIME"; exit 1 ;;
+esac
+AGENT_ID="$(create_agent "$SMOKE_RUNTIME")"
+CREATED_AGENT_IDS+=("$AGENT_ID")
 if [ -z "$BOARD_ID" ] || [ -z "$REPO_ID" ] || [ -z "$AGENT_ID" ]; then
   echo "FATAL: failed to discover board, repo, or agent"
   echo "  Board: ${BOARD_ID:-missing}"
@@ -396,13 +411,6 @@ echo "==============================="
 echo "  Passed: $PASS"
 echo "  Failed: $FAIL"
 echo "==============================="
-
-# Cleanup test tasks
-if [ "${#TASKS[@]}" -gt 0 ]; then
-  for tid in "${TASKS[@]}"; do
-    ak task cancel "$tid" >/dev/null 2>&1 || true
-  done
-fi
 
 if [ "$FAIL" -gt 0 ]; then
   exit 1

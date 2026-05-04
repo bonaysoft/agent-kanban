@@ -16,10 +16,14 @@ describe("daemon smoke script", () => {
     execFileSync("bash", ["-n", scriptPath], { stdio: "pipe" });
   });
 
-  it("accepts all subagent-capable runtimes during agent discovery", () => {
+  it("creates temporary agents instead of discovering reusable smoke agents", () => {
     const script = readScript();
 
-    expect(script).toContain("['codex', 'claude', 'gemini', 'copilot'].includes(a.runtime)");
+    expect(script).toContain("Usage: ./scripts/daemon-smoke-test.sh <runtime> [board_id] [repo_id]");
+    expect(script).toContain("runtime is required");
+    expect(script).toContain("CREATED_AGENT_IDS=()");
+    expect(script).toContain("trap cleanup EXIT");
+    expect(script).toContain('ak delete agent "$agent_id"');
     expect(script).toContain("codex, claude, gemini, or copilot");
   });
 
@@ -27,13 +31,13 @@ describe("daemon smoke script", () => {
     const script = readScript();
 
     expect(script).toContain("codex)");
-    expect(script).toContain('username="codex-smoke-nomodel"');
+    expect(script).toContain('username="codex-smoke-$TIMESTAMP"');
     expect(script).toContain("claude)");
-    expect(script).toContain('username="claude-smoke"');
+    expect(script).toContain('username="claude-smoke-$TIMESTAMP"');
     expect(script).toContain("gemini)");
-    expect(script).toContain('username="gemini-smoke"');
+    expect(script).toContain('username="gemini-smoke-$TIMESTAMP"');
     expect(script).toContain("copilot)");
-    expect(script).toContain('username="copilot-smoke"');
+    expect(script).toContain('username="copilot-smoke-$TIMESTAMP"');
   });
 
   it("checks runtime-specific subagent definition paths", () => {
