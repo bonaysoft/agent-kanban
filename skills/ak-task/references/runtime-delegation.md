@@ -140,6 +140,12 @@ Skill selection rules:
 - If a carried subagent owns a narrow responsibility, put the specialist skill on that subagent when possible; put it on the primary worker only when the primary worker must directly follow that skill.
 - If no installable skill exists for a repeated need, leave it out and describe the behavior in `soul`; workers may later propose adding a real skill when one becomes available.
 
+Recommended skill examples:
+
+- Web regression, browser E2E, visual flow checks, or product acceptance for web apps: `microsoft/playwright-cli@playwright-cli`.
+- UI/UX implementation or visual review for web/mobile interfaces: `nextlevelbuilder/ui-ux-pro-max-skill@ui-ux-pro-max` or `vercel-labs/agent-skills@web-design-guidelines`.
+- GitHub PR, issue, or CI workflows: use the relevant GitHub workflow skill when it is installed in the runtime; add it to YAML only if it has a valid `<source>/<repo>@<skill>` installable ref.
+
 Soul writing rules:
 
 - Include durable workflow preferences, review bar, handoff rules, and domain-specific principles.

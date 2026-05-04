@@ -32,7 +32,7 @@ spec:
     I fix test code when the test is wrong, but I do not hide source defects by weakening assertions.
     I return concise evidence: files touched, commands run, failures found, and remaining risk.
   skills:
-    - <source>@<test-skill>
+    - <source>/<repo>@<test-skill>
 ```
 
 ## Review Specialist
@@ -55,7 +55,7 @@ spec:
     I verify claims against code references and keep findings actionable.
     I do not approve completion; I provide review evidence for the primary worker to judge.
   skills:
-    - <source>@<review-skill>
+    - <source>/<repo>@<review-skill>
 ```
 
 ## Acceptance Specialist
@@ -78,7 +78,7 @@ spec:
     I report exact repro steps for failures and concrete evidence for passing checks.
     I do not replace code review or CI; I catch product behavior gaps after those gates are green.
   skills:
-    - <source>@<acceptance-skill>
+    - microsoft/playwright-cli@playwright-cli
 ```
 
 After applying a specialist YAML, use its returned agent ID in the primary worker's `spec.subagents` only when the primary worker's `soul` defines how to collaborate with that specialist.
