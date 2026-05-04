@@ -15,6 +15,55 @@ import {
   output,
 } from "../output.js";
 
+type AgentRef = {
+  id: string;
+  username: string;
+  version: string;
+  name: string;
+  created_at?: string;
+  soul_sha1?: string;
+};
+
+function sortAgentVersions(agents: AgentRef[]): AgentRef[] {
+  return [...agents].sort((a, b) => {
+    if (a.version === "latest") return -1;
+    if (b.version === "latest") return 1;
+    return Number(b.version) - Number(a.version);
+  });
+}
+
+function formatAgentVersions(data: { username: string; versions: AgentRef[] }): string {
+  if (data.versions.length === 0) return `No versions found for ${data.username}.`;
+  const lines = [`${data.username}`];
+  for (const agent of sortAgentVersions(data.versions)) {
+    const version = agent.version.padEnd(8);
+    const hash = agent.soul_sha1 ? agent.soul_sha1.slice(0, 10) : "no-soul";
+    const created = agent.created_at ? new Date(agent.created_at).toISOString().slice(0, 10) : "";
+    lines.push(`  ${version} ${agent.id}  ${hash}  ${created}  ${agent.name}`);
+  }
+  return lines.join("\n");
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
+}
+
+async function getAgentOrVersions(client: any, id: string): Promise<{ value: any; formatter: (value: any) => string }> {
+  try {
+    return { value: await client.getAgent(id), formatter: formatAgent };
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+  }
+
+  const agents = (await client.listAgents()) as AgentRef[];
+  const versions = sortAgentVersions(agents.filter((agent) => agent.username === id));
+  if (versions.length === 0) {
+    console.error(`Agent not found: ${id}`);
+    process.exit(1);
+  }
+  return { value: { username: id, versions }, formatter: formatAgentVersions };
+}
+
 export function registerGetCommand(program: Command) {
   const getCmd = program.command("get").description("Get a resource or list resources");
 
@@ -70,8 +119,8 @@ export function registerGetCommand(program: Command) {
       const client = await createClient();
       const fmt = getOutputFormat(opts.output);
       if (id) {
-        const agent = await client.getAgent(id);
-        output(agent, fmt, formatAgent, { kind: "agent" });
+        const { value, formatter } = await getAgentOrVersions(client, id);
+        output(value, fmt, formatter, { kind: "agent" });
       } else {
         const all = (await client.listAgents()) as any[];
         const agents = all.filter((a: any) => a.kind !== "leader");

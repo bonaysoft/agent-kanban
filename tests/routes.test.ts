@@ -339,13 +339,15 @@ describe("routes", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/agents rejects duplicate username", async () => {
-    // First create succeeds
+  it("POST /api/agents creates a new version for an existing username", async () => {
     const r1 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
     expect(r1.status).toBe(201);
-    // Same username second time → conflict
     const r2 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
-    expect(r2.status).toBe(409);
+    expect(r2.status).toBe(201);
+    const first = (await r1.json()) as any;
+    const second = (await r2.json()) as any;
+    expect(first.version).toBe("1");
+    expect(second.version).toBe("2");
   });
 
   it("POST /api/agents returns username in response", async () => {
@@ -353,6 +355,21 @@ describe("routes", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.username).toBe("username-check-agent");
+  });
+
+  it("PUT /api/agents/:username/versions/latest creates a latest snapshot", async () => {
+    const versionRes = await apiRequest("POST", "/api/agents", { username: "publish-route-agent", runtime: "claude", soul: "route soul" }, userToken);
+    expect(versionRes.status).toBe(201);
+    const version = (await versionRes.json()) as any;
+
+    const publishRes = await apiRequest("PUT", "/api/agents/publish-route-agent/versions/latest", { agent_id: version.id }, userToken);
+
+    expect(publishRes.status).toBe(200);
+    const latest = (await publishRes.json()) as any;
+    expect(latest.username).toBe("publish-route-agent");
+    expect(latest.version).toBe("latest");
+    expect(latest.soul).toBe("route soul");
+    expect(latest.id).not.toBe(version.id);
   });
 
   it("POST /api/agents rejects a second leader for the same runtime", async () => {

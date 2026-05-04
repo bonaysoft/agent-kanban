@@ -19,6 +19,7 @@ const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
 
   // Agents — user/machine/leader creates, user/leader manages
   { method: "POST", pattern: /^\/api\/agents$/, rule: { allow: ["user", "machine", "agent:leader"] } },
+  { method: "PUT", pattern: /^\/api\/agents\/[^/]+\/versions\/latest$/, rule: { allow: ["user", "agent:leader"] } },
   { method: "PATCH", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user", "agent:leader"] } },
   { method: "DELETE", pattern: /^\/api\/agents\/[^/]+$/, rule: { allow: ["user", "agent:leader"] } },
 

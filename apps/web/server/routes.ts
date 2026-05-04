@@ -19,6 +19,7 @@ import {
   insertAgent,
   listAgents,
   prepareAgent,
+  publishAgent,
   updateAgent,
 } from "./agentRepo";
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
@@ -286,7 +287,11 @@ api.get("/api/share/:slug/stream", async (c) => {
 
 api.get("/agents/:file{.+\\.gpg$}", async (c) => {
   const username = c.req.param("file").replace(/\.gpg$/, "");
-  const agent = await c.env.DB.prepare("SELECT owner_id FROM agents WHERE username = ?").bind(username).first<{ owner_id: string }>();
+  const agent = await c.env.DB.prepare(
+    "SELECT owner_id FROM agents WHERE username = ? ORDER BY CASE WHEN version = 'latest' THEN 0 ELSE 1 END LIMIT 1",
+  )
+    .bind(username)
+    .first<{ owner_id: string }>();
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   const armoredPublicKey = await getRootPublicKey(c.env.DB, agent.owner_id);
   if (!armoredPublicKey) throw new HTTPException(404, { message: "GPG key not found" });
@@ -301,7 +306,11 @@ api.get("/.well-known/openpgpkey/hu/:hash", async (c) => {
   const hash = c.req.param("hash");
   const localPart = c.req.query("l");
   if (!localPart) throw new HTTPException(400, { message: "Missing l= query parameter" });
-  const agent = await c.env.DB.prepare("SELECT owner_id FROM agents WHERE username = ?").bind(localPart).first<{ owner_id: string }>();
+  const agent = await c.env.DB.prepare(
+    "SELECT owner_id FROM agents WHERE username = ? ORDER BY CASE WHEN version = 'latest' THEN 0 ELSE 1 END LIMIT 1",
+  )
+    .bind(localPart)
+    .first<{ owner_id: string }>();
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   // Verify the hash matches the local part (WKD uses SHA-1 + z-base-32)
   const expectedHash = await wkdHash(localPart);
@@ -521,9 +530,12 @@ api.post("/api/agents", async (c) => {
   const ownerId = c.get("ownerId");
   await assertRegisteredWorkerSubagents(c.env.DB, ownerId, body.subagents);
 
-  // Validate username uniqueness before GPG mutation
-  const taken = await c.env.DB.prepare("SELECT 1 FROM agents WHERE username = ?").bind(body.username).first();
-  if (taken) throw new HTTPException(409, { message: `Username "${body.username}" is already taken` });
+  const existingUsername = await c.env.DB.prepare("SELECT owner_id FROM agents WHERE username = ? LIMIT 1")
+    .bind(body.username)
+    .first<{ owner_id: string }>();
+  if (existingUsername && existingUsername.owner_id !== ownerId) {
+    throw new HTTPException(409, { message: `Username "${body.username}" is already taken` });
+  }
   if (body.kind === "leader") {
     const existingLeader = await c.env.DB.prepare("SELECT 1 FROM agents WHERE owner_id = ? AND runtime = ? AND kind = 'leader'")
       .bind(ownerId, body.runtime)
@@ -539,7 +551,7 @@ api.post("/api/agents", async (c) => {
   const prepared = await prepareAgent(c.env.DB, ownerId, body as CreateAgentInput, identity);
 
   // External service — create mailbox (skip if MAILS_ADMIN_TOKEN not configured)
-  const mailboxToken = c.env.MAILS_ADMIN_TOKEN ? await createMailbox(c.env.MAILS_ADMIN_TOKEN, email) : undefined;
+  const mailboxToken = c.env.MAILS_ADMIN_TOKEN && !existingUsername ? await createMailbox(c.env.MAILS_ADMIN_TOKEN, email) : undefined;
 
   try {
     // Single atomic insert with all fields
@@ -557,11 +569,22 @@ api.post("/api/agents", async (c) => {
 
     return c.json(agent, 201);
   } catch (err) {
-    await deleteMailbox(c.env.MAILS_ADMIN_TOKEN, email).catch((cleanupErr: unknown) => {
-      logger.warn(`mailbox cleanup failed for ${email}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
-    });
+    if (!existingUsername) {
+      await deleteMailbox(c.env.MAILS_ADMIN_TOKEN, email).catch((cleanupErr: unknown) => {
+        logger.warn(`mailbox cleanup failed for ${email}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
+      });
+    }
     throw err;
   }
+});
+
+api.put("/api/agents/:username/versions/latest", async (c) => {
+  const body = await c.req.json<{ agent_id: string }>();
+  assertJsonObject(body, "latest agent version");
+  if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
+  const agent = await publishAgent(c.env.DB, c.req.param("username"), body.agent_id, c.get("ownerId"));
+  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
+  return c.json(agent);
 });
 
 api.patch("/api/agents/:id", async (c) => {
@@ -591,13 +614,14 @@ api.delete("/api/agents/:id", async (c) => {
   await assertAgentNotReferencedAsSubagent(c.env.DB, ownerId, agent.id);
   const email = agentEmail(agent.username);
   await deleteAgent(c.env.DB, agent.id);
-  if (c.env.MAILS_ADMIN_TOKEN) {
+  const remaining = await c.env.DB.prepare("SELECT 1 FROM agents WHERE username = ? LIMIT 1").bind(agent.username).first();
+  if (c.env.MAILS_ADMIN_TOKEN && !remaining) {
     await deleteMailbox(c.env.MAILS_ADMIN_TOKEN, email);
   }
 
   // Remove email from GitHub (best-effort)
   const token = await getGithubToken(c.env.DB, c.get("ownerId"));
-  if (token) {
+  if (token && !remaining) {
     await removeAgentEmail(token, email).catch((err: unknown) => {
       logger.warn(`github email cleanup failed for ${email}: ${err instanceof Error ? err.message : String(err)}`);
     });

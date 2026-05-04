@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { loadIdentity } from "./agent/identity.js";
 import { createClient, createIdentity } from "./agent/leader.js";
 import { detectRuntime } from "./agent/runtime.js";
+import { registerAgentCommand } from "./commands/agent.js";
 import { registerApplyCommand } from "./commands/apply.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDeleteCommand } from "./commands/delete.js";
@@ -42,6 +43,13 @@ const helpSections: [string, [string, string][]][] = [
       ["task reject <id>", "Reject back to in-progress"],
       ["task cancel <id>", "Cancel a task"],
       ["task release <id>", "Release back to todo"],
+    ],
+  ],
+  [
+    "Agent",
+    [
+      ["agent publish <id>", "Publish an agent version as latest"],
+      ["agent diff <from> [to]", "Compare agent versions"],
     ],
   ],
   [
@@ -193,6 +201,7 @@ taskCmd
 
 // ─── Top-level CRUD ───
 
+registerAgentCommand(program);
 registerGetCommand(program);
 registerDescribeCommand(program);
 registerCreateCommand(program);

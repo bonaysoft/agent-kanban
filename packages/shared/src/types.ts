@@ -211,6 +211,8 @@ export interface Agent {
   model: string | null;
   skills: string[] | null;
   subagents: string[] | null;
+  version: string;
+  soul_sha1: string;
   public_key: string;
   fingerprint: string;
   builtin: number;

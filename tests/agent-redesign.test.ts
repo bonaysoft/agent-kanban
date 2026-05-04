@@ -49,6 +49,7 @@ async function applyMigrations(db: D1Database) {
     "0016_task_actions_session_id.sql",
     "0017_unique_leader_per_runtime.sql",
     "0018_agent_subagents.sql",
+    "0019_agent_versions.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -131,6 +132,7 @@ describe("agent CRUD", () => {
     agentId = agent.id;
     expect(agent.name).toBe("CrudAgent");
     expect(agent.bio).toBe("test bio");
+    expect(agent.version).toBe("1");
   });
 
   it("updates agent fields", async () => {
@@ -140,6 +142,7 @@ describe("agent CRUD", () => {
     expect(agent!.name).toBe("UpdatedAgent");
     expect(agent!.bio).toBe("new bio");
     expect(agent!.soul).toBe("be precise");
+    expect(agent!.soul_sha1).toHaveLength(40);
   });
 
   it("deletes agent", async () => {

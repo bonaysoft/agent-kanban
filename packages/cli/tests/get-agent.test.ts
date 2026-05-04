@@ -2,9 +2,10 @@
 /**
  * Tests for `get agent` command handler in commands/get.ts.
  *
- * Covers the leader-filtering added to list mode and the unchanged single-agent path:
+ * Covers the leader-filtering added to list mode and agent lookup:
  *   - `ak get agent` (no id) → calls listAgents, filters out kind === "leader"
  *   - `ak get agent <id>`    → calls getAgent directly, no filtering
+ *   - `ak get agent <username>` → lists versions for that username when no id exists
  */
 
 import { Command } from "commander";
@@ -158,5 +159,40 @@ describe("get agent — single agent fetch by ID", () => {
     await makeProgram().parseAsync(["get", "agent", "leader-1"], { from: "user" });
     expect(mockGetAgent).toHaveBeenCalledWith("leader-1");
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("get agent — username version list", () => {
+  it("lists versions when the argument is a username", async () => {
+    mockGetAgent.mockRejectedValue({ status: 404, message: "Not found" });
+    mockListAgents.mockResolvedValue([
+      { id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim", soul_sha1: "1111111111", created_at: "2026-01-01T00:00:00Z" },
+      { id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex Kim", soul_sha1: "2222222222", created_at: "2026-01-02T00:00:00Z" },
+      { id: "agent-other", username: "riley", version: "1", name: "Riley" },
+    ]);
+
+    await makeProgram().parseAsync(["get", "agent", "alex-kim"], { from: "user" });
+
+    expect(mockGetAgent).toHaveBeenCalledWith("alex-kim");
+    expect(mockListAgents).toHaveBeenCalledOnce();
+    expect(vi.mocked(outputModule.output)).toHaveBeenCalledWith(
+      {
+        username: "alex-kim",
+        versions: [
+          {
+            id: "agent-latest",
+            username: "alex-kim",
+            version: "latest",
+            name: "Alex Kim",
+            soul_sha1: "2222222222",
+            created_at: "2026-01-02T00:00:00Z",
+          },
+          { id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim", soul_sha1: "1111111111", created_at: "2026-01-01T00:00:00Z" },
+        ],
+      },
+      "text",
+      expect.any(Function),
+      { kind: "agent" },
+    );
   });
 });

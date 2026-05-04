@@ -119,6 +119,10 @@ export abstract class ApiClient {
   deleteAgent(agentId: string) {
     return this.request("DELETE", `/api/agents/${agentId}`);
   }
+  async publishAgent(agentId: string) {
+    const agent = (await this.getAgent(agentId)) as { username: string };
+    return this.request("PUT", `/api/agents/${agent.username}/versions/latest`, { agent_id: agentId });
+  }
 
   // Machines
   registerMachine(info: { name: string; os: string; version: string; runtimes: MachineRuntime[]; device_id: string }) {

@@ -174,7 +174,7 @@ spec:
     - <worker-agent-id>
 ```
 
-The leader must generate the Agent YAML from the project context and apply it with `ak apply -f <file>`. Do not use role templates. After creation, run `ak get agent -o json` and confirm the new worker is visible and `runtime_available: true` before assigning tasks.
+The leader must generate and publish worker Agent YAML according to `references/runtime-delegation.md`. Then run `ak get agent -o json` and confirm the latest worker is visible and `runtime_available: true` before assigning tasks.
 
 Create tasks with full specs. For each task:
 

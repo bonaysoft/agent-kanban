@@ -57,6 +57,9 @@ function formatDescribeAgent(agent: any, sessions: any[]): string {
 
   lines.push(`${pad("Name")} ${agent.name}`);
   lines.push(`${pad("ID")} ${agent.id}`);
+  if (agent.username) lines.push(`${pad("Username")} ${agent.username}`);
+  if (agent.version) lines.push(`${pad("Version")} ${agent.version}`);
+  if (agent.soul_sha1) lines.push(`${pad("Soul SHA1")} ${agent.soul_sha1}`);
   lines.push(`${pad("Status")} ${agent.status}`);
   if (agent.role) lines.push(`${pad("Role")} ${agent.role}`);
   if (agent.bio) lines.push(`${pad("Bio")} ${agent.bio}`);
@@ -78,6 +81,23 @@ function formatDescribeAgent(agent: any, sessions: any[]): string {
   }
 
   return lines.join("\n");
+}
+
+function normalizeVersion(version: string): string {
+  return version.startsWith("v") && version.length > 1 ? version.slice(1) : version;
+}
+
+async function resolveAgent(client: any, id: string, version?: string): Promise<any> {
+  if (!version) return client.getAgent(id);
+
+  const normalized = normalizeVersion(version);
+  const agents = await client.listAgents();
+  const agent = agents.find((candidate: any) => candidate.username === id && candidate.version === normalized);
+  if (!agent) {
+    console.error(`Agent version not found: ${id}@${version}`);
+    process.exit(1);
+  }
+  return client.getAgent(agent.id);
 }
 
 function formatDescribeBoard(board: any): string {
@@ -140,11 +160,13 @@ export function registerDescribeCommand(program: Command) {
   describeCmd
     .command("agent <id>")
     .description("Show full detail for an agent: sessions, task history")
+    .option("--version <version>", "Agent version when <id> is a username")
     .option("-o, --output <format>", "Output format (json, yaml, text)")
     .action(async (id: string, opts) => {
       const client = await createClient();
       const fmt = getOutputFormat(opts.output);
-      const [agent, sessions] = await Promise.all([client.getAgent(id), client.listSessions(id)]);
+      const agent = await resolveAgent(client, id, opts.version);
+      const sessions = await client.listSessions(agent.id);
       output({ agent, sessions }, fmt, () => formatDescribeAgent(agent, sessions), { kind: "agent" });
     });
 

@@ -36,7 +36,7 @@ Create workers only when needed for the current task:
 
 Do not create duplicate workers for hypothetical future work.
 
-Create workers by generating an Agent YAML from the current task context. Do not use role templates.
+Create workers by generating an Agent YAML from the current task context.
 
 ```yaml
 kind: Agent
@@ -58,6 +58,9 @@ spec:
 
 ```bash
 ak apply -f agent.yaml
+ak get agent <username>
+ak describe agent <username> --version <version>
+ak agent publish <agent-id>
 ak get agent -o json
 ```
 
@@ -70,6 +73,8 @@ Agent creation rules:
 - `skills` must be installable skill refs in `<source>@<skill>` format, matching what `npx skills add <source> --skill <skill>` can install.
 - `handoff_to` should list real delegation targets.
 - `subagents` should list worker agent IDs to install as task-local subagents for this agent.
+- Agent YAML creates a new version. Use `ak get agent <username>` to list versions and `ak describe agent <username> --version <version>` to inspect one version.
+- Use `ak agent publish <agent-id>` after leader review to update the `version: latest` snapshot.
 - Verify `runtime_available: true` before assigning any task to the new worker.
 
 ## Runtime Failure Handling

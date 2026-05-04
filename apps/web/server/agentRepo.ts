@@ -6,6 +6,21 @@ import { runtimeReadyPredicateSql } from "./machineRepo";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "subagents", "handoff_to"]);
 
+async function sha1(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-1", bytes);
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function nextVersion(db: D1, username: string, builtin: boolean): Promise<string> {
+  if (builtin) return "latest";
+  const row = await db
+    .prepare("SELECT MAX(CAST(version AS INTEGER)) as version FROM agents WHERE username = ? AND version != 'latest'")
+    .bind(username)
+    .first<{ version: number | null }>();
+  return String((row?.version ?? 0) + 1);
+}
+
 export interface PreparedAgent extends Agent {
   privateKeyJwk: JsonWebKey;
 }
@@ -26,6 +41,7 @@ export async function prepareAgent(
 ): Promise<PreparedAgent> {
   const { id, publicKeyBase64, fingerprint, privateKeyJwk } = identity;
   const now = new Date().toISOString();
+  const soul = input.soul ?? null;
   return {
     id,
     owner_id: ownerId,
@@ -33,7 +49,7 @@ export async function prepareAgent(
     username: input.username,
     gpg_subkey_id: null,
     bio: input.bio ?? null,
-    soul: input.soul ?? null,
+    soul,
     role: input.role ?? null,
     kind: input.kind ?? "worker",
     handoff_to: input.handoff_to ?? null,
@@ -41,6 +57,8 @@ export async function prepareAgent(
     model: input.model ?? null,
     skills: input.skills ?? null,
     subagents: input.subagents ?? null,
+    version: await nextVersion(db, input.username, builtin),
+    soul_sha1: await sha1(soul ?? ""),
     public_key: publicKeyBase64,
     fingerprint,
     builtin: builtin ? 1 : 0,
@@ -56,8 +74,8 @@ export async function insertAgent(db: D1, agent: PreparedAgent, extras?: { mailb
   const handoffJson = agent.handoff_to ? JSON.stringify(agent.handoff_to) : null;
   await db
     .prepare(`
-    INSERT INTO agents (id, owner_id, name, username, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, public_key, private_key, fingerprint, builtin, mailbox_token, gpg_subkey_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, owner_id, name, username, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, version, soul_sha1, public_key, private_key, fingerprint, builtin, mailbox_token, gpg_subkey_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .bind(
       agent.id,
@@ -73,6 +91,8 @@ export async function insertAgent(db: D1, agent: PreparedAgent, extras?: { mailb
       agent.model,
       skillsJson,
       subagentsJson,
+      agent.version,
+      agent.soul_sha1,
       agent.public_key,
       JSON.stringify(agent.privateKeyJwk),
       agent.fingerprint,
@@ -127,6 +147,7 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
   const result = await db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.username, a.gpg_subkey_id, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills, a.subagents,
+      a.version, a.soul_sha1,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (
         SELECT 1 FROM machines m, json_each(m.runtimes) rt
@@ -159,6 +180,7 @@ export async function getAgent(db: D1, agentId: string, ownerId: string): Promis
   return db
     .prepare(`
     SELECT a.id, a.owner_id, a.name, a.username, a.gpg_subkey_id, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills, a.subagents,
+      a.version, a.soul_sha1,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
       CASE WHEN EXISTS (
         SELECT 1 FROM machines m, json_each(m.runtimes) rt
@@ -192,7 +214,7 @@ export async function updateAgent(
 ): Promise<Agent | null> {
   const agent = await db
     .prepare(
-      "SELECT id, owner_id, name, username, gpg_subkey_id, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, public_key, fingerprint, builtin, created_at, updated_at FROM agents WHERE id = ?",
+      "SELECT id, owner_id, name, username, gpg_subkey_id, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, version, soul_sha1, public_key, fingerprint, builtin, created_at, updated_at FROM agents WHERE id = ?",
     )
     .bind(agentId)
     .first<Agent>();
@@ -213,6 +235,12 @@ export async function updateAgent(
       (applied as any)[field] = val;
     }
   }
+  if ("soul" in updates && updates.soul !== undefined) {
+    const digest = await sha1(updates.soul ?? "");
+    sets.push("soul_sha1 = ?");
+    binds.push(digest);
+    applied.soul_sha1 = digest;
+  }
 
   binds.push(agentId);
   await db
@@ -220,6 +248,106 @@ export async function updateAgent(
     .bind(...binds)
     .run();
   return parseAgent({ ...agent, ...applied, updated_at: now });
+}
+
+type AgentSnapshot = Agent & { private_key: string; mailbox_token: string | null };
+
+function jsonOrNull(value: unknown[] | null): string | null {
+  return value ? JSON.stringify(value) : null;
+}
+
+async function findLatestAgentId(db: D1, username: string): Promise<string | null> {
+  const row = await db.prepare("SELECT id FROM agents WHERE username = ? AND version = 'latest'").bind(username).first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+async function updateLatestAgent(db: D1, latestId: string, source: AgentSnapshot, updatedAt: string): Promise<void> {
+  await db
+    .prepare(`
+      UPDATE agents
+      SET name = ?, gpg_subkey_id = ?, bio = ?, soul = ?, role = ?, kind = ?, handoff_to = ?, runtime = ?, model = ?,
+          skills = ?, subagents = ?, soul_sha1 = ?, public_key = ?, private_key = ?, fingerprint = ?, builtin = ?, mailbox_token = ?, updated_at = ?
+      WHERE id = ?
+    `)
+    .bind(
+      source.name,
+      source.gpg_subkey_id,
+      source.bio,
+      source.soul,
+      source.role,
+      source.kind,
+      jsonOrNull(source.handoff_to),
+      source.runtime,
+      source.model,
+      jsonOrNull(source.skills),
+      jsonOrNull(source.subagents),
+      source.soul_sha1,
+      source.public_key,
+      source.private_key,
+      source.fingerprint,
+      source.builtin,
+      source.mailbox_token,
+      updatedAt,
+      latestId,
+    )
+    .run();
+}
+
+async function insertLatestAgent(db: D1, ownerId: string, source: AgentSnapshot, now: string): Promise<string> {
+  const latestId = crypto.randomUUID();
+  await db
+    .prepare(`
+      INSERT INTO agents (id, owner_id, name, username, gpg_subkey_id, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, version, soul_sha1, public_key, private_key, fingerprint, builtin, mailbox_token, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'latest', ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(
+      latestId,
+      ownerId,
+      source.name,
+      source.username,
+      source.gpg_subkey_id,
+      source.bio,
+      source.soul,
+      source.role,
+      source.kind,
+      jsonOrNull(source.handoff_to),
+      source.runtime,
+      source.model,
+      jsonOrNull(source.skills),
+      jsonOrNull(source.subagents),
+      source.soul_sha1,
+      source.public_key,
+      source.private_key,
+      source.fingerprint,
+      source.builtin,
+      source.mailbox_token,
+      now,
+      now,
+    )
+    .run();
+  return latestId;
+}
+
+export async function publishAgent(db: D1, username: string, agentId: string, ownerId: string): Promise<Agent | null> {
+  const target = await db
+    .prepare(
+      "SELECT id, owner_id, name, username, gpg_subkey_id, bio, soul, role, kind, handoff_to, runtime, model, skills, subagents, version, soul_sha1, public_key, private_key, fingerprint, builtin, mailbox_token FROM agents WHERE id = ? AND owner_id = ?",
+    )
+    .bind(agentId, ownerId)
+    .first<Agent & { private_key: string; mailbox_token: string | null }>();
+  if (!target) return null;
+  const source = parseAgent(target) as AgentSnapshot;
+  if (source.username !== username) return null;
+  if (source.version === "latest") return getAgent(db, agentId, ownerId);
+
+  const now = new Date().toISOString();
+  const latestId = await findLatestAgentId(db, source.username);
+  if (latestId) {
+    await updateLatestAgent(db, latestId, source, now);
+    return getAgent(db, latestId, ownerId);
+  }
+
+  return getAgent(db, await insertLatestAgent(db, ownerId, source, now), ownerId);
 }
 
 export async function deleteAgent(db: D1, agentId: string): Promise<boolean> {
