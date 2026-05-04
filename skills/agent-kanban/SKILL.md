@@ -16,18 +16,21 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 4. **PR** → push branch, `gh pr create`
 5. **Wait for CI** → `gh pr checks <pr-number> --watch` — fix failures, push, re-check until green
 6. **Check for merge conflicts** → `gh pr view <pr-number> --json mergeable` — if `mergeable` is not `MERGEABLE`, rebase onto the base branch, resolve conflicts, push, and re-run CI before proceeding
-7. **Completion note** → summarize what happened; include a profile proposal only if the task revealed a durable process or principle issue → `ak create note --task <id> "..."`
-8. **Submit for review** once CI passes, PR is conflict-free, and the completion note is posted → `ak task review <id> --pr-url <url>`
+7. **Completion note** → before review, post a final note that starts with `Completion Summary:` and includes `Profile Decision:`; include a profile proposal only if the task revealed a durable process or principle issue → `ak create note --task <id> "..."`
+8. **Submit for review** only after CI passes, PR is conflict-free, and the completion note is posted → `ak task review <id> --pr-url <url>`
 
 ## Agent Profile Change Candidates
 
-Before submitting every task for review, write a completion note summarizing what happened.
+Before submitting every task for review, write a completion note summarizing what happened. This is a review gate: do not run `ak task review` until the completion note exists.
 
-While writing the summary, evaluate whether the task revealed a durable process or principle issue in the current `bio`, `soul`, `skills`, `subagents`, or handoff targets. Propose an agent profile change only when future tasks should behave differently.
+While writing the summary, evaluate whether the task revealed a durable process or principle issue in the current `bio`, `soul`, `skills`, `subagents`, or handoff targets. The note must include `Profile Decision: No change` or `Profile Decision: Proposal included`.
+
+Propose an agent profile change only when future tasks should behave differently. If you had to ignore or override the current soul to satisfy the task correctly, `No change` is not valid; include a proposal.
 
 Good reasons:
 
 - The current soul made you choose the wrong workflow or review bar.
+- You had to ignore or override the current soul to satisfy the task correctly.
 - A required installable skill was missing for this kind of work.
 - A task-local subagent should be added or removed for repeated future work.
 - The role/bio is misleading for the work the leader assigns to this agent.
@@ -45,6 +48,31 @@ Workers do not update agent profiles directly. When a durable profile change is 
 - A complete candidate `Agent` YAML using the same `metadata.name` username.
 
 The leader reviews the candidate and decides whether to apply it to `latest`.
+
+Use this shape when a proposal is needed:
+
+Completion Summary:
+- <what changed>
+- <tests/checks run>
+- <handoff details>
+
+Profile Decision: Proposal included
+
+Agent Profile Proposal:
+Reason: <durable process or principle issue>
+Fields: <exact fields to change>
+
+```yaml
+kind: Agent
+metadata:
+  name: <same-username>
+  annotations:
+    agent-kanban.dev/display-name: "<human display name>"
+spec:
+  bio: "<updated bio if needed>"
+  soul: |
+    <updated durable behavior instructions>
+```
 
 ## Commands
 

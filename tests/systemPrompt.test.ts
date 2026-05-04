@@ -24,12 +24,28 @@ function makeAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
   };
 }
 
-// ─── DEV lifecycle ─────────────────────────────────────────────────────────
+// ─── Workflow boundary ─────────────────────────────────────────────────────
 
 describe("generateSystemPrompt — dev board", () => {
-  it("uses ak create note --task for progress logging", () => {
+  it("directs agents to read the installed agent-kanban skill", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("ak create note --task");
+    expect(prompt).toContain("The detailed task workflow is defined by the installed `agent-kanban` skill");
+    expect(prompt).toContain(".agents/skills/agent-kanban/SKILL.md");
+    expect(prompt).toContain(".claude/skills/agent-kanban/SKILL.md");
+  });
+
+  it("keeps detailed PR and CI workflow out of the system prompt", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev");
+    expect(prompt).not.toContain("gh pr checks");
+    expect(prompt).not.toContain("gh pr create");
+    expect(prompt).not.toContain("Check for conflicts");
+  });
+
+  it("keeps completion note and profile proposal details out of the system prompt", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "dev");
+    expect(prompt).not.toContain("Completion Summary:");
+    expect(prompt).not.toContain("Agent Profile Proposal");
+    expect(prompt).not.toContain("candidate `Agent` YAML");
   });
 
   it("does NOT contain ak task log anywhere", () => {
@@ -37,37 +53,15 @@ describe("generateSystemPrompt — dev board", () => {
     expect(prompt).not.toContain("ak task log");
   });
 
-  it("contains gh pr checks in the dev lifecycle", () => {
+  it("keeps platform review boundary in the system prompt", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("gh pr checks");
+    expect(prompt).toContain("`task review` is always your final action");
   });
 
-  it("contains conflict check step in the dev lifecycle", () => {
+  it("defines precedence between platform workflow and soul", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("Check for conflicts");
-  });
-
-  it("dev lifecycle has a PR step (gh pr create)", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("gh pr create");
-  });
-
-  it("dev lifecycle has a Wait for CI step", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toContain("Wait for CI");
-  });
-
-  it("dev lifecycle has 5 numbered steps", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    // Steps 1–5 must all appear in the lifecycle constant
-    for (let i = 1; i <= 6; i++) {
-      expect(prompt).toContain(`${i}.`);
-    }
-  });
-
-  it("dev lifecycle does NOT have a 7th numbered lifecycle step", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).not.toMatch(/^7\.\s+\*\*/m);
+    expect(prompt).toContain("take precedence over your soul");
+    expect(prompt).toContain("skill's completion-note process");
   });
 
   it("includes agent identity with correct id", () => {
@@ -90,45 +84,24 @@ describe("generateSystemPrompt — dev board", () => {
     expect(prompt).toContain("Role: general");
   });
 
-  it("Claim step is step 1", () => {
+  it("includes agent runtime", () => {
     const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/1\.\s+\*\*Claim\*\*/);
-  });
-
-  it("Work step is step 2", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/2\.\s+\*\*Work\*\*/);
-  });
-
-  it("PR step is step 3", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/3\.\s+\*\*PR\*\*/);
-  });
-
-  it("Wait for CI step is step 4", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/4\.\s+\*\*Wait for CI\*\*/);
-  });
-
-  it("Deliver step is step 6", () => {
-    const prompt = generateSystemPrompt(makeAgent(), "dev");
-    expect(prompt).toMatch(/6\.\s+\*\*Deliver\*\*/);
+    expect(prompt).toContain("Runtime: claude-cli");
   });
 
   it("Handoff is described in its own section, not as a numbered lifecycle step", () => {
-    // Handoff is an optional section added by buildHandoffSection, not step 6 in the lifecycle
     const prompt = generateSystemPrompt(makeAgent({ handoff_to: ["qa"] }), "dev");
     expect(prompt).toContain("## Handoff");
-    expect(prompt).not.toMatch(/^6\.\s+\*\*Handoff/m);
+    expect(prompt).not.toMatch(/^\d+\.\s+\*\*Handoff/m);
   });
 });
 
-// ─── OPS lifecycle ─────────────────────────────────────────────────────────
+// ─── OPS board ─────────────────────────────────────────────────────────────
 
 describe("generateSystemPrompt — ops board", () => {
-  it("uses ak create note --task for progress logging", () => {
+  it("directs ops agents to read the installed agent-kanban skill", () => {
     const prompt = generateSystemPrompt(makeAgent(), "ops");
-    expect(prompt).toContain("ak create note --task");
+    expect(prompt).toContain("The detailed task workflow is defined by the installed `agent-kanban` skill");
   });
 
   it("does NOT contain ak task log anywhere", () => {
@@ -146,9 +119,15 @@ describe("generateSystemPrompt — ops board", () => {
     expect(prompt).not.toContain("gh pr create");
   });
 
-  it("Deliver step is step 3 in ops lifecycle", () => {
+  it("keeps platform review boundary in the system prompt", () => {
     const prompt = generateSystemPrompt(makeAgent(), "ops");
-    expect(prompt).toMatch(/3\.\s+\*\*Deliver\*\*/);
+    expect(prompt).toContain("`task review` is always your final action");
+  });
+
+  it("defines precedence between platform workflow and soul", () => {
+    const prompt = generateSystemPrompt(makeAgent(), "ops");
+    expect(prompt).toContain("take precedence over your soul");
+    expect(prompt).toContain("skill's completion-note process");
   });
 });
 

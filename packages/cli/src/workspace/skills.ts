@@ -5,7 +5,7 @@ import { createLogger } from "../logger.js";
 
 const logger = createLogger("skills");
 
-const SKILL_SOURCE = "saltbo/agent-kanban";
+const SKILL_SOURCE = process.env.AK_AGENT_KANBAN_SKILL_SOURCE || "saltbo/agent-kanban";
 const SKILL_NAME = "agent-kanban";
 const SKILL_GITIGNORE_ENTRIES = [".claude/skills/", ".agents/", "skills-lock.json"];
 
