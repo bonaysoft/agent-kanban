@@ -291,7 +291,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
       >
         <SheetContent
           showCloseButton={false}
-          className={`overflow-hidden p-0 gap-0 transition-all duration-200 !w-[60%] max-md:!w-full ${chatOpen ? "!w-[calc(60%+3rem)]" : ""}`}
+          className={`overflow-hidden p-0 gap-0 !w-[60%] max-md:!w-full ${chatOpen ? "!w-[calc(60%+3rem)]" : ""}`}
         >
           <SheetTitle className="sr-only">{task.title}</SheetTitle>
           <SheetDescription className="sr-only">Task detail panel</SheetDescription>
