@@ -37,7 +37,7 @@ The leader chooses its own username and optional full name.
 ## Input
 
 Parse the user's input:
-- **Name** — version (e.g. "v1.4.0") or product name (e.g. "my-api")
+- **Name** — version (e.g. "v1.4") or product name (e.g. "my-api"). If the user provides a patch version such as `v1.4.0`, normalize task labels to `v1.4`.
 - **Goals** — what to achieve (if not provided, ask)
 
 ## Phase 0: Detect Mode
@@ -142,6 +142,44 @@ Create all tasks? (y/n)
 
 The user must confirm before any `ak create task` calls are made. If the user requests changes, adjust and re-preview.
 
+### Label Best Practices
+
+Labels are board-level taxonomy, not free-form notes. Before task creation, define the small label set this plan will use and show it in the preview. Prefer reusing existing board labels and adding only labels that will remain useful for future filtering.
+
+Recommended label categories:
+
+- **Version** — usually one version label per versioned task, formatted `vX.Y` (for example `v1.4`, `v2.0`). Prefer avoiding patch versions (`v1.4.0`) or suffixes (`v1.4-final`, `v1.4-test`) unless the board already has a specific reason to track that granularity.
+- **Area** — one or two stable implementation areas: `backend`, `frontend`, `cli`, `api`, `database`, `infra`, `docs`, `ui`, `security`, `test`.
+- **Type** — optional, only when it materially helps filtering: `feature`, `bug`, `refactor`.
+
+Prefer keeping temporary process state, tools, providers, experiments, and implementation trivia in the task description instead of labels. Labels such as `done`, `setup:lefthook`, `prompt-fix-test`, `smoke-test`, `cost-test`, `codex`, `github`, `cloudflare`, `tanstack-query`, or file/library names usually become noisy unless the board already uses that exact label intentionally.
+
+When labels overlap, choose the stable category:
+
+- Use `infra`, not `infrastructure`.
+- Use `bug`, not `bugfix`.
+- Use `database`, not `db`.
+- Use `frontend` for UI implementation unless the task is specifically design polish, then add `ui`.
+
+Task labels must already exist on the board. Check existing labels first; if a needed label does not exist, create it with color and description, then use it on tasks:
+
+```bash
+ak get label --board $BOARD
+ak create label --board $BOARD --name v1.4 --color "#22C55E" --description "Version 1.4"
+ak create label --board $BOARD --name backend --color "#38BDF8" --description "Backend/API work"
+ak create label --board $BOARD --name bug --color "#F87171" --description "Bug fix"
+```
+
+Useful color defaults:
+
+- Version: `#22C55E`
+- Frontend/UI: `#A78BFA`
+- Backend/API/database: `#38BDF8`
+- CLI/runtime: `#22D3EE`
+- Bug/security: `#F87171`
+- Infra/deploy: `#F59E0B`
+- Docs/refactor/general: `#71717A`
+
 ## Phase 3: Create Board, Workers & Tasks
 
 Use the existing board for the project. One project = one board.
@@ -190,7 +228,7 @@ Create tasks with full specs. For each task:
    - API endpoints, DB queries, UI components (concrete, not vague)
    - Patterns to follow from the existing codebase
 3. **`--repo <id>`** — from `ak repo list`
-4. **`--labels`** — include version label (e.g. `v1.4.0`) plus category (backend, frontend, cli, etc.)
+4. **`--labels`** — include the planned `vX.Y` version label plus one or two stable area/type labels
 5. **`--assign-to <agent-id>`** — worker chosen before task creation
 6. **`--depends-on`** — task IDs this depends on
 
@@ -211,7 +249,8 @@ T2=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT
 - Assign every task at creation with `--assign-to`.
 - Use `--depends-on` for real blockers or overlapping context. Tasks touching the same files, data model, or API contract should be sequential or merged.
 - Keep parallel tasks independent by feature/module boundary and data model boundary.
-- Use stable labels: version plus area, such as `v1.4.0,backend` or `v1.4.0,cli`.
+- Use stable labels: version plus area, such as `v1.4,backend` or `v1.4,cli`.
+- Keep the board label set small and reusable. If a label would be used by only one task and is not a version label, put that detail in the task description instead.
 
 ### Task Description Quality
 

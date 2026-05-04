@@ -5,6 +5,7 @@ import {
   formatAgentList,
   formatBoard,
   formatBoardList,
+  formatLabelList,
   formatRepository,
   formatRepositoryList,
   formatTask,
@@ -83,6 +84,18 @@ export function registerGetCommand(program: Command) {
         const boards = await client.listBoards();
         output(boards, fmt, formatBoardList, { kind: "board" });
       }
+    });
+
+  getCmd
+    .command("label")
+    .description("List board labels")
+    .requiredOption("--board <id>", "Board ID")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .action(async (opts) => {
+      const client = await createClient();
+      const fmt = getOutputFormat(opts.output);
+      const board = await client.getBoard(opts.board);
+      output(board.labels ?? [], fmt, formatLabelList, { kind: "label" });
     });
 
   getCmd

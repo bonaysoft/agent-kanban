@@ -1,4 +1,4 @@
-import type { MachineRuntime, UsageInfo } from "@agent-kanban/shared";
+import type { BoardWithTasks, MachineRuntime, UsageInfo } from "@agent-kanban/shared";
 import { getVersion } from "../version.js";
 
 export class ApiError extends Error {
@@ -174,7 +174,7 @@ export abstract class ApiClient {
     return this.request("GET", `/api/boards?name=${encodeURIComponent(name)}`);
   }
   getBoard(boardId: string) {
-    return this.request("GET", `/api/boards/${boardId}`);
+    return this.request<BoardWithTasks>("GET", `/api/boards/${boardId}`);
   }
   updateBoard(boardId: string, body: Record<string, unknown>) {
     return this.request("PATCH", `/api/boards/${boardId}`, body);

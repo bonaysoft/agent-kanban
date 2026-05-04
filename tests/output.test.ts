@@ -5,6 +5,7 @@ import {
   formatAgentList,
   formatBoard,
   formatBoardList,
+  formatLabelList,
   formatRepositoryList,
   formatTask,
   formatTaskList,
@@ -399,6 +400,24 @@ describe("formatBoardList", () => {
     const boards = [{ id: "b1", name: "My Board", description: null }];
     const result = formatBoardList(boards);
     expect(result).not.toContain(" — ");
+  });
+});
+
+describe("formatLabelList", () => {
+  it("returns 'No labels found.' for empty array", () => {
+    expect(formatLabelList([])).toBe("No labels found.");
+  });
+
+  it("includes label name and color", () => {
+    const labels = [{ name: "backend", color: "#38BDF8", description: "" }];
+    const result = formatLabelList(labels);
+    expect(result).toContain("backend");
+    expect(result).toContain("#38BDF8");
+  });
+
+  it("includes description when present", () => {
+    const labels = [{ name: "v1.4", color: "#22C55E", description: "Version 1.4" }];
+    expect(formatLabelList(labels)).toContain("Version 1.4");
   });
 });
 

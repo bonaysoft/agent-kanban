@@ -106,6 +106,17 @@ export function formatBoardList(boards: any[]): string {
   return lines.join("\n");
 }
 
+export function formatLabelList(labels: any[]): string {
+  if (labels.length === 0) return "No labels found.";
+
+  return labels
+    .map((label) => {
+      const description = label.description ? ` — ${label.description}` : "";
+      return `  ${label.name}  ${label.color}${description}`;
+    })
+    .join("\n");
+}
+
 export function formatRepository(repo: any): string {
   const lines: string[] = [];
   lines.push(`${repo.name}`);
