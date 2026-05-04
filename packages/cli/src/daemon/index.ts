@@ -1,11 +1,12 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, unlinkSync } from "node:fs";
-import { arch, hostname, platform, release } from "node:os";
+import { arch, platform, release } from "node:os";
 import type { MachineRuntime } from "@agent-kanban/shared";
 import { MachineClient } from "../client/index.js";
 import { getCredentials } from "../config.js";
 import { generateDeviceId } from "../device.js";
 import { createLogger } from "../logger.js";
+import { resolveMachineName } from "../machineName.js";
 import { PID_FILE, STATE_DIR } from "../paths.js";
 import { getAvailableProviders, getProvider } from "../providers/registry.js";
 import type { AgentProvider, HistoryEvent } from "../providers/types.js";
@@ -168,7 +169,7 @@ function removePidFile(): void {
 async function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter) {
   const os = `${platform()} ${arch()} ${release()}`;
   const runtimes = await buildRuntimeStates(providers, rateLimiter);
-  return { name: hostname(), os, version: getVersion(), runtimes };
+  return { name: resolveMachineName(), os, version: getVersion(), runtimes };
 }
 
 async function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateLimiter): Promise<MachineRuntime[]> {
