@@ -339,15 +339,21 @@ describe("routes", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/agents creates a new version for an existing username", async () => {
+  it("POST /api/agents updates latest and snapshots the previous latest for an existing username", async () => {
     const r1 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
     expect(r1.status).toBe(201);
-    const r2 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude" }, apiKey);
+    const r2 = await apiRequest("POST", "/api/agents", { username: "dupe-agent", runtime: "claude", soul: "second" }, apiKey);
     expect(r2.status).toBe(201);
     const first = (await r1.json()) as any;
     const second = (await r2.json()) as any;
-    expect(first.version).toBe("1");
-    expect(second.version).toBe("2");
+    expect(first.version).toBe("latest");
+    expect(second.id).toBe(first.id);
+    expect(second.version).toBe("latest");
+    expect(second.soul).toBe("second");
+
+    const snapshots = await env.DB.prepare("SELECT version FROM agents WHERE username = ? AND version != 'latest'").bind("dupe-agent").all<any>();
+    expect(snapshots.results).toHaveLength(1);
+    expect(snapshots.results[0].version).toMatch(/^[a-f0-9]{10}$/);
   });
 
   it("POST /api/agents returns username in response", async () => {
@@ -355,21 +361,6 @@ describe("routes", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.username).toBe("username-check-agent");
-  });
-
-  it("PUT /api/agents/:username/versions/latest creates a latest snapshot", async () => {
-    const versionRes = await apiRequest("POST", "/api/agents", { username: "publish-route-agent", runtime: "claude", soul: "route soul" }, userToken);
-    expect(versionRes.status).toBe(201);
-    const version = (await versionRes.json()) as any;
-
-    const publishRes = await apiRequest("PUT", "/api/agents/publish-route-agent/versions/latest", { agent_id: version.id }, userToken);
-
-    expect(publishRes.status).toBe(200);
-    const latest = (await publishRes.json()) as any;
-    expect(latest.username).toBe("publish-route-agent");
-    expect(latest.version).toBe("latest");
-    expect(latest.soul).toBe("route soul");
-    expect(latest.id).not.toBe(version.id);
   });
 
   it("POST /api/agents rejects a second leader for the same runtime", async () => {
@@ -565,6 +556,20 @@ describe("routes", () => {
     expect(body.subagents).toEqual([subagent.id]);
     expect(body).not.toHaveProperty("private_key");
     expect(body).not.toHaveProperty("mailbox_token");
+  });
+
+  it("PATCH /api/agents/:id rejects agent snapshots", async () => {
+    await apiRequest("POST", "/api/agents", { username: "patch-snapshot-agent", runtime: "claude", soul: "before" }, userToken);
+    await apiRequest("POST", "/api/agents", { username: "patch-snapshot-agent", runtime: "claude", soul: "after" }, userToken);
+    const snapshot = await env.DB.prepare("SELECT id FROM agents WHERE username = ? AND version != 'latest'")
+      .bind("patch-snapshot-agent")
+      .first<any>();
+
+    const res = await apiRequest("PATCH", `/api/agents/${snapshot.id}`, { soul: "mutated" }, userToken);
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("snapshots cannot be modified");
   });
 
   it.each(["gemini", "copilot"] as const)("PATCH /api/agents/:id allows %s agents with subagents", async (runtime) => {
@@ -1099,6 +1104,51 @@ describe("routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
+  });
+
+  it("DELETE /api/agents/:id deletes latest and all snapshots for the agent", async () => {
+    const first = await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Versioned Delete Agent",
+      username: "versioned-delete-agent",
+      runtime: "claude",
+      soul: "first",
+    });
+    await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Versioned Delete Agent",
+      username: "versioned-delete-agent",
+      runtime: "claude",
+      soul: "second",
+    });
+
+    const res = await apiRequest("DELETE", `/api/agents/${first.id}`, undefined, userToken);
+
+    expect(res.status).toBe(200);
+    const remaining = await env.DB.prepare("SELECT id FROM agents WHERE username = ?").bind("versioned-delete-agent").all<any>();
+    expect(remaining.results).toHaveLength(0);
+  });
+
+  it("DELETE /api/agents/:id rejects agent snapshots", async () => {
+    await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Snapshot Delete Agent",
+      username: "snapshot-delete-agent",
+      runtime: "claude",
+      soul: "first",
+    });
+    await createTestAgent(env.DB, userTokenOwnerId, {
+      name: "Snapshot Delete Agent",
+      username: "snapshot-delete-agent",
+      runtime: "claude",
+      soul: "second",
+    });
+    const snapshot = await env.DB.prepare("SELECT id FROM agents WHERE username = ? AND version != 'latest'")
+      .bind("snapshot-delete-agent")
+      .first<any>();
+
+    const res = await apiRequest("DELETE", `/api/agents/${snapshot.id}`, undefined, userToken);
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("snapshots cannot be deleted directly");
   });
 
   it("DELETE /api/agents/:id rejects agents referenced as subagents", async () => {

@@ -174,7 +174,7 @@ spec:
     - <worker-agent-id>
 ```
 
-The leader must generate and publish worker Agent YAML according to `references/runtime-delegation.md`. Then run `ak get agent -o json` and confirm the latest worker is visible and `runtime_available: true` before assigning tasks.
+The leader must generate and apply worker Agent YAML according to `references/runtime-delegation.md`. Then run `ak get agent -o json` and confirm the latest worker is visible and `runtime_available: true` before assigning tasks.
 
 Create tasks with full specs. For each task:
 
@@ -287,7 +287,24 @@ Check:
 - Check for regressions in related features
 - **Fails → reject with specific repro steps**
 
-**Either gate fails → Reject.** List all issues in the reason.
+**Gate 3: Agent Notes Review**
+
+Read task notes before merging:
+
+```bash
+ak get note --task <task-id>
+```
+
+Check:
+- The worker summarized what was done.
+- Whether the worker proposed any durable process or principle change for its agent profile.
+- Any proposal includes the reason, exact fields to change, and complete candidate `Agent` YAML using the same `metadata.name` username as the current agent.
+
+If the completion summary is missing or unclear, reject and ask the worker to add it.
+
+If no proposal is present, continue. If a proposal is present, review it using `references/runtime-delegation.md`. Apply it only when the proposal is durable, role-appropriate, and not task-specific.
+
+**Any gate fails → Reject.** List all issues in the reason.
 ```bash
 ak task reject <task-id> --reason "<all issues, specific and actionable>"
 ```

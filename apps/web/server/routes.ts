@@ -16,11 +16,10 @@ import {
   getAgent,
   getAgentLogs,
   getAgentMailboxToken,
-  insertAgent,
   listAgents,
   prepareAgent,
-  publishAgent,
   updateAgent,
+  upsertLatestAgent,
 } from "./agentRepo";
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
@@ -545,9 +544,20 @@ api.post("/api/agents", async (c) => {
     }
   }
 
-  // GPG subkey — its Ed25519 material becomes the agent's unified key
   const email = agentEmail(body.username);
-  const identity = await createAgentIdentity(c.env.DB, ownerId, email);
+  const latestIdentity = existingUsername
+    ? await c.env.DB.prepare("SELECT id, public_key, private_key, fingerprint FROM agents WHERE username = ? AND owner_id = ? AND version = 'latest'")
+        .bind(body.username, ownerId)
+        .first<{ id: string; public_key: string; private_key: string; fingerprint: string }>()
+    : null;
+  const identity = latestIdentity
+    ? {
+        id: latestIdentity.id,
+        publicKeyBase64: latestIdentity.public_key,
+        fingerprint: latestIdentity.fingerprint,
+        privateKeyJwk: JSON.parse(latestIdentity.private_key) as JsonWebKey,
+      }
+    : await createAgentIdentity(c.env.DB, ownerId, email);
   const prepared = await prepareAgent(c.env.DB, ownerId, body as CreateAgentInput, identity);
 
   // External service — create mailbox (skip if MAILS_ADMIN_TOKEN not configured)
@@ -555,9 +565,9 @@ api.post("/api/agents", async (c) => {
 
   try {
     // Single atomic insert with all fields
-    const agent = await insertAgent(c.env.DB, prepared, {
+    const agent = await upsertLatestAgent(c.env.DB, prepared, {
       mailboxToken,
-      gpgSubkeyId: identity.id.toUpperCase(),
+      gpgSubkeyId: latestIdentity ? undefined : identity.id.toUpperCase(),
     });
 
     // GitHub sync — best-effort, skip if not connected
@@ -578,20 +588,12 @@ api.post("/api/agents", async (c) => {
   }
 });
 
-api.put("/api/agents/:username/versions/latest", async (c) => {
-  const body = await c.req.json<{ agent_id: string }>();
-  assertJsonObject(body, "latest agent version");
-  if (!body.agent_id) throw new HTTPException(400, { message: "agent_id is required" });
-  const agent = await publishAgent(c.env.DB, c.req.param("username"), body.agent_id, c.get("ownerId"));
-  if (!agent) throw new HTTPException(404, { message: "Agent not found" });
-  return c.json(agent);
-});
-
 api.patch("/api/agents/:id", async (c) => {
   const ownerId = c.get("ownerId");
   const existing = await getAgent(c.env.DB, c.req.param("id"), ownerId);
   if (!existing) throw new HTTPException(404, { message: "Agent not found" });
   if (existing.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be modified" });
+  if (existing.version !== "latest") throw new HTTPException(409, { message: "Agent snapshots cannot be modified" });
   const body = await c.req.json();
   assertJsonObject(body, "agent update");
   const updates = body as Partial<CreateAgentInput>;
@@ -606,11 +608,12 @@ api.patch("/api/agents/:id", async (c) => {
 
 api.delete("/api/agents/:id", async (c) => {
   const ownerId = c.get("ownerId");
-  const agent = await c.env.DB.prepare("SELECT id, username, builtin FROM agents WHERE id = ? AND owner_id = ?")
+  const agent = await c.env.DB.prepare("SELECT id, username, builtin, version FROM agents WHERE id = ? AND owner_id = ?")
     .bind(c.req.param("id"), ownerId)
-    .first<{ id: string; username: string; builtin: number }>();
+    .first<{ id: string; username: string; builtin: number; version: string }>();
   if (!agent) throw new HTTPException(404, { message: "Agent not found" });
   if (agent.builtin) throw new HTTPException(403, { message: "Built-in agents cannot be deleted" });
+  if (agent.version !== "latest") throw new HTTPException(409, { message: "Agent snapshots cannot be deleted directly" });
   await assertAgentNotReferencedAsSubagent(c.env.DB, ownerId, agent.id);
   const email = agentEmail(agent.username);
   await deleteAgent(c.env.DB, agent.id);

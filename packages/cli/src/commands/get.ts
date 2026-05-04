@@ -21,14 +21,13 @@ type AgentRef = {
   version: string;
   name: string;
   created_at?: string;
-  soul_sha1?: string;
 };
 
 function sortAgentVersions(agents: AgentRef[]): AgentRef[] {
   return [...agents].sort((a, b) => {
     if (a.version === "latest") return -1;
     if (b.version === "latest") return 1;
-    return Number(b.version) - Number(a.version);
+    return (b.created_at ?? "").localeCompare(a.created_at ?? "") || a.version.localeCompare(b.version);
   });
 }
 
@@ -37,9 +36,8 @@ function formatAgentVersions(data: { username: string; versions: AgentRef[] }): 
   const lines = [`${data.username}`];
   for (const agent of sortAgentVersions(data.versions)) {
     const version = agent.version.padEnd(8);
-    const hash = agent.soul_sha1 ? agent.soul_sha1.slice(0, 10) : "no-soul";
     const created = agent.created_at ? new Date(agent.created_at).toISOString().slice(0, 10) : "";
-    lines.push(`  ${version} ${agent.id}  ${hash}  ${created}  ${agent.name}`);
+    lines.push(`  ${version} ${agent.id}  ${created}  ${agent.name}`);
   }
   return lines.join("\n");
 }

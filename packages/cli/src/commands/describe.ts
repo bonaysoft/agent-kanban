@@ -59,7 +59,6 @@ function formatDescribeAgent(agent: any, sessions: any[]): string {
   lines.push(`${pad("ID")} ${agent.id}`);
   if (agent.username) lines.push(`${pad("Username")} ${agent.username}`);
   if (agent.version) lines.push(`${pad("Version")} ${agent.version}`);
-  if (agent.soul_sha1) lines.push(`${pad("Soul SHA1")} ${agent.soul_sha1}`);
   lines.push(`${pad("Status")} ${agent.status}`);
   if (agent.role) lines.push(`${pad("Role")} ${agent.role}`);
   if (agent.bio) lines.push(`${pad("Bio")} ${agent.bio}`);

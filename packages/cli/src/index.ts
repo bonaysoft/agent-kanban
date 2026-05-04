@@ -45,13 +45,7 @@ const helpSections: [string, [string, string][]][] = [
       ["task release <id>", "Release back to todo"],
     ],
   ],
-  [
-    "Agent",
-    [
-      ["agent publish <id>", "Publish an agent version as latest"],
-      ["agent diff <from> [to]", "Compare agent versions"],
-    ],
-  ],
+  ["Agent", [["agent diff <from> [to]", "Compare agent versions"]]],
   [
     "Wait (block until condition)",
     [

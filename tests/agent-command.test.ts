@@ -1,14 +1,12 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const publishAgent = vi.fn();
 const getAgent = vi.fn();
 const output = vi.fn();
 
 vi.mock("../packages/cli/src/agent/leader.js", () => ({
   createClient: vi.fn(async () => ({
     getAgent,
-    publishAgent,
   })),
 }));
 
@@ -58,34 +56,17 @@ async function registerAgentCommands(): Promise<Map<string, CapturedCommand>> {
 describe("agent command", () => {
   beforeEach(() => {
     getAgent.mockReset();
-    publishAgent.mockReset();
     output.mockReset();
-  });
-
-  it("publishes an agent version", async () => {
-    const commands = await registerAgentCommands();
-    const command = commands.get("publish <id>")!;
-    publishAgent.mockResolvedValue({ id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex Kim" });
-
-    await command.action!("agent-2", { output: "json" });
-
-    expect(publishAgent).toHaveBeenCalledWith("agent-2");
-    expect(output).toHaveBeenCalledWith(
-      { id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex Kim" },
-      "json",
-      expect.any(Function),
-    );
   });
 
   it("diffs an agent id against latest by default", async () => {
     const commands = await registerAgentCommands();
     const command = commands.get("diff <from> [to]")!;
-    getAgent.mockResolvedValueOnce({ id: "agent-2", username: "alex-kim", version: "2", name: "Alex", soul: "new", runtime: "codex" });
+    getAgent.mockResolvedValueOnce({ id: "agent-2", username: "alex-kim", version: "abc123def4", name: "Alex", soul: "new", runtime: "codex" });
     const listAgents = vi.fn().mockResolvedValue([{ id: "agent-latest", username: "alex-kim", version: "latest" }]);
     vi.mocked((await import("../packages/cli/src/agent/leader.js")).createClient).mockResolvedValueOnce({
       getAgent,
       listAgents,
-      publishAgent,
     } as any);
     getAgent.mockResolvedValueOnce({ id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex", soul: "old", runtime: "codex" });
 
@@ -95,7 +76,7 @@ describe("agent command", () => {
     expect(getAgent).toHaveBeenNthCalledWith(2, "agent-latest");
     expect(output).toHaveBeenCalledWith(
       {
-        from: { id: "agent-2", username: "alex-kim", version: "2" },
+        from: { id: "agent-2", username: "alex-kim", version: "abc123def4" },
         to: { id: "agent-latest", username: "alex-kim", version: "latest" },
         changes: [{ field: "soul", before: "new", after: "old" }],
       },
@@ -111,16 +92,15 @@ describe("agent command", () => {
     vi.mocked((await import("../packages/cli/src/agent/leader.js")).createClient).mockResolvedValueOnce({
       getAgent,
       listAgents,
-      publishAgent,
     } as any);
     listAgents
-      .mockResolvedValueOnce([{ id: "agent-1", username: "alex-kim", version: "1" }])
-      .mockResolvedValueOnce([{ id: "agent-2", username: "alex-kim", version: "2" }]);
+      .mockResolvedValueOnce([{ id: "agent-1", username: "alex-kim", version: "abc123def4" }])
+      .mockResolvedValueOnce([{ id: "agent-2", username: "alex-kim", version: "def456abc7" }]);
     getAgent
-      .mockResolvedValueOnce({ id: "agent-1", username: "alex-kim", version: "1", name: "Alex", role: "builder" })
-      .mockResolvedValueOnce({ id: "agent-2", username: "alex-kim", version: "2", name: "Alex", role: "reviewer" });
+      .mockResolvedValueOnce({ id: "agent-1", username: "alex-kim", version: "abc123def4", name: "Alex", role: "builder" })
+      .mockResolvedValueOnce({ id: "agent-2", username: "alex-kim", version: "def456abc7", name: "Alex", role: "reviewer" });
 
-    await command.action!("alex-kim@v1", "alex-kim@v2", { output: "json" });
+    await command.action!("alex-kim@abc123def4", "alex-kim@def456abc7", { output: "json" });
 
     expect(getAgent).toHaveBeenNthCalledWith(1, "agent-1");
     expect(getAgent).toHaveBeenNthCalledWith(2, "agent-2");

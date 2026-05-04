@@ -205,9 +205,26 @@ Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memor
 
 **Fails → reject with specific repro steps.**
 
+#### Gate 3: Agent Notes Review
+
+Read task notes before merging:
+
+```bash
+ak get note --task <task-id>
+```
+
+Check:
+- The worker summarized what was done.
+- Whether the worker proposed any durable process or principle change for its agent profile.
+- Any proposal includes the reason, exact fields to change, and complete candidate `Agent` YAML using the same `metadata.name` username as the current agent.
+
+If the completion summary is missing or unclear, reject and ask the worker to add it.
+
+If no proposal is present, continue. If a proposal is present, review it using `references/runtime-delegation.md`. Apply it only when the proposal is durable, role-appropriate, and not task-specific.
+
 ### Step 7: Decide — act immediately, do not ask the user
 
-**Either gate fails → Reject.** List all issues in the reason.
+**Any gate fails → Reject.** List all issues in the reason.
 ```bash
 ak task reject <task-id> --reason "<all issues, specific and actionable>"
 ```

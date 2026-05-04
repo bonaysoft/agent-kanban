@@ -166,9 +166,9 @@ describe("get agent — username version list", () => {
   it("lists versions when the argument is a username", async () => {
     mockGetAgent.mockRejectedValue({ status: 404, message: "Not found" });
     mockListAgents.mockResolvedValue([
-      { id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim", soul_sha1: "1111111111", created_at: "2026-01-01T00:00:00Z" },
-      { id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex Kim", soul_sha1: "2222222222", created_at: "2026-01-02T00:00:00Z" },
-      { id: "agent-other", username: "riley", version: "1", name: "Riley" },
+      { id: "agent-1", username: "alex-kim", version: "abc123def4", name: "Alex Kim", created_at: "2026-01-01T00:00:00Z" },
+      { id: "agent-latest", username: "alex-kim", version: "latest", name: "Alex Kim", created_at: "2026-01-02T00:00:00Z" },
+      { id: "agent-other", username: "riley", version: "abc123def4", name: "Riley" },
     ]);
 
     await makeProgram().parseAsync(["get", "agent", "alex-kim"], { from: "user" });
@@ -184,10 +184,9 @@ describe("get agent — username version list", () => {
             username: "alex-kim",
             version: "latest",
             name: "Alex Kim",
-            soul_sha1: "2222222222",
             created_at: "2026-01-02T00:00:00Z",
           },
-          { id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim", soul_sha1: "1111111111", created_at: "2026-01-01T00:00:00Z" },
+          { id: "agent-1", username: "alex-kim", version: "abc123def4", name: "Alex Kim", created_at: "2026-01-01T00:00:00Z" },
         ],
       },
       "text",

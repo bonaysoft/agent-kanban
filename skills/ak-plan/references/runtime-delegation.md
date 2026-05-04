@@ -59,8 +59,7 @@ spec:
 ```bash
 ak apply -f agent.yaml
 ak get agent <username>
-ak describe agent <username> --version <version>
-ak agent publish <agent-id>
+ak describe agent <username> --version latest
 ak get agent -o json
 ```
 
@@ -73,9 +72,25 @@ Agent creation rules:
 - `skills` must be installable skill refs in `<source>@<skill>` format, matching what `npx skills add <source> --skill <skill>` can install.
 - `handoff_to` should list real delegation targets.
 - `subagents` should list worker agent IDs to install as task-local subagents for this agent.
-- Agent YAML creates a new version. Use `ak get agent <username>` to list versions and `ak describe agent <username> --version <version>` to inspect one version.
-- Use `ak agent publish <agent-id>` after leader review to update the `version: latest` snapshot.
+- Agent YAML updates the current `latest` profile for `metadata.name`. If the profile changed, AK keeps the previous `latest` as a hash-version snapshot.
+- Use `ak get agent <username>` to list snapshots and `ak describe agent <username> --version latest` to inspect the current approved profile.
 - Verify `runtime_available: true` before assigning any task to the new worker.
+
+## Reviewing Agent Profile Candidates
+
+Every completed worker task must include a completion summary. The leader must read the task notes before merging the PR and check whether the worker proposed an agent profile change. Workers may propose profile changes when their current `bio`, `soul`, `skills`, `subagents`, or handoff targets caused durable behavior that should change for future tasks. Treat these as candidates, not approvals.
+
+When a worker proposes a candidate:
+
+1. Read the reason and candidate Agent YAML.
+2. Accept only if the change is durable, role-appropriate, and not task-specific.
+3. Apply accepted candidates with `ak apply -f <file>`; this updates the current `latest` profile. If the profile changed, AK snapshots the previous latest.
+4. Verify with `ak describe agent <username> --version latest` and `ak get agent <username>`.
+5. Reject by leaving `latest` unchanged and telling the worker why.
+
+Do not apply changes that store one-off task context, project facts, temporary user preferences, or fixes that belong in source code or task descriptions.
+
+If no proposal is present, no agent version action is needed.
 
 ## Runtime Failure Handling
 

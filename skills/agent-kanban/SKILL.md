@@ -16,7 +16,35 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 4. **PR** → push branch, `gh pr create`
 5. **Wait for CI** → `gh pr checks <pr-number> --watch` — fix failures, push, re-check until green
 6. **Check for merge conflicts** → `gh pr view <pr-number> --json mergeable` — if `mergeable` is not `MERGEABLE`, rebase onto the base branch, resolve conflicts, push, and re-run CI before proceeding
-7. **Submit for review** once CI passes and PR is conflict-free → `ak task review <id> --pr-url <url>`
+7. **Completion note** → summarize what happened; include a profile proposal only if the task revealed a durable process or principle issue → `ak create note --task <id> "..."`
+8. **Submit for review** once CI passes, PR is conflict-free, and the completion note is posted → `ak task review <id> --pr-url <url>`
+
+## Agent Profile Change Candidates
+
+Before submitting every task for review, write a completion note summarizing what happened.
+
+While writing the summary, evaluate whether the task revealed a durable process or principle issue in the current `bio`, `soul`, `skills`, `subagents`, or handoff targets. Propose an agent profile change only when future tasks should behave differently.
+
+Good reasons:
+
+- The current soul made you choose the wrong workflow or review bar.
+- A required installable skill was missing for this kind of work.
+- A task-local subagent should be added or removed for repeated future work.
+- The role/bio is misleading for the work the leader assigns to this agent.
+
+Do not propose profile changes for:
+
+- One-off task facts, project details, or temporary user preferences.
+- Source-code bugs fixed by the current task.
+- Missing context that belongs in the task description.
+
+Workers do not update agent profiles directly. When a durable profile change is needed, include a proposal in the completion note with:
+
+- The reason the current profile caused incorrect or inefficient behavior.
+- The exact fields that should change.
+- A complete candidate `Agent` YAML using the same `metadata.name` username.
+
+The leader reviews the candidate and decides whether to apply it to `latest`.
 
 ## Commands
 
@@ -38,6 +66,7 @@ You are an agent. Use the `ak` CLI to work on tasks. Your identity is initialize
 | `ak apply -f <file>` | Apply a YAML/JSON resource spec (preferred for tasks) |
 | `ak get agent` | List agents, including load and unavailable runtime markers |
 | `ak get agent -o json` | List agents as JSON, including `runtime_available`, `queued_task_count`, and `active_task_count` |
+| `ak describe agent "$AK_AGENT_ID"` | Inspect your current agent profile |
 | `ak get board` | List boards |
 | `ak get repo` | List repositories |
 | `ak create repo --name "..." --url "..."` | Register a repository |

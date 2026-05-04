@@ -48,11 +48,6 @@ describe("ApiClient new methods — public contract", () => {
     expect((ApiClient.prototype as any).deleteAgent.length).toBe(1);
   });
 
-  it("publishAgent accepts one argument (agent id)", async () => {
-    const { ApiClient } = await import("../packages/cli/src/client/index");
-    expect((ApiClient.prototype as any).publishAgent.length).toBe(1);
-  });
-
   it("updateBoard is a function on ApiClient", async () => {
     const { ApiClient } = await import("../packages/cli/src/client/index");
     expect(typeof (ApiClient.prototype as any).updateBoard).toBe("function");

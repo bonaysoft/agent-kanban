@@ -68,16 +68,16 @@ describe("describe agent version", () => {
   it("resolves username and version before describing an agent", async () => {
     const commands = await registerDescribeCommands();
     const command = commands.get("agent <id>")!;
-    listAgents.mockResolvedValue([{ id: "agent-1", username: "alex-kim", version: "1" }]);
-    getAgent.mockResolvedValue({ id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim" });
+    listAgents.mockResolvedValue([{ id: "agent-1", username: "alex-kim", version: "abc123def4" }]);
+    getAgent.mockResolvedValue({ id: "agent-1", username: "alex-kim", version: "abc123def4", name: "Alex Kim" });
     listSessions.mockResolvedValue([]);
 
-    await command.action!("alex-kim", { version: "v1", output: "json" });
+    await command.action!("alex-kim", { version: "abc123def4", output: "json" });
 
     expect(getAgent).toHaveBeenCalledWith("agent-1");
     expect(listSessions).toHaveBeenCalledWith("agent-1");
     expect(output).toHaveBeenCalledWith(
-      { agent: { id: "agent-1", username: "alex-kim", version: "1", name: "Alex Kim" }, sessions: [] },
+      { agent: { id: "agent-1", username: "alex-kim", version: "abc123def4", name: "Alex Kim" }, sessions: [] },
       "json",
       expect.any(Function),
       { kind: "agent" },

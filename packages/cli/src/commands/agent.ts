@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { createClient } from "../agent/leader.js";
 import { getOutputFormat, output } from "../output.js";
 
-const DIFF_FIELDS = ["name", "bio", "soul", "role", "kind", "handoff_to", "runtime", "model", "skills", "subagents", "soul_sha1"];
+const DIFF_FIELDS = ["name", "bio", "soul", "role", "kind", "handoff_to", "runtime", "model", "skills", "subagents"];
 
 function normalizeVersion(version: string): string {
   return version.startsWith("v") && version.length > 1 ? version.slice(1) : version;
@@ -72,16 +72,5 @@ export function registerAgentCommand(program: Command) {
       const to = toRef ? await resolveAgentRef(client, toRef) : await resolveAgentRef(client, `${from.username}@latest`);
       const fmt = getOutputFormat(opts.output);
       output(diffAgents(from, to), fmt, formatAgentDiff);
-    });
-
-  agentCmd
-    .command("publish <id>")
-    .description("Publish an agent version as latest")
-    .option("-o, --output <format>", "Output format (json, yaml, text)")
-    .action(async (id: string, opts) => {
-      const client = await createClient();
-      const agent = await client.publishAgent(id);
-      const fmt = getOutputFormat(opts.output);
-      output(agent, fmt, (a: any) => `Published agent ${a.username}@${a.version}: ${a.name}`);
     });
 }

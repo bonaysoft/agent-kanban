@@ -132,7 +132,7 @@ describe("agent CRUD", () => {
     agentId = agent.id;
     expect(agent.name).toBe("CrudAgent");
     expect(agent.bio).toBe("test bio");
-    expect(agent.version).toBe("1");
+    expect(agent.version).toBe("latest");
   });
 
   it("updates agent fields", async () => {
@@ -142,7 +142,6 @@ describe("agent CRUD", () => {
     expect(agent!.name).toBe("UpdatedAgent");
     expect(agent!.bio).toBe("new bio");
     expect(agent!.soul).toBe("be precise");
-    expect(agent!.soul_sha1).toHaveLength(40);
   });
 
   it("deletes agent", async () => {
