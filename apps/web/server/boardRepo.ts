@@ -191,11 +191,21 @@ export async function deleteBoardLabel(db: D1, boardId: string, name: string): P
   if (!board) return null;
   const labels = parseBoard(board).labels;
   if (!labels.some((label) => label.name === name)) throw new HTTPException(404, { message: `Label not found: ${name}` });
-  const inUse = await db
-    .prepare("SELECT 1 FROM tasks WHERE board_id = ? AND EXISTS (SELECT 1 FROM json_each(tasks.labels) WHERE json_each.value = ?) LIMIT 1")
-    .bind(boardId, name)
-    .first();
-  if (inUse) throw new HTTPException(409, { message: `Label is in use: ${name}` });
+
+  const tasks = await db
+    .prepare("SELECT id, labels FROM tasks WHERE board_id = ? AND labels IS NOT NULL")
+    .bind(boardId)
+    .all<{ id: string; labels: string }>();
+  const now = new Date().toISOString();
+  const statements = tasks.results
+    .map((task) => {
+      const current = JSON.parse(task.labels) as string[];
+      return { id: task.id, current, next: current.filter((label) => label !== name) };
+    })
+    .filter((task) => task.current.length !== task.next.length)
+    .map((task) => db.prepare("UPDATE tasks SET labels = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(task.next), now, task.id));
+  if (statements.length > 0) await db.batch(statements);
+
   return updateBoard(db, boardId, { labels: labels.filter((label) => label.name !== name) });
 }
 

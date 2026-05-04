@@ -59,6 +59,8 @@ function BoardItem({ board }: { board: any }) {
 
   async function handleDeleteLabel(name: string) {
     setLabelError(null);
+    const confirmed = window.confirm(`Delete label "${name}" from this board and remove it from all tasks?`);
+    if (!confirmed) return;
     try {
       await deleteLabel.mutateAsync({ boardId: board.id, name });
     } catch (err) {

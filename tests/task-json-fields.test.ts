@@ -197,4 +197,20 @@ describe("task JSON field parsing (labels, input)", () => {
     expect(Array.isArray(reviewed!.labels)).toBe(true);
     expect(typeof reviewed!.input).toBe("object");
   });
+
+  it("deleteBoardLabel removes the label from tasks on the same board", async () => {
+    const { createTask, getTask } = await import("../apps/web/server/taskRepo");
+    const { deleteBoardLabel } = await import("../apps/web/server/boardRepo");
+    const task = await createTask(db, ownerId, {
+      title: "Delete label propagation",
+      board_id: boardId,
+      labels: ["bug", "feature"],
+    });
+
+    const board = await deleteBoardLabel(db, boardId, "bug");
+    const updated = await getTask(db, task.id, ownerId);
+
+    expect(board!.labels.map((label) => label.name)).not.toContain("bug");
+    expect(updated!.labels).toEqual(["feature"]);
+  });
 });
