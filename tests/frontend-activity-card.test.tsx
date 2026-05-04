@@ -72,6 +72,21 @@ describe("ActivityLog", () => {
     expect(text.indexOf("claimed this task")).toBeLessThan(text.indexOf("completed this task"));
   });
 
+  it("does not create an inner scroll region", () => {
+    render(
+      React.createElement(ActivityLog, {
+        reconnecting: false,
+        initialNotes: [note({ id: "older", action: "created", created_at: "2026-05-04T10:01:00.000Z" })],
+        sseNotes: [],
+      }),
+    );
+
+    const liveRegion = screen.getByText("created this task").closest("[aria-live='polite']");
+
+    expect(liveRegion?.className).not.toContain("overflow-y-auto");
+    expect(liveRegion?.className).not.toContain("max-h-");
+  });
+
   it("renders comment detail as GitHub-style markdown content", () => {
     const markdown = [
       "## Review notes",

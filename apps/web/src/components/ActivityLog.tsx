@@ -1,12 +1,10 @@
 import { User } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 import { AgentIdenticon } from "./AgentIdenticon";
 import { formatRelative } from "./TaskDetailFields";
-import { Button } from "./ui/button";
 
 interface ActivityLogProps {
   initialNotes: any[];
@@ -107,10 +105,6 @@ function hasBody(log: any): boolean {
 }
 
 export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLogProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [newCount, setNewCount] = useState(0);
-
   const displayed = (() => {
     const seen = new Set<string>();
     const merged: any[] = [];
@@ -123,28 +117,6 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
     return merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
   })();
 
-  useEffect(() => {
-    if (autoScroll && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    } else if (!autoScroll && sseNotes.length > 0) {
-      setNewCount((c) => c + 1);
-    }
-  }, [autoScroll, sseNotes.length]);
-
-  function handleScroll() {
-    if (!containerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    const atBottom = scrollHeight - scrollTop - clientHeight < 20;
-    setAutoScroll(atBottom);
-    if (atBottom) setNewCount(0);
-  }
-
-  function scrollToLatest() {
-    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
-    setNewCount(0);
-    setAutoScroll(true);
-  }
-
   if (displayed.length === 0) {
     return <p className="text-sm text-content-tertiary">No activity yet. Assign an agent to see notes.</p>;
   }
@@ -153,13 +125,7 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
     <div className="relative">
       {reconnecting && <div className="text-[10px] text-warning mb-1">Reconnecting...</div>}
 
-      {newCount > 0 && !autoScroll && (
-        <Button onClick={scrollToLatest} size="xs" className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono">
-          ↓ {newCount} new
-        </Button>
-      )}
-
-      <div ref={containerRef} onScroll={handleScroll} className="mt-2 max-h-96 overflow-y-auto pr-1" aria-live="polite">
+      <div className="mt-2 pr-1" aria-live="polite">
         <div className="relative">
           <div className="absolute left-3.5 top-0 bottom-0 w-px bg-border" />
 
