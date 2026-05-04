@@ -1,5 +1,9 @@
 import { User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
+
 import { AgentIdenticon } from "./AgentIdenticon";
 import { formatRelative } from "./TaskDetailFields";
 import { Button } from "./ui/button";
@@ -35,48 +39,71 @@ const dotColors: Record<string, string> = {
   moved: "bg-zinc-500 border-zinc-500/30",
 };
 
-function buildSentence(log: any): { prefix: string; actionText: string; suffix: string } {
-  const name = log.actor_name || null;
-  const isAgent = log.actor_type?.startsWith("agent:");
-  const defaultPrefix = isAgent ? "Agent" : log.actor_type === "user" ? "User" : "System";
+const bodyActions = new Set(["commented", "rejected", "completed", "cancelled"]);
 
+const markdownClass =
+  "overflow-x-auto text-[13px] text-content-secondary [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-content-primary [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-content-primary [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-content-primary [&_h3]:mt-2 [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:mb-2 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:mb-0.5 [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 [&_pre]:bg-surface-primary [&_pre]:border [&_pre]:border-border [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:overflow-x-auto [&_pre]:font-mono [&_pre]:text-[12px] [&_code]:font-mono [&_code]:text-accent [&_code]:bg-surface-primary [&_code]:px-1 [&_code]:rounded [&_code]:text-[12px] [&_pre_code]:bg-transparent [&_pre_code]:text-content-secondary [&_pre_code]:p-0 [&_table]:w-full [&_table]:border-collapse [&_th]:text-left [&_th]:text-[11px] [&_th]:font-medium [&_th]:text-content-tertiary [&_th]:uppercase [&_th]:tracking-wide [&_th]:border-b [&_th]:border-border [&_th]:pb-1 [&_td]:border-b [&_td]:border-border [&_td]:py-1 [&_td]:pr-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-content-tertiary [&_hr]:border-border";
+
+function actorLabel(log: any): string {
+  if (log.actor_name) return log.actor_name;
+  if (log.actor_type?.startsWith("agent:")) return "Agent";
+  if (log.actor_type === "user") return "User";
+  return "System";
+}
+
+function buildSentence(log: any): { actionText: string; suffix: string } {
   switch (log.action) {
     case "claimed":
-      return { prefix: name ?? defaultPrefix, actionText: "claimed this task", suffix: "" };
+      return { actionText: "claimed this task", suffix: "" };
     case "assigned":
-      return { prefix: name ?? "System", actionText: "assigned to", suffix: log.detail ?? "agent" };
+      return { actionText: "assigned to", suffix: log.detail ?? "agent" };
     case "completed":
-      return { prefix: name ?? defaultPrefix, actionText: "completed this task", suffix: log.detail ? `— ${log.detail}` : "" };
+      return { actionText: "completed this task", suffix: "" };
     case "released":
-      return { prefix: name ?? defaultPrefix, actionText: "released this task", suffix: "" };
+      return { actionText: "released this task", suffix: "" };
     case "timed_out":
-      return { prefix: name ?? defaultPrefix, actionText: "timed out", suffix: "" };
+      return { actionText: "timed out", suffix: "" };
     case "cancelled":
-      return { prefix: name ?? "System", actionText: "cancelled this task", suffix: log.detail ? `— ${log.detail}` : "" };
+      return { actionText: "cancelled this task", suffix: "" };
     case "rejected":
-      return { prefix: name ?? "Reviewer", actionText: "rejected — sent back to agent", suffix: log.detail ? `(${log.detail})` : "" };
+      return { actionText: "rejected this task", suffix: "" };
     case "review_requested":
-      return { prefix: name ?? defaultPrefix, actionText: "submitted for review", suffix: "" };
+      return { actionText: "submitted for review", suffix: "" };
     case "created":
-      return { prefix: "System", actionText: "created this task", suffix: "" };
+      return { actionText: "created this task", suffix: "" };
     case "moved":
-      return { prefix: "System", actionText: "moved", suffix: log.detail ?? "" };
+      return { actionText: "moved", suffix: log.detail ?? "" };
     case "commented":
-      return { prefix: name ?? defaultPrefix, actionText: "commented", suffix: "" };
+      return { actionText: "commented", suffix: "" };
     default:
-      return { prefix: name ?? "System", actionText: log.action, suffix: log.detail ?? "" };
+      return { actionText: log.action, suffix: bodyActions.has(log.action) ? "" : (log.detail ?? "") };
   }
 }
 
-function NoteAvatar({ actorType, actorPublicKey }: { actorType: string | null; actorPublicKey: string | null }) {
-  if (actorType?.startsWith("agent:") && actorPublicKey) {
-    return <AgentIdenticon publicKey={actorPublicKey} size={20} />;
+function NoteAvatar({ log }: { log: any }) {
+  if (log.actor_type?.startsWith("agent:") && log.actor_public_key) {
+    return <AgentIdenticon publicKey={log.actor_public_key} size={28} />;
   }
+
   return (
-    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center">
-      <User className="w-3 h-3 text-content-tertiary" />
+    <span className="flex-shrink-0 w-7 h-7 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center">
+      <User className="w-3.5 h-3.5 text-content-tertiary" />
     </span>
   );
+}
+
+function MarkdownBody({ children }: { children: string }) {
+  return (
+    <div className={markdownClass}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function hasBody(log: any): boolean {
+  return bodyActions.has(log.action) && !!log.detail;
 }
 
 export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLogProps) {
@@ -84,7 +111,7 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
   const [autoScroll, setAutoScroll] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
-  const allNotes = (() => {
+  const displayed = (() => {
     const seen = new Set<string>();
     const merged: any[] = [];
     for (const note of [...initialNotes, ...sseNotes]) {
@@ -96,11 +123,9 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
     return merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
   })();
 
-  const displayed = allNotes.slice().reverse();
-
   useEffect(() => {
     if (autoScroll && containerRef.current) {
-      containerRef.current.scrollTop = 0;
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     } else if (!autoScroll && sseNotes.length > 0) {
       setNewCount((c) => c + 1);
     }
@@ -108,13 +133,14 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
 
   function handleScroll() {
     if (!containerRef.current) return;
-    const atTop = containerRef.current.scrollTop < 20;
-    setAutoScroll(atTop);
-    if (atTop) setNewCount(0);
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 20;
+    setAutoScroll(atBottom);
+    if (atBottom) setNewCount(0);
   }
 
-  function scrollToTop() {
-    containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  function scrollToLatest() {
+    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
     setNewCount(0);
     setAutoScroll(true);
   }
@@ -128,54 +154,52 @@ export function ActivityLog({ initialNotes, sseNotes, reconnecting }: ActivityLo
       {reconnecting && <div className="text-[10px] text-warning mb-1">Reconnecting...</div>}
 
       {newCount > 0 && !autoScroll && (
-        <Button onClick={scrollToTop} size="xs" className="absolute top-0 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono">
-          ↑ {newCount} new
+        <Button onClick={scrollToLatest} size="xs" className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 text-[11px] font-mono">
+          ↓ {newCount} new
         </Button>
       )}
 
-      <div ref={containerRef} onScroll={handleScroll} className="mt-2 max-h-80 overflow-y-auto" aria-live="polite">
-        {/* Timeline container */}
-        <div className="relative ml-2.5">
-          {/* Vertical line */}
-          <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+      <div ref={containerRef} onScroll={handleScroll} className="mt-2 max-h-96 overflow-y-auto pr-1" aria-live="polite">
+        <div className="relative">
+          <div className="absolute left-3.5 top-0 bottom-0 w-px bg-border" />
 
           {displayed.map((log: any) => {
-            const { prefix, actionText, suffix } = buildSentence(log);
-            const isAgent = log.actor_type?.startsWith("agent:") && !!log.actor_public_key;
+            const actor = actorLabel(log);
+            const { actionText, suffix } = buildSentence(log);
+            const isAgent = log.actor_type?.startsWith("agent:");
             const dot = dotColors[log.action] || "bg-zinc-500 border-zinc-500/30";
             const actionColor = actionStyles[log.action] || "text-content-secondary";
-            const isComment = log.action === "commented";
+            const body = hasBody(log);
 
             return (
-              <div key={log.id} className="relative pl-5 pb-3">
-                {/* Timeline dot */}
-                <span className={`absolute left-0 -translate-x-1/2 mt-[3px] w-2 h-2 rounded-full border ${dot}`} style={{ top: "4px" }} />
-
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <NoteAvatar actorType={log.actor_type} actorPublicKey={log.actor_public_key} />
-
-                  {/* Sentence: prefix (agent name) + action + suffix */}
-                  <span className="text-[12px] leading-snug">
-                    <span className={isAgent ? "font-mono text-accent" : "text-content-tertiary"}>{prefix}</span>{" "}
-                    <span className={isComment ? "text-content-tertiary" : actionColor}>{actionText}</span>
-                    {suffix && (
-                      <>
-                        {" "}
-                        <span className="text-content-tertiary">{suffix}</span>
-                      </>
-                    )}
-                  </span>
-
-                  {/* Relative time */}
-                  <span className="ml-auto font-mono text-[10px] text-content-tertiary whitespace-nowrap">{formatRelative(log.created_at)}</span>
+              <div key={log.id} className="relative flex gap-3 pb-4">
+                <div className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center">
+                  {body ? <NoteAvatar log={log} /> : <span className={`w-2.5 h-2.5 rounded-full border ${dot}`} />}
                 </div>
 
-                {/* Comment body */}
-                {isComment && log.detail && (
-                  <div className="mt-1.5 ml-6 bg-surface-primary border border-border rounded px-2.5 py-1.5 font-mono text-[11px] text-content-secondary leading-relaxed">
-                    {log.detail}
-                  </div>
-                )}
+                <div className="min-w-0 flex-1">
+                  {body ? (
+                    <div className="overflow-hidden rounded-md border border-border bg-surface-secondary">
+                      <div className="flex items-center gap-1.5 border-b border-border bg-surface-tertiary px-3 py-2 text-[12px]">
+                        <span className={isAgent ? "font-mono text-accent" : "font-medium text-content-primary"}>{actor}</span>
+                        <span className={actionColor}>{actionText}</span>
+                        <span className="ml-auto font-mono text-[10px] text-content-tertiary whitespace-nowrap">
+                          {formatRelative(log.created_at)}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <MarkdownBody>{log.detail}</MarkdownBody>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 min-h-7 text-[12px] leading-snug">
+                      <span className={isAgent ? "font-mono text-accent" : "text-content-tertiary"}>{actor}</span>
+                      <span className={actionColor}>{actionText}</span>
+                      {suffix && <span className="text-content-tertiary">{suffix}</span>}
+                      <span className="ml-auto font-mono text-[10px] text-content-tertiary whitespace-nowrap">{formatRelative(log.created_at)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}

@@ -4,7 +4,7 @@ import { TaskCard } from "./TaskCard";
 interface KanbanColumnProps {
   column: any;
   onTaskClick: (taskId: string) => void;
-  onAgentClick?: (agentId: string) => void;
+  onAgentClick?: (task: any) => void;
 }
 
 export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumnProps) {

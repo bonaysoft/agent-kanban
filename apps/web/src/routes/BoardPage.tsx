@@ -5,6 +5,7 @@ import { FilterBar } from "../components/FilterBar";
 import { AgentAvatarOverlay } from "../components/FloatingAvatar";
 import { Header } from "../components/Header";
 import { KanbanColumn } from "../components/KanbanColumn";
+import { TaskChatDrawer } from "../components/TaskChatDrawer";
 import { TaskDetail } from "../components/TaskDetail";
 import { useAgentPresence } from "../hooks/useAgentPresence";
 import { useBoard } from "../hooks/useBoard";
@@ -25,6 +26,7 @@ export function BoardPage() {
   const avatars = useAgentPresence(boardId);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [chatTask, setChatTask] = useState<any | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState(0);
 
@@ -115,7 +117,7 @@ export function BoardPage() {
       {/* Desktop: 5-column grid */}
       <div className="hidden md:grid flex-1 overflow-hidden" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
         {columns.map((col) => (
-          <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
+          <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
         ))}
       </div>
 
@@ -124,7 +126,7 @@ export function BoardPage() {
         {columns
           .filter((_, i) => i === mobileTab)
           .map((col) => (
-            <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setSelectedAgent} />
+            <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
           ))}
       </div>
 
@@ -141,6 +143,16 @@ export function BoardPage() {
           }}
         />
       )}
+
+      <TaskChatDrawer
+        open={!!chatTask}
+        onOpenChange={(open) => {
+          if (!open) setChatTask(null);
+        }}
+        taskId={chatTask?.id ?? null}
+        task={chatTask}
+        className="!w-[45%] max-md:!w-full"
+      />
 
       {selectedAgent && (
         <AgentProfile

@@ -13,8 +13,8 @@ import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { ActivityLog } from "./ActivityLog";
 import { AgentIdenticon } from "./AgentIdenticon";
-import { ChatPanel } from "./ChatPanel";
 import { SubtaskList } from "./SubtaskList";
+import { TaskChatDrawer } from "./TaskChatDrawer";
 import { Field, FieldLabel, formatRelative } from "./TaskDetailFields";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -338,33 +338,15 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
         </SheetContent>
       </Sheet>
 
-      {/* Nested chat drawer — overlays on top of task detail */}
       {task.assigned_to && (
-        <Sheet open={chatOpen} onOpenChange={(open) => setChatOpen(open)}>
-          <SheetContent showCloseButton={false} showOverlay={false} className="flex flex-col p-0 gap-0 z-[60] !w-[45%] shadow-2xl">
-            <SheetTitle className="sr-only">Chat with {task.agent_name}</SheetTitle>
-            <SheetDescription className="sr-only">Chat panel</SheetDescription>
-
-            {/* Chat drawer header */}
-            <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
-              {task.agent_public_key && <AgentIdenticon publicKey={task.agent_public_key} size={28} />}
-              <span className="font-mono text-[13px] text-accent flex-1">{task.agent_name}</span>
-              <Button variant="ghost" size="icon-sm" onClick={() => setChatOpen(false)}>
-                ✕
-              </Button>
-            </div>
-
-            {/* Chat panel body */}
-            <div className="flex flex-col flex-1 min-h-0 pl-4 pb-4">
-              <ChatPanel
-                taskId={taskId}
-                agentId={task.assigned_to}
-                sessionId={task.active_session_id ?? null}
-                taskDone={task.status === "done" || task.status === "cancelled"}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
+        <TaskChatDrawer
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          taskId={taskId}
+          task={task}
+          showOverlay={false}
+          className="z-[60] !w-[45%] max-md:!w-full"
+        />
       )}
     </>
   );
