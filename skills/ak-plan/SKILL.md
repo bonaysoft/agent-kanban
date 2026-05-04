@@ -108,7 +108,7 @@ Use Explore agents to thoroughly scan the codebase for gaps related to the goals
 Use `AskUserQuestion` to interactively confirm the plan with the user. For each ambiguous point, present options:
 
 - **Scope** — which gaps to address in this version vs defer to later
-- **Priority/ordering** — which tasks are critical path vs nice-to-have
+- **Ordering** — which tasks are critical path vs nice-to-have
 - **Approach** — when multiple implementation strategies exist, present them with trade-off descriptions
 - **Task granularity** — whether to split a large piece into subtasks or keep it as one
 - **Runtime choice** — when multiple schedulable runtimes are reasonable, ask which runtime to use for new workers
@@ -120,10 +120,10 @@ Before creating any tasks, show the user a **task summary table** using `AskUser
 ```
 📋 Task Plan Preview
 
-| # | Title | Repo | Priority | Labels | Depends on | Agent |
-|---|-------|------|----------|--------|------------|-------|
-| 1 | <title> | <repo> | high | backend | — | <agent> |
-| 2 | <title> | <repo> | medium | frontend | #1 | <agent> |
+| # | Title | Repo | Labels | Depends on | Agent |
+|---|-------|------|--------|------------|-------|
+| 1 | <title> | <repo> | backend | — | <agent> |
+| 2 | <title> | <repo> | frontend | #1 | <agent> |
 | ...
 
 Per-task description summary:
@@ -190,14 +190,13 @@ Create tasks with full specs. For each task:
    - API endpoints, DB queries, UI components (concrete, not vague)
    - Patterns to follow from the existing codebase
 3. **`--repo <id>`** — from `ak repo list`
-4. **`--priority`** — urgent/high/medium/low
-5. **`--labels`** — include version label (e.g. `v1.4.0`) plus category (backend, frontend, cli, etc.)
-6. **`--assign-to <agent-id>`** — worker chosen before task creation
-7. **`--depends-on`** — task IDs this depends on
+4. **`--labels`** — include version label (e.g. `v1.4.0`) plus category (backend, frontend, cli, etc.)
+5. **`--assign-to <agent-id>`** — worker chosen before task creation
+6. **`--depends-on`** — task IDs this depends on
 
 Create tasks in dependency order so earlier task IDs can be referenced:
 ```bash
-T1=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT --priority high -o json | jq -r .id)
+T1=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT -o json | jq -r .id)
 T2=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT --depends-on $T1 -o json | jq -r .id)
 ```
 

@@ -58,7 +58,6 @@ export function registerUpdateCommand(program: Command) {
     .description("Update a task")
     .option("--title <title>", "New title")
     .option("--description <desc>", "New description")
-    .option("--priority <priority>", "New priority: low, medium, high, urgent")
     .option("--labels <labels>", "Comma-separated labels")
     .option("--input <json>", "JSON input payload")
     .option("--depends-on <ids>", "Comma-separated task IDs")
@@ -69,7 +68,6 @@ export function registerUpdateCommand(program: Command) {
       const body: Record<string, unknown> = {};
       if (opts.title) body.title = opts.title;
       if (opts.description) body.description = opts.description;
-      if (opts.priority) body.priority = opts.priority;
       if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
       if (opts.dependsOn) body.depends_on = opts.dependsOn.split(",").map((d: string) => d.trim());
       if (opts.repo) body.repository_id = await resolveRepoId(client, opts.repo);
@@ -88,6 +86,34 @@ export function registerUpdateCommand(program: Command) {
       const task = await client.updateTask(id, body);
       const fmt = getOutputFormat(opts.output);
       output(task, fmt, (t) => `Updated task ${t.id}: ${t.title}`);
+    });
+
+  updateCmd
+    .command("label")
+    .description("Update a board label")
+    .option("--board <id>", "Board ID")
+    .option("--name <name>", "Current label name")
+    .option("--new-name <name>", "New label name")
+    .option("--color <hex>", "New label color, e.g. #22D3EE")
+    .option("--description <desc>", "New label description")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .action(async (opts) => {
+      if (!opts.board || !opts.name) {
+        console.error("Missing required options: --board and --name");
+        process.exit(1);
+      }
+      const client = await createClient();
+      const body: Record<string, unknown> = {};
+      if (opts.newName) body.name = opts.newName;
+      if (opts.color) body.color = opts.color;
+      if (opts.description) body.description = opts.description;
+      if (Object.keys(body).length === 0) {
+        console.error("Nothing to update. Provide --new-name, --color, or --description.");
+        process.exit(1);
+      }
+      const board = await client.updateBoardLabel(opts.board, opts.name, body);
+      const fmt = getOutputFormat(opts.output);
+      output(board, fmt, (b) => `Updated label ${opts.name} on board ${b.id}`);
     });
 
   updateCmd

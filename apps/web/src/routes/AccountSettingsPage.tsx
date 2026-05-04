@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
-import { useBoards, useDeleteBoard, useUpdateBoard } from "../hooks/useBoard";
+import { LabelChip } from "../components/LabelChip";
+import { useBoards, useCreateBoardLabel, useDeleteBoard, useDeleteBoardLabel, useUpdateBoard } from "../hooks/useBoard";
 
 import { authClient } from "../lib/auth-client";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
@@ -10,10 +11,16 @@ function BoardItem({ board }: { board: any }) {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(board.name);
   const [editDesc, setEditDesc] = useState(board.description || "");
+  const [labelName, setLabelName] = useState("");
+  const [labelColor, setLabelColor] = useState("#71717A");
+  const [labelDescription, setLabelDescription] = useState("");
+  const [labelError, setLabelError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const navigate = useNavigate();
   const updateBoard = useUpdateBoard();
   const deleteBoard = useDeleteBoard();
+  const createLabel = useCreateBoardLabel();
+  const deleteLabel = useDeleteBoardLabel();
 
   useEffect(() => {
     setEditName(board.name);
@@ -31,6 +38,32 @@ function BoardItem({ board }: { board: any }) {
 
   async function handleDelete() {
     await deleteBoard.mutateAsync(board.id);
+  }
+
+  async function handleCreateLabel() {
+    setLabelError(null);
+    try {
+      await createLabel.mutateAsync({
+        boardId: board.id,
+        name: labelName.trim(),
+        color: labelColor,
+        description: labelDescription.trim(),
+      });
+      setLabelName("");
+      setLabelColor("#71717A");
+      setLabelDescription("");
+    } catch (err) {
+      setLabelError(err instanceof Error ? err.message : "Unable to create label");
+    }
+  }
+
+  async function handleDeleteLabel(name: string) {
+    setLabelError(null);
+    try {
+      await deleteLabel.mutateAsync({ boardId: board.id, name });
+    } catch (err) {
+      setLabelError(err instanceof Error ? err.message : "Unable to delete label");
+    }
   }
 
   return (
@@ -83,6 +116,52 @@ function BoardItem({ board }: { board: any }) {
               placeholder="What is this board for?"
               className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent resize-none"
             />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs text-content-tertiary">Labels</label>
+            <div className="flex flex-wrap gap-1.5">
+              {(board.labels || []).map((label: any) => (
+                <LabelChip
+                  key={label.name}
+                  name={label.name}
+                  color={label.color}
+                  description={label.description}
+                  onRemove={() => handleDeleteLabel(label.name)}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                value={labelName}
+                onChange={(e) => setLabelName(e.target.value)}
+                placeholder="Label name"
+                className="bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
+              />
+              <input
+                type="color"
+                value={labelColor}
+                onChange={(e) => setLabelColor(e.target.value)}
+                className="h-9 w-11 bg-surface-primary border border-border rounded-lg p-1"
+                aria-label="Label color"
+              />
+            </div>
+            <input
+              value={labelDescription}
+              onChange={(e) => setLabelDescription(e.target.value)}
+              placeholder="Description"
+              className="w-full bg-surface-primary border border-border rounded-lg px-3 py-2 text-sm text-content-primary placeholder:text-content-tertiary outline-none focus:border-accent"
+            />
+            <div className="flex items-center justify-between">
+              {labelError ? <span className="text-xs text-error">{labelError}</span> : <span />}
+              <button
+                type="button"
+                onClick={handleCreateLabel}
+                disabled={createLabel.isPending || !labelName.trim()}
+                className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90 disabled:opacity-50"
+              >
+                {createLabel.isPending ? "Adding..." : "Add label"}
+              </button>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <div>

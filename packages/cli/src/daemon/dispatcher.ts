@@ -286,7 +286,7 @@ async function dispatchOne(task: any, repoDir: string | null, boardType: BoardTy
     `Task ID: ${task.id}`,
     `Title: ${task.title}`,
     task.description ? `Description: ${task.description}` : null,
-    task.priority ? `Priority: ${task.priority}` : null,
+    task.labels?.length ? `Labels: ${task.labels.join(", ")}` : null,
     task.repository_id ? `Repository: ${taskRepo?.url ?? task.repository_id}` : null,
     `Board: ${task.board_id}`,
   ]

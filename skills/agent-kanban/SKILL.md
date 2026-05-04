@@ -114,7 +114,6 @@ spec:
   description: |
     After login, users are redirected to / instead of the page they came from.
     The `returnTo` param is set but not read in the auth callback.
-  priority: high
   labels: [bug, auth]
   repo: https://github.com/org/repo
   assignTo: <agent-id>
@@ -133,7 +132,6 @@ To update an existing task, add the `id` field inside `spec` and re-apply:
 kind: Task
 spec:
   id: <task-id>
-  priority: medium
   assignTo: <new-agent-id>
 ```
 
@@ -143,7 +141,6 @@ For quick single-task creation, `ak create task` still works:
 ak create task --board <id> --title "Title" \
   --description "Details" \
   --repo <repo-id> \
-  --priority medium \
   --labels "bug,frontend" \
   --assign-to <agent-id> \
   --parent <task-id> \

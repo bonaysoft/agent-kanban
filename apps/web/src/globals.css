@@ -78,10 +78,6 @@ body {
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-priority-urgent: #EF4444;
-  --color-priority-high: #F97316;
-  --color-priority-medium: #EAB308;
-  --color-priority-low: var(--text-tertiary);
 
   --color-success: #22C55E;
   --color-warning: #EAB308;

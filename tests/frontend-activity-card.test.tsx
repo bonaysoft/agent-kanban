@@ -12,7 +12,7 @@ describe("TaskCard agent click", () => {
       seq: 17,
       title: "Improve activity",
       status: "in_progress",
-      priority: "medium",
+      labels: ["frontend"],
       assigned_to: "agent-1",
       agent_name: "flint",
       agent_public_key: "agent-public-key",
@@ -35,7 +35,7 @@ describe("TaskCard agent click", () => {
       seq: 18,
       title: "Open details",
       status: "todo",
-      priority: "low",
+      labels: [],
       assigned_to: "agent-2",
       agent_name: "worker",
     };

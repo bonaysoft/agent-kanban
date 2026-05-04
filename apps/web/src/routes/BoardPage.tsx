@@ -28,6 +28,7 @@ export function BoardPage() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [chatTask, setChatTask] = useState<any | null>(null);
   const [activeRepository, setActiveRepository] = useState<string | null>(null);
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState(0);
 
   const repositories = useMemo(() => {
@@ -45,13 +46,17 @@ export function BoardPage() {
 
   const columns = useMemo(() => {
     if (!board?.tasks) return [];
-    const tasks = activeRepository ? board.tasks.filter((t: any) => t.repository_id === activeRepository) : board.tasks;
+    const tasks = board.tasks.filter((t: any) => {
+      if (activeRepository && t.repository_id !== activeRepository) return false;
+      if (activeLabel && !t.labels?.includes(activeLabel)) return false;
+      return true;
+    });
     return TASK_STATUSES.map((status) => ({
       status,
       name: TASK_STATUS_LABELS[status],
       tasks: tasks.filter((t: any) => t.status === status),
     }));
-  }, [board, activeRepository]);
+  }, [board, activeRepository, activeLabel]);
 
   if (error === "NOT_AUTHENTICATED") {
     window.location.href = "/auth";
@@ -88,7 +93,14 @@ export function BoardPage() {
   return (
     <div className="h-screen overflow-hidden bg-surface-primary flex flex-col">
       <Header />
-      <FilterBar repositories={repositories} activeRepository={activeRepository} onRepositoryChange={setActiveRepository} />
+      <FilterBar
+        repositories={repositories}
+        labels={board.labels ?? []}
+        activeRepository={activeRepository}
+        activeLabel={activeLabel}
+        onRepositoryChange={setActiveRepository}
+        onLabelChange={setActiveLabel}
+      />
 
       {error && (
         <div className="mx-5 mt-3 px-4 py-2 bg-error/10 border-l-2 border-error text-error text-sm rounded">
@@ -117,7 +129,7 @@ export function BoardPage() {
       {/* Desktop: 5-column grid */}
       <div className="hidden md:grid flex-1 overflow-hidden" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
         {columns.map((col) => (
-          <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
+          <KanbanColumn key={col.status} column={col} labels={board.labels ?? []} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
         ))}
       </div>
 
@@ -126,7 +138,7 @@ export function BoardPage() {
         {columns
           .filter((_, i) => i === mobileTab)
           .map((col) => (
-            <KanbanColumn key={col.status} column={col} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
+            <KanbanColumn key={col.status} column={col} labels={board.labels ?? []} onTaskClick={setSelectedTask} onAgentClick={setChatTask} />
           ))}
       </div>
 
@@ -135,6 +147,7 @@ export function BoardPage() {
       {selectedTask && (
         <TaskDetail
           taskId={selectedTask}
+          labels={board.labels ?? []}
           onClose={() => setSelectedTask(null)}
           onRefresh={refresh}
           onAgentClick={(agentId) => {

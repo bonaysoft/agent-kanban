@@ -158,13 +158,11 @@ describe("scheduled_at field — taskRepo", () => {
     const task = await createTask(env.DB, "sched-test-user", {
       title: "Preserve Fields",
       board_id: boardId,
-      priority: "high",
     });
 
     const updated = await updateTask(env.DB, task.id, { scheduled_at: "2099-12-01T00:00:00.000Z" });
 
     expect(updated!.title).toBe("Preserve Fields");
-    expect(updated!.priority).toBe("high");
     expect(updated!.status).toBe("todo");
   });
 
@@ -218,7 +216,7 @@ describe("dispatchTasks — scheduled_at filter", () => {
       scheduled_at: null,
       title: "Test task",
       description: null,
-      priority: null,
+      labels: null,
       ...overrides,
     };
   }

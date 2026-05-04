@@ -102,8 +102,12 @@ export const api = {
     list: () => request<any[]>("GET", "/boards"),
     get: (id: string) => request<any>("GET", `/boards/${id}`),
     create: (input: { name: string; type: "dev" | "ops"; description?: string }) => request<any>("POST", "/boards", input),
-    update: (id: string, body: { name?: string; description?: string; visibility?: "private" | "public" }) =>
+    update: (id: string, body: { name?: string; description?: string; visibility?: "private" | "public"; labels?: any[] }) =>
       request<any>("PATCH", `/boards/${id}`, body),
+    createLabel: (id: string, body: { name: string; color: string; description?: string }) => request<any>("POST", `/boards/${id}/labels`, body),
+    updateLabel: (id: string, name: string, body: { name?: string; color?: string; description?: string }) =>
+      request<any>("PATCH", `/boards/${id}/labels/${encodeURIComponent(name)}`, body),
+    deleteLabel: (id: string, name: string) => request<any>("DELETE", `/boards/${id}/labels/${encodeURIComponent(name)}`),
     delete: (id: string) => request<void>("DELETE", `/boards/${id}`),
   },
   share: {

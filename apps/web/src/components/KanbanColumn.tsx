@@ -1,22 +1,30 @@
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { Ban, CheckCircle2, Circle, Clock3, RotateCw } from "lucide-react";
 import { TaskCard } from "./TaskCard";
 
 interface KanbanColumnProps {
   column: any;
+  labels?: { name: string; color: string; description: string }[];
   onTaskClick: (taskId: string) => void;
   onAgentClick?: (task: any) => void;
 }
 
-export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumnProps) {
-  const hasRecentUpdate = column.tasks.some((t: any) => {
-    const updated = new Date(t.updated_at).getTime();
-    return t.assigned_to && Date.now() - updated < 5 * 60 * 1000;
-  });
+const COLUMN_ICONS: Record<string, typeof Circle> = {
+  todo: Circle,
+  in_progress: RotateCw,
+  in_review: Clock3,
+  done: CheckCircle2,
+  cancelled: Ban,
+};
+
+export function KanbanColumn({ column, labels = [], onTaskClick, onAgentClick }: KanbanColumnProps) {
+  const Icon = COLUMN_ICONS[column.status] ?? Circle;
 
   return (
     <div data-column-status={column.status} className="min-w-0 min-h-0 border-r border-border last:border-r-0 flex flex-col h-full">
       <div className="flex items-center justify-between flex-shrink-0 px-4 pt-4 pb-3">
-        <span className={`text-xs font-semibold uppercase tracking-wide ${hasRecentUpdate ? "text-accent" : "text-content-tertiary"}`}>
+        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
+          <Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />
           {column.name}
         </span>
         <span className="font-mono text-[11px] text-content-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">{column.tasks.length}</span>
@@ -35,7 +43,7 @@ export function KanbanColumn({ column, onTaskClick, onAgentClick }: KanbanColumn
                 transition={{ duration: 0.25, layout: { duration: 0.3 } }}
                 className="mb-2"
               >
-                <TaskCard task={task} onClick={() => onTaskClick(task.id)} onAgentClick={onAgentClick} />
+                <TaskCard task={task} labels={labels} onClick={() => onTaskClick(task.id)} onAgentClick={onAgentClick} />
               </motion.div>
             ))}
           </AnimatePresence>

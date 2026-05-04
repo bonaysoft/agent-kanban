@@ -38,6 +38,7 @@ export async function applyMigrations(db: D1Database) {
     "0017_unique_leader_per_runtime.sql",
     "0018_agent_subagents.sql",
     "0019_agent_versions.sql",
+    "0020_board_labels.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");

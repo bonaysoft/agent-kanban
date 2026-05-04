@@ -1,4 +1,5 @@
-import type { Board, BoardType, BoardWithTasks, Task } from "@agent-kanban/shared";
+import type { Board, BoardLabel, BoardType, BoardWithTasks, Task } from "@agent-kanban/shared";
+import { HTTPException } from "hono/http-exception";
 import { customAlphabet } from "nanoid";
 import { seedBuiltinAgents } from "./agentRepo";
 import { type D1, newId, parseJsonFields } from "./db";
@@ -6,6 +7,32 @@ import { type D1, newId, parseJsonFields } from "./db";
 const nanoidSlug = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 10);
 
 import { computeBlocked } from "./taskDeps";
+
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+function parseBoard<T extends Board | BoardWithTasks>(board: T): T {
+  return parseJsonFields(board, ["labels"] as (keyof T)[]);
+}
+
+function normalizeLabel(label: BoardLabel): BoardLabel {
+  if (!label || typeof label.name !== "string" || typeof label.color !== "string") {
+    throw new HTTPException(400, { message: "Label name and color are required" });
+  }
+  const name = label.name.trim();
+  const color = label.color.trim();
+  if (!name) throw new HTTPException(400, { message: "Label name is required" });
+  if (!HEX_COLOR.test(color)) throw new HTTPException(400, { message: "Label color must be a hex color like #22D3EE" });
+  return { name, color, description: label.description?.trim() || "" };
+}
+
+function normalizeLabels(labels: BoardLabel[]): BoardLabel[] {
+  const seen = new Set<string>();
+  return labels.map(normalizeLabel).map((label) => {
+    if (seen.has(label.name)) throw new HTTPException(400, { message: `Duplicate label: ${label.name}` });
+    seen.add(label.name);
+    return label;
+  });
+}
 
 export async function createBoard(db: D1, ownerId: string, name: string, type: BoardType, description?: string): Promise<Board> {
   const id = newId();
@@ -17,16 +44,18 @@ export async function createBoard(db: D1, ownerId: string, name: string, type: B
 
   await seedBuiltinAgents(db, ownerId);
 
-  return db.prepare("SELECT * FROM boards WHERE id = ?").bind(id).first<Board>() as Promise<Board>;
+  const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(id).first<Board>();
+  return parseBoard(board!);
 }
 
 export async function listBoards(db: D1, ownerId: string): Promise<Board[]> {
   const result = await db.prepare("SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at DESC").bind(ownerId).all<Board>();
-  return result.results;
+  return result.results.map(parseBoard);
 }
 
 export async function getBoardByName(db: D1, ownerId: string, name: string): Promise<Board | null> {
-  return db.prepare("SELECT * FROM boards WHERE owner_id = ? AND name = ?").bind(ownerId, name).first<Board>();
+  const board = await db.prepare("SELECT * FROM boards WHERE owner_id = ? AND name = ?").bind(ownerId, name).first<Board>();
+  return board ? parseBoard(board) : null;
 }
 
 export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks | null> {
@@ -41,10 +70,7 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
     WHERE t.board_id = ?
     ORDER BY
       CASE t.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'in_review' THEN 2 WHEN 'done' THEN 3 ELSE 4 END,
-      CASE WHEN t.status = 'todo' THEN
-        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END
-      ELSE 0 END,
-      CASE WHEN t.status = 'todo' THEN t.created_at END DESC,
+      CASE WHEN t.status = 'todo' THEN t.position END ASC,
       CASE WHEN t.status != 'todo' THEN t.updated_at END DESC
   `)
     .bind(boardId)
@@ -58,17 +84,18 @@ export async function getBoard(db: D1, boardId: string): Promise<BoardWithTasks 
     }
   }
 
-  return { ...board, tasks: tasks.results.map((t) => parseJsonFields(t, ["labels", "input"])) };
+  return parseBoard({ ...board, tasks: tasks.results.map((t) => parseJsonFields(t, ["labels", "input"])) });
 }
 
 export async function getDefaultBoard(db: D1, ownerId: string): Promise<Board | null> {
-  return db.prepare("SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1").bind(ownerId).first<Board>();
+  const board = await db.prepare("SELECT * FROM boards WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1").bind(ownerId).first<Board>();
+  return board ? parseBoard(board) : null;
 }
 
 export async function updateBoard(
   db: D1,
   boardId: string,
-  updates: { name?: string; description?: string; visibility?: "private" | "public" },
+  updates: { name?: string; description?: string; visibility?: "private" | "public"; labels?: BoardLabel[] },
 ): Promise<Board | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -91,7 +118,14 @@ export async function updateBoard(
       }
     }
   }
-  if (sets.length === 0) return db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  if (updates.labels !== undefined) {
+    sets.push("labels = ?");
+    values.push(JSON.stringify(normalizeLabels(updates.labels)));
+  }
+  if (sets.length === 0) {
+    const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+    return board ? parseBoard(board) : null;
+  }
 
   sets.push("updated_at = ?");
   values.push(new Date().toISOString());
@@ -101,7 +135,68 @@ export async function updateBoard(
     .prepare(`UPDATE boards SET ${sets.join(", ")} WHERE id = ?`)
     .bind(...values)
     .run();
-  return db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  return board ? parseBoard(board) : null;
+}
+
+export async function createBoardLabel(db: D1, boardId: string, input: BoardLabel): Promise<Board | null> {
+  const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  if (!board) return null;
+  const labels = parseBoard(board).labels;
+  const label = normalizeLabel(input);
+  if (labels.some((existing) => existing.name === label.name)) throw new HTTPException(409, { message: `Label already exists: ${label.name}` });
+  return updateBoard(db, boardId, { labels: [...labels, label] });
+}
+
+export async function updateBoardLabel(db: D1, boardId: string, name: string, input: Partial<BoardLabel>): Promise<Board | null> {
+  const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  if (!board) return null;
+  const labels = parseBoard(board).labels;
+  const current = labels.find((label) => label.name === name);
+  if (!current) throw new HTTPException(404, { message: `Label not found: ${name}` });
+  const next = normalizeLabel({
+    name: input.name ?? current.name,
+    color: input.color ?? current.color,
+    description: input.description ?? current.description,
+  });
+  if (next.name !== name && labels.some((label) => label.name === next.name)) {
+    throw new HTTPException(409, { message: `Label already exists: ${next.name}` });
+  }
+
+  const updatedLabels = labels.map((label) => (label.name === name ? next : label));
+  await updateBoard(db, boardId, { labels: updatedLabels });
+
+  if (next.name !== name) {
+    const tasks = await db
+      .prepare("SELECT id, labels FROM tasks WHERE board_id = ? AND labels IS NOT NULL")
+      .bind(boardId)
+      .all<{ id: string; labels: string }>();
+    const statements = tasks.results
+      .map((task) => ({ id: task.id, labels: JSON.parse(task.labels) as string[] }))
+      .filter((task) => task.labels.includes(name))
+      .map((task) =>
+        db
+          .prepare("UPDATE tasks SET labels = ?, updated_at = ? WHERE id = ?")
+          .bind(JSON.stringify(task.labels.map((label) => (label === name ? next.name : label))), new Date().toISOString(), task.id),
+      );
+    if (statements.length > 0) await db.batch(statements);
+  }
+
+  const nextBoard = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  return nextBoard ? parseBoard(nextBoard) : null;
+}
+
+export async function deleteBoardLabel(db: D1, boardId: string, name: string): Promise<Board | null> {
+  const board = await db.prepare("SELECT * FROM boards WHERE id = ?").bind(boardId).first<Board>();
+  if (!board) return null;
+  const labels = parseBoard(board).labels;
+  if (!labels.some((label) => label.name === name)) throw new HTTPException(404, { message: `Label not found: ${name}` });
+  const inUse = await db
+    .prepare("SELECT 1 FROM tasks WHERE board_id = ? AND EXISTS (SELECT 1 FROM json_each(tasks.labels) WHERE json_each.value = ?) LIMIT 1")
+    .bind(boardId, name)
+    .first();
+  if (inUse) throw new HTTPException(409, { message: `Label is in use: ${name}` });
+  return updateBoard(db, boardId, { labels: labels.filter((label) => label.name !== name) });
 }
 
 export async function getBoardBySlug(db: D1, slug: string): Promise<BoardWithTasks | null> {
@@ -116,16 +211,13 @@ export async function getBoardBySlug(db: D1, slug: string): Promise<BoardWithTas
     WHERE t.board_id = ?
     ORDER BY
       CASE t.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'in_review' THEN 2 WHEN 'done' THEN 3 ELSE 4 END,
-      CASE WHEN t.status = 'todo' THEN
-        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END
-      ELSE 0 END,
-      CASE WHEN t.status = 'todo' THEN t.created_at END DESC,
+      CASE WHEN t.status = 'todo' THEN t.position END ASC,
       CASE WHEN t.status != 'todo' THEN t.updated_at END DESC
   `)
     .bind(board.id)
     .all<Task>();
 
-  return { ...board, tasks: tasks.results.map((t) => parseJsonFields(t, ["labels", "input"])) };
+  return parseBoard({ ...board, tasks: tasks.results.map((t) => parseJsonFields(t, ["labels", "input"])) });
 }
 
 export async function deleteBoard(db: D1, boardId: string): Promise<boolean> {

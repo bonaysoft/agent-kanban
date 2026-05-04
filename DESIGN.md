@@ -61,15 +61,12 @@ Color is rare and meaningful. The cyan accent is reserved for agent activity and
 
 ### Semantic Colors (both modes)
 - **Success:** #22C55E — task completed, positive status
-- **Warning:** #EAB308 — stale agent, medium priority
-- **Error:** #EF4444 — failures, urgent priority
+- **Warning:** #EAB308 — stale agent, warnings
+- **Error:** #EF4444 — failures, destructive actions
 - **Info:** same as accent (#22D3EE dark / #0891B2 light)
 
-### Priority Colors
-- **Urgent:** #EF4444 (red)
-- **High:** #F97316 (orange)
-- **Medium:** #EAB308 (amber)
-- **Low:** #71717A dark / #A1A1AA light (gray)
+### Label Colors
+Board labels use user-selected hex colors with low-opacity backgrounds and restrained borders.
 
 ### Dark Mode Strategy
 Dark is the default. Light mode uses the same hue relationships with adjusted lightness for readability. Accent shifts from #22D3EE (bright cyan) to #0891B2 (deeper cyan) to maintain WCAG AA contrast on light backgrounds.

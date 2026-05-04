@@ -14,6 +14,7 @@ export interface Board {
   name: string;
   description: string | null;
   type: BoardType;
+  labels: BoardLabel[];
   visibility: "private" | "public";
   share_slug: string | null;
   created_at: string;
@@ -37,7 +38,6 @@ export interface Task {
   description: string | null;
   repository_id: string | null;
   labels: string[] | null;
-  priority: Priority | null;
   created_by: string | null;
   assigned_to: string | null;
   result: string | null;
@@ -97,7 +97,11 @@ export interface BoardAction extends TaskAction {
   agent_kind?: AgentKind | null;
 }
 
-export type Priority = "low" | "medium" | "high" | "urgent";
+export interface BoardLabel {
+  name: string;
+  color: string;
+  description: string;
+}
 
 // ─── Machine ───
 
@@ -352,7 +356,6 @@ export interface CreateTaskInput {
   description?: string;
   repository_id?: string;
   labels?: string[];
-  priority?: Priority;
   input?: Record<string, unknown>;
   board_id?: string;
   agent_id?: string;

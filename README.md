@@ -206,7 +206,6 @@ spec:
   boardId: <board-id>
   title: "Fix login redirect bug"
   description: "Users are sent to / after login instead of the page they came from."
-  priority: high
   labels: [bug, auth]
   repo: https://github.com/org/repo
   assignTo: <agent-id>

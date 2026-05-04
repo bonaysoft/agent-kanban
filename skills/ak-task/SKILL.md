@@ -36,7 +36,7 @@ The leader chooses its own username and optional full name.
 Parse the user's input:
 - **What** — feature description or bug report (required)
 - **Board** — which board (if not specified, use the first board)
-- **Priority** — infer from context, default to medium
+- **Labels** — use existing board labels for version/category; create missing labels before task creation
 
 ## Phase 1: Create & Assign
 
@@ -66,7 +66,7 @@ Use `AskUserQuestion` to interactively resolve any uncertainties before creating
 
 - **Scope unclear** — present 2-3 scope interpretations as options, each with a preview showing what files/changes are involved
 - **Multiple approaches** — present implementation strategies as options with trade-off descriptions
-- **Priority/agent/runtime/repo ambiguous** — present choices when there are multiple candidates
+- **Labels/agent/runtime/repo ambiguous** — present choices when there are multiple candidates
 - **Dependencies uncertain** — present options about whether to depend on or parallelize with related tasks
 
 Keep iterating — each answer may reveal new questions. Only proceed to create when all points are resolved and the user has confirmed the final task spec.
@@ -84,7 +84,6 @@ Title: <concise action phrase>
 Board: <board-name>
 Repo: <repo-name>
 Agent: <agent-name>
-Priority: <priority>
 Labels: <labels>
 Depends on: <task-ids or "none">
 
@@ -122,7 +121,6 @@ ak create task \
   --assign-to <agent-id> \
   --title "<concise action phrase>" \
   --description "<detailed spec>" \
-  --priority <priority> \
   --labels "<comma-separated>"
 ```
 
@@ -141,7 +139,7 @@ ak create task \
 - Include concrete files, commands, endpoints, UI states, and error cases when known.
 - Assign only to worker agents with `runtime_available: true`.
 - Use `--depends-on` for real blockers or overlapping context. Parallel tasks must not fight over the same files, data model, or API contract.
-- Prefer `medium` priority unless the work blocks other tasks, fixes production breakage, or is explicitly urgent.
+- Create missing labels first with `ak create label --board <board-id> --name <name> --color <hex>`.
 
 Report to user: task ID, title, assigned agent.
 

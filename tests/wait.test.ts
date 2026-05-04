@@ -16,7 +16,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     description: null,
     repository_id: null,
     labels: null,
-    priority: null,
     created_by: null,
     assigned_to: null,
     result: null,

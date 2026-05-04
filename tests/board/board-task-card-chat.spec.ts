@@ -23,7 +23,6 @@ const task = {
   repository_id: null,
   repository_name: null,
   labels: [],
-  priority: "medium",
   created_by: "test",
   assigned_to: "agent-card-chat",
   agent_name: "CardChatAgent",

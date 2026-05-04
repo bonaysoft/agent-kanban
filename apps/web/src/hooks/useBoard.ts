@@ -66,8 +66,46 @@ export function useUpdateBoard() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; name?: string; description?: string; visibility?: "private" | "public" }) =>
+    mutationFn: ({ id, ...body }: { id: string; name?: string; description?: string; visibility?: "private" | "public"; labels?: any[] }) =>
       api.boards.update(id, body),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["boards"] });
+      if (data?.id) queryClient.invalidateQueries({ queryKey: ["board", data.id] });
+    },
+  });
+}
+
+export function useCreateBoardLabel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, ...body }: { boardId: string; name: string; color: string; description?: string }) =>
+      api.boards.createLabel(boardId, body),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["boards"] });
+      if (data?.id) queryClient.invalidateQueries({ queryKey: ["board", data.id] });
+    },
+  });
+}
+
+export function useUpdateBoardLabel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, name, ...body }: { boardId: string; name: string; nextName?: string; color?: string; description?: string }) =>
+      api.boards.updateLabel(boardId, name, { name: body.nextName, color: body.color, description: body.description }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["boards"] });
+      if (data?.id) queryClient.invalidateQueries({ queryKey: ["board", data.id] });
+    },
+  });
+}
+
+export function useDeleteBoardLabel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, name }: { boardId: string; name: string }) => api.boards.deleteLabel(boardId, name),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["boards"] });
       if (data?.id) queryClient.invalidateQueries({ queryKey: ["board", data.id] });

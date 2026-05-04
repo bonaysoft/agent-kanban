@@ -37,12 +37,12 @@ describe("updateTask position field", () => {
 
   it("updateTask preserves other fields when only position is updated", async () => {
     const { createTask, updateTask } = await import("../apps/web/server/taskRepo");
-    const task = await createTask(env.DB, "pos-test-user", { title: "Position Preserve", board_id: boardId, priority: "high" });
+    const task = await createTask(env.DB, "pos-test-user", { title: "Position Preserve", board_id: boardId });
 
     const updated = await updateTask(env.DB, task.id, { position: 5 });
 
     expect(updated!.title).toBe("Position Preserve");
-    expect(updated!.priority).toBe("high");
+    expect(updated!.status).toBe("todo");
     expect(updated!.position).toBe(5);
   });
 

@@ -51,12 +51,12 @@ export function formatTaskList(tasks: any[]): string {
 
   const lines = tasks.map((t) => {
     const status = `[${t.status}]`.padEnd(14);
-    const priority = t.priority ? `[${t.priority}]` : "";
     const blocked = t.blocked ? " BLOCKED" : "";
+    const labels = t.labels?.length ? `[${t.labels.join(",")}]` : "";
     const repo = t.repository_name ? `(${t.repository_name})` : "";
     const agent = t.assigned_to ? `→ ${t.assigned_to.slice(0, 8)}` : "";
     const pr = t.pr_url ? `PR: ${t.pr_url}` : "";
-    return `  ${t.id}  ${status} ${priority.padEnd(8)} ${t.title} ${blocked} ${repo} ${agent} ${pr}`.trimEnd();
+    return `  ${t.id}  ${status} ${labels} ${t.title} ${blocked} ${repo} ${agent} ${pr}`.trimEnd();
   });
 
   return lines.join("\n");
@@ -67,13 +67,13 @@ export function formatTaskListWide(tasks: any[]): string {
 
   const lines = tasks.map((t) => {
     const status = `[${t.status}]`.padEnd(14);
-    const priority = t.priority ? `[${t.priority}]` : "";
     const blocked = t.blocked ? " BLOCKED" : "";
+    const labels = t.labels?.length ? `[${t.labels.join(",")}]` : "";
     const repo = t.repository_name ? t.repository_name.padEnd(20) : "".padEnd(20);
     const agent = t.assigned_to ? t.assigned_to.slice(0, 12).padEnd(14) : "".padEnd(14);
     const created = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : "";
     const pr = t.pr_url ? `PR: ${t.pr_url}` : "";
-    return `  ${t.id}  ${status} ${priority.padEnd(8)} ${t.title} ${blocked} ${repo} ${agent} ${created} ${pr}`.trimEnd();
+    return `  ${t.id}  ${status} ${labels} ${t.title} ${blocked} ${repo} ${agent} ${created} ${pr}`.trimEnd();
   });
 
   return lines.join("\n");
@@ -130,7 +130,6 @@ export function formatTask(task: any): string {
   lines.push(`${task.title}`);
   lines.push(`  ID:          ${task.id}`);
   lines.push(`  Status:      ${task.status}${task.blocked ? " (BLOCKED)" : ""}`);
-  lines.push(`  Priority:    ${task.priority || "none"}`);
   if (task.labels?.length) lines.push(`  Labels:      ${task.labels.join(", ")}`);
   if (task.assigned_to) lines.push(`  Assigned to: ${task.assigned_to}`);
   if (task.repository_name) lines.push(`  Repository:  ${task.repository_name}`);

@@ -214,7 +214,7 @@ interface FakeTask {
   board_type: string;
   repository_id?: string;
   description?: string;
-  priority?: string;
+  labels?: string[];
   model?: string;
   runtime?: string;
   name?: string;

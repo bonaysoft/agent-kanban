@@ -179,6 +179,15 @@ export abstract class ApiClient {
   updateBoard(boardId: string, body: Record<string, unknown>) {
     return this.request("PATCH", `/api/boards/${boardId}`, body);
   }
+  createBoardLabel(boardId: string, body: { name: string; color: string; description?: string }) {
+    return this.request("POST", `/api/boards/${boardId}/labels`, body);
+  }
+  updateBoardLabel(boardId: string, name: string, body: { name?: string; color?: string; description?: string }) {
+    return this.request("PATCH", `/api/boards/${boardId}/labels/${encodeURIComponent(name)}`, body);
+  }
+  deleteBoardLabel(boardId: string, name: string) {
+    return this.request("DELETE", `/api/boards/${boardId}/labels/${encodeURIComponent(name)}`);
+  }
   deleteBoard(boardId: string) {
     return this.request("DELETE", `/api/boards/${boardId}`);
   }

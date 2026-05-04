@@ -12,7 +12,6 @@ function formatDescribeTask(task: any, notes: any[], messages: any[]): string {
   lines.push(`${pad("Name")} ${task.title}`);
   lines.push(`${pad("ID")} ${task.id}`);
   lines.push(`${pad("Status")} ${task.status}`);
-  lines.push(`${pad("Priority")} ${task.priority || "none"}`);
   if (task.board_id) lines.push(`${pad("Board")} ${task.board_id}`);
   if (task.repository_name) lines.push(`${pad("Repo")} ${task.repository_name}`);
   if (task.assigned_to) lines.push(`${pad("Agent")} ${task.assigned_to}`);
@@ -134,8 +133,8 @@ function formatDescribeBoard(board: any): string {
       const agent = t.assigned_to ? ` → ${t.assigned_to.slice(0, 8)}` : "";
       const blocked = t.blocked ? " BLOCKED" : "";
       const pr = t.pr_url ? ` PR: ${t.pr_url}` : "";
-      const priority = t.priority ? ` [${t.priority}]` : "";
-      lines.push(`  ${t.id}  ${t.title}${priority}${blocked}${agent}${pr}`);
+      const labels = t.labels?.length ? ` [${t.labels.join(",")}]` : "";
+      lines.push(`  ${t.id}  ${t.title}${labels}${blocked}${agent}${pr}`);
     }
   }
 

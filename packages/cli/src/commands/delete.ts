@@ -6,6 +6,23 @@ export function registerDeleteCommand(program: Command) {
   const deleteCmd = program.command("delete").description("Delete a resource (board, task, agent, repo)");
 
   deleteCmd
+    .command("label")
+    .description("Delete a board label")
+    .option("--board <id>", "Board ID")
+    .option("--name <name>", "Label name")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .action(async (opts) => {
+      if (!opts.board || !opts.name) {
+        console.error("Missing required options: --board and --name");
+        process.exit(1);
+      }
+      const client = await createClient();
+      const board = await client.deleteBoardLabel(opts.board, opts.name);
+      const fmt = getOutputFormat(opts.output);
+      output(board, fmt, (b) => `Deleted label ${opts.name} from board ${b.id}`);
+    });
+
+  deleteCmd
     .command("board <id>")
     .description("Delete a board")
     .option("-o, --output <format>", "Output format (json, yaml, text)")

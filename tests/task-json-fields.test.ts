@@ -30,6 +30,7 @@ async function applyMigrations(db: D1Database) {
     "0017_unique_leader_per_runtime.sql",
     "0018_agent_subagents.sql",
     "0019_agent_versions.sql",
+    "0020_board_labels.sql",
   ];
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
@@ -66,6 +67,18 @@ describe("task JSON field parsing (labels, input)", () => {
     const { createBoard } = await import("../apps/web/server/boardRepo");
     const board = await createBoard(db, ownerId, "json-test-board", "ops");
     boardId = board.id;
+    await createBoard(db, ownerId, "json-empty-labels-board", "ops");
+    await db
+      .prepare("UPDATE boards SET labels = ? WHERE id = ?")
+      .bind(
+        JSON.stringify([
+          { name: "bug", color: "#EF4444", description: "Bug fix" },
+          { name: "urgent", color: "#EAB308", description: "Urgent work" },
+          { name: "feature", color: "#22D3EE", description: "Feature work" },
+        ]),
+        boardId,
+      )
+      .run();
     const { updateMachine, upsertMachine } = await import("../apps/web/server/machineRepo");
     const machine = await upsertMachine(db, ownerId, {
       name: "json-runtime-machine",
@@ -91,6 +104,17 @@ describe("task JSON field parsing (labels, input)", () => {
     expect(task.labels).toEqual(["bug", "urgent"]);
     expect(typeof task.input).toBe("object");
     expect(task.input).toEqual({ prompt: "fix the thing", context: { file: "main.ts", line: 42 } });
+  });
+
+  it("createTask rejects labels that are not defined on the board", async () => {
+    const { createTask } = await import("../apps/web/server/taskRepo");
+    await expect(
+      createTask(db, ownerId, {
+        title: "Unknown label",
+        board_id: boardId,
+        labels: ["missing"],
+      }),
+    ).rejects.toThrow("Label not found: missing");
   });
 
   it("createTask with null labels/input returns null", async () => {

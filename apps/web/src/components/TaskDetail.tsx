@@ -13,6 +13,7 @@ import { useSSE } from "../hooks/useSSE";
 import { api } from "../lib/api";
 import { ActivityLog } from "./ActivityLog";
 import { AgentIdenticon } from "./AgentIdenticon";
+import { LabelChip } from "./LabelChip";
 import { SubtaskList } from "./SubtaskList";
 import { TaskChatDrawer } from "./TaskChatDrawer";
 import { Field, FieldLabel, formatRelative } from "./TaskDetailFields";
@@ -35,8 +36,11 @@ const REVIEW_ACTIONS = {
   complete: { label: "Complete", variant: "default" as const },
 };
 
+const TASK_DETAIL_SHEET_CLASS = "overflow-hidden p-0 gap-0 !w-[60%] max-md:!w-full";
+
 interface TaskDetailProps {
   taskId: string;
+  labels?: { name: string; color: string; description: string }[];
   onClose: () => void;
   onRefresh: () => void;
   onAgentClick?: (agentId: string) => void;
@@ -73,17 +77,11 @@ function LiveDuration({ startedAt, finishedMinutes }: { startedAt: string | null
   return <span className="font-mono text-[13px]">{formatElapsed(finishedMinutes! * 60_000)}</span>;
 }
 
-const PRIORITY_CLASSES: Record<string, string> = {
-  urgent: "bg-red-500/10 text-red-400 border-red-500/20",
-  high: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  medium: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  low: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-};
-
-export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentClick }: TaskDetailProps) {
+export function TaskDetail({ taskId, labels = [], onClose, onRefresh, onAgentClick: _onAgentClick }: TaskDetailProps) {
   const queryClient = useQueryClient();
   const [chatOpen, setChatOpen] = useState(false);
   const { notes: sseNotes, reconnecting } = useSSE({ taskId, enabled: true });
+  const labelByName = new Map(labels.map((label) => [label.name, label]));
 
   const { data: task, isLoading: loading } = useQuery({
     queryKey: ["task", taskId],
@@ -141,10 +139,10 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
           if (!open) onClose();
         }}
       >
-        <SheetContent showCloseButton={false}>
+        <SheetContent showCloseButton={false} className={TASK_DETAIL_SHEET_CLASS}>
           <SheetTitle className="sr-only">Task</SheetTitle>
           <SheetDescription className="sr-only">Task details</SheetDescription>
-          {content}
+          <div className="h-full overflow-y-auto overscroll-contain">{content}</div>
         </SheetContent>
       </Sheet>
     );
@@ -289,10 +287,7 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
           if (!open) onClose();
         }}
       >
-        <SheetContent
-          showCloseButton={false}
-          className={`overflow-hidden p-0 gap-0 !w-[60%] max-md:!w-full ${chatOpen ? "!w-[calc(60%+3rem)]" : ""}`}
-        >
+        <SheetContent showCloseButton={false} className={`${TASK_DETAIL_SHEET_CLASS} ${chatOpen ? "!w-[calc(60%+3rem)]" : ""}`}>
           <SheetTitle className="sr-only">{task.title}</SheetTitle>
           <SheetDescription className="sr-only">Task detail panel</SheetDescription>
 
@@ -311,13 +306,14 @@ export function TaskDetail({ taskId, onClose, onRefresh, onAgentClick: _onAgentC
                 </div>
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {repo && (
-                    <Badge variant="secondary" className="text-[11px] font-mono">
+                    <Badge variant="secondary" className="rounded-[4px] text-[11px] font-mono">
                       {repo.name}
                     </Badge>
                   )}
-                  {task.priority && PRIORITY_CLASSES[task.priority] && (
-                    <Badge className={`text-[11px] font-mono border ${PRIORITY_CLASSES[task.priority]}`}>{task.priority}</Badge>
-                  )}
+                  {task.labels?.map((name: string) => {
+                    const label = labelByName.get(name);
+                    return <LabelChip key={name} name={name} color={label?.color ?? "#71717A"} description={label?.description} />;
+                  })}
                 </div>
               </div>
               <Button variant="ghost" size="icon-sm" onClick={onClose}>

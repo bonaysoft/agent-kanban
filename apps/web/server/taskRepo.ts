@@ -8,6 +8,15 @@ import { computeBlocked, detectCycle, getDependencies, setDependencies } from ".
 
 const parseTask = <T extends Task>(row: T) => parseJsonFields(row, ["labels", "input"]);
 
+async function assertKnownLabels(db: D1, boardId: string, labels: string[] | null | undefined): Promise<void> {
+  if (!labels?.length) return;
+  const board = await db.prepare("SELECT labels FROM boards WHERE id = ?").bind(boardId).first<{ labels: string }>();
+  if (!board) throw new HTTPException(400, { message: "Board not found" });
+  const knownLabels = new Set((JSON.parse(board.labels) as { name: string }[]).map((label) => label.name));
+  const unknown = labels.find((label) => !knownLabels.has(label));
+  if (unknown) throw new HTTPException(400, { message: `Label not found: ${unknown}` });
+}
+
 function enforceTransition(action: TaskActionType, currentStatus: TaskStatus, identity: IdentityType): void {
   const error = validateTransition(action as any, currentStatus, identity);
   if (error) {
@@ -75,6 +84,7 @@ export async function createTask(
   if (input.assigned_to) {
     await assertAssignableWorkerAgent(db, ownerId, input.assigned_to, 400);
   }
+  await assertKnownLabels(db, board.id, input.labels);
 
   // Atomically allocate the next seq number via RETURNING
   const seqResult = await db
@@ -86,8 +96,8 @@ export async function createTask(
   const stmts = [
     db
       .prepare(`
-      INSERT INTO tasks (id, board_id, seq, status, title, description, repository_id, labels, priority, created_by, assigned_to, result, pr_url, input, created_from, scheduled_at, position, created_at, updated_at)
-      VALUES (?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, board_id, seq, status, title, description, repository_id, labels, created_by, assigned_to, result, pr_url, input, created_from, scheduled_at, position, created_at, updated_at)
+      VALUES (?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
     `)
       .bind(
         taskId,
@@ -97,7 +107,6 @@ export async function createTask(
         input.description || null,
         input.repository_id || null,
         labelsJson,
-        input.priority || null,
         actorId,
         input.assigned_to || null,
         inputJson,
@@ -135,7 +144,6 @@ export async function createTask(
     description: input.description || null,
     repository_id: input.repository_id || null,
     labels: input.labels || null,
-    priority: input.priority || null,
     created_by: actorId,
     assigned_to: input.assigned_to || null,
     result: null,
@@ -256,9 +264,7 @@ export async function getTask(db: D1, taskId: string, ownerId: string): Promise<
 export async function updateTask(
   db: D1,
   taskId: string,
-  updates: Partial<
-    Pick<Task, "title" | "description" | "repository_id" | "labels" | "priority" | "result" | "pr_url" | "input" | "position" | "scheduled_at">
-  > & {
+  updates: Partial<Pick<Task, "title" | "description" | "repository_id" | "labels" | "result" | "pr_url" | "input" | "position" | "scheduled_at">> & {
     depends_on?: string[];
   },
 ): Promise<Task | null> {
@@ -272,24 +278,16 @@ export async function updateTask(
     }
     await setDependencies(db, taskId, updates.depends_on);
   }
+  if (updates.labels !== undefined) {
+    await assertKnownLabels(db, task.board_id, updates.labels);
+  }
 
   const now = new Date().toISOString();
   const sets: string[] = ["updated_at = ?"];
   const binds: unknown[] = [now];
 
   const jsonFields = new Set(["labels", "input"]);
-  const allowedFields = [
-    "title",
-    "description",
-    "repository_id",
-    "labels",
-    "priority",
-    "result",
-    "pr_url",
-    "input",
-    "position",
-    "scheduled_at",
-  ] as const;
+  const allowedFields = ["title", "description", "repository_id", "labels", "result", "pr_url", "input", "position", "scheduled_at"] as const;
   for (const field of allowedFields) {
     if (field in updates && (updates as any)[field] !== undefined) {
       sets.push(`${field} = ?`);

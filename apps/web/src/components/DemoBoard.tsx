@@ -11,7 +11,7 @@ interface DemoTask {
   id: string;
   seq: number;
   title: string;
-  priority: string;
+  labels: string[];
   status: string;
   repository_name: string;
   assigned_to: string | null;
@@ -35,14 +35,21 @@ function assign(i: number) {
   return { assigned_to: A[i].id, agent_name: A[i].name, agent_public_key: A[i].pk };
 }
 
+const DEMO_LABELS = [
+  { name: "backend", color: "#22D3EE", description: "API and worker code" },
+  { name: "frontend", color: "#A78BFA", description: "Browser UI" },
+  { name: "bug", color: "#EF4444", description: "Defect fix" },
+  { name: "docs", color: "#71717A", description: "Documentation" },
+];
+
 function makeTasks(): DemoTask[] {
   const now = new Date().toISOString();
   let seqCounter = 0;
-  const t = (id: string, title: string, pri: string, repo: string, ag?: number): DemoTask => ({
+  const t = (id: string, title: string, labels: string[], repo: string, ag?: number): DemoTask => ({
     id,
     seq: ++seqCounter,
     title,
-    priority: pri,
+    labels,
     status: "todo",
     repository_name: repo,
     ...(ag !== undefined ? assign(ag) : { assigned_to: null, agent_name: null, agent_public_key: null }),
@@ -51,13 +58,13 @@ function makeTasks(): DemoTask[] {
     updated_at: now,
   });
   return [
-    t(TID[0], "Refactor auth middleware", "high", "api-server", 0),
-    t(TID[1], "Fix rate limiter bug", "urgent", "api-server", 1),
-    t(TID[2], "Add pagination to API", "medium", "api-server", 0),
-    t(TID[3], "Implement webhook retry", "high", "api-server", 1),
-    t(TID[4], "Update API documentation", "low", "docs", 2),
-    t(TID[5], "Fix timezone bug in reports", "medium", "dashboard"),
-    t(TID[6], "Add export to CSV", "low", "dashboard"),
+    t(TID[0], "Refactor auth middleware", ["backend"], "api-server", 0),
+    t(TID[1], "Fix rate limiter bug", ["backend", "bug"], "api-server", 1),
+    t(TID[2], "Add pagination to API", ["backend"], "api-server", 0),
+    t(TID[3], "Implement webhook retry", ["backend"], "api-server", 1),
+    t(TID[4], "Update API documentation", ["docs"], "docs", 2),
+    t(TID[5], "Fix timezone bug in reports", ["frontend", "bug"], "dashboard"),
+    t(TID[6], "Add export to CSV", ["frontend"], "dashboard"),
   ];
 }
 
@@ -270,14 +277,14 @@ export function DemoBoard({ onContinue, onSkip }: { onContinue: () => void; onSk
     <div className="relative">
       <div className="hidden md:grid grid-cols-5 min-h-[50vh]">
         {columns.map((c) => (
-          <KanbanColumn key={c.status} column={c} onTaskClick={() => {}} />
+          <KanbanColumn key={c.status} column={c} labels={DEMO_LABELS} onTaskClick={() => {}} />
         ))}
       </div>
       <div className="md:hidden min-h-[40vh] grid grid-cols-2">
         {columns
           .filter((c) => c.status === "todo" || c.status === "in_progress")
           .map((c) => (
-            <KanbanColumn key={c.status} column={c} onTaskClick={() => {}} />
+            <KanbanColumn key={c.status} column={c} labels={DEMO_LABELS} onTaskClick={() => {}} />
           ))}
       </div>
       <AgentAvatarOverlay avatars={avatars} />

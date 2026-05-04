@@ -56,7 +56,6 @@ export function registerCreateCommand(program: Command) {
     .requiredOption("--title <title>", "Task title")
     .option("--description <desc>", "Task description")
     .option("--repo <repo>", "Repository ID or URL")
-    .option("--priority <priority>", "Priority: low, medium, high, urgent")
     .option("--labels <labels>", "Comma-separated labels")
     .option("--input <json>", "JSON input payload")
     .option("--assign-to <id>", "Agent ID to assign")
@@ -69,7 +68,6 @@ export function registerCreateCommand(program: Command) {
       const body: Record<string, unknown> = { title: opts.title, board_id: opts.board };
       if (opts.description) body.description = opts.description;
       if (opts.repo) body.repository_id = await resolveRepoId(client, opts.repo);
-      if (opts.priority) body.priority = opts.priority;
       if (opts.labels) body.labels = opts.labels.split(",").map((l: string) => l.trim());
       if (opts.assignTo) body.assigned_to = opts.assignTo;
       if (opts.parent) body.created_from = opts.parent;
@@ -93,6 +91,29 @@ export function registerCreateCommand(program: Command) {
       const task = await client.createTask(body);
       const fmt = getOutputFormat(opts.output);
       output(task, fmt, (t) => `Created task ${t.id}: ${t.title}`);
+    });
+
+  createCmd
+    .command("label")
+    .description("Create a board label")
+    .option("--board <id>", "Board ID")
+    .option("--name <name>", "Label name")
+    .option("--color <hex>", "Label color, e.g. #22D3EE")
+    .option("--description <desc>", "Label description")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .action(async (opts) => {
+      if (!opts.board || !opts.name || !opts.color) {
+        console.error("Missing required options: --board, --name, and --color");
+        process.exit(1);
+      }
+      const client = await createClient();
+      const board = await client.createBoardLabel(opts.board, {
+        name: opts.name,
+        color: opts.color,
+        description: opts.description,
+      });
+      const fmt = getOutputFormat(opts.output);
+      output(board, fmt, (b) => `Created label ${opts.name} on board ${b.id}`);
     });
 
   createCmd

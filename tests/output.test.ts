@@ -15,142 +15,136 @@ import {
 
 describe("formatTask", () => {
   it("includes task title on the first line", () => {
-    const task = { id: "t1", title: "My Task", status: "todo", priority: null };
+    const task = { id: "t1", title: "My Task", status: "todo" };
     const result = formatTask(task);
     expect(result.split("\n")[0]).toBe("My Task");
   });
 
   it("includes task ID", () => {
-    const task = { id: "abc123", title: "T", status: "todo", priority: null };
+    const task = { id: "abc123", title: "T", status: "todo" };
     const result = formatTask(task);
     expect(result).toContain("abc123");
   });
 
   it("includes status", () => {
-    const task = { id: "t1", title: "T", status: "in_progress", priority: null };
+    const task = { id: "t1", title: "T", status: "in_progress" };
     const result = formatTask(task);
     expect(result).toContain("in_progress");
   });
 
   it("appends BLOCKED to status when task is blocked", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, blocked: true };
+    const task = { id: "t1", title: "T", status: "todo", blocked: true };
     const result = formatTask(task);
     expect(result).toContain("BLOCKED");
   });
 
   it("does not show BLOCKED when blocked is false", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, blocked: false };
+    const task = { id: "t1", title: "T", status: "todo", blocked: false };
     const result = formatTask(task);
     expect(result).not.toContain("BLOCKED");
   });
 
-  it("shows priority when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: "high" };
+  it("omits Labels line when missing labels", () => {
+    const task = { id: "t1", title: "T", status: "todo", labels: null };
     const result = formatTask(task);
-    expect(result).toContain("high");
-  });
-
-  it("shows 'none' for missing priority", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null };
-    const result = formatTask(task);
-    expect(result).toContain("none");
+    expect(result).not.toContain("Labels:");
   });
 
   it("includes labels when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, labels: ["bug", "urgent"] };
+    const task = { id: "t1", title: "T", status: "todo", labels: ["bug", "urgent"] };
     const result = formatTask(task);
     expect(result).toContain("bug");
     expect(result).toContain("urgent");
   });
 
   it("does not include Labels line when labels are absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, labels: null };
+    const task = { id: "t1", title: "T", status: "todo", labels: null };
     const result = formatTask(task);
     expect(result).not.toContain("Labels:");
   });
 
   it("includes assigned_to when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, assigned_to: "agent-7" };
+    const task = { id: "t1", title: "T", status: "todo", assigned_to: "agent-7" };
     const result = formatTask(task);
     expect(result).toContain("agent-7");
   });
 
   it("omits Assigned line when assigned_to is absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, assigned_to: null };
+    const task = { id: "t1", title: "T", status: "todo", assigned_to: null };
     const result = formatTask(task);
     expect(result).not.toContain("Assigned to:");
   });
 
   it("includes repository_name when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, repository_name: "my-repo" };
+    const task = { id: "t1", title: "T", status: "todo", repository_name: "my-repo" };
     const result = formatTask(task);
     expect(result).toContain("my-repo");
   });
 
   it("omits Repository line when repository_name is absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, repository_name: null };
+    const task = { id: "t1", title: "T", status: "todo", repository_name: null };
     const result = formatTask(task);
     expect(result).not.toContain("Repository:");
   });
 
   it("includes depends_on IDs when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, depends_on: ["dep1", "dep2"] };
+    const task = { id: "t1", title: "T", status: "todo", depends_on: ["dep1", "dep2"] };
     const result = formatTask(task);
     expect(result).toContain("dep1");
     expect(result).toContain("dep2");
   });
 
   it("omits Depends on line when depends_on is empty", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, depends_on: [] };
+    const task = { id: "t1", title: "T", status: "todo", depends_on: [] };
     const result = formatTask(task);
     expect(result).not.toContain("Depends on:");
   });
 
   it("includes pr_url when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, pr_url: "https://github.com/org/repo/pull/42" };
+    const task = { id: "t1", title: "T", status: "todo", pr_url: "https://github.com/org/repo/pull/42" };
     const result = formatTask(task);
     expect(result).toContain("https://github.com/org/repo/pull/42");
   });
 
   it("omits PR line when pr_url is absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, pr_url: null };
+    const task = { id: "t1", title: "T", status: "todo", pr_url: null };
     const result = formatTask(task);
     expect(result).not.toContain("PR:");
   });
 
   it("includes description when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, description: "A task description" };
+    const task = { id: "t1", title: "T", status: "todo", description: "A task description" };
     const result = formatTask(task);
     expect(result).toContain("A task description");
   });
 
   it("omits description section when absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, description: null };
+    const task = { id: "t1", title: "T", status: "todo", description: null };
     const result = formatTask(task);
     expect(result.split("\n").length).toBeLessThan(10);
   });
 
   it("includes input as JSON when present", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, input: { key: "value" } };
+    const task = { id: "t1", title: "T", status: "todo", input: { key: "value" } };
     const result = formatTask(task);
     expect(result).toContain('"key"');
     expect(result).toContain('"value"');
   });
 
   it("omits Input section when absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, input: null };
+    const task = { id: "t1", title: "T", status: "todo", input: null };
     const result = formatTask(task);
     expect(result).not.toContain("Input:");
   });
 
   it("includes result when present", () => {
-    const task = { id: "t1", title: "T", status: "done", priority: null, result: "Completed successfully" };
+    const task = { id: "t1", title: "T", status: "done", result: "Completed successfully" };
     const result = formatTask(task);
     expect(result).toContain("Completed successfully");
   });
 
   it("omits Result line when result is absent", () => {
-    const task = { id: "t1", title: "T", status: "todo", priority: null, result: null };
+    const task = { id: "t1", title: "T", status: "todo", result: null };
     const result = formatTask(task);
     expect(result).not.toContain("Result:");
   });
@@ -317,34 +311,34 @@ describe("formatTaskList", () => {
   });
 
   it("includes task ID and title", () => {
-    const tasks = [{ id: "t1", title: "Do something", status: "todo", priority: null }];
+    const tasks = [{ id: "t1", title: "Do something", status: "todo" }];
     const result = formatTaskList(tasks);
     expect(result).toContain("t1");
     expect(result).toContain("Do something");
   });
 
-  it("includes priority bracket when present", () => {
-    const tasks = [{ id: "t1", title: "T", status: "todo", priority: "high" }];
+  it("includes label bracket when present", () => {
+    const tasks = [{ id: "t1", title: "T", status: "todo", labels: ["bug"] }];
     const result = formatTaskList(tasks);
-    expect(result).toContain("[high]");
+    expect(result).toContain("[bug]");
   });
 
   it("includes repository name when present", () => {
-    const tasks = [{ id: "t1", title: "T", status: "todo", priority: null, repository_name: "my-repo" }];
+    const tasks = [{ id: "t1", title: "T", status: "todo", repository_name: "my-repo" }];
     const result = formatTaskList(tasks);
     expect(result).toContain("my-repo");
   });
 
   it("includes assigned_to agent when present", () => {
-    const tasks = [{ id: "t1", title: "T", status: "todo", priority: null, assigned_to: "agent-9" }];
+    const tasks = [{ id: "t1", title: "T", status: "todo", assigned_to: "agent-9" }];
     const result = formatTaskList(tasks);
     expect(result).toContain("agent-9");
   });
 
   it("returns one line per task", () => {
     const tasks = [
-      { id: "t1", title: "First", status: "todo", priority: null },
-      { id: "t2", title: "Second", status: "todo", priority: null },
+      { id: "t1", title: "First", status: "todo" },
+      { id: "t2", title: "Second", status: "todo" },
     ];
     const lines = formatTaskList(tasks).split("\n");
     expect(lines.length).toBe(2);

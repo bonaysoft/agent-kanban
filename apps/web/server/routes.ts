@@ -26,7 +26,18 @@ import {
 import { closeSession, createSession, listSessions, reopenSession, updateSessionUsage } from "./agentSessionRepo";
 import { authMiddleware } from "./auth";
 import { createAuth } from "./betterAuth";
-import { createBoard, deleteBoard, getBoard, getBoardByName, getBoardBySlug, listBoards, updateBoard } from "./boardRepo";
+import {
+  createBoard,
+  createBoardLabel,
+  deleteBoard,
+  deleteBoardLabel,
+  getBoard,
+  getBoardByName,
+  getBoardBySlug,
+  listBoards,
+  updateBoard,
+  updateBoardLabel,
+} from "./boardRepo";
 import { createBoardSSEResponse, createPublicBoardSSEResponse } from "./boardSSE";
 import { cliVersionMiddleware } from "./cliVersion";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
@@ -230,7 +241,6 @@ api.get("/api/share/:slug", async (c) => {
     seq: t.seq,
     title: t.title,
     status: t.status,
-    priority: t.priority,
     labels: t.labels,
     repository_name: t.repository_name,
     agent_name: t.agent_name,
@@ -960,8 +970,28 @@ api.get("/api/boards/:id", async (c) => {
 });
 
 api.patch("/api/boards/:id", async (c) => {
-  const body = await c.req.json<{ name?: string; description?: string; visibility?: "private" | "public" }>();
+  const body = await c.req.json<{ name?: string; description?: string; visibility?: "private" | "public"; labels?: any[] }>();
   const board = await updateBoard(c.env.DB, c.req.param("id"), body);
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return c.json(board);
+});
+
+api.post("/api/boards/:id/labels", async (c) => {
+  const body = await c.req.json<{ name: string; color: string; description?: string }>();
+  const board = await createBoardLabel(c.env.DB, c.req.param("id"), { name: body.name, color: body.color, description: body.description || "" });
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return c.json(board, 201);
+});
+
+api.patch("/api/boards/:id/labels/:name", async (c) => {
+  const body = await c.req.json<{ name?: string; color?: string; description?: string }>();
+  const board = await updateBoardLabel(c.env.DB, c.req.param("id"), c.req.param("name"), body);
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return c.json(board);
+});
+
+api.delete("/api/boards/:id/labels/:name", async (c) => {
+  const board = await deleteBoardLabel(c.env.DB, c.req.param("id"), c.req.param("name"));
   if (!board) throw new HTTPException(404, { message: "Board not found" });
   return c.json(board);
 });
