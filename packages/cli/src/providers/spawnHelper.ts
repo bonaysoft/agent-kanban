@@ -7,6 +7,7 @@ export interface SpawnAgentOpts {
   cwd: string;
   env: Record<string, string>;
   input?: string;
+  onLine?: (raw: string) => void;
   parseEvent: (raw: string) => AgentEvent | null;
 }
 
@@ -42,7 +43,7 @@ export function spawnAgent(opts: SpawnAgentOpts): AgentHandle {
     if (stderrBuffer.length > 50000) stderrBuffer = stderrBuffer.slice(-25000);
   });
 
-  const events = createEventStream(proc, opts.parseEvent, () => stderrBuffer, state);
+  const events = createEventStream(proc, opts.parseEvent, () => stderrBuffer, state, opts.onLine);
 
   return {
     events,
@@ -64,6 +65,7 @@ async function* createEventStream(
   parseEvent: (raw: string) => AgentEvent | null,
   getStderr: () => string,
   state: SpawnState,
+  onLine?: (raw: string) => void,
 ): AsyncGenerator<AgentEvent> {
   let buffer = "";
   const queue: AgentEvent[] = [];
@@ -80,6 +82,7 @@ async function* createEventStream(
     buffer = lines.pop() || "";
     for (const line of lines) {
       if (!line.trim()) continue;
+      onLine?.(line);
       const event = parseEvent(line);
       if (event) {
         queue.push(event);
@@ -90,6 +93,7 @@ async function* createEventStream(
 
   proc.on("close", (code) => {
     if (buffer.trim()) {
+      onLine?.(buffer);
       const event = parseEvent(buffer);
       if (event) queue.push(event);
     }

@@ -59,7 +59,8 @@ describe("convertEvents — consecutive assistant events merging", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].id).toBe("evt-1");
     expect(messages[0].role).toBe("assistant");
-    expect(messages[0].content as any[]).toHaveLength(3);
+    expect(messages[0].content as any[]).toHaveLength(2);
+    expect((messages[0].content as any[])[0]).toEqual({ type: "text", text: "First partSecond part" });
   });
 
   it("starts a new message after user event", () => {

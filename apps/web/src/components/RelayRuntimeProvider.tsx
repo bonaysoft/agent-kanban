@@ -160,6 +160,15 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
     }
   }
 
+  function appendPart(part: ContentPart) {
+    const previous = currentParts[currentParts.length - 1];
+    if ((part.type === "text" || part.type === "reasoning") && previous?.type === part.type) {
+      previous.text += part.text;
+      return;
+    }
+    currentParts.push(part);
+  }
+
   function updateOrAppend(block: { type: string; [k: string]: any }) {
     if (block.type === "tool_result") {
       const tc = toolCallMap.get(block.tool_use_id);
@@ -203,7 +212,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
 
     // Fallback: append as new part
     const part = mapBlock(block);
-    if (part) currentParts.push(part);
+    if (part) appendPart(part);
   }
 
   for (const re of events) {
@@ -224,7 +233,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
       ensureCurrentTurn(re);
       turnRunning = true;
       const part = mapBlock(event.block);
-      if (part) currentParts.push(part);
+      if (part) appendPart(part);
       continue;
     }
 
@@ -285,7 +294,7 @@ export function convertEvents(events: RelayEvent[], agentStatus: AgentStatus): T
           updateOrAppend(block as any);
         } else {
           const part = mapBlock(block);
-          if (part) currentParts.push(part);
+          if (part) appendPart(part);
         }
       }
       continue;

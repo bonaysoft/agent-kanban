@@ -6,6 +6,10 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn().mockImplementation(() => {
     throw new Error("ENOENT");
   }),
+  readdirSync: vi.fn().mockImplementation(() => {
+    throw new Error("ENOENT");
+  }),
+  existsSync: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("node:child_process", () => ({
@@ -63,7 +67,9 @@ import {
   buildArgs as geminiBuildArgs,
   buildResumeArgs as geminiBuildResumeArgs,
   parseEvent as geminiParseEvent,
+  parseSessionId as geminiParseSessionId,
   geminiProvider,
+  resolveGeminiCommand,
 } from "../src/providers/gemini.js";
 import { getAvailableProviders, getProvider, registerProvider } from "../src/providers/registry.js";
 import type { AgentProvider } from "../src/providers/types.js";
@@ -73,6 +79,10 @@ beforeEach(async () => {
   vi.mocked(fsModule.readFileSync).mockImplementation(() => {
     throw new Error("ENOENT");
   });
+  vi.mocked(fsModule.readdirSync).mockImplementation(() => {
+    throw new Error("ENOENT");
+  });
+  vi.mocked(fsModule.existsSync).mockReturnValue(false);
 
   const childProcess = await import("node:child_process");
   vi.mocked(childProcess.execSync).mockImplementation(() => {
@@ -1048,6 +1058,11 @@ describe("geminiProvider.buildArgs", () => {
     expect(args).toContain("--yolo");
   });
 
+  it("includes --skip-trust for headless daemon worktrees", () => {
+    const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
+    expect(args).toContain("--skip-trust");
+  });
+
   it("includes --prompt flag", () => {
     const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).toContain("--prompt");
@@ -1057,7 +1072,7 @@ describe("geminiProvider.buildArgs", () => {
     expect(Array.isArray(geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" }))).toBe(true);
   });
 
-  it("does not include --session-id flag (Gemini has no session concept)", () => {
+  it("does not force the AK session id into new Gemini sessions", () => {
     const args = geminiBuildArgs({ sessionId: "s1", cwd: "/", env: {}, taskContext: "" });
     expect(args).not.toContain("--session-id");
   });
@@ -1107,45 +1122,65 @@ describe("geminiProvider.buildArgs", () => {
 
 describe("geminiProvider.buildResumeArgs", () => {
   it("returns an array", () => {
-    expect(Array.isArray(geminiBuildResumeArgs())).toBe(true);
+    expect(Array.isArray(geminiBuildResumeArgs("gemini-session-1"))).toBe(true);
   });
 
-  it("includes --output-format stream-json (falls back to fresh session)", () => {
-    const args = geminiBuildResumeArgs();
+  it("includes --output-format stream-json", () => {
+    const args = geminiBuildResumeArgs("gemini-session-1");
     const idx = args.indexOf("--output-format");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("stream-json");
   });
 
-  it("includes --yolo flag (fresh session fallback)", () => {
-    const args = geminiBuildResumeArgs();
+  it("includes --yolo flag", () => {
+    const args = geminiBuildResumeArgs("gemini-session-1");
     expect(args).toContain("--yolo");
   });
 
-  it("includes --resume latest (Gemini resumes the latest session rather than by ID)", () => {
-    const args = geminiBuildResumeArgs();
+  it("includes --skip-trust for resumed headless daemon worktrees", () => {
+    const args = geminiBuildResumeArgs("gemini-session-1");
+    expect(args).toContain("--skip-trust");
+  });
+
+  it("includes --resume with the provider session id", () => {
+    const args = geminiBuildResumeArgs("gemini-session-1");
     const idx = args.indexOf("--resume");
     expect(idx).toBeGreaterThan(-1);
-    expect(args[idx + 1]).toBe("latest");
+    expect(args[idx + 1]).toBe("gemini-session-1");
   });
 
   it("uses task context as resume prompt", () => {
-    const args = geminiBuildResumeArgs(undefined, "Address review feedback.");
+    const args = geminiBuildResumeArgs("gemini-session-1", undefined, "Address review feedback.");
     const idx = args.indexOf("--prompt");
 
     expect(args[idx + 1]).toBe("Address review feedback.");
   });
 
   it("includes --model when model is provided", () => {
-    const args = geminiBuildResumeArgs("gemini-2.5-pro");
+    const args = geminiBuildResumeArgs("gemini-session-1", "gemini-2.5-pro");
     const idx = args.indexOf("--model");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("gemini-2.5-pro");
   });
 
   it("does not include --model when model is absent", () => {
-    const args = geminiBuildResumeArgs();
+    const args = geminiBuildResumeArgs("gemini-session-1");
     expect(args).not.toContain("--model");
+  });
+});
+
+describe("geminiProvider.resolveGeminiCommand", () => {
+  it("uses gemini from PATH outside Volta", () => {
+    expect(resolveGeminiCommand({})).toBe("gemini");
+  });
+
+  it("uses the Volta package bin when installed", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.existsSync).mockImplementation((path) => String(path).endsWith("/tools/image/packages/@google/gemini-cli/bin/gemini"));
+
+    expect(resolveGeminiCommand({ VOLTA_HOME: "/Users/saltbo/.volta" })).toBe(
+      "/Users/saltbo/.volta/tools/image/packages/@google/gemini-cli/bin/gemini",
+    );
   });
 });
 
@@ -1169,6 +1204,21 @@ describe("geminiProvider.parseEvent — invalid input", () => {
   it("returns null for init event", () => {
     const raw = JSON.stringify({ type: "init", timestamp: "2024-01-01T00:00:00Z", session_id: "s1", model: "gemini-pro" });
     expect(geminiParseEvent(raw)).toBeNull();
+  });
+
+  it("extracts session_id from init event", () => {
+    const raw = JSON.stringify({ type: "init", timestamp: "2024-01-01T00:00:00Z", session_id: "s1", model: "gemini-pro" });
+    expect(geminiParseSessionId(raw)).toBe("s1");
+  });
+
+  it("extracts session_id when Gemini prefixes the JSON event with warning text", () => {
+    const raw =
+      'MCP issues detected. Run /mcp list for status.{"type":"init","timestamp":"2024-01-01T00:00:00Z","session_id":"s1","model":"gemini-pro"}';
+    expect(geminiParseSessionId(raw)).toBe("s1");
+  });
+
+  it("returns null when no session_id is present", () => {
+    expect(geminiParseSessionId(JSON.stringify({ type: "message" }))).toBeNull();
   });
 
   it("returns null for user message event", () => {
@@ -1213,6 +1263,91 @@ describe("geminiProvider.parseEvent — assistant message", () => {
   it("returns null for assistant message with empty content string", () => {
     const raw = JSON.stringify({ type: "message", role: "assistant", content: "" });
     expect(geminiParseEvent(raw)).toBeNull();
+  });
+
+  it("returns normalized tool blocks for assistant tool calls without text content", () => {
+    const raw = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      id: "msg-1",
+      toolCalls: [{ id: "tool-1", name: "run_shell_command", args: { command: "pnpm test", description: "Run tests" }, result: "ok" }],
+    });
+
+    const event = geminiParseEvent(raw);
+
+    expect(event).toEqual({
+      type: "message",
+      blocks: [
+        { type: "tool_use", id: "tool-1", name: "Bash", input: { command: "pnpm test", description: "Run tests" } },
+        { type: "tool_result", tool_use_id: "tool-1", output: "ok" },
+      ],
+    });
+  });
+
+  it("returns normalized tool blocks for OpenAI-style tool_calls", () => {
+    const raw = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      id: "msg-1",
+      tool_calls: [{ id: "tool-1", function: { name: "read_file", arguments: { file_path: "README.md" } } }],
+    });
+
+    const event = geminiParseEvent(raw);
+
+    expect(event).toEqual({
+      type: "message",
+      blocks: [{ type: "tool_use", id: "tool-1", name: "Read", input: { filePath: "README.md" } }],
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiProvider.parseEvent — live tool events
+// ---------------------------------------------------------------------------
+
+describe("geminiProvider.parseEvent — live tool events", () => {
+  it("normalizes Gemini stream-json tool_use events", () => {
+    const raw = JSON.stringify({
+      type: "tool_use",
+      timestamp: "2026-05-04T06:08:23.618Z",
+      tool_name: "run_shell_command",
+      tool_id: "run_shell_command_1",
+      parameters: { description: "Run echo", command: "echo live-tool-test" },
+    });
+
+    const event = geminiParseEvent(raw);
+
+    expect(event).toEqual({
+      type: "message",
+      blocks: [{ type: "tool_use", id: "run_shell_command_1", name: "Bash", input: { command: "echo live-tool-test", description: "Run echo" } }],
+    });
+  });
+
+  it("normalizes Gemini stream-json tool_result events", () => {
+    const raw = JSON.stringify({
+      type: "tool_result",
+      timestamp: "2026-05-04T06:08:23.754Z",
+      tool_id: "run_shell_command_1",
+      status: "success",
+    });
+
+    const event = geminiParseEvent(raw);
+
+    expect(event).toEqual({
+      type: "message",
+      blocks: [{ type: "tool_result", tool_use_id: "run_shell_command_1", output: "success", error: false }],
+    });
+  });
+
+  it("marks Gemini stream-json tool_result error events", () => {
+    const raw = JSON.stringify({ type: "tool_result", tool_id: "run_shell_command_1", status: "error", output: "failed" });
+
+    const event = geminiParseEvent(raw);
+
+    expect(event).toEqual({
+      type: "message",
+      blocks: [{ type: "tool_result", tool_use_id: "run_shell_command_1", output: "failed", error: true }],
+    });
   });
 });
 
@@ -1391,9 +1526,16 @@ describe("geminiProvider.execute — arg selection", () => {
   it("uses buildResumeArgs when resume is true", async () => {
     const { spawnAgent } = await import("../src/providers/spawnHelper.js");
     vi.mocked(spawnAgent).mockClear();
-    await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true });
+    await geminiProvider.execute({ sessionId: "s1", resumeToken: "gemini-session-1", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true });
     const call = vi.mocked(spawnAgent).mock.calls[0][0];
     expect(call.args).toContain("--resume");
+    expect(call.args).toContain("gemini-session-1");
+  });
+
+  it("fails fast when resume is true without a resumeToken", async () => {
+    await expect(geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx", resume: true })).rejects.toThrow(
+      "gemini: resume requested but no resumeToken provided",
+    );
   });
 
   it("uses task context only when resuming", async () => {
@@ -1403,6 +1545,7 @@ describe("geminiProvider.execute — arg selection", () => {
       sessionId: "s1",
       cwd: "/tmp",
       env: {},
+      resumeToken: "gemini-session-1",
       systemPromptFile: "/tmp/system.txt",
       taskContext: "Task rejected. Reason: fix it",
       resume: true,
@@ -1411,6 +1554,16 @@ describe("geminiProvider.execute — arg selection", () => {
     const promptIdx = call.args.indexOf("--prompt");
 
     expect(call.args[promptIdx + 1]).toBe("Task rejected. Reason: fix it");
+  });
+
+  it("captures provider resume token from Gemini init output", async () => {
+    const { spawnAgent } = await import("../src/providers/spawnHelper.js");
+    vi.mocked(spawnAgent).mockClear();
+    const handle = await geminiProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
+    const call = vi.mocked(spawnAgent).mock.calls[0][0];
+    call.onLine?.(JSON.stringify({ type: "init", session_id: "gemini-session-2" }));
+
+    expect(handle.getResumeToken?.()).toBe("gemini-session-2");
   });
 
   it("uses buildArgs when resume is false or absent", async () => {
