@@ -141,8 +141,9 @@ export abstract class ApiClient {
   reopenSession(agentId: string, sessionId: string) {
     return this.request("POST", `/api/agents/${agentId}/sessions/${sessionId}/reopen`);
   }
-  listAgents() {
-    return this.request("GET", "/api/agents");
+  listAgents(params?: Record<string, string>) {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return this.request("GET", `/api/agents${qs}`);
   }
   listSessions(agentId: string) {
     return this.request<any[]>("GET", `/api/agents/${agentId}/sessions`);

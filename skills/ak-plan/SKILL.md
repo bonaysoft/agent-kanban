@@ -111,6 +111,7 @@ Use `AskUserQuestion` to interactively confirm the plan with the user. For each 
 - **Priority/ordering** — which tasks are critical path vs nice-to-have
 - **Approach** — when multiple implementation strategies exist, present them with trade-off descriptions
 - **Task granularity** — whether to split a large piece into subtasks or keep it as one
+- **Runtime choice** — when multiple schedulable runtimes are reasonable, ask which runtime to use for new workers
 
 Keep iterating until all uncertainties are resolved.
 
@@ -153,7 +154,8 @@ ak get board                   # find the project board
 Before creating tasks, choose or create the workers that will own them. Read `references/runtime-delegation.md`.
 
 Check existing agents. For a typical project you need:
-- **fullstack-developer** or backend + frontend split
+- A primary implementation worker for each coherent feature/module.
+- Focused specialist subagents only when the primary worker will repeatedly use that stable specialist context, such as test, review, or acceptance.
 
 Only assign work to agents whose `runtime_available` is `true`. If the best role exists only on an unavailable runtime, create a new worker with the same role, soul, skills, and handoff settings on an available runtime.
 
@@ -163,15 +165,19 @@ kind: Agent
 metadata:
   name: <human-username>
   annotations:
-    agent-kanban.dev/display-name: "<Human Name>"
+    agent-kanban.dev/nickname: "<Human Name>"
 spec:
   runtime: <available-runtime>
-  role: "<role>"
+  model: <runtime-model>
+  role: "<kebab-case-role>"
   bio: "<durable responsibility>"
+  soul: |
+    <durable behavior policy and decision rules>
+    <if subagents are set, when to call them and how to review or integrate their output>
   skills:
-    - <source>@<skill>
+    - <source>@<domain-skill>
   subagents:
-    - <worker-agent-id>
+    - <specialist-worker-agent-id>
 ```
 
 The leader must generate and apply worker Agent YAML according to `references/runtime-delegation.md`. Then run `ak get agent -o json` and confirm the latest worker is visible and `runtime_available: true` before assigning tasks.
@@ -197,12 +203,15 @@ T2=$(ak create task --board $BOARD --title "..." --repo $REPO --assign-to $AGENT
 
 ### Task Creation Best Practices
 
-- Create one task for one reviewable outcome. Split unrelated backend, frontend, CLI, and infra work.
+- Create one task for one reviewable outcome.
+- Split by feature/module boundary and context overlap, not by human job title.
+- Keep highly overlapping work in one task, even if it touches frontend, backend, CLI, infra, schema, and tests.
+- Split only when work is independently understandable, independently reviewable, and has low file/data/API context overlap.
 - Make each task independently claimable: no hidden chat context, no "continue from above" descriptions.
 - Put the exact files, APIs, commands, UI states, and acceptance checks in `--description`.
 - Assign every task at creation with `--assign-to`.
-- Use `--depends-on` for real blockers or overlapping files. Tasks touching the same files should be sequential.
-- Keep parallel tasks independent by file ownership and data model boundary.
+- Use `--depends-on` for real blockers or overlapping context. Tasks touching the same files, data model, or API contract should be sequential or merged.
+- Keep parallel tasks independent by feature/module boundary and data model boundary.
 - Use stable labels: version plus area, such as `v1.4.0,backend` or `v1.4.0,cli`.
 
 ### Task Description Quality
@@ -281,10 +290,12 @@ Check:
 **Fails → reject immediately**, don't proceed to Gate 2.
 
 **Gate 2: Functional Acceptance**
+- Passing tests, CI, and code review is not completion. Validate the feature from the product/user perspective before accepting it.
 - Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memory from Phase 1
 - Walk through every item in the task's `## Checks` section — each must pass
 - Visit preview/staging deployment and verify end-to-end
 - Check for regressions in related features
+- If an acceptance specialist is attached to the reviewing agent, use it for product-level E2E or manual acceptance checks, then independently judge whether its findings are sufficient.
 - **Fails → reject with specific repro steps**
 
 **Gate 3: Agent Notes Review**
@@ -398,5 +409,5 @@ Never include API keys, session tokens, private keys, `.env` contents, or privat
 - **Space API calls** — avoid triggering rate limits during batch creation
 - **Respect CLAUDE.md** — follow all project conventions and UI principles
 - **Pre-install shared dependencies in scaffold** — avoid parallel install conflicts
-- **Tasks touching the same files must be sequential** (depends-on)
-- **Tasks touching different files can be parallel**
+- **Tasks with high context overlap must be sequential or merged** (depends-on)
+- **Tasks can be parallel only when their feature/module context, files, data model, and API contracts are independent**

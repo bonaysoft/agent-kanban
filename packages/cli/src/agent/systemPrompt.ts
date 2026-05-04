@@ -114,7 +114,7 @@ After delivering your own work, if it reveals NEW independent work (not review o
 To hand off:
 1. Run \`ak get agent -o json\` to find agents by role. Only assign to agents with \`runtime_available: true\`.
 2. If the matching role only exists on an unavailable runtime, create a new worker with the same role on an available runtime.
-3. Create a task: \`ak create task --title "..." --assign-to <agent-id>${repoFlag} --parent <current-task-id>\`
+3. Create a task: \`ak create task --board <current-board-id> --title "..." --assign-to <agent-id>${repoFlag} --parent <current-task-id>\`
 4. Log the handoff: \`ak create note --task <current-task-id> "Handed off to <agent-name> for <reason>"\`
 
 Do NOT create handoff tasks for reviewing your PR — review is handled by the platform after you submit \`task review\`.

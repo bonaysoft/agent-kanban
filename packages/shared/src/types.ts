@@ -150,9 +150,14 @@ export type AgentKind = "worker" | "leader";
 export type AgentRuntime = "claude" | "codex" | "gemini" | "copilot" | "hermes";
 
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$/;
+const AGENT_ROLE_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 export function isValidUsername(value: string): boolean {
   return USERNAME_RE.test(value);
+}
+
+export function isValidAgentRole(value: string): boolean {
+  return value.length <= 63 && AGENT_ROLE_RE.test(value);
 }
 
 export function deriveUsername(name: string): string {

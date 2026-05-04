@@ -1,8 +1,10 @@
 import {
   AGENT_RUNTIMES,
+  type AgentRuntime,
   type CreateAgentInput,
   findInvalidSkillRef,
   isBoardType,
+  isValidAgentRole,
   isValidUsername,
   type MachineRuntime,
   parseScheduledAt,
@@ -85,6 +87,20 @@ function assertSubagentList(subagents: unknown) {
   }
 }
 
+function assertValidAgentRole(role: unknown): void {
+  if (role === undefined || role === null) return;
+  if (typeof role !== "string" || !isValidAgentRole(role)) {
+    throw new HTTPException(400, { message: "role must be kebab-case: lowercase letters, numbers, and single hyphens; start with a letter" });
+  }
+}
+
+function assertValidHandoffRoles(roles: unknown): void {
+  if (roles === undefined || roles === null) return;
+  if (!Array.isArray(roles) || roles.some((role) => typeof role !== "string" || !isValidAgentRole(role))) {
+    throw new HTTPException(400, { message: "handoff_to must be an array of kebab-case agent roles" });
+  }
+}
+
 function assertSubagentRuntime(runtime: string, subagents: string[] | null | undefined) {
   if (!subagents || subagents.length === 0) return;
   if (!SUBAGENT_RUNTIMES.has(runtime)) {
@@ -97,6 +113,19 @@ function assertValidAgentRuntime(runtime: string | undefined): void {
   if (!AGENT_RUNTIMES.includes(runtime as any)) {
     throw new HTTPException(400, { message: `Invalid runtime "${runtime}". Must be one of: ${AGENT_RUNTIMES.join(", ")}` });
   }
+}
+
+function parseOptionalBoolean(value: string | undefined, name: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new HTTPException(400, { message: `${name} must be true or false` });
+}
+
+function parseOptionalAgentKind(value: string | undefined): "worker" | "leader" | undefined {
+  if (value === undefined) return undefined;
+  if (value === "worker" || value === "leader") return value;
+  throw new HTTPException(400, { message: "kind must be worker or leader" });
 }
 
 async function assertRegisteredWorkerSubagents(
@@ -490,7 +519,16 @@ api.delete("/api/machines/:id", async (c) => {
 // ─── Agents ───
 
 api.get("/api/agents", async (c) => {
-  const agents = await listAgents(c.env.DB, c.get("ownerId"));
+  const role = c.req.query("role");
+  const runtime = c.req.query("runtime") as AgentRuntime | undefined;
+  assertValidAgentRole(role);
+  assertValidAgentRuntime(runtime);
+  const agents = await listAgents(c.env.DB, c.get("ownerId"), {
+    kind: parseOptionalAgentKind(c.req.query("kind")),
+    role,
+    runtime,
+    available: parseOptionalBoolean(c.req.query("available"), "available"),
+  });
   return c.json(agents);
 });
 
@@ -519,6 +557,8 @@ api.post("/api/agents", async (c) => {
   if (!body.username) throw new HTTPException(400, { message: "username is required" });
   if (!body.runtime) throw new HTTPException(400, { message: "runtime is required" });
   if (!isValidUsername(body.username)) throw new HTTPException(400, { message: `Invalid username "${body.username}"` });
+  assertValidAgentRole(body.role);
+  assertValidHandoffRoles(body.handoff_to);
   assertValidAgentRuntime(body.runtime);
   if (body.role && RESERVED_ROLES.has(body.role)) {
     throw new HTTPException(403, { message: `Role "${body.role}" is reserved for built-in agents` });
@@ -597,6 +637,8 @@ api.patch("/api/agents/:id", async (c) => {
   const body = await c.req.json();
   assertJsonObject(body, "agent update");
   const updates = body as Partial<CreateAgentInput>;
+  assertValidAgentRole(updates.role);
+  assertValidHandoffRoles(updates.handoff_to);
   assertValidAgentRuntime(updates.runtime);
   assertValidSkillRefs(updates.skills);
   assertSubagentList(updates.subagents);

@@ -769,6 +769,17 @@ describe("ApiClient method stubs", () => {
     expect(url).toContain("status=todo");
   });
 
+  it("listAgents appends query string when params provided", async () => {
+    const c = await makeAgentClient();
+    stubOk([]);
+    await c.listAgents({ kind: "worker", role: "test-specialist", available: "true" });
+    const [url] = lastCall();
+    expect(url).toContain("/api/agents?");
+    expect(url).toContain("kind=worker");
+    expect(url).toContain("role=test-specialist");
+    expect(url).toContain("available=true");
+  });
+
   it("getTask calls GET /api/tasks/:id", async () => {
     const c = await makeAgentClient();
     stubOk({});

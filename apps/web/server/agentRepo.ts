@@ -6,6 +6,13 @@ import { runtimeReadyPredicateSql } from "./machineRepo";
 
 const parseAgent = <T extends Agent>(row: T) => parseJsonFields(row, ["skills", "subagents", "handoff_to"]);
 
+export type AgentListFilters = {
+  kind?: "worker" | "leader";
+  role?: string;
+  runtime?: AgentRuntime;
+  available?: boolean;
+};
+
 async function shortHash(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-1", bytes);
@@ -157,10 +164,9 @@ export async function seedBuiltinAgents(db: D1, ownerId: string): Promise<void> 
   }
 }
 
-export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActivity[]> {
+export async function listAgents(db: D1, ownerId: string, filters: AgentListFilters = {}): Promise<AgentWithActivity[]> {
   const runtimeCutoff = new Date(Date.now() - MACHINE_STALE_TIMEOUT_MS).toISOString();
-  const result = await db
-    .prepare(`
+  let query = `
     SELECT a.id, a.owner_id, a.name, a.username, a.gpg_subkey_id, a.bio, a.soul, a.role, a.kind, a.handoff_to, a.runtime, a.model, a.skills, a.subagents,
       a.version,
       a.public_key, a.fingerprint, a.builtin, a.created_at, a.updated_at,
@@ -183,11 +189,32 @@ export async function listAgents(db: D1, ownerId: string): Promise<AgentWithActi
       COALESCE((SELECT SUM(s.cost_micro_usd) FROM agent_sessions s WHERE s.agent_id = a.id), 0) as cost_micro_usd
     FROM agents a
     WHERE a.owner_id = ?
-    ORDER BY a.created_at DESC
-  `)
-    .bind(runtimeCutoff, ownerId)
+  `;
+  const binds: unknown[] = [runtimeCutoff, ownerId];
+  if (filters.kind) {
+    query += " AND a.kind = ?";
+    binds.push(filters.kind);
+  }
+  if (filters.role) {
+    query += " AND a.role = ?";
+    binds.push(filters.role);
+  }
+  if (filters.runtime) {
+    query += " AND a.runtime = ?";
+    binds.push(filters.runtime);
+  }
+  query += " ORDER BY a.created_at DESC";
+  const result = await db
+    .prepare(query)
+    .bind(...binds)
     .all<AgentWithActivity>();
-  return result.results.map((r) => ({ ...parseAgent(r), runtime_available: !!r.runtime_available, email: `${r.username}@mails.agent-kanban.dev` }));
+  const agents = result.results.map((r) => ({
+    ...parseAgent(r),
+    runtime_available: !!r.runtime_available,
+    email: `${r.username}@mails.agent-kanban.dev`,
+  }));
+  if (filters.available === undefined) return agents;
+  return agents.filter((agent) => agent.runtime_available === filters.available);
 }
 
 export async function getAgent(db: D1, agentId: string, ownerId: string): Promise<AgentWithActivity | null> {

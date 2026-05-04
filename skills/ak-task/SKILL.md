@@ -66,7 +66,7 @@ Use `AskUserQuestion` to interactively resolve any uncertainties before creating
 
 - **Scope unclear** — present 2-3 scope interpretations as options, each with a preview showing what files/changes are involved
 - **Multiple approaches** — present implementation strategies as options with trade-off descriptions
-- **Priority/agent/repo ambiguous** — present choices when there are multiple candidates
+- **Priority/agent/runtime/repo ambiguous** — present choices when there are multiple candidates
 - **Dependencies uncertain** — present options about whether to depend on or parallelize with related tasks
 
 Keep iterating — each answer may reveal new questions. Only proceed to create when all points are resolved and the user has confirmed the final task spec.
@@ -132,12 +132,15 @@ ak create task \
 
 ### Task Creation Best Practices
 
-- Create one task for one reviewable outcome. If the request has unrelated backend, frontend, and CLI work, split it.
+- Create one task for one reviewable outcome.
+- Split by feature/module boundary and context overlap, not by human job title.
+- Keep highly overlapping work in one task, even if it touches frontend, backend, CLI, schema, and tests.
+- Split only when work is independently understandable, independently reviewable, and has low file/data/API context overlap.
 - Make the title an action phrase, not a vague topic.
 - Put implementation constraints and acceptance checks in `--description`; do not rely on chat context.
 - Include concrete files, commands, endpoints, UI states, and error cases when known.
 - Assign only to worker agents with `runtime_available: true`.
-- Use `--depends-on` for real blockers or overlapping files. Parallel tasks must not fight over the same files.
+- Use `--depends-on` for real blockers or overlapping context. Parallel tasks must not fight over the same files, data model, or API contract.
 - Prefer `medium` priority unless the work blocks other tasks, fixes production breakage, or is explicitly urgent.
 
 Report to user: task ID, title, assigned agent.
@@ -197,11 +200,14 @@ Check:
 
 #### Gate 2: Functional Acceptance
 
+Passing tests, CI, and code review is not completion. Validate the feature from the product/user perspective before accepting it.
+
 Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memory from Step 2.
 - Walk through every item in the task's `## Checks` section — each must pass
 - Visit the preview/staging deployment and verify end-to-end
 - Check for regressions in related features
 - Run any project-specific verification steps defined in CONTRIBUTING.md
+- If an acceptance specialist is attached to the reviewing agent, use it for product-level E2E or manual acceptance checks, then independently judge whether its findings are sufficient.
 
 **Fails → reject with specific repro steps.**
 
@@ -333,11 +339,11 @@ Never include API keys, session tokens, private keys, `.env` contents, or privat
 - **Workflow completion is mandatory** — once this skill is invoked, the full lifecycle (create → assign → monitor → review → merge/reject) MUST run to completion. If you are interrupted mid-workflow (user asks a side question, chat drifts to another topic, tool fails, etc.), handle the interruption and then **immediately resume the workflow from where you left off**. Never ask "should I continue monitoring?" or "do you want me to keep going?" — the answer is always yes. The only way to exit the workflow early is if the user explicitly says to stop, cancel, or abort.
 - **Follow CONTRIBUTING.md** — read the target repo's CONTRIBUTING.md before creating tasks; check PR compliance during review
 - **Investigate before creating** — read the code first, don't create vague tasks
-- **One task per invocation** — if the user describes multiple things, create one and suggest splitting
+- **One coherent outcome per invocation** — if the user describes multiple unrelated or low-overlap outcomes, create one and suggest splitting the rest
 - **Detailed descriptions** — agents are autonomous, the description is their only input
 - **Check for duplicates** — look at existing tasks before creating
 - **Review = act** — reject or merge based on your review, don't ask the user for permission
-- **Think about dependencies** — tasks touching shared files must use `--depends-on`
+- **Think about dependencies** — tasks with overlapping files, data model, API contract, or context must use `--depends-on` or be merged
 - **Always `--assign-to` on create** — never create a task without assigning an agent
 - **Close PR before cancel** — never cancel a task without closing its PR first
 - **Don't sleep-poll blindly** — if monitoring takes too long, investigate daemon logs and agent processes immediately

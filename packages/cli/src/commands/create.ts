@@ -105,7 +105,7 @@ export function registerCreateCommand(program: Command) {
     .option("--role <role>", "Agent role")
     .option("--runtime <runtime>", "Agent runtime")
     .option("--model <model>", "Model to use")
-    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
+    .option("--handoff-to <roles>", "Comma-separated agent roles this agent may hand off to")
     .option("--skills <skills>", "Comma-separated installable skill refs (<source>@<skill>)")
     .option("--subagents <ids>", "Comma-separated worker agent IDs to install as task-local subagents")
     .option("-o, --output <format>", "Output format (json, yaml, text)")

@@ -43,7 +43,7 @@ describe("apply agent resources", () => {
     await applyResource(api as any, "Agent", { role: "builder", runtime: "codex" }, "json", {
       name: "morgan",
       annotations: {
-        "agent-kanban.dev/display-name": "Morgan Lee",
+        "agent-kanban.dev/nickname": "Morgan Lee",
       },
     });
 
@@ -65,7 +65,7 @@ describe("apply agent resources", () => {
     await applyResource(api as any, "Agent", { id: "agent-1", role: "reviewer" }, "json", {
       name: "riley",
       annotations: {
-        "agent-kanban.dev/display-name": "Riley Chen",
+        "agent-kanban.dev/nickname": "Riley Chen",
       },
     });
 
@@ -101,7 +101,7 @@ describe("apply agent resources", () => {
           "metadata:",
           "  name: jordan",
           "  annotations:",
-          "    agent-kanban.dev/display-name: Jordan Patel",
+          "    agent-kanban.dev/nickname: Jordan Patel",
           "spec:",
           "  role: tester",
           "  runtime: codex",
@@ -116,7 +116,7 @@ describe("apply agent resources", () => {
           metadata: {
             name: "jordan",
             annotations: {
-              "agent-kanban.dev/display-name": "Jordan Patel",
+              "agent-kanban.dev/nickname": "Jordan Patel",
             },
           },
           spec: {

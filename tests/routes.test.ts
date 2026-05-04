@@ -303,6 +303,27 @@ describe("routes", () => {
     expect(Array.isArray(body)).toBe(true);
   });
 
+  it("GET /api/agents filters by kind, role, runtime, and availability", async () => {
+    await createTestAgent(env.DB, userId, { username: "filter-claude-agent", runtime: "claude", role: "filter-specialist" });
+    await createTestAgent(env.DB, userId, { username: "filter-copilot-agent", runtime: "copilot", role: "filter-specialist" });
+
+    const res = await apiRequest("GET", "/api/agents?kind=worker&role=filter-specialist&runtime=claude&available=true", undefined, apiKey);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any[];
+    expect(body.map((agent) => agent.username)).toEqual(["filter-claude-agent"]);
+  });
+
+  it("GET /api/agents rejects invalid filters", async () => {
+    const invalidRole = await apiRequest("GET", "/api/agents?role=BadRole", undefined, apiKey);
+    expect(invalidRole.status).toBe(400);
+
+    const invalidKind = await apiRequest("GET", "/api/agents?kind=manager", undefined, apiKey);
+    expect(invalidKind.status).toBe(400);
+
+    const invalidAvailable = await apiRequest("GET", "/api/agents?available=yes", undefined, apiKey);
+    expect(invalidAvailable.status).toBe(400);
+  });
+
   it("GET /api/agents/:id returns agent with logs", async () => {
     const res = await apiRequest("GET", `/api/agents/${agentId}`, undefined, apiKey);
     expect(res.status).toBe(200);
@@ -402,6 +423,30 @@ describe("routes", () => {
       apiKey,
     );
     expect(res.status).toBe(403);
+  });
+
+  it("POST /api/agents rejects non-kebab-case role", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Bad Role Format", username: "bad-role-format", runtime: "claude", role: "Frontend Reviewer" },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("role must be kebab-case");
+  });
+
+  it("POST /api/agents rejects non-kebab-case handoff roles", async () => {
+    const res = await apiRequest(
+      "POST",
+      "/api/agents",
+      { name: "Bad Handoff Role", username: "bad-handoff-role", runtime: "claude", handoff_to: ["QA Reviewer"] },
+      apiKey,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("handoff_to must be an array of kebab-case agent roles");
   });
 
   it("POST /api/agents rejects malformed skill refs", async () => {
@@ -556,6 +601,22 @@ describe("routes", () => {
     expect(body.subagents).toEqual([subagent.id]);
     expect(body).not.toHaveProperty("private_key");
     expect(body).not.toHaveProperty("mailbox_token");
+  });
+
+  it("PATCH /api/agents/:id rejects non-kebab-case role", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { role: "Release Manager" }, jwt);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("role must be kebab-case");
+  });
+
+  it("PATCH /api/agents/:id rejects non-kebab-case handoff roles", async () => {
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("PATCH", `/api/agents/${agentId}`, { handoff_to: ["Release Manager"] }, jwt);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.message).toContain("handoff_to must be an array of kebab-case agent roles");
   });
 
   it("PATCH /api/agents/:id rejects agent snapshots", async () => {

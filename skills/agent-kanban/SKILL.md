@@ -33,6 +33,7 @@ Good reasons:
 - You had to ignore or override the current soul to satisfy the task correctly.
 - A required installable skill was missing for this kind of work.
 - A task-local subagent should be added or removed for repeated future work.
+- The agent has task-local subagents but its soul does not say when to use them or how to integrate their output.
 - The role/bio is misleading for the work the leader assigns to this agent.
 
 Do not propose profile changes for:
@@ -46,6 +47,7 @@ Workers do not update agent profiles directly. When a durable profile change is 
 - The reason the current profile caused incorrect or inefficient behavior.
 - The exact fields that should change.
 - A complete candidate `Agent` YAML using the same `metadata.name` username.
+- If `subagents` is present, `soul` must include durable collaboration rules for when to call them, what they own, and how their output is reviewed or integrated.
 
 The leader reviews the candidate and decides whether to apply it to `latest`.
 
@@ -67,11 +69,11 @@ kind: Agent
 metadata:
   name: <same-username>
   annotations:
-    agent-kanban.dev/display-name: "<human display name>"
+    agent-kanban.dev/nickname: "<human nickname>"
 spec:
   bio: "<updated bio if needed>"
   soul: |
-    <updated durable behavior instructions>
+    <updated durable behavior policy and decision rules>
 ```
 
 ## Commands

@@ -99,7 +99,7 @@ export function registerUpdateCommand(program: Command) {
     .option("--role <role>", "Agent role")
     .option("--runtime <runtime>", "Agent runtime")
     .option("--model <model>", "Agent model")
-    .option("--handoff-to <ids>", "Comma-separated agent IDs for handoff")
+    .option("--handoff-to <roles>", "Comma-separated agent roles this agent may hand off to")
     .option("--skills <skills>", "Comma-separated installable skill refs (<source>@<skill>)")
     .option("--subagents <ids>", "Comma-separated worker agent IDs to install as task-local subagents")
     .option("-o, --output <format>", "Output format (json, yaml, text)")
@@ -116,7 +116,9 @@ export function registerUpdateCommand(program: Command) {
       if (opts.skills) body.skills = opts.skills.split(",").map((s: string) => s.trim());
       if (opts.subagents) body.subagents = opts.subagents.split(",").map((s: string) => s.trim());
       if (Object.keys(body).length === 0) {
-        console.error("Nothing to update. Provide at least one option (--name, --bio, --role, --runtime, --model, --skills, --subagents).");
+        console.error(
+          "Nothing to update. Provide at least one option (--name, --bio, --role, --runtime, --model, --handoff-to, --skills, --subagents).",
+        );
         process.exit(1);
       }
       const agent = await client.updateAgent(id, body);

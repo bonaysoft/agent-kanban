@@ -281,9 +281,9 @@ describe("formatAgent", () => {
   });
 
   it("includes handoff_to when present", () => {
-    const agent = { id: "a1", name: "Claude", status: "idle", handoff_to: ["reviewer-agent"] };
+    const agent = { id: "a1", name: "Claude", status: "idle", handoff_to: ["qa"] };
     const result = formatAgent(agent);
-    expect(result).toContain("reviewer-agent");
+    expect(result).toContain("qa");
   });
 
   it("omits Handoff line when handoff_to array is empty", () => {

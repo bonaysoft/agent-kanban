@@ -36,7 +36,7 @@ function agentBody(spec: Record<string, unknown>, metadata: Record<string, unkno
     process.exit(1);
   }
   const annotations = metadata?.annotations as Record<string, unknown> | undefined;
-  const name = annotations?.["agent-kanban.dev/display-name"];
+  const name = annotations?.["agent-kanban.dev/nickname"];
   return {
     ...spec,
     username,

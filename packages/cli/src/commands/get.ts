@@ -20,6 +20,10 @@ type AgentRef = {
   username: string;
   version: string;
   name: string;
+  kind?: string;
+  role?: string | null;
+  runtime?: string;
+  runtime_available?: boolean;
   created_at?: string;
 };
 
@@ -113,6 +117,9 @@ export function registerGetCommand(program: Command) {
     .command("agent [id]")
     .description("Get an agent or list agents")
     .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .option("--role <role>", "Filter by agent role")
+    .option("--runtime <runtime>", "Filter by runtime")
+    .option("--available", "Only show agents whose runtime is available")
     .action(async (id: string | undefined, opts) => {
       const client = await createClient();
       const fmt = getOutputFormat(opts.output);
@@ -120,8 +127,11 @@ export function registerGetCommand(program: Command) {
         const { value, formatter } = await getAgentOrVersions(client, id);
         output(value, fmt, formatter, { kind: "agent" });
       } else {
-        const all = (await client.listAgents()) as any[];
-        const agents = all.filter((a: any) => a.kind !== "leader");
+        const params: Record<string, string> = { kind: "worker" };
+        if (opts.role) params.role = opts.role;
+        if (opts.runtime) params.runtime = opts.runtime;
+        if (opts.available) params.available = "true";
+        const agents = (await client.listAgents(params)) as AgentRef[];
         output(agents, fmt, formatAgentList, { kind: "agent" });
       }
     });

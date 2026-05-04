@@ -87,7 +87,7 @@ describe("registerCreateCommand agent", () => {
       role: "build",
       runtime: "codex",
       model: "gpt-5",
-      handoffTo: "worker-1, worker-2",
+      handoffTo: "qa, devops",
       skills: "saltbo/agent-kanban@agent-kanban,trailofbits/skills@differential-review",
       subagents: "worker-1",
       output: "json",
@@ -102,7 +102,7 @@ describe("registerCreateCommand agent", () => {
       runtime: "codex",
       model: "gpt-5",
       kind: "worker",
-      handoff_to: ["worker-1", "worker-2"],
+      handoff_to: ["qa", "devops"],
       skills: ["saltbo/agent-kanban@agent-kanban", "trailofbits/skills@differential-review"],
       subagents: ["worker-1"],
     });
