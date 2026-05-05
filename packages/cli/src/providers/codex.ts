@@ -1,15 +1,26 @@
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BashArgs, ReadArgs } from "@agent-kanban/shared";
 import { ToolName } from "@agent-kanban/shared";
 import { Codex, type ThreadEvent } from "@openai/codex-sdk";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
+import type {
+  AgentEvent,
+  AgentHandle,
+  AgentProvider,
+  ContentBlock,
+  ExecuteOpts,
+  HistoryEvent,
+  RuntimeModel,
+  UsageInfo,
+  UsageWindow,
+} from "./types.js";
 import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const AUTH_PATH = join(homedir(), ".codex", "auth.json");
 const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
+const CODEX_MODELS_CACHE_PATH = join(homedir(), ".codex", "models_cache.json");
 const USAGE_API = "https://chatgpt.com/backend-api/wham/usage";
 
 function readAccessToken(): string | null {
@@ -76,6 +87,39 @@ function resolveCodexModel(opts: ExecuteOpts): string | undefined {
     return undefined;
   }
   return opts.model;
+}
+
+type CodexCachedModel = {
+  slug: string;
+  display_name?: string;
+  description?: string;
+  visibility?: string;
+  priority?: number;
+  context_window?: number;
+  max_context_window?: number;
+  supported_reasoning_levels?: { effort: string }[];
+  default_reasoning_level?: string;
+  support_verbosity?: boolean;
+};
+
+function readCodexModelCache(): CodexCachedModel[] {
+  if (!existsSync(CODEX_MODELS_CACHE_PATH)) throw new Error("Codex models cache not found; start Codex CLI once to populate it");
+  const data = JSON.parse(readFileSync(CODEX_MODELS_CACHE_PATH, "utf-8")) as { models?: CodexCachedModel[] };
+  return data.models ?? [];
+}
+
+function normalizeCodexCachedModel(model: CodexCachedModel): RuntimeModel {
+  return {
+    id: model.slug,
+    name: model.display_name,
+    description: model.description,
+    context_window: model.context_window,
+    supports: {
+      verbosity: model.support_verbosity ?? false,
+    },
+    supported_reasoning_efforts: model.supported_reasoning_levels?.map((level) => level.effort),
+    default_reasoning_effort: model.default_reasoning_level,
+  };
 }
 
 /** Map a single Codex thread event to an AgentEvent (or null to skip). */
@@ -216,6 +260,13 @@ export const codexProvider: AgentProvider = {
     } catch (err) {
       return availabilityFromUsageError(err, "Codex");
     }
+  },
+
+  async listModels(): Promise<RuntimeModel[]> {
+    return readCodexModelCache()
+      .filter((model) => model.visibility !== "hide")
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+      .map(normalizeCodexCachedModel);
   },
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {

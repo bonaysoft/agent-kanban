@@ -5,7 +5,17 @@ import { ToolName } from "@agent-kanban/shared";
 import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import { approveAll, CopilotClient } from "@github/copilot-sdk";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
+import type {
+  AgentEvent,
+  AgentHandle,
+  AgentProvider,
+  ContentBlock,
+  ExecuteOpts,
+  HistoryEvent,
+  RuntimeModel,
+  UsageInfo,
+  UsageWindow,
+} from "./types.js";
 import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const logger = createLogger("copilot");
@@ -283,6 +293,27 @@ export const copilotProvider: AgentProvider = {
       return availabilityFromUsage(await this.fetchUsage!());
     } catch (err) {
       return availabilityFromUsageError(err, "GitHub Copilot");
+    }
+  },
+
+  async listModels(): Promise<RuntimeModel[]> {
+    const client = new CopilotClient({ useLoggedInUser: true });
+    await client.start();
+    try {
+      const models = await client.listModels();
+      return models.map((model) => ({
+        id: model.id,
+        name: model.name,
+        context_window: model.capabilities.limits.max_context_window_tokens,
+        supports: {
+          vision: model.capabilities.supports.vision,
+          reasoning_effort: model.capabilities.supports.reasoningEffort,
+        },
+        supported_reasoning_efforts: model.supportedReasoningEfforts,
+        default_reasoning_effort: model.defaultReasoningEffort,
+      }));
+    } finally {
+      await client.stop();
     }
   },
 

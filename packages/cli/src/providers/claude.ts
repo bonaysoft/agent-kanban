@@ -7,7 +7,17 @@ import { ToolName } from "@agent-kanban/shared";
 import type { SDKAssistantMessage, SDKMessage, SDKPartialAssistantMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getSessionMessages, query } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "../logger.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent, UsageInfo, UsageWindow } from "./types.js";
+import type {
+  AgentEvent,
+  AgentHandle,
+  AgentProvider,
+  ContentBlock,
+  ExecuteOpts,
+  HistoryEvent,
+  RuntimeModel,
+  UsageInfo,
+  UsageWindow,
+} from "./types.js";
 import { availabilityFromUsage, availabilityFromUsageError, parseRetryAfterMs, UsageFetchError } from "./types.js";
 
 const SUBTASK_STATUSES: readonly SubtaskStatus[] = ["completed", "failed", "stopped"] as const;
@@ -384,6 +394,35 @@ export const claudeProvider: AgentProvider = {
       return availabilityFromUsage(await this.fetchUsage!());
     } catch (err) {
       return availabilityFromUsageError(err, "Claude Code");
+    }
+  },
+
+  async listModels(): Promise<RuntimeModel[]> {
+    const q = query({
+      prompt: "",
+      options: {
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+      },
+    });
+    try {
+      const models = await q.supportedModels();
+      return models.map((model) => ({
+        id: model.value,
+        name: model.displayName,
+        description: model.description,
+        supports: {
+          effort: model.supportsEffort ?? false,
+          adaptive_thinking: model.supportsAdaptiveThinking ?? false,
+          fast_mode: model.supportsFastMode ?? false,
+          auto_mode: model.supportsAutoMode ?? false,
+        },
+        supported_reasoning_efforts: model.supportedEffortLevels,
+      }));
+    } finally {
+      q.close();
     }
   },
 

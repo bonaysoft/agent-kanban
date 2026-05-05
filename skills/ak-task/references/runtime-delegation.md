@@ -19,18 +19,36 @@ Use these fields:
 
 ## Runtime Choice
 
+Runtime selection is a hard stop before task creation.
+
 If multiple runtimes are schedulable for the needed role and the user has not expressed a runtime preference, ask which runtime to use before creating a new worker or assigning the task. Present only runtimes with `runtime_available: true`, plus the relevant trade-off: existing matching worker, current load, model preference, or runtime-specific capability.
 
-Do not ask when there is only one schedulable runtime, the user already specified a runtime, or an existing matching worker is clearly the best choice by role and load.
+When creating a worker or choosing a non-default model, query provider-reported model availability:
+
+```bash
+ak get model --runtime <runtime> -o json
+```
+
+Treat the command as the source of truth. It reads from the runtime/provider's own authenticated surface where available: Codex cache, Claude SDK, Copilot model endpoint, or Gemini public API / Code Assist quota.
+
+Use a returned model ID in `spec.model`. If `ak get model` fails because the runtime/provider does not expose model listing or lacks model-list credentials, follow `references/agent-creation.md` and either ask during the initial phase or use `default` only for low-risk, clearly scoped work.
+
+Do not ask when there is only one schedulable runtime for the required capability profile, or when the user already specified a schedulable runtime.
 
 ## Assignment Rules
 
 1. Pick a worker whose `role` matches the task.
 2. Exclude workers with `runtime_available !== true`.
 3. Prefer the matching worker with the lowest `active_task_count`, then lowest `queued_task_count`.
-4. If no matching worker is schedulable, create a worker for the same role on a schedulable runtime.
-5. If a matching worker exists only on an unavailable runtime, copy its role, soul, skills, and handoff settings into the new worker.
-6. Do not assign to a runtime just because the CLI exists on a machine. Runtime availability is whatever AK reports.
+4. If the user specified a runtime, exclude workers whose `runtime` does not match.
+5. If the user specified a runtime and no worker or machine reports that runtime as schedulable, stop and ask the user to choose an available runtime.
+6. If no matching worker is schedulable, create a worker with the required capability profile on a schedulable runtime using `references/agent-creation.md`.
+7. If a matching worker exists only on an unavailable runtime, copy the required capability profile into the new worker using `references/agent-creation.md`.
+8. Do not assign to a runtime just because the CLI exists on a machine. Runtime availability is whatever AK reports.
+
+## Same-Role Worker Creation
+
+`Same role` means capability-compatible for the current task, not only the same `role` string. Follow `references/agent-creation.md` before creating or assigning the replacement worker.
 
 ## Creating Workers
 
@@ -40,7 +58,7 @@ Create workers only when needed for the current task:
 - Matching role exists but every matching worker has unavailable runtime.
 - The task should run now and matching workers are already busy.
 
-Do not create duplicate workers for hypothetical future work.
+Do not create duplicate workers for hypothetical future work. When creation is needed, follow `references/agent-creation.md`.
 
 ## Complex Task Execution Model
 
@@ -87,7 +105,7 @@ metadata:
     agent-kanban.dev/nickname: "Alex Chen"
 spec:
   runtime: codex
-  model: gpt-5.1-codex
+  model: <provider-reported-model-id>
   role: frontend-reviewer
   bio: Frontend reviewer focused on React, Tailwind, accessibility, and visual consistency.
   soul: |

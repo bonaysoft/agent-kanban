@@ -6,6 +6,7 @@ import {
   formatBoard,
   formatBoardList,
   formatLabelList,
+  formatModelList,
   formatRepositoryList,
   formatTask,
   formatTaskList,
@@ -375,6 +376,29 @@ describe("formatAgentList", () => {
     const result = formatAgentList(agents);
     expect(result).toContain("claude");
     expect(result).toContain("Builds APIs");
+  });
+});
+
+describe("formatModelList", () => {
+  it("returns 'No models found.' for an empty list", () => {
+    expect(formatModelList([])).toBe("No models found.");
+  });
+
+  it("prints id, display name, context window, and reasoning efforts", () => {
+    const result = formatModelList([
+      {
+        id: "gpt-5",
+        name: "GPT-5",
+        context_window: 400000,
+        supported_reasoning_efforts: ["low", "medium", "high"],
+      },
+    ]);
+
+    expect(result).toBe("  gpt-5  GPT-5 context=400000 efforts=low,medium,high");
+  });
+
+  it("omits duplicate display name and missing optional fields", () => {
+    expect(formatModelList([{ id: "claude-opus-4-1", name: "claude-opus-4-1" }])).toBe("  claude-opus-4-1");
   });
 });
 

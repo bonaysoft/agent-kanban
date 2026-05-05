@@ -95,6 +95,19 @@ export function formatAgentList(agents: any[]): string {
   return lines.join("\n");
 }
 
+export function formatModelList(models: any[]): string {
+  if (models.length === 0) return "No models found.";
+
+  return models
+    .map((model) => {
+      const name = model.name && model.name !== model.id ? `  ${model.name}` : "";
+      const efforts = model.supported_reasoning_efforts?.length ? ` efforts=${model.supported_reasoning_efforts.join(",")}` : "";
+      const context = model.context_window ? ` context=${model.context_window}` : "";
+      return `  ${model.id}${name}${context}${efforts}`;
+    })
+    .join("\n");
+}
+
 export function formatBoardList(boards: any[]): string {
   if (boards.length === 0) return "No boards found.";
 

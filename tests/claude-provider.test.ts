@@ -41,6 +41,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
     [Symbol.asyncIterator]: async function* () {},
     close: vi.fn(),
     streamInput: vi.fn().mockResolvedValue(undefined),
+    supportedModels: vi.fn().mockResolvedValue([]),
   }),
 }));
 
@@ -1365,6 +1366,48 @@ describe("claudeProvider.execute — handle shape", () => {
     const handle = await claudeProvider.execute({ sessionId: "s1", cwd: "/tmp", env: {}, taskContext: "ctx" });
     await handle.send("ping");
     expect(streamInputSpy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("claudeProvider.listModels", () => {
+  it("normalizes SDK supported models and closes the query", async () => {
+    const { query: mockQuery } = await import("@anthropic-ai/claude-agent-sdk");
+    const close = vi.fn();
+    vi.mocked(mockQuery).mockReturnValueOnce({
+      [Symbol.asyncIterator]: async function* () {},
+      close,
+      streamInput: vi.fn().mockResolvedValue(undefined),
+      supportedModels: vi.fn().mockResolvedValue([
+        {
+          value: "claude-opus-4-1",
+          displayName: "Claude Opus 4.1",
+          description: "Most capable model",
+          supportsEffort: true,
+          supportsAdaptiveThinking: true,
+          supportsFastMode: false,
+          supportsAutoMode: true,
+          supportedEffortLevels: ["low", "medium", "high"],
+        },
+      ]),
+    } as any);
+
+    const models = await claudeProvider.listModels?.();
+
+    expect(models).toEqual([
+      {
+        id: "claude-opus-4-1",
+        name: "Claude Opus 4.1",
+        description: "Most capable model",
+        supports: {
+          effort: true,
+          adaptive_thinking: true,
+          fast_mode: false,
+          auto_mode: true,
+        },
+        supported_reasoning_efforts: ["low", "medium", "high"],
+      },
+    ]);
+    expect(close).toHaveBeenCalledOnce();
   });
 });
 

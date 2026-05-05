@@ -6,6 +6,7 @@ import {
   formatBoard,
   formatBoardList,
   formatLabelList,
+  formatModelList,
   formatRepository,
   formatRepositoryList,
   formatTask,
@@ -15,6 +16,7 @@ import {
   getOutputFormat,
   output,
 } from "../output.js";
+import { getProvider, normalizeRuntime } from "../providers/registry.js";
 
 type AgentRef = {
   id: string;
@@ -147,6 +149,22 @@ export function registerGetCommand(program: Command) {
         const agents = (await client.listAgents(params)) as AgentRef[];
         output(agents, fmt, formatAgentList, { kind: "agent" });
       }
+    });
+
+  getCmd
+    .command("model")
+    .description("List available models for a runtime")
+    .requiredOption("--runtime <runtime>", "Runtime name")
+    .option("-o, --output <format>", "Output format (json, yaml, text)")
+    .action(async (opts) => {
+      const fmt = getOutputFormat(opts.output);
+      const provider = getProvider(normalizeRuntime(opts.runtime));
+      if (!provider.listModels) {
+        console.error(`Model listing is not supported by ${provider.label}.`);
+        process.exit(1);
+      }
+      const models = await provider.listModels();
+      output(models, fmt, formatModelList, { kind: "model" });
     });
 
   getCmd

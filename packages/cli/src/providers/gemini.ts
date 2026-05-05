@@ -3,10 +3,26 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { type BashArgs, type GlobArgs, type GrepArgs, type ReadArgs, ToolName, type WriteArgs } from "@agent-kanban/shared";
 import { spawnAgent } from "./spawnHelper.js";
-import type { AgentEvent, AgentHandle, AgentProvider, ContentBlock, ExecuteOpts, HistoryEvent } from "./types.js";
+import type {
+  AgentEvent,
+  AgentHandle,
+  AgentProvider,
+  ContentBlock,
+  ExecuteOpts,
+  HistoryEvent,
+  RuntimeModel,
+  UsageInfo,
+  UsageWindow,
+} from "./types.js";
+import { availabilityFromUsage, availabilityFromUsageError, UsageFetchError } from "./types.js";
 
 const OAUTH_CREDS_PATH = join(homedir(), ".gemini", "oauth_creds.json");
 const GEMINI_TMP_DIR = join(homedir(), ".gemini", "tmp");
+const GEMINI_MODELS_API = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_MODELS_PAGE_SIZE = 1000;
+const CODE_ASSIST_API = "https://cloudcode-pa.googleapis.com/v1internal";
+const GEMINI_CLI_OAUTH_CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
+const GEMINI_CLI_OAUTH_CLIENT_SECRET = "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";
 
 /** Per 1M tokens, paid tier pricing */
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
@@ -25,6 +41,193 @@ function readSystemPrompt(filePath?: string): string {
   } catch {
     return "";
   }
+}
+
+function readGeminiApiKey(): string | null {
+  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? null;
+}
+
+function readGoogleCloudProject(): string | undefined {
+  return process.env.GOOGLE_CLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT_ID || undefined;
+}
+
+type GeminiOAuthCreds = {
+  access_token?: string;
+  refresh_token?: string;
+  expiry_date?: number;
+  token_type?: string;
+};
+
+function readGeminiOAuthCreds(): GeminiOAuthCreds | null {
+  try {
+    return JSON.parse(readFileSync(OAUTH_CREDS_PATH, "utf-8")) as GeminiOAuthCreds;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshGeminiAccessToken(refreshToken: string): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GEMINI_CLI_OAUTH_CLIENT_ID,
+      client_secret: GEMINI_CLI_OAUTH_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+    signal: AbortSignal.timeout(5000),
+  });
+  const data = (await res.json()) as { access_token?: string };
+  if (!res.ok || !data.access_token) throw new UsageFetchError(`gemini oauth token refresh returned ${res.status}`, { status: res.status });
+  return data.access_token;
+}
+
+async function readGeminiAccessToken(): Promise<string | null> {
+  const creds = readGeminiOAuthCreds();
+  if (!creds) return null;
+  if (creds.access_token && (creds.expiry_date ?? 0) > Date.now() + 60_000) return creds.access_token;
+  if (!creds.refresh_token) return null;
+  return refreshGeminiAccessToken(creds.refresh_token);
+}
+
+function normalizeGeminiModelId(name: string): string {
+  return name.startsWith("models/") ? name.slice("models/".length) : name;
+}
+
+type GeminiModel = {
+  name: string;
+  displayName?: string;
+  description?: string;
+  inputTokenLimit?: number;
+  outputTokenLimit?: number;
+  supportedGenerationMethods?: string[];
+};
+
+async function fetchGeminiModelPage(key: string, pageToken?: string): Promise<{ models?: GeminiModel[]; nextPageToken?: string }> {
+  const url = new URL(GEMINI_MODELS_API);
+  url.searchParams.set("key", key);
+  url.searchParams.set("pageSize", String(GEMINI_MODELS_PAGE_SIZE));
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`Gemini models API returned ${res.status}`);
+  return (await res.json()) as { models?: GeminiModel[]; nextPageToken?: string };
+}
+
+function normalizeGeminiModel(model: GeminiModel): RuntimeModel {
+  return {
+    id: normalizeGeminiModelId(model.name),
+    name: model.displayName,
+    description: model.description,
+    input_token_limit: model.inputTokenLimit,
+    output_token_limit: model.outputTokenLimit,
+    supports: {
+      generate_content: true,
+      stream_generate_content: model.supportedGenerationMethods?.includes("streamGenerateContent") ?? false,
+    },
+  };
+}
+
+type CodeAssistCredit = {
+  creditType?: string;
+  creditAmount?: string;
+};
+
+type CodeAssistQuotaBucket = {
+  modelId?: string;
+  remainingFraction?: number;
+  remainingAmount?: string;
+  resetTime?: string;
+};
+
+type CodeAssistLoadResponse = {
+  cloudaicompanionProject?: string | { id?: string };
+  currentTier?: { id?: string; name?: string };
+  paidTier?: { id?: string; name?: string; availableCredits?: CodeAssistCredit[] };
+};
+
+type CodeAssistQuotaResponse = {
+  buckets?: CodeAssistQuotaBucket[];
+};
+
+async function codeAssistPost<T>(accessToken: string, method: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${CODE_ASSIST_API}:${method}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new UsageFetchError(`gemini code assist ${method} returned ${res.status}`, { status: res.status });
+  return (await res.json()) as T;
+}
+
+function codeAssistProjectId(load: CodeAssistLoadResponse, envProjectId: string | undefined): string | null {
+  if (typeof load.cloudaicompanionProject === "string") return load.cloudaicompanionProject;
+  return load.cloudaicompanionProject?.id ?? envProjectId ?? null;
+}
+
+async function loadCodeAssist(accessToken: string, projectId: string | undefined): Promise<CodeAssistLoadResponse> {
+  return codeAssistPost<CodeAssistLoadResponse>(accessToken, "loadCodeAssist", {
+    cloudaicompanionProject: projectId,
+    metadata: {
+      ideType: "IDE_UNSPECIFIED",
+      platform: "PLATFORM_UNSPECIFIED",
+      pluginType: "GEMINI",
+      duetProject: projectId,
+    },
+  });
+}
+
+async function retrieveCodeAssistQuota(): Promise<{ load: CodeAssistLoadResponse; quota: CodeAssistQuotaResponse }> {
+  const accessToken = await readGeminiAccessToken();
+  if (!accessToken) throw new UsageFetchError("Gemini CLI OAuth credentials not found", { status: 401 });
+  const envProjectId = readGoogleCloudProject();
+  const load = await loadCodeAssist(accessToken, envProjectId);
+  const projectId = codeAssistProjectId(load, envProjectId);
+  if (!projectId) throw new UsageFetchError("Gemini Code Assist did not return a project id");
+  const quota = await codeAssistPost<CodeAssistQuotaResponse>(accessToken, "retrieveUserQuota", { project: projectId });
+  return { load, quota };
+}
+
+async function listPublicGeminiModels(key: string): Promise<RuntimeModel[]> {
+  const models: GeminiModel[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = await fetchGeminiModelPage(key, pageToken);
+    models.push(...(page.models ?? []));
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+
+  return models.filter((model) => model.supportedGenerationMethods?.includes("generateContent")).map(normalizeGeminiModel);
+}
+
+function modelsFromCodeAssistQuota(quota: CodeAssistQuotaResponse): RuntimeModel[] {
+  return (quota.buckets ?? [])
+    .filter((bucket): bucket is CodeAssistQuotaBucket & { modelId: string } => Boolean(bucket.modelId))
+    .map((bucket) => ({
+      id: bucket.modelId,
+      name: bucket.modelId,
+    }));
+}
+
+function usageFromCodeAssist(load: CodeAssistLoadResponse, quota: CodeAssistQuotaResponse): UsageInfo {
+  const tier = load.paidTier?.name ?? load.currentTier?.name ?? "Code Assist";
+  const windows: UsageWindow[] = (quota.buckets ?? [])
+    .filter(
+      (bucket): bucket is CodeAssistQuotaBucket & { modelId: string; remainingFraction: number; resetTime: string } =>
+        Boolean(bucket.modelId) && bucket.remainingFraction !== undefined && Boolean(bucket.resetTime),
+    )
+    .map((bucket) => ({
+      runtime: "gemini",
+      label: `${tier}: ${bucket.modelId}`,
+      utilization: Number(((1 - bucket.remainingFraction) * 100).toFixed(2)),
+      resets_at: bucket.resetTime,
+    }));
+  return { windows, updated_at: new Date().toISOString() };
 }
 
 function buildPrompt(opts: ExecuteOpts): string {
@@ -292,9 +495,29 @@ export const geminiProvider: AgentProvider = {
   label: "Gemini CLI",
 
   async checkAvailability() {
-    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || existsSync(OAUTH_CREDS_PATH)
-      ? { status: "ready" }
-      : { status: "unauthorized", detail: "Gemini CLI is not authenticated" };
+    const hasApiKey = Boolean(readGeminiApiKey());
+    if (hasApiKey) return { status: "ready" };
+    if (!existsSync(OAUTH_CREDS_PATH)) {
+      return { status: "unauthorized", detail: "Gemini CLI is not authenticated" };
+    }
+    try {
+      return availabilityFromUsage(await this.fetchUsage!());
+    } catch (err) {
+      return availabilityFromUsageError(err, "Gemini");
+    }
+  },
+
+  async listModels(): Promise<RuntimeModel[]> {
+    const key = readGeminiApiKey();
+    if (key) return listPublicGeminiModels(key);
+    const { quota } = await retrieveCodeAssistQuota();
+    return modelsFromCodeAssistQuota(quota);
+  },
+
+  async fetchUsage(): Promise<UsageInfo | null> {
+    if (!existsSync(OAUTH_CREDS_PATH)) return null;
+    const { load, quota } = await retrieveCodeAssistQuota();
+    return usageFromCodeAssist(load, quota);
   },
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {

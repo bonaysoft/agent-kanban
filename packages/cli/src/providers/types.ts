@@ -8,6 +8,18 @@ export interface RuntimeAvailability {
   reset_at?: string;
 }
 
+export interface RuntimeModel {
+  id: string;
+  name?: string;
+  description?: string;
+  context_window?: number;
+  input_token_limit?: number;
+  output_token_limit?: number;
+  supports?: Record<string, boolean>;
+  supported_reasoning_efforts?: string[];
+  default_reasoning_effort?: string;
+}
+
 /** Normalized history entry returned by provider history readers. */
 export interface HistoryEvent {
   id: string;
@@ -49,6 +61,7 @@ export interface AgentProvider {
   readonly name: AgentRuntime;
   readonly label: string;
   checkAvailability?(): Promise<RuntimeAvailability>;
+  listModels?(): Promise<RuntimeModel[]>;
   execute(opts: ExecuteOpts): Promise<AgentHandle>;
   /**
    * Retrieve session history from this provider's local storage.

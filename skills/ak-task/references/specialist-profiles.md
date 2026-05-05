@@ -12,6 +12,8 @@ ak get agent --role acceptance-specialist --available -o json
 
 If multiple runtimes are available and the user has not expressed a preference, ask which runtime to use.
 
+Before setting a concrete `model`, run `ak get model --runtime <runtime> -o json` and use a provider-reported model ID. If model listing is unsupported for the chosen runtime, use `default` with a reason instead of inventing a model ID.
+
 ## Test Specialist
 
 ```yaml
@@ -22,7 +24,7 @@ metadata:
     agent-kanban.dev/nickname: "Maya Lin"
 spec:
   runtime: codex
-  model: gpt-5.1-codex
+  model: <provider-reported-model-id>
   role: test-specialist
   bio: Test specialist focused on focused coverage, relevant checks, and test failure diagnosis.
   soul: |
@@ -45,7 +47,7 @@ metadata:
     agent-kanban.dev/nickname: "Noah Kim"
 spec:
   runtime: codex
-  model: gpt-5.1-codex
+  model: <provider-reported-model-id>
   role: review-specialist
   bio: Review specialist focused on correctness, maintainability, security, performance, and architecture.
   soul: |
@@ -68,7 +70,7 @@ metadata:
     agent-kanban.dev/nickname: "Iris Zhao"
 spec:
   runtime: codex
-  model: gpt-5.1-codex
+  model: <provider-reported-model-id>
   role: acceptance-specialist
   bio: Acceptance specialist focused on product-level validation after implementation review, tests, and CI pass.
   soul: |

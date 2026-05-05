@@ -31,6 +31,14 @@ ak identity create --username <username> [--name <name>]
 
 The leader chooses its own username and optional full name.
 
+## Unattended Execution Contract
+
+Assume this workflow runs in an unattended environment: human not in the loop.
+
+Ask the user only during the initial clarification and task preview phase, before task creation is confirmed. Once the user confirms the task, do not stop to ask for permission, confirmation, or next steps unless the user interrupts you. Continue through the full work cycle: create, assign, monitor, review, reject or complete, and report the outcome.
+
+If execution hits a blocker after confirmation, use the available tools and repository context to resolve it. If the blocker cannot be resolved without external authorization or production mutation, fail fast with the exact blocker and the next required action instead of waiting in the middle of the workflow.
+
 ## Input
 
 Parse the user's input:
@@ -42,11 +50,12 @@ Parse the user's input:
 
 ### Step 1: Context
 
-Before choosing or creating workers, read `references/runtime-delegation.md`.
+Before choosing or creating workers, read `references/runtime-delegation.md`. Before creating any worker, also read `references/agent-creation.md` and follow its Worker Profile Preview.
 
 ```bash
 ak get board                   # pick the right board
 ak get agent -o json           # available agents, load, runtime_available
+ak get model --runtime <name>  # provider-reported models for a runtime
 ak get repo                    # registered repos
 ```
 
@@ -69,6 +78,17 @@ Use `AskUserQuestion` to interactively resolve any uncertainties before creating
 - **Labels/agent/runtime/repo ambiguous** — present choices when there are multiple candidates
 - **Dependencies uncertain** — present options about whether to depend on or parallelize with related tasks
 
+#### Hard Stop: Agent Runtime Selection
+
+Before creating workers or tasks, determine the worker runtime.
+
+- If the user specified a runtime, assign only to a worker whose `runtime` matches it and whose `runtime_available` is `true`.
+- If the user specified a runtime but that runtime is not schedulable, stop before worker or task creation and ask the user to choose an available runtime.
+- If no matching available worker exists for the specified schedulable runtime, create a worker on that runtime before task creation using `references/agent-creation.md`.
+- If the user did not specify runtime and multiple available runtimes are reasonable for the task, ask the user to choose the runtime before creating workers or tasks.
+- Never silently default to the leader's own runtime.
+- Before choosing a non-default model for a new worker, run `ak get model --runtime <runtime> -o json` and use a provider-reported model ID.
+
 Keep iterating — each answer may reveal new questions. Only proceed to create when all points are resolved and the user has confirmed the final task spec.
 
 If nothing is ambiguous (simple, clear-cut request), skip straight to the task preview below.
@@ -84,6 +104,7 @@ Title: <concise action phrase>
 Board: <board-name>
 Repo: <repo-name>
 Agent: <agent-name>
+Runtime: <agent-runtime>
 Labels: <labels>
 Depends on: <task-ids or "none">
 
@@ -110,7 +131,17 @@ Examples by task type:
 Create this task? (y/n)
 ```
 
-Everything from `## Goal` through `## Checks` is the exact text that will be passed to `--description`. The header fields above it (Title, Board, Agent, etc.) are metadata for display only — do not include them in `--description`. The user must see the full description before it's sent to the agent.
+Everything from `## Goal` through `## Checks` is the exact text that will be passed to `--description`. The header fields above it (Title, Board, Agent, Runtime, etc.) are metadata for display only — do not include them in `--description`. The user must see the full description before it's sent to the agent.
+
+Before running `ak create task`, verify:
+
+- Selected agent is a worker.
+- Selected agent has `runtime_available: true`.
+- If the user specified runtime, selected agent runtime matches it.
+- If the user specified runtime, that runtime is schedulable.
+- If runtime was ambiguous, the user chose the runtime.
+- Task Preview includes Runtime and Agent.
+- `--assign-to` uses the selected agent ID.
 
 **On confirmation**, create the task:
 
@@ -124,7 +155,7 @@ ak create task \
   --labels "<comma-separated>"
 ```
 
-**`--assign-to` is mandatory.** Always include it on create. Only assign to an agent whose `runtime_available` is `true`. If the right role only exists on an unavailable runtime, create a new worker with the same role on an available runtime and assign to that worker.
+**`--assign-to` is mandatory.** Always include it on create. Only assign to an agent whose `runtime_available` is `true`. If the right role only exists on an unavailable runtime, create a new worker with the required capability profile on an available runtime and assign to that worker. Use `references/agent-creation.md`; do not create workers from role/runtime alone.
 
 **Dependencies**: If this task touches files that overlap with other in-flight tasks, add `--depends-on <task-id>`. Create all related tasks upfront with DAG dependencies — don't wait for one to finish before creating the next.
 
@@ -161,7 +192,7 @@ esac
 Run `ak wait task --help` for the full flag list.
 
 **On timeout (124) or if you suspect the agent is stuck, investigate immediately — don't just re-wait:**
-1. Check daemon logs: `ak logs --no-follow --lines 20`
+1. Check daemon logs: `ak logs --lines 20`
 2. Check if agent process is alive: `ps aux | grep "claude.*session"`
 3. Check agent session log for what it's doing or where it's stuck
 4. Check child processes: the agent may be stuck on a hook, install, or network call
@@ -206,6 +237,16 @@ Re-read the target repo's CONTRIBUTING.md before testing — don't rely on memor
 - Check for regressions in related features
 - Run any project-specific verification steps defined in CONTRIBUTING.md
 - If an acceptance specialist is attached to the reviewing agent, use it for product-level E2E or manual acceptance checks, then independently judge whether its findings are sufficient.
+
+##### Non-Production Verification Blockers
+
+Preview, staging, local dev, and other non-production environments are agent-operable verification environments.
+
+If functional acceptance is blocked in a non-production environment by missing credentials, stale migrations, missing feature/license data, bad seed data, authorization setup, or corrupted test state, recover the environment and continue verification. Allowed recovery actions include resetting test passwords, applying migrations, creating test users, seeding test data, enabling test-only feature/license bindings, recreating broken non-production state, and rerunning deployment or CI checks.
+
+No non-production blocker permits skipping the task's functional verification or regression checks. Exercise the implemented feature end-to-end before merge, not only an auth gate, paywall, error state, or empty shell around it.
+
+Production is the exception: do not mutate production credentials, customer data, license state, or other production resources unless the user explicitly authorizes that specific action.
 
 **Fails → reject with specific repro steps.**
 
