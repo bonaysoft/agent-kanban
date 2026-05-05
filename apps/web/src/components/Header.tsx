@@ -167,7 +167,7 @@ export function Header() {
                 </>
               )}
 
-              <DropdownMenuItem onClick={() => navigate("/settings")}>
+              <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
                 <svg
                   width="14"
                   height="14"

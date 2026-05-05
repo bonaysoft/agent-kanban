@@ -1,85 +1,230 @@
-import { useEffect, useState } from "react";
+import { CheckCircle2, CircleAlert } from "lucide-react";
+import type React from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { Header } from "../components/Header";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { authClient, useSession } from "../lib/auth-client";
+import { cn } from "../lib/utils";
 
-import { authClient } from "../lib/auth-client";
-import { getTheme, setTheme, type Theme } from "../lib/theme";
+type SettingsUser = {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  emailVerified?: boolean;
+};
 
-function GitHubSection() {
-  const [accounts, setAccounts] = useState<Array<{ providerId: string }>>([]);
+const settingsLinks = [
+  { to: "/settings/profile", label: "Profile" },
+  { to: "/settings/account", label: "Account" },
+];
+
+function ProfileSettingsPage() {
+  const { data: session, refetch } = useSession();
+  const user = session?.user as SettingsUser | undefined;
+  const [name, setName] = useState(user?.name ?? "");
+  const [image, setImage] = useState(user?.image ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    authClient.listAccounts().then((res: any) => {
-      if (res.data) setAccounts(res.data);
-    });
-  }, []);
+    setName(user?.name ?? "");
+    setImage(user?.image ?? "");
+  }, [user?.name, user?.image]);
 
-  const isConnected = accounts.some((a) => a.providerId === "github");
+  const trimmedName = name.trim();
+  const trimmedImage = image.trim();
+  const imageError = useMemo(() => imageValidationError(trimmedImage), [trimmedImage]);
+  const isDirty = trimmedName !== (user?.name ?? "") || trimmedImage !== (user?.image ?? "");
+  const canSave = isDirty && trimmedName.length > 0 && !imageError && !isSaving;
+  const fallback = profileInitial(trimmedName || user?.email || "?");
 
-  async function handleConnect() {
-    await authClient.signIn.social({ provider: "github", callbackURL: "/settings" });
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSave) return;
+
+    setError(null);
+    setIsSaving(true);
+    const { error } = await authClient.updateUser({
+      name: trimmedName,
+      image: trimmedImage || null,
+    } as any);
+    setIsSaving(false);
+
+    if (error) {
+      setError(error.message || "Failed to save profile");
+      toast.error("Failed to save profile");
+      return;
+    }
+
+    await refetch();
+    toast.success("Profile saved");
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">GitHub</h2>
-      <div className="border border-border rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-content-primary font-medium">GitHub Account</p>
-            <p className="text-xs text-content-tertiary mt-0.5">
-              {isConnected ? "Connected — agent GPG keys and emails sync automatically." : "Not connected"}
-            </p>
-          </div>
-          {!isConnected && (
-            <button onClick={handleConnect} className="bg-accent text-[#09090B] font-medium text-xs px-3 py-1.5 rounded-md hover:opacity-90">
-              Connect GitHub
-            </button>
-          )}
-          {isConnected && <span className="text-xs text-green-500 font-medium">Connected</span>}
-        </div>
+    <main className="min-w-0 flex-1 space-y-6">
+      <div className="border-b border-border pb-4">
+        <h1 className="text-xl font-semibold tracking-tight text-content-primary">Profile</h1>
+        <p className="mt-1 text-sm text-content-secondary">Manage the identity shown across Agent Kanban.</p>
       </div>
-    </section>
-  );
-}
 
-export function AccountSettingsPage() {
-  const [currentTheme, setCurrentTheme] = useState<Theme>(getTheme());
+      <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
+        <section className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[96px_1fr]">
+            <div>
+              <Label className="mb-2 text-xs uppercase tracking-[0.06em] text-content-tertiary">Preview</Label>
+              <Avatar size="lg" className="size-14">
+                {trimmedImage && !imageError && <AvatarImage src={trimmedImage} alt="" />}
+                <AvatarFallback className="text-base font-semibold">{fallback}</AvatarFallback>
+              </Avatar>
+            </div>
 
-  function handleTheme(theme: Theme) {
-    setTheme(theme);
-    setCurrentTheme(theme);
-  }
+            <div className="space-y-4">
+              <Field label="Display name" htmlFor="profile-name">
+                <Input
+                  id="profile-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  aria-invalid={trimmedName.length === 0}
+                  autoComplete="name"
+                />
+                {trimmedName.length === 0 && <p className="text-xs text-error">Display name is required.</p>}
+              </Field>
 
-  return (
-    <div className="min-h-screen bg-surface-primary">
-      <Header />
-      <div className="max-w-2xl mx-auto p-8 space-y-8">
-        <h1 className="text-xl font-bold text-content-primary">Settings</h1>
-
-        {/* Theme */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold text-content-tertiary uppercase tracking-wide">Theme</h2>
-          <div className="flex gap-2">
-            {(["light", "dark", "system"] as Theme[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => handleTheme(t)}
-                className={`text-sm px-4 py-2 rounded-lg border transition-colors capitalize ${
-                  currentTheme === t
-                    ? "border-accent text-accent bg-accent-soft"
-                    : "border-border text-content-secondary hover:border-content-tertiary"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
+              <Field label="Image URL" htmlFor="profile-image">
+                <Input
+                  id="profile-image"
+                  value={image}
+                  onChange={(event) => setImage(event.target.value)}
+                  aria-invalid={!!imageError}
+                  autoComplete="url"
+                  placeholder="https://example.com/avatar.png"
+                />
+                {imageError && <p className="text-xs text-error">{imageError}</p>}
+              </Field>
+            </div>
           </div>
         </section>
 
-        {/* GitHub */}
-        <GitHubSection />
+        <section className="grid gap-4 border-t border-border pt-5 md:grid-cols-2">
+          <Field label="Email" htmlFor="profile-email">
+            <Input id="profile-email" value={user?.email ?? ""} readOnly className="text-content-secondary" />
+          </Field>
 
-        <p className="text-xs text-content-tertiary pt-4">Version {__APP_VERSION__}</p>
+          <div>
+            <Label className="mb-2 text-xs uppercase tracking-[0.06em] text-content-tertiary">Email verification</Label>
+            <EmailVerificationBadge verified={user?.emailVerified === true} />
+          </div>
+        </section>
+
+        {error && (
+          <p role="alert" className="text-sm text-error">
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3 border-t border-border pt-5">
+          <Button type="submit" disabled={!canSave}>
+            {isSaving ? "Saving..." : "Save profile"}
+          </Button>
+          {!isDirty && <p className="text-xs text-content-tertiary">No unsaved changes</p>}
+        </div>
+      </form>
+    </main>
+  );
+}
+
+function AccountSettingsPlaceholder() {
+  return (
+    <main className="min-w-0 flex-1 space-y-6">
+      <div className="border-b border-border pb-4">
+        <h1 className="text-xl font-semibold tracking-tight text-content-primary">Account</h1>
+        <p className="mt-1 text-sm text-content-secondary">Account settings will be added in the next task.</p>
+      </div>
+    </main>
+  );
+}
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={htmlFor} className="text-xs uppercase tracking-[0.06em] text-content-tertiary">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function EmailVerificationBadge({ verified }: { verified: boolean }) {
+  if (verified) {
+    return (
+      <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
+        <CheckCircle2 className="size-3" />
+        Verified
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
+      <CircleAlert className="size-3" />
+      Unverified
+    </Badge>
+  );
+}
+
+function imageValidationError(value: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "Image URL must use http or https.";
+    return null;
+  } catch {
+    return "Image URL must be a valid URL.";
+  }
+}
+
+function profileInitial(value: string) {
+  return value.trim().charAt(0).toUpperCase() || "?";
+}
+
+export function AccountSettingsPage() {
+  return (
+    <div className="min-h-screen bg-surface-primary">
+      <Header />
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8 md:flex-row md:px-8">
+        <aside className="w-full shrink-0 md:w-48">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-content-tertiary">Settings</h2>
+          <nav aria-label="Settings" className="space-y-1">
+            {settingsLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  cn(
+                    "block rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isActive ? "bg-accent-soft text-accent" : "text-content-secondary hover:bg-surface-secondary hover:text-content-primary",
+                  )
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
+        </aside>
+
+        <Routes>
+          <Route index element={<Navigate to="profile" replace />} />
+          <Route path="profile" element={<ProfileSettingsPage />} />
+          <Route path="account" element={<AccountSettingsPlaceholder />} />
+          <Route path="*" element={<Navigate to="profile" replace />} />
+        </Routes>
       </div>
     </div>
   );
