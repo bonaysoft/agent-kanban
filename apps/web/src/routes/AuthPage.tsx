@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authClient, setAuthToken, signIn, signUp } from "../lib/auth-client";
+import { authClient, sendVerificationEmail, setAuthToken, signIn, signUp } from "../lib/auth-client";
+
+type AuthMode = "signin" | "signup" | "verify";
 
 function GitHubIcon() {
   return (
@@ -11,17 +13,37 @@ function GitHubIcon() {
 }
 
 export function AuthPage() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
   const navigate = useNavigate();
+
+  async function handleResendVerification() {
+    setError(null);
+    setNotice(null);
+    setResending(true);
+
+    const { error } = await sendVerificationEmail({ email: verificationEmail, callbackURL: "/" });
+    setResending(false);
+
+    if (error) {
+      setError(error.message || "Could not resend verification email");
+      return;
+    }
+
+    setNotice("Verification email sent.");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
 
     const onSuccess = (ctx: any) => {
@@ -30,23 +52,38 @@ export function AuthPage() {
     };
 
     if (mode === "signin") {
-      const { error } = await signIn.email({ email, password }, { onSuccess });
+      const { error } = await signIn.email({ email, password, callbackURL: "/" }, { onSuccess });
       if (error) {
+        if (isEmailNotVerified(error)) {
+          showVerification(email, "We sent another verification link to your email.");
+          return;
+        }
         setError(error.message || "Sign in failed");
         setLoading(false);
         return;
       }
     } else {
-      const { error } = await signUp.email({ email, password, name }, { onSuccess });
+      const { data, error } = await signUp.email({ email, password, name, callbackURL: "/" }, { onSuccess });
       if (error) {
         setError(error.message || "Sign up failed");
         setLoading(false);
+        return;
+      }
+      if (!data?.token) {
+        showVerification(email, "Check your email to verify your account before signing in.");
         return;
       }
     }
 
     setLoading(false);
     navigate("/");
+  }
+
+  function showVerification(targetEmail: string, message: string) {
+    setVerificationEmail(targetEmail);
+    setMode("verify");
+    setNotice(message);
+    setLoading(false);
   }
 
   return (
@@ -56,79 +93,176 @@ export function AuthPage() {
           <h1 className="text-xl font-bold tracking-tight text-content-primary">
             Agent <span className="text-accent">Kanban</span>
           </h1>
-          <p className="mt-2 text-sm text-content-secondary">{mode === "signin" ? "Sign in to your account" : "Create a new account"}</p>
+          <p className="mt-2 text-sm text-content-secondary">
+            {mode === "signin" && "Sign in to your account"}
+            {mode === "signup" && "Create a new account"}
+            {mode === "verify" && "Verify your email"}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "signup" && (
-            <input
-              type="text"
-              placeholder="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
-          />
-
-          {error && <p className="text-sm text-error">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-accent text-surface-primary font-semibold text-sm py-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {loading ? "..." : mode === "signin" ? "Sign In" : "Sign Up"}
-          </button>
-        </form>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="bg-surface-primary px-2 text-content-tertiary">or</span>
-          </div>
-        </div>
-
-        <button
-          onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/auth/callback" })}
-          className="w-full flex items-center justify-center gap-2 bg-surface-secondary border border-border text-content-primary font-semibold text-sm py-2 rounded-lg hover:bg-surface-tertiary transition-colors"
-        >
-          <GitHubIcon />
-          Continue with GitHub
-        </button>
-
-        <p className="text-center text-xs text-content-tertiary">
-          {mode === "signin" ? "No account? " : "Already have an account? "}
-          <button
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
+        {mode === "verify" ? (
+          <VerifyEmailView
+            email={verificationEmail}
+            error={error}
+            notice={notice}
+            resending={resending}
+            onResend={handleResendVerification}
+            onBack={() => {
+              setMode("signin");
               setError(null);
+              setNotice(null);
             }}
-            className="text-accent hover:underline"
-          >
-            {mode === "signin" ? "Sign up" : "Sign in"}
-          </button>
-        </p>
+          />
+        ) : (
+          <>
+            <AuthForm
+              mode={mode}
+              email={email}
+              password={password}
+              name={name}
+              error={error}
+              notice={notice}
+              loading={loading}
+              onEmailChange={setEmail}
+              onPasswordChange={setPassword}
+              onNameChange={setName}
+              onSubmit={handleSubmit}
+            />
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-surface-primary px-2 text-content-tertiary">or</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/auth/callback" })}
+              className="w-full flex items-center justify-center gap-2 bg-surface-secondary border border-border text-content-primary font-semibold text-sm py-2 rounded-lg hover:bg-surface-tertiary transition-colors"
+            >
+              <GitHubIcon />
+              Continue with GitHub
+            </button>
+
+            <p className="text-center text-xs text-content-tertiary">
+              {mode === "signin" ? "No account? " : "Already have an account? "}
+              <button
+                onClick={() => {
+                  setMode(mode === "signin" ? "signup" : "signin");
+                  setError(null);
+                  setNotice(null);
+                }}
+                className="text-accent hover:underline"
+              >
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+function AuthForm(props: {
+  mode: Exclude<AuthMode, "verify">;
+  email: string;
+  password: string;
+  name: string;
+  error: string | null;
+  notice: string | null;
+  loading: boolean;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <form onSubmit={props.onSubmit} className="space-y-4">
+      {props.mode === "signup" && (
+        <input
+          type="text"
+          placeholder="Name"
+          value={props.name}
+          onChange={(e) => props.onNameChange(e.target.value)}
+          required
+          className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
+        />
+      )}
+      <input
+        type="email"
+        placeholder="Email"
+        value={props.email}
+        onChange={(e) => props.onEmailChange(e.target.value)}
+        required
+        className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={props.password}
+        onChange={(e) => props.onPasswordChange(e.target.value)}
+        required
+        minLength={8}
+        className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm text-content-primary outline-none focus:border-accent transition-colors"
+      />
+
+      {props.error && <p className="text-sm text-error">{props.error}</p>}
+      {props.notice && <p className="text-sm text-content-secondary">{props.notice}</p>}
+
+      <button
+        type="submit"
+        disabled={props.loading}
+        className="w-full bg-accent text-surface-primary font-semibold text-sm py-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+      >
+        {props.loading ? "..." : props.mode === "signin" ? "Sign In" : "Sign Up"}
+      </button>
+    </form>
+  );
+}
+
+function VerifyEmailView(props: {
+  email: string;
+  error: string | null;
+  notice: string | null;
+  resending: boolean;
+  onResend: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-surface-secondary p-4 space-y-3">
+        <p className="text-sm text-content-secondary">
+          We sent a verification link to <span className="font-mono text-content-primary">{props.email}</span>.
+        </p>
+        <p className="text-xs text-content-tertiary">Open the link, then return here and sign in.</p>
+      </div>
+
+      {props.error && <p className="text-sm text-error">{props.error}</p>}
+      {props.notice && <p className="text-sm text-content-secondary">{props.notice}</p>}
+
+      <button
+        type="button"
+        disabled={props.resending}
+        onClick={props.onResend}
+        className="w-full bg-accent text-surface-primary font-semibold text-sm py-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+      >
+        {props.resending ? "..." : "Resend verification email"}
+      </button>
+
+      <button
+        type="button"
+        onClick={props.onBack}
+        className="w-full bg-surface-secondary border border-border text-content-primary font-semibold text-sm py-2 rounded-lg hover:bg-surface-tertiary transition-colors"
+      >
+        Back to sign in
+      </button>
+    </div>
+  );
+}
+
+function isEmailNotVerified(error: { code?: string; message?: string; status?: number; statusCode?: number }): boolean {
+  return error.code === "EMAIL_NOT_VERIFIED" || error.message === "Email not verified" || error.status === 403 || error.statusCode === 403;
 }

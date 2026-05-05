@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth";
 import { admin, bearer } from "better-auth/plugins";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
+import { sendVerificationEmail } from "./emailService";
 import type { Env } from "./types";
 
 export function createAuth(env: Env) {
@@ -14,13 +15,30 @@ export function createAuth(env: Env) {
     },
     basePath: "/api/auth",
     baseURL: {
-      allowedHosts: env.ALLOWED_HOSTS.split(","),
+      allowedHosts: authAllowedHosts(env),
       fallback: `https://${env.ALLOWED_HOSTS.split(",")[0]}`,
       protocol: "auto",
     },
     secret: env.AUTH_SECRET,
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: true,
+      customSyntheticUser: ({ coreFields, additionalFields, id }) => ({
+        ...coreFields,
+        role: "user",
+        banned: false,
+        banReason: null,
+        banExpires: null,
+        ...additionalFields,
+        id,
+      }),
+    },
+    emailVerification: {
+      autoSignInAfterVerification: true,
+      sendOnSignIn: true,
+      sendVerificationEmail: async ({ user, url }, request) => {
+        await sendVerificationEmail(env, user.email, verificationPageUrl(env, url, request));
+      },
     },
     socialProviders: {
       github: {
@@ -68,3 +86,22 @@ export function createAuth(env: Env) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+function authAllowedHosts(env: Env): string[] {
+  const hosts = env.ALLOWED_HOSTS.split(",");
+  if (!hosts.some((host) => host.startsWith("localhost") || host.startsWith("127.0.0.1"))) return hosts;
+  return [...hosts, "localhost:*", "127.0.0.1:*"];
+}
+
+function verificationUrlForRequest(env: Env, url: string, request?: Request): string {
+  if (!request) return new URL(url, `https://${env.ALLOWED_HOSTS.split(",")[0]}`).toString();
+  const origin = new URL(request.url).origin;
+  return new URL(url, origin).toString();
+}
+
+function verificationPageUrl(env: Env, url: string, request?: Request): string {
+  const resolved = new URL(verificationUrlForRequest(env, url, request));
+  const page = new URL("/auth/verify", resolved.origin);
+  page.searchParams.set("token", resolved.searchParams.get("token") || "");
+  return page.toString();
+}

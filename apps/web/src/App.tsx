@@ -7,6 +7,7 @@ import { AgentNewPage } from "./routes/AgentNewPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
 import { AuthPage } from "./routes/AuthPage";
+import { AuthVerifyPage } from "./routes/AuthVerifyPage";
 import { AdminDashboardPage } from "./routes/admin/AdminDashboardPage";
 import { AdminLayout } from "./routes/admin/AdminLayout";
 import { AdminMachinesPage } from "./routes/admin/AdminMachinesPage";
@@ -55,6 +56,7 @@ export function App() {
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/verify" element={<AuthVerifyPage />} />
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/mock/chat" element={<MockChatPage />} />
         <Route path="/share/:slug" element={<SharePage />} />

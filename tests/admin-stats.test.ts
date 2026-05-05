@@ -3,7 +3,7 @@
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getSystemStats } from "../apps/web/server/statsRepo";
-import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestAgent, createTestEnv, seedUser, setupMiniflare, signUpVerifiedUser } from "./helpers/db";
 
 const env = createTestEnv();
 let mf: Miniflare;
@@ -178,18 +178,20 @@ describe("GET /api/admin/stats", () => {
     const auth = createAuth(env);
 
     // Create admin user via signup then elevate role
-    const adminResult = await auth.api.signUpEmail({
-      body: { name: "Admin Stats User", email: "admin-stats@test.com", password: "admin-password-123" },
-    });
-    if (!adminResult.token) throw new Error("admin signUpEmail did not return a token");
-    await env.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?").bind("admin-stats@test.com").run();
+    const adminResult = await signUpVerifiedUser(
+      env.DB,
+      auth,
+      { name: "Admin Stats User", email: "admin-stats@test.com", password: "admin-password-123" },
+      "admin",
+    );
     adminToken = adminResult.token;
 
     // Create regular (non-admin) user via signup
-    const regularResult = await auth.api.signUpEmail({
-      body: { name: "Regular Stats User", email: "regular-stats@test.com", password: "regular-password-123" },
+    const regularResult = await signUpVerifiedUser(env.DB, auth, {
+      name: "Regular Stats User",
+      email: "regular-stats@test.com",
+      password: "regular-password-123",
     });
-    if (!regularResult.token) throw new Error("regular signUpEmail did not return a token");
     regularToken = regularResult.token;
 
     // Create a machine API key for testing machine identity blocking

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestAgent, createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestAgent, createTestEnv, seedUser, setupMiniflare, signUpVerifiedUser } from "./helpers/db";
 
 const BETTER_AUTH_URL = "http://localhost:8788";
 const env = createTestEnv();
@@ -51,10 +51,11 @@ describe("routes", () => {
   async function createUserSessionToken(): Promise<{ token: string; userId: string }> {
     const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(env);
-    const result = await auth.api.signUpEmail({
-      body: { name: "Routes Test User", email: "routes-session@test.com", password: "test-password-123" },
+    const result = await signUpVerifiedUser(env.DB, auth, {
+      name: "Routes Test User",
+      email: "routes-session@test.com",
+      password: "test-password-123",
     });
-    if (!result.token) throw new Error("signUpEmail did not return a session token");
     return { token: result.token, userId: result.user.id };
   }
 

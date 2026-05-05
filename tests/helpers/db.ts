@@ -9,6 +9,7 @@ export function createTestEnv() {
   return {
     DB: null as any as D1Database,
     AE: { writeDataPoint: () => {} } as unknown as AnalyticsEngineDataset,
+    EMAIL: { send: async () => ({ messageId: "test-message" }) } as SendEmail,
     AUTH_SECRET: "test-secret-32-chars-minimum-ok!!",
     ALLOWED_HOSTS: "localhost:8788",
     GITHUB_CLIENT_ID: "x",
@@ -57,6 +58,19 @@ export async function seedUser(db: D1Database, id: string, email: string) {
     .prepare("INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)")
     .bind(id, "Test User", email, now, now)
     .run();
+}
+
+export async function signUpVerifiedUser(
+  db: D1Database,
+  auth: any,
+  body: { name: string; email: string; password: string },
+  role = "user",
+): Promise<{ token: string; user: { id: string } }> {
+  await auth.api.signUpEmail({ body });
+  await db.prepare("UPDATE user SET emailVerified = 1, role = ? WHERE email = ?").bind(role, body.email.toLowerCase()).run();
+  const result = await auth.api.signInEmail({ body: { email: body.email, password: body.password } });
+  if (!result.token) throw new Error("verified signInEmail did not return a token");
+  return result;
 }
 
 export async function setupMiniflare() {

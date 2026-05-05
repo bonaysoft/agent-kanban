@@ -43,6 +43,11 @@ new_sqlite_classes = ["TunnelRelay"]
 binding = "AE"
 dataset = "agent_kanban_metrics"
 
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["noreply@agent-kanban.dev"]
+remote = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "agent-kanban-db"
@@ -73,6 +78,11 @@ crons = ["* * * * *"]
 [[env.staging.analytics_engine_datasets]]
 binding = "AE"
 dataset = "agent_kanban_metrics_staging"
+
+[[env.staging.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["noreply@agent-kanban.dev"]
+remote = true
 
 [[env.staging.d1_databases]]
 binding = "DB"

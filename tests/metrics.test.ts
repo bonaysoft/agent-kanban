@@ -2,7 +2,7 @@
 
 import { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createTestEnv, seedUser, setupMiniflare } from "./helpers/db";
+import { createTestEnv, seedUser, setupMiniflare, signUpVerifiedUser } from "./helpers/db";
 
 // ─── metricsMiddleware unit tests ───
 
@@ -464,17 +464,19 @@ describe("GET /api/admin/machines", () => {
     const { createAuth } = await import("../apps/web/server/betterAuth");
     const auth = createAuth(routeEnv);
 
-    const adminResult = await auth.api.signUpEmail({
-      body: { name: "Admin Machines User", email: "admin-machines@test.com", password: "admin-password-123" },
-    });
-    if (!adminResult.token) throw new Error("admin signUpEmail did not return a token");
-    await routeEnv.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?").bind("admin-machines@test.com").run();
+    const adminResult = await signUpVerifiedUser(
+      routeEnv.DB,
+      auth,
+      { name: "Admin Machines User", email: "admin-machines@test.com", password: "admin-password-123" },
+      "admin",
+    );
     adminToken = adminResult.token;
 
-    const regularResult = await auth.api.signUpEmail({
-      body: { name: "Regular Machines User", email: "regular-machines@test.com", password: "regular-password-123" },
+    const regularResult = await signUpVerifiedUser(routeEnv.DB, auth, {
+      name: "Regular Machines User",
+      email: "regular-machines@test.com",
+      password: "regular-password-123",
     });
-    if (!regularResult.token) throw new Error("regular signUpEmail did not return a token");
     regularToken = regularResult.token;
 
     // stub fetch so getMachineMetrics does not make real network calls
