@@ -1,31 +1,11 @@
-import { RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
-import dayjs from "dayjs";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
-import { MachineRuntimeList } from "../components/MachineRuntimes";
+import { MachineRuntimeAvailability } from "../components/MachineRuntimes";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { useDeleteMachine, useMachine } from "../hooks/useMachines";
-
-function usageBarColor(pct: number): string {
-  if (pct >= 75) return "bg-error";
-  if (pct >= 40) return "bg-warning";
-  return "bg-success";
-}
-
-function usagePercent(window: UsageWindow): number {
-  return Math.round(window.utilization < 1 ? window.utilization * 100 : window.utilization);
-}
-
-function formatResetTime(resetsAt: string): string {
-  return dayjs(resetsAt).format("MMM D, YYYY h:mm A");
-}
-
-function isPendingReset(window: UsageWindow): boolean {
-  return new Date(window.resets_at).getTime() > Date.now();
-}
 
 const statusDotColors: Record<string, string> = {
   online: "bg-success",
@@ -78,7 +58,7 @@ export function MachineDetailPage() {
   const isOffline = machine.status === "offline";
   const apiUrl = window.location.origin;
   const runtimes = machine.runtimes || [];
-  const usageWindows = ((machine.usage_info?.windows ?? []) as UsageWindow[]).filter(isPendingReset);
+  const usageWindows = machine.usage_info?.windows ?? [];
 
   return (
     <div className="min-h-screen bg-surface-primary">
@@ -100,14 +80,11 @@ export function MachineDetailPage() {
             <h1 className="font-mono text-xl font-bold text-content-primary">{machine.name}</h1>
             <span className="text-[11px] font-mono text-content-tertiary uppercase tracking-wide">{machine.status}</span>
           </div>
-          <button onClick={() => setShowDeleteDialog(true)} className="text-xs text-error hover:underline">
-            Delete
-          </button>
         </div>
 
-        {/* Machine info */}
+        {/* Machine summary */}
         <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+          <div className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-content-tertiary uppercase tracking-wide">OS</span>
               <span className="font-mono text-xs text-content-primary">{machine.os || "—"}</span>
@@ -126,73 +103,40 @@ export function MachineDetailPage() {
               <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Created</span>
               <span className="font-mono text-xs text-content-primary">{formatRelative(machine.created_at)}</span>
             </div>
-          </div>
-          <div>
-            <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
-            <MachineRuntimeList runtimes={runtimes} />
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Sessions</div>
-            <span className="font-mono text-lg text-content-primary">{machine.session_count}</span>
-          </div>
-          <div className="bg-surface-secondary border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide mb-1">Active</div>
-            <span className="font-mono text-lg text-accent">{machine.active_session_count}</span>
-          </div>
-        </div>
-
-        {/* Usage quota */}
-        {machine.usage_info && usageWindows.length > 0 && (
-          <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
-              <span className="text-[11px] font-mono text-content-tertiary">
-                {machine.usage_info.updated_at ? formatRelative(machine.usage_info.updated_at) : ""}
-              </span>
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Sessions</span>
+              <span className="font-mono text-xs text-content-primary">{machine.session_count}</span>
             </div>
-            <div className="space-y-2.5">
-              {usageWindows.map((w, i) => (
-                <div key={`${w.runtime}-${i}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-medium text-content-tertiary bg-surface-tertiary border border-border rounded px-1 py-0.5">
-                        {RUNTIME_LABELS[w.runtime] ?? w.runtime}
-                      </span>
-                      <span className="text-xs text-content-secondary">{w.label}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-content-primary">{usagePercent(w)}%</span>
-                      <span className="text-[11px] text-content-tertiary">Resets {formatResetTime(w.resets_at)}</span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${usageBarColor(usagePercent(w))}`}
-                      style={{ width: `${Math.min(usagePercent(w), 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Active</span>
+              <span className="font-mono text-xs text-accent">{machine.active_session_count}</span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Offline reconnect */}
         {isOffline && (
           <div className="bg-warning/5 border border-warning/20 rounded-lg p-4 flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-warning">Machine is offline</div>
-              <p className="text-xs text-content-secondary mt-0.5">Generate a new API key to reconnect this machine.</p>
+              <p className="text-xs text-content-secondary mt-0.5">Restart the daemon on this machine to bring it back online.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowReconnect(true)}>
               Reconnect
             </Button>
           </div>
         )}
+
+        {/* Runtime availability */}
+        <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Runtime Availability</span>
+            <span className="text-[11px] font-mono text-content-tertiary">
+              {machine.usage_info?.updated_at ? `Usage updated ${formatRelative(machine.usage_info.updated_at)}` : ""}
+            </span>
+          </div>
+          <MachineRuntimeAvailability runtimes={runtimes} windows={usageWindows} />
+        </div>
 
         {/* Agents on this machine */}
         <div>
@@ -228,6 +172,19 @@ export function MachineDetailPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Danger zone */}
+        <div className="border-t border-border pt-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-medium text-error uppercase tracking-wide">Danger Zone</div>
+              <p className="mt-1 text-xs text-content-tertiary">Revoke this machine's API key and remove it from the workspace.</p>
+            </div>
+            <Button variant="outline" size="sm" className="border-error/30 text-error hover:bg-error/10" onClick={() => setShowDeleteDialog(true)}>
+              Delete Machine
+            </Button>
+          </div>
         </div>
       </div>
 
