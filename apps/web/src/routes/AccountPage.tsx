@@ -112,6 +112,10 @@ export function AccountPage() {
         <div className="max-w-2xl rounded-lg border border-border bg-surface-secondary p-4">
           {accountsLoading ? (
             <Skeleton className="h-8 w-48" />
+          ) : accountsError ? (
+            <p role="alert" className="text-sm text-error">
+              {accountsError}
+            </p>
           ) : githubAccount ? (
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
@@ -141,7 +145,7 @@ export function AccountPage() {
       </section>
 
       {/* Change password */}
-      <ChangePasswordSection hasCredentialAccount={hasCredentialAccount} accountsLoading={accountsLoading} />
+      <ChangePasswordSection hasCredentialAccount={hasCredentialAccount} accountsLoading={accountsLoading} accountsError={accountsError} />
 
       {/* Active sessions */}
       <SessionsSection
@@ -161,7 +165,15 @@ function connectGitHub() {
 
 // ─── Change password section ─────────────────────────────────────────────────
 
-function ChangePasswordSection({ hasCredentialAccount, accountsLoading }: { hasCredentialAccount: boolean; accountsLoading: boolean }) {
+function ChangePasswordSection({
+  hasCredentialAccount,
+  accountsLoading,
+  accountsError,
+}: {
+  hasCredentialAccount: boolean;
+  accountsLoading: boolean;
+  accountsError: string | null;
+}) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -198,6 +210,10 @@ function ChangePasswordSection({ hasCredentialAccount, accountsLoading }: { hasC
       <div className="max-w-2xl rounded-lg border border-border bg-surface-secondary p-4">
         {accountsLoading ? (
           <Skeleton className="h-8 w-48" />
+        ) : accountsError ? (
+          <p role="alert" className="text-sm text-error">
+            {accountsError}
+          </p>
         ) : !hasCredentialAccount ? (
           <p className="text-sm text-content-secondary">Your account uses OAuth only. Password change is not available for OAuth-only accounts.</p>
         ) : (

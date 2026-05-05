@@ -171,4 +171,29 @@ test.describe("Account Settings Page", () => {
     await expect(page.getByText("Your account uses OAuth only.")).toBeVisible();
     await expect(page.getByLabel("Current password")).not.toBeVisible();
   });
+
+  test("listAccounts failure — GitHub and password sections show error, not misleading defaults", async ({ page }) => {
+    await signUpAndGetBoard(page, `account_load_fail_${Date.now()}@example.com`);
+
+    // Fail list-accounts; sessions succeed so we can isolate the accounts error
+    await page.route("**/api/auth/list-accounts", (route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Server error" }) }),
+    );
+    await page.route("**/api/auth/list-sessions", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([MOCK_SESSION]) }),
+    );
+
+    await page.goto("/settings/account");
+
+    // GitHub section must NOT show "GitHub not connected" or "Connect GitHub"
+    await expect(page.getByText("GitHub not connected")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Connect GitHub" })).not.toBeVisible();
+
+    // Password section must NOT show the OAuth-only message
+    await expect(page.getByText("Your account uses OAuth only.")).not.toBeVisible();
+
+    // Both sections show an error alert instead
+    const alerts = page.getByRole("alert");
+    await expect(alerts.first()).toBeVisible();
+  });
 });
