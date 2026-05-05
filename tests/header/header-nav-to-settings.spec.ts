@@ -17,13 +17,13 @@ test.describe("Header and Navigation", () => {
     await expect(dropdown).toBeVisible();
     await dropdown.getByRole("menuitem", { name: "Settings" }).click();
 
-    // expect: The user is navigated to /settings
-    await expect(page).toHaveURL(/\/settings/);
+    // expect: The user is navigated to the profile settings page
+    await expect(page).toHaveURL(/\/settings\/profile$/);
 
-    // expect: The Settings page is displayed with account-level settings
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Theme" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "GitHub" })).toBeVisible();
+    // expect: The Settings page is displayed with profile settings
+    await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Theme" })).not.toBeVisible();
+    await expect(page.getByRole("heading", { name: "GitHub" })).not.toBeVisible();
     await expect(page.getByRole("heading", { name: "Boards" })).not.toBeVisible();
   });
 });

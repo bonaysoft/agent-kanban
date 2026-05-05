@@ -161,6 +161,14 @@ export function App() {
           path="/settings"
           element={
             <ProtectedRoute>
+              <Navigate to="/settings/profile" replace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/*"
+          element={
+            <ProtectedRoute>
               <AccountSettingsPage />
             </ProtectedRoute>
           }
