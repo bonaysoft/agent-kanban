@@ -453,7 +453,7 @@ export const copilotProvider: AgentProvider = {
       .map(([key, label]) => ({
         runtime: "copilot" as const,
         label,
-        utilization: 1 - snapshots[key].percent_remaining / 100,
+        utilization: Number((100 - snapshots[key].percent_remaining).toFixed(2)),
         resets_at,
       }));
 

@@ -934,9 +934,9 @@ describe("codexProvider.fetchUsage — successful fetch", () => {
     expect(Array.isArray(result!.windows)).toBe(true);
     expect(result!.windows.length).toBe(2);
     expect(result!.windows[0].label).toBe("5-Hour");
-    expect(result!.windows[0].utilization).toBe(0.5);
+    expect(result!.windows[0].utilization).toBe(50);
     expect(result!.windows[1].label).toBe("Weekly");
-    expect(result!.windows[1].utilization).toBe(0.2);
+    expect(result!.windows[1].utilization).toBe(20);
     expect(typeof result!.updated_at).toBe("string");
     fetchSpy.mockRestore();
   });

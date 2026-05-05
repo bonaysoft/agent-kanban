@@ -1,7 +1,9 @@
-import { type MachineRuntime, RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
+import { RUNTIME_LABELS, type UsageWindow } from "@agent-kanban/shared";
+import dayjs from "dayjs";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
+import { MachineRuntimeList } from "../components/MachineRuntimes";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -13,13 +15,16 @@ function usageBarColor(pct: number): string {
   return "bg-success";
 }
 
-function formatResetCountdown(resetsAt: string): string {
-  const diff = new Date(resetsAt).getTime() - Date.now();
-  if (diff <= 0) return "resetting...";
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+function usagePercent(window: UsageWindow): number {
+  return Math.round(window.utilization < 1 ? window.utilization * 100 : window.utilization);
+}
+
+function formatResetTime(resetsAt: string): string {
+  return dayjs(resetsAt).format("MMM D, YYYY h:mm A");
+}
+
+function isPendingReset(window: UsageWindow): boolean {
+  return new Date(window.resets_at).getTime() > Date.now();
 }
 
 const statusDotColors: Record<string, string> = {
@@ -32,18 +37,6 @@ const agentStatusDotColors: Record<string, string> = {
   working: "bg-accent animate-pulse-glow",
   offline: "bg-warning",
 };
-
-const runtimeStatusColors: Record<string, string> = {
-  ready: "text-accent bg-accent-soft",
-  limited: "text-warning bg-warning/10",
-  unauthorized: "text-error bg-error/10",
-  unhealthy: "text-error bg-error/10",
-  missing: "text-content-tertiary bg-surface-tertiary",
-};
-
-function runtimeLabel(runtime: MachineRuntime): string {
-  return `${RUNTIME_LABELS[runtime.name] ?? runtime.name}:${runtime.status}`;
-}
 
 export function MachineDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -85,6 +78,7 @@ export function MachineDetailPage() {
   const isOffline = machine.status === "offline";
   const apiUrl = window.location.origin;
   const runtimes = machine.runtimes || [];
+  const usageWindows = ((machine.usage_info?.windows ?? []) as UsageWindow[]).filter(isPendingReset);
 
   return (
     <div className="min-h-screen bg-surface-primary">
@@ -135,17 +129,7 @@ export function MachineDetailPage() {
           </div>
           <div>
             <span className="text-[11px] text-content-tertiary uppercase tracking-wide block mb-1.5">Runtimes</span>
-            {runtimes.length > 0 ? (
-              <div className="flex gap-1.5 flex-wrap">
-                {runtimes.map((runtime: MachineRuntime) => (
-                  <span key={runtime.name} className={`text-[11px] font-mono px-2 py-0.5 rounded ${runtimeStatusColors[runtime.status]}`}>
-                    {runtimeLabel(runtime)}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span className="text-[11px] font-mono text-content-tertiary">No runtimes detected</span>
-            )}
+            <MachineRuntimeList runtimes={runtimes} />
           </div>
         </div>
 
@@ -162,7 +146,7 @@ export function MachineDetailPage() {
         </div>
 
         {/* Usage quota */}
-        {machine.usage_info && machine.usage_info.windows.length > 0 && (
+        {machine.usage_info && usageWindows.length > 0 && (
           <div className="bg-surface-secondary border border-border rounded-lg px-5 py-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-medium text-content-tertiary uppercase tracking-wide">Usage</span>
@@ -171,7 +155,7 @@ export function MachineDetailPage() {
               </span>
             </div>
             <div className="space-y-2.5">
-              {(machine.usage_info.windows as UsageWindow[]).map((w, i) => (
+              {usageWindows.map((w, i) => (
                 <div key={`${w.runtime}-${i}`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5">
@@ -181,14 +165,14 @@ export function MachineDetailPage() {
                       <span className="text-xs text-content-secondary">{w.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-content-primary">{Math.round(w.utilization)}%</span>
-                      <span className="text-[11px] text-content-tertiary">resets {formatResetCountdown(w.resets_at)}</span>
+                      <span className="font-mono text-xs text-content-primary">{usagePercent(w)}%</span>
+                      <span className="text-[11px] text-content-tertiary">Resets {formatResetTime(w.resets_at)}</span>
                     </div>
                   </div>
                   <div className="h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all ${usageBarColor(w.utilization)}`}
-                      style={{ width: `${Math.min(w.utilization, 100)}%` }}
+                      className={`h-full rounded-full transition-all ${usageBarColor(usagePercent(w))}`}
+                      style={{ width: `${Math.min(usagePercent(w), 100)}%` }}
                     />
                   </div>
                 </div>

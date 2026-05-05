@@ -1,8 +1,8 @@
-import { type MachineRuntime, RUNTIME_LABELS } from "@agent-kanban/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { getAuthToken } from "../lib/auth-client";
+import { MachineRuntimeBadges } from "./MachineRuntimes";
 import { Button } from "./ui/button";
 
 interface AddMachineStepsProps {
@@ -10,10 +10,6 @@ interface AddMachineStepsProps {
   apiKeyId: string;
   onDone: () => void;
   onConnected?: (machine: any) => void;
-}
-
-function runtimeLabel(runtime: MachineRuntime): string {
-  return `${RUNTIME_LABELS[runtime.name] ?? runtime.name}:${runtime.status}`;
 }
 
 export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMachineStepsProps) {
@@ -79,12 +75,8 @@ export function AddMachineSteps({ apiKey, apiKeyId, onDone, onConnected }: AddMa
           {connectedMachine.runtimes && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-content-tertiary uppercase tracking-wide">Runtimes</span>
-              <div className="flex gap-1">
-                {connectedMachine.runtimes.map((runtime: MachineRuntime) => (
-                  <span key={runtime.name} className="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded">
-                    {runtimeLabel(runtime)}
-                  </span>
-                ))}
+              <div className="max-w-[70%]">
+                <MachineRuntimeBadges runtimes={connectedMachine.runtimes} />
               </div>
             </div>
           )}

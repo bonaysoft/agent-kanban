@@ -474,7 +474,12 @@ export const claudeProvider: AgentProvider = {
     const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>;
     const windows: UsageWindow[] = Object.entries(CLAUDE_WINDOW_LABELS)
       .filter(([key]) => data[key])
-      .map(([key, label]) => ({ runtime: "claude", label, ...data[key] }));
+      .map(([key, label]) => ({
+        runtime: "claude",
+        label,
+        resets_at: data[key].resets_at,
+        utilization: normalizeUsagePercent(data[key].utilization),
+      }));
     return { windows, updated_at: new Date().toISOString() };
   },
 
@@ -498,3 +503,7 @@ export const claudeProvider: AgentProvider = {
     return events;
   },
 };
+
+function normalizeUsagePercent(value: number): number {
+  return value < 1 ? value * 100 : value;
+}

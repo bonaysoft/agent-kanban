@@ -289,7 +289,7 @@ export const codexProvider: AgentProvider = {
       windows.push({
         runtime: "codex",
         label: windowLabel(rl.primary_window.limit_window_seconds),
-        utilization: rl.primary_window.used_percent / 100,
+        utilization: rl.primary_window.used_percent,
         resets_at: new Date(rl.primary_window.reset_at * 1000).toISOString(),
       });
     }
@@ -297,7 +297,7 @@ export const codexProvider: AgentProvider = {
       windows.push({
         runtime: "codex",
         label: windowLabel(rl.secondary_window.limit_window_seconds),
-        utilization: rl.secondary_window.used_percent / 100,
+        utilization: rl.secondary_window.used_percent,
         resets_at: new Date(rl.secondary_window.reset_at * 1000).toISOString(),
       });
     }

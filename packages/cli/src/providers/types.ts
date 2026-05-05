@@ -89,7 +89,7 @@ export class UsageFetchError extends Error {
 }
 
 export function availabilityFromUsage(usage: UsageInfo | null): RuntimeAvailability {
-  const exhausted = usage?.windows.filter((window) => window.utilization >= 1) ?? [];
+  const exhausted = usage?.windows.filter((window) => window.utilization >= 100) ?? [];
   if (exhausted.length === 0) return { status: "ready" };
 
   const reset_at = exhausted

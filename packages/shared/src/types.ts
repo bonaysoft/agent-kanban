@@ -110,6 +110,7 @@ export type MachineStatus = "online" | "offline";
 export interface UsageWindow {
   runtime: AgentRuntime;
   label: string;
+  /** Utilized quota percentage, 0-100. */
   utilization: number;
   resets_at: string;
 }

@@ -44,7 +44,16 @@ import type { D1 } from "./db";
 import { addAgentEmail, getGithubToken, removeAgentEmail, syncGpgKey } from "./githubService";
 import { getArmoredPrivateKey, getRootKeyInfo, getRootPublicKey, getSubkeyIds } from "./gpgKeyRepo";
 import { createLogger } from "./logger";
-import { deleteMachine, getMachine, listAllMachines, listMachines, normalizeMachineRuntimes, updateMachine, upsertMachine } from "./machineRepo";
+import {
+  deleteMachine,
+  detectStaleMachines,
+  getMachine,
+  listAllMachines,
+  listMachines,
+  normalizeMachineRuntimes,
+  updateMachine,
+  upsertMachine,
+} from "./machineRepo";
 import { createMailbox, deleteMailbox, getEmail, getInbox } from "./mailsService";
 import { createMessage, listMessages } from "./messageRepo";
 import { metricsMiddleware } from "./metrics";
@@ -428,11 +437,13 @@ api.post("/api/machines/:id/heartbeat", async (c) => {
 });
 
 api.get("/api/machines", async (c) => {
+  await detectStaleMachines(c.env.DB);
   const machines = await listMachines(c.env.DB, c.get("ownerId"));
   return c.json(machines);
 });
 
 api.get("/api/machines/:id", async (c) => {
+  await detectStaleMachines(c.env.DB);
   const machine = await getMachine(c.env.DB, c.req.param("id"), c.get("ownerId"));
   if (!machine) throw new HTTPException(404, { message: "Machine not found" });
   return c.json(machine);

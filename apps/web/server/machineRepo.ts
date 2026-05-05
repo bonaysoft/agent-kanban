@@ -48,9 +48,10 @@ export async function updateMachine(db: D1, machineId: string, ownerId: string, 
     sets.push("runtimes = ?");
     binds.push(JSON.stringify(normalizeMachineRuntimes(info.runtimes, now)));
   }
-  if (info.usage_info) {
+  if ("usage_info" in info) {
+    const usageInfo = info.usage_info;
     sets.push("usage_info = ?");
-    binds.push(JSON.stringify(info.usage_info));
+    binds.push(usageInfo == null ? null : JSON.stringify(normalizeUsageInfo(usageInfo)));
   }
 
   binds.push(machineId, ownerId);
@@ -132,7 +133,18 @@ export async function listAllMachines(db: D1): Promise<AdminMachine[]> {
 function parseMachine<T extends Machine>(row: T): T {
   const parsed = parseJsonFields(row, ["runtimes", "usage_info"]);
   parsed.runtimes = normalizeMachineRuntimes(parsed.runtimes ?? [], parsed.last_heartbeat_at ?? parsed.created_at);
+  if (parsed.usage_info) parsed.usage_info = normalizeUsageInfo(parsed.usage_info);
   return parsed;
+}
+
+function normalizeUsageInfo(info: UsageInfo): UsageInfo {
+  return {
+    ...info,
+    windows: info.windows.map((window) => ({
+      ...window,
+      utilization: window.utilization < 1 ? window.utilization * 100 : window.utilization,
+    })),
+  };
 }
 
 const RUNTIME_BY_LABEL = Object.fromEntries(Object.entries(RUNTIME_LABELS).map(([runtime, label]) => [label, runtime])) as Record<

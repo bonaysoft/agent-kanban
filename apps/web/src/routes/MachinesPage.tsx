@@ -1,8 +1,8 @@
-import { type MachineRuntime, RUNTIME_LABELS } from "@agent-kanban/shared";
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { AddMachineSteps } from "../components/AddMachineSteps";
 import { Header } from "../components/Header";
+import { MachineRuntimeBadges } from "../components/MachineRuntimes";
 import { formatRelative } from "../components/TaskDetailFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { useMachines } from "../hooks/useMachines";
@@ -12,18 +12,6 @@ const statusDotColors: Record<string, string> = {
   online: "bg-success",
   offline: "bg-content-tertiary",
 };
-
-const runtimeStatusColors: Record<string, string> = {
-  ready: "text-accent bg-accent-soft",
-  limited: "text-warning bg-warning/10",
-  unauthorized: "text-error bg-error/10",
-  unhealthy: "text-error bg-error/10",
-  missing: "text-content-tertiary bg-surface-tertiary",
-};
-
-function runtimeLabel(runtime: MachineRuntime): string {
-  return `${RUNTIME_LABELS[runtime.name] ?? runtime.name}:${runtime.status}`;
-}
 
 type DialogStep = "choose" | "waiting";
 
@@ -139,16 +127,8 @@ export function MachinesPage() {
                       {machine.last_heartbeat_at ? formatRelative(machine.last_heartbeat_at) : "—"}
                     </span>
                   </div>
-                  <div className="flex gap-1 ml-auto">
-                    {machine.runtimes?.length > 0 ? (
-                      machine.runtimes.map((runtime: MachineRuntime) => (
-                        <span key={runtime.name} className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${runtimeStatusColors[runtime.status]}`}>
-                          {runtimeLabel(runtime)}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-[10px] font-mono text-content-tertiary">No runtimes</span>
-                    )}
+                  <div className="ml-auto max-w-[45%]">
+                    <MachineRuntimeBadges runtimes={machine.runtimes ?? []} />
                   </div>
                 </div>
               </Link>

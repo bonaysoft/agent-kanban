@@ -9,7 +9,7 @@ describe("provider availability helpers", () => {
     expect(
       availabilityFromUsage({
         updated_at: "2026-03-21T10:00:00.000Z",
-        windows: [{ runtime: "claude", label: "5-Hour", utilization: 0.5, resets_at: "2026-03-21T12:00:00.000Z" }],
+        windows: [{ runtime: "claude", label: "5-Hour", utilization: 50, resets_at: "2026-03-21T12:00:00.000Z" }],
       }),
     ).toEqual({ status: "ready" });
   });
@@ -18,7 +18,7 @@ describe("provider availability helpers", () => {
     expect(
       availabilityFromUsage({
         updated_at: "2026-03-21T10:00:00.000Z",
-        windows: [{ runtime: "codex", label: "5-Hour", utilization: 1, resets_at: "2026-03-21T12:00:00.000Z" }],
+        windows: [{ runtime: "codex", label: "5-Hour", utilization: 100, resets_at: "2026-03-21T12:00:00.000Z" }],
       }),
     ).toEqual({
       status: "limited",

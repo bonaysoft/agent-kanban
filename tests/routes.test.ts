@@ -979,6 +979,18 @@ describe("routes", () => {
     expect(body.id).toBe(machineId);
   });
 
+  it("GET /api/machines/:id marks stale machines offline", async () => {
+    await env.DB.prepare("UPDATE machines SET status = 'online', last_heartbeat_at = ? WHERE id = ?")
+      .bind("2000-01-01T00:00:00.000Z", machineId)
+      .run();
+
+    const res = await apiRequest("GET", `/api/machines/${machineId}`, undefined, apiKey);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.status).toBe("offline");
+  });
+
   it("GET /api/machines/:id returns 404 for unknown machine", async () => {
     const res = await apiRequest("GET", "/api/machines/nonexistent", undefined, apiKey);
     expect(res.status).toBe(404);

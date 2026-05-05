@@ -128,17 +128,54 @@ describe("machine usage tracking", () => {
     const { updateMachine: heartbeat } = await import("../apps/web/server/machineRepo");
     const newUsage: UsageInfo = {
       windows: [
-        { runtime: "claude", label: "5-Hour", utilization: 75.0, resets_at: "2026-03-21T20:00:00Z" },
-        { runtime: "claude", label: "7-Day Opus", utilization: 45.0, resets_at: "2026-03-28T00:00:00Z" },
+        { runtime: "claude", label: "5-Hour", utilization: 75, resets_at: "2026-03-21T20:00:00Z" },
+        { runtime: "claude", label: "7-Day Opus", utilization: 45, resets_at: "2026-03-28T00:00:00Z" },
       ],
       updated_at: "2026-03-21T15:00:00Z",
     };
     const machine = await heartbeat(db, machineId, "user-001", { usage_info: newUsage });
 
     expect(machine.usage_info!.windows).toHaveLength(2);
-    expect(machine.usage_info!.windows[0].utilization).toBe(75.0);
-    expect(machine.usage_info!.windows[1].utilization).toBe(45.0);
+    expect(machine.usage_info!.windows[0].utilization).toBe(75);
+    expect(machine.usage_info!.windows[1].utilization).toBe(45);
     expect(machine.usage_info!.windows[0].label).toBe("5-Hour");
+  });
+
+  it("heartbeat normalizes legacy ratio utilization values to percentages", async () => {
+    const { updateMachine: heartbeat } = await import("../apps/web/server/machineRepo");
+    const machine = await heartbeat(db, machineId, "user-001", {
+      usage_info: {
+        windows: [{ runtime: "claude", label: "5-Hour", utilization: 0.75, resets_at: "2026-03-21T20:00:00Z" }],
+        updated_at: "2026-03-21T15:00:00Z",
+      },
+    });
+
+    expect(machine.usage_info!.windows[0].utilization).toBe(75);
+  });
+
+  it("getMachine normalizes legacy ratio utilization stored in the database", async () => {
+    const { getMachine } = await import("../apps/web/server/machineRepo");
+    await db
+      .prepare("UPDATE machines SET usage_info = ? WHERE id = ?")
+      .bind(
+        JSON.stringify({
+          windows: [{ runtime: "claude", label: "7-Day", utilization: 0.36, resets_at: "2026-03-28T00:00:00Z" }],
+          updated_at: "2026-03-21T15:00:00Z",
+        }),
+        machineId,
+      )
+      .run();
+
+    const machine = await getMachine(db, machineId, "user-001");
+
+    expect(machine!.usage_info!.windows[0].utilization).toBe(36);
+  });
+
+  it("heartbeat with usage_info null clears stale usage data", async () => {
+    const { updateMachine: heartbeat } = await import("../apps/web/server/machineRepo");
+    const machine = await heartbeat(db, machineId, "user-001", { usage_info: null });
+
+    expect(machine.usage_info).toBeNull();
   });
 
   it("heartbeat updates version and runtimes", async () => {

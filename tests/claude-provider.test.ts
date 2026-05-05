@@ -1457,8 +1457,8 @@ describe("claudeProvider.fetchUsage — successful fetch", () => {
       ok: true,
       headers: { get: () => null },
       json: async () => ({
-        five_hour: { utilization: 0.5, resets_at: "2026-04-01T12:00:00Z" },
-        seven_day: { utilization: 0.2, resets_at: "2026-04-08T00:00:00Z" },
+        five_hour: { utilization: 50, resets_at: "2026-04-01T12:00:00Z" },
+        seven_day: { utilization: 20, resets_at: "2026-04-08T00:00:00Z" },
       }),
     } as any);
 
@@ -1466,7 +1466,25 @@ describe("claudeProvider.fetchUsage — successful fetch", () => {
     expect(result).not.toBeNull();
     expect(Array.isArray(result!.windows)).toBe(true);
     expect(result!.windows.length).toBeGreaterThanOrEqual(1);
+    expect(result!.windows[0].utilization).toBe(50);
     expect(typeof result!.updated_at).toBe("string");
+    fetchSpy.mockRestore();
+  });
+
+  it("normalizes legacy ratio utilization values from the API", async () => {
+    const fsModule = await import("node:fs");
+    vi.mocked(fsModule.readFileSync).mockReturnValueOnce(JSON.stringify({ claudeAiOauth: { accessToken: "test-token-xyz" } }) as any);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ({
+        five_hour: { utilization: 0.5, resets_at: "2026-04-01T12:00:00Z" },
+      }),
+    } as any);
+
+    const result = await claudeProvider.fetchUsage?.();
+
+    expect(result!.windows[0].utilization).toBe(50);
     fetchSpy.mockRestore();
   });
 
@@ -1497,8 +1515,8 @@ describe("claudeProvider.fetchUsage — successful fetch", () => {
       ok: true,
       headers: { get: () => null },
       json: async () => ({
-        five_hour: { utilization: 0.3, resets_at: "2026-04-11T12:00:00Z" },
-        unknown_key: { utilization: 0.9, resets_at: "2026-04-11T12:00:00Z" },
+        five_hour: { utilization: 30, resets_at: "2026-04-11T12:00:00Z" },
+        unknown_key: { utilization: 90, resets_at: "2026-04-11T12:00:00Z" },
       }),
     } as any);
 
@@ -1572,7 +1590,7 @@ describe("claudeProvider.fetchUsage — 401 invalidates cachedToken", () => {
       return {
         ok: true,
         headers: { get: () => null },
-        json: async () => ({ five_hour: { utilization: 0.1, resets_at: "2026-04-12T00:00:00Z" } }),
+        json: async () => ({ five_hour: { utilization: 10, resets_at: "2026-04-12T00:00:00Z" } }),
       } as any;
     });
 

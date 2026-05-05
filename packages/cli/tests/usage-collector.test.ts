@@ -201,8 +201,8 @@ describe("UsageCollector — happy path", () => {
   });
 
   it("getSnapshot() returns combined windows from all providers after first tick", async () => {
-    const windowA = { runtime: "claude" as const, label: "5-Hour", utilization: 0.5, resets_at: "2026-04-11T12:00:00Z" };
-    const windowB = { runtime: "codex" as const, label: "Weekly", utilization: 0.1, resets_at: "2026-04-18T00:00:00Z" };
+    const windowA = { runtime: "claude" as const, label: "5-Hour", utilization: 50, resets_at: "2026-04-11T12:00:00Z" };
+    const windowB = { runtime: "codex" as const, label: "Weekly", utilization: 10, resets_at: "2026-04-18T00:00:00Z" };
     const providerA = makeProvider("claude", vi.fn().mockResolvedValue({ windows: [windowA], updated_at: "" }));
     const providerB = makeProvider("codex", vi.fn().mockResolvedValue({ windows: [windowB], updated_at: "" }));
 
@@ -246,7 +246,7 @@ describe("UsageCollector — happy path", () => {
 
   it("getSnapshot() includes updated_at as ISO string", async () => {
     const fetchUsage = vi.fn().mockResolvedValue({
-      windows: [{ runtime: "claude" as const, label: "5-Hour", utilization: 0.3, resets_at: "2026-04-11T12:00:00Z" }],
+      windows: [{ runtime: "claude" as const, label: "5-Hour", utilization: 30, resets_at: "2026-04-11T12:00:00Z" }],
       updated_at: "",
     });
     const provider = makeProvider("claude", fetchUsage);
@@ -330,7 +330,7 @@ describe("UsageCollector — null fetchUsage (no creds)", () => {
 
 describe("UsageCollector — last-known-good preserved on failure", () => {
   it("keeps previous windows when a subsequent fetch throws", async () => {
-    const window1 = { runtime: "claude" as const, label: "5-Hour", utilization: 0.4, resets_at: "2026-04-11T12:00:00Z" };
+    const window1 = { runtime: "claude" as const, label: "5-Hour", utilization: 40, resets_at: "2026-04-11T12:00:00Z" };
     let callCount = 0;
     const fetchUsage = vi.fn().mockImplementation(() => {
       callCount++;
