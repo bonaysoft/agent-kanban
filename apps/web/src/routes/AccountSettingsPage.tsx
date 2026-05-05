@@ -11,6 +11,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { authClient, useSession } from "../lib/auth-client";
 import { cn } from "../lib/utils";
+import { AccountPage } from "./AccountPage";
 
 type SettingsUser = {
   name?: string | null;
@@ -139,17 +140,6 @@ function ProfileSettingsPage() {
   );
 }
 
-function AccountSettingsPlaceholder() {
-  return (
-    <main className="min-w-0 flex-1 space-y-6">
-      <div className="border-b border-border pb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-content-primary">Account</h1>
-        <p className="mt-1 text-sm text-content-secondary">Account settings will be added in the next task.</p>
-      </div>
-    </main>
-  );
-}
-
 function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
@@ -222,7 +212,7 @@ export function AccountSettingsPage() {
         <Routes>
           <Route index element={<Navigate to="profile" replace />} />
           <Route path="profile" element={<ProfileSettingsPage />} />
-          <Route path="account" element={<AccountSettingsPlaceholder />} />
+          <Route path="account" element={<AccountPage />} />
           <Route path="*" element={<Navigate to="profile" replace />} />
         </Routes>
       </div>

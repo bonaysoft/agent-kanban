@@ -51,3 +51,38 @@ export const authClient = createAuthClient({
 });
 
 export const { useSession, signIn, signUp, signOut, sendVerificationEmail } = authClient;
+
+// ─── Account API types ────────────────────────────────────────────────────────
+// Better Auth generates these methods dynamically from the server endpoints.
+// We declare a narrow typed wrapper here instead of scattering `as any` at call sites.
+
+export type LinkedAccount = {
+  id: string;
+  providerId: string;
+  accountId: string;
+  createdAt: Date;
+  scopes: string[];
+};
+
+export type SessionEntry = {
+  id: string;
+  token: string;
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  userId: string;
+};
+
+type AuthResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
+
+type AccountAuthClient = {
+  listAccounts: () => AuthResult<LinkedAccount[]>;
+  listSessions: () => AuthResult<SessionEntry[]>;
+  changePassword: (body: { currentPassword: string; newPassword: string; revokeOtherSessions?: boolean }) => AuthResult<{ status: boolean }>;
+  revokeOtherSessions: () => AuthResult<{ status: boolean }>;
+  linkSocial: (body: { provider: string; callbackURL?: string }) => AuthResult<unknown>;
+};
+
+export const accountAuthClient = authClient as unknown as AccountAuthClient;
