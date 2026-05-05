@@ -196,4 +196,24 @@ test.describe("Account Settings Page", () => {
     const alerts = page.getByRole("alert");
     await expect(alerts.first()).toBeVisible();
   });
+
+  test("GitHub connect error — shows inline error and toast", async ({ page }) => {
+    await signUpAndGetBoard(page, `account_gh_err_${Date.now()}@example.com`);
+    await mockAccountData(page, [CREDENTIAL_ACCOUNT]);
+
+    await page.route("**/api/auth/link-social", (route) =>
+      route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "GitHub OAuth failed" }),
+      }),
+    );
+
+    await page.goto("/settings/account");
+
+    await expect(page.getByRole("button", { name: "Connect GitHub" })).toBeVisible();
+    await page.getByRole("button", { name: "Connect GitHub" }).click();
+
+    await expect(page.getByRole("alert").filter({ hasText: "GitHub OAuth failed" })).toBeVisible();
+  });
 });

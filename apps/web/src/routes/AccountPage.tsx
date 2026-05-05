@@ -63,6 +63,21 @@ export function AccountPage() {
   const hasCredentialAccount = accounts?.some((a) => a.providerId === "credential") ?? false;
   const githubAccount = accounts?.find((a) => a.providerId === "github");
 
+  const [githubConnecting, setGithubConnecting] = useState(false);
+  const [githubError, setGithubError] = useState<string | null>(null);
+
+  async function handleConnectGitHub() {
+    setGithubConnecting(true);
+    setGithubError(null);
+    const { error } = await accountAuthClient.linkSocial({ provider: "github", callbackURL: "/settings/account" });
+    setGithubConnecting(false);
+    if (error) {
+      const msg = error.message || "Failed to connect GitHub";
+      setGithubError(msg);
+      toast.error(msg);
+    }
+  }
+
   return (
     <main className="min-w-0 flex-1 space-y-8">
       <div className="border-b border-border pb-4">
@@ -117,27 +132,37 @@ export function AccountPage() {
               {accountsError}
             </p>
           ) : githubAccount ? (
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-content-primary">GitHub connected</p>
                 <p className="text-xs text-content-tertiary">
                   Account ID: <span className="font-mono">{githubAccount.accountId}</span>
                 </p>
+                {githubError && (
+                  <p role="alert" className="text-xs text-error">
+                    {githubError}
+                  </p>
+                )}
               </div>
-              <Button variant="outline" size="sm" onClick={connectGitHub} className="shrink-0">
+              <Button variant="outline" size="sm" onClick={handleConnectGitHub} disabled={githubConnecting} className="shrink-0">
                 <RefreshCw className="size-3.5" />
-                Reconnect
+                {githubConnecting ? "Connecting..." : "Reconnect"}
               </Button>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-content-primary">GitHub not connected</p>
                 <p className="text-xs text-content-tertiary">Connect GitHub to enable agent identity sync and GPG key integration.</p>
+                {githubError && (
+                  <p role="alert" className="text-xs text-error">
+                    {githubError}
+                  </p>
+                )}
               </div>
-              <Button size="sm" onClick={connectGitHub} className="shrink-0">
+              <Button size="sm" onClick={handleConnectGitHub} disabled={githubConnecting} className="shrink-0">
                 <Github className="size-3.5" />
-                Connect GitHub
+                {githubConnecting ? "Connecting..." : "Connect GitHub"}
               </Button>
             </div>
           )}
@@ -157,10 +182,6 @@ export function AccountPage() {
       />
     </main>
   );
-}
-
-function connectGitHub() {
-  accountAuthClient.linkSocial({ provider: "github", callbackURL: "/settings/account" });
 }
 
 // ─── Change password section ─────────────────────────────────────────────────
