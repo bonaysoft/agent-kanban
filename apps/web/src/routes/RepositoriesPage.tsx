@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Header } from "../components/Header";
 import { formatRelative } from "../components/TaskDetailFields";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { useCreateRepository, useDeleteRepository, useRepositories } from "../hooks/useRepositories";
 
 export function RepositoriesPage() {
@@ -11,6 +12,7 @@ export function RepositoriesPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
+  const [repoToDelete, setRepoToDelete] = useState<any | null>(null);
 
   async function handleAdd() {
     if (!newName.trim() || !newUrl.trim()) return;
@@ -20,8 +22,10 @@ export function RepositoriesPage() {
     setShowDialog(false);
   }
 
-  async function handleDelete(id: string) {
-    await deleteRepo.mutateAsync(id);
+  async function handleDelete() {
+    if (!repoToDelete) return;
+    await deleteRepo.mutateAsync(repoToDelete.id);
+    setRepoToDelete(null);
   }
 
   return (
@@ -61,7 +65,7 @@ export function RepositoriesPage() {
                     <span className="text-[11px] font-mono text-content-tertiary truncate hidden sm:inline">{repo.url}</span>
                   </div>
                   <button
-                    onClick={() => handleDelete(repo.id)}
+                    onClick={() => setRepoToDelete(repo)}
                     disabled={deleteRepo.isPending}
                     className="text-xs text-content-tertiary hover:text-error transition-colors shrink-0 ml-3 disabled:opacity-50"
                   >
@@ -123,6 +127,26 @@ export function RepositoriesPage() {
               {createRepo.isPending ? "Adding..." : "Add Repository"}
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!repoToDelete} onOpenChange={(open) => !open && setRepoToDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove Repository</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-mono text-content-primary">{repoToDelete?.name}</span> from this workspace. Existing tasks linked to this
+              repository will lose their repository association.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRepoToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteRepo.isPending}>
+              {deleteRepo.isPending ? "Removing..." : "Remove"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
