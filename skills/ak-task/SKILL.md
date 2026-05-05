@@ -44,7 +44,7 @@ If execution hits a blocker after confirmation, use the available tools and repo
 Parse the user's input:
 - **What** — feature description or bug report (required)
 - **Board** — which board (if not specified, use the first board)
-- **Labels** — use existing board labels for version/category; create missing labels before task creation
+- **Labels** — use board-level taxonomy for stable filtering; create only reusable missing labels before task creation
 
 ## Phase 1: Create & Assign
 
@@ -54,6 +54,7 @@ Before choosing or creating workers, read `references/runtime-delegation.md`. Be
 
 ```bash
 ak get board                   # pick the right board
+ak get label --board <board>   # existing board label taxonomy
 ak get agent -o json           # available agents, load, runtime_available
 ak get model --runtime <name>  # provider-reported models for a runtime
 ak get repo                    # registered repos
@@ -77,6 +78,45 @@ Use `AskUserQuestion` to interactively resolve any uncertainties before creating
 - **Multiple approaches** — present implementation strategies as options with trade-off descriptions
 - **Labels/agent/runtime/repo ambiguous** — present choices when there are multiple candidates
 - **Dependencies uncertain** — present options about whether to depend on or parallelize with related tasks
+
+#### Label Selection
+
+Labels are board-level taxonomy, not free-form task notes. Use them only for stable filtering dimensions that will remain useful across tasks.
+
+Before previewing the task:
+
+1. Run `ak get label --board <board-id>` and reuse existing labels whenever possible.
+2. Choose at most a small set of labels, usually one version label plus one or two stable area/type labels.
+3. Create a missing label only if it will be reused beyond this task; otherwise put that detail in `## Spec`.
+4. If label choice is ambiguous, ask during the initial clarification phase.
+
+Recommended categories:
+
+- **Version** — `vX.Y`, for example `v1.4`; avoid patch versions or suffixes unless the board already uses that granularity.
+- **Area** — stable implementation area such as `frontend`, `backend`, `api`, `database`, `cli`, `infra`, `docs`, `ui`, `security`, or `test`.
+- **Type** — optional when useful for filtering, such as `feature`, `bug`, or `refactor`.
+
+Avoid labels for temporary process state, runtime/provider choice, tools, libraries, branches, files, or one-off implementation details. Examples that usually belong in the task description instead of labels: `blocked`, `testing`, `needs-review`, `codex`, `copilot`, `gemini`, `github`, `cloudflare`, `tailwind`, `sqlite`, `prompt-fix`, and file names.
+
+When labels overlap, prefer the canonical stable form: `infra` over `infrastructure`, `bug` over `bugfix`, `database` over `db`, and `frontend` for UI implementation unless the task is specifically visual polish.
+
+Create missing reusable labels before task creation:
+
+```bash
+ak create label --board <board-id> --name v1.4 --color "#22C55E" --description "Version 1.4"
+ak create label --board <board-id> --name backend --color "#38BDF8" --description "Backend/API work"
+ak create label --board <board-id> --name bug --color "#F87171" --description "Bug fix"
+```
+
+Useful color defaults:
+
+- Version: `#22C55E`
+- Frontend/UI: `#A78BFA`
+- Backend/API/database: `#38BDF8`
+- CLI/runtime: `#22D3EE`
+- Bug/security: `#F87171`
+- Infra/deploy: `#F59E0B`
+- Docs/refactor/general: `#71717A`
 
 #### Hard Stop: Agent Runtime Selection
 
@@ -141,6 +181,7 @@ Before running `ak create task`, verify:
 - If the user specified runtime, that runtime is schedulable.
 - If runtime was ambiguous, the user chose the runtime.
 - Task Preview includes Runtime and Agent.
+- Labels exist on the board, are stable taxonomy labels, and exclude one-off implementation details.
 - `--assign-to` uses the selected agent ID.
 
 **On confirmation**, create the task:
@@ -170,7 +211,7 @@ ak create task \
 - Include concrete files, commands, endpoints, UI states, and error cases when known.
 - Assign only to worker agents with `runtime_available: true`.
 - Use `--depends-on` for real blockers or overlapping context. Parallel tasks must not fight over the same files, data model, or API contract.
-- Create missing labels first with `ak create label --board <board-id> --name <name> --color <hex>`.
+- Create missing reusable labels first with `ak create label --board <board-id> --name <name> --color <hex> --description "<desc>"`.
 
 Report to user: task ID, title, assigned agent.
 
