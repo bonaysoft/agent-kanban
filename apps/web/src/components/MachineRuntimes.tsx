@@ -25,6 +25,22 @@ const runtimeStatusStyles: Record<MachineRuntime["status"], { dot: string; label
   },
 };
 
+const RUNTIME_SHORT_LABELS: Record<MachineRuntime["name"], string> = {
+  claude: "Claude",
+  codex: "Codex",
+  gemini: "Gemini",
+  copilot: "Copilot",
+  hermes: "Hermes",
+};
+
+const runtimeBadgeStyles: Record<MachineRuntime["status"], string> = {
+  ready: "text-content-secondary",
+  limited: "bg-warning/10 text-warning",
+  unauthorized: "bg-error/10 text-error",
+  unhealthy: "bg-error/10 text-error",
+  missing: "text-content-tertiary",
+};
+
 function RuntimeStatus({ runtime }: { runtime: MachineRuntime }) {
   const style = runtimeStatusStyles[runtime.status];
   return (
@@ -33,6 +49,12 @@ function RuntimeStatus({ runtime }: { runtime: MachineRuntime }) {
       {style.label}
     </span>
   );
+}
+
+function runtimeTooltip(runtime: MachineRuntime): string {
+  const status = runtimeStatusStyles[runtime.status].label;
+  const label = RUNTIME_LABELS[runtime.name] ?? runtime.name;
+  return runtime.detail ? `${label} · ${status} · ${runtime.detail}` : `${label} · ${status}`;
 }
 
 function usageBarColor(pct: number): string {
@@ -53,19 +75,29 @@ function isPendingReset(window: UsageWindow): boolean {
   return new Date(window.resets_at).getTime() > Date.now();
 }
 
-export function MachineRuntimeBadges({ runtimes }: { runtimes: MachineRuntime[] }) {
+export function MachineRuntimeBadges({ runtimes, maxVisible = runtimes.length }: { runtimes: MachineRuntime[]; maxVisible?: number }) {
   if (runtimes.length === 0) {
     return <span className="text-[10px] font-mono text-content-tertiary">No runtimes</span>;
   }
 
+  const visible = runtimes.slice(0, maxVisible);
+  const hiddenCount = runtimes.length - visible.length;
+
   return (
     <div className="flex flex-wrap justify-end gap-1.5">
-      {runtimes.map((runtime) => (
-        <span key={runtime.name} className="inline-flex items-center gap-1.5 rounded bg-surface-tertiary px-2 py-1">
-          <span className="font-mono text-[10px] text-content-primary">{RUNTIME_LABELS[runtime.name] ?? runtime.name}</span>
-          <RuntimeStatus runtime={runtime} />
+      {visible.map((runtime) => (
+        <span
+          key={runtime.name}
+          title={runtimeTooltip(runtime)}
+          className={cn("inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 font-mono text-[10px]", runtimeBadgeStyles[runtime.status])}
+        >
+          <span>{RUNTIME_SHORT_LABELS[runtime.name] ?? runtime.name}</span>
+          <span className={cn("size-1.5 rounded-full", runtimeStatusStyles[runtime.status].dot)} />
         </span>
       ))}
+      {hiddenCount > 0 && (
+        <span className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] text-content-tertiary">+{hiddenCount}</span>
+      )}
     </div>
   );
 }

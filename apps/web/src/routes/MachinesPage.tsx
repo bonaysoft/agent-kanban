@@ -128,7 +128,7 @@ export function MachinesPage() {
                     </span>
                   </div>
                   <div className="ml-auto max-w-[45%]">
-                    <MachineRuntimeBadges runtimes={machine.runtimes ?? []} />
+                    <MachineRuntimeBadges runtimes={machine.runtimes ?? []} maxVisible={3} />
                   </div>
                 </div>
               </Link>
