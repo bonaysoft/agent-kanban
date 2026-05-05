@@ -272,13 +272,13 @@ describe("geminiProvider.listModels", () => {
       windows: [
         {
           runtime: "gemini",
-          label: "Gemini Code Assist Standard: gemini-2.5-pro",
+          label: "gemini-2.5-pro",
           utilization: 60,
           resets_at: "2026-05-05T18:00:00Z",
         },
         {
           runtime: "gemini",
-          label: "Gemini Code Assist Standard: gemini-2.5-flash",
+          label: "gemini-2.5-flash",
           utilization: 0,
           resets_at: "2026-05-05T20:00:00Z",
         },

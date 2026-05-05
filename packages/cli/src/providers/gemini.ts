@@ -214,8 +214,7 @@ function modelsFromCodeAssistQuota(quota: CodeAssistQuotaResponse): RuntimeModel
     }));
 }
 
-function usageFromCodeAssist(load: CodeAssistLoadResponse, quota: CodeAssistQuotaResponse): UsageInfo {
-  const tier = load.paidTier?.name ?? load.currentTier?.name ?? "Code Assist";
+function usageFromCodeAssist(quota: CodeAssistQuotaResponse): UsageInfo {
   const windows: UsageWindow[] = (quota.buckets ?? [])
     .filter(
       (bucket): bucket is CodeAssistQuotaBucket & { modelId: string; remainingFraction: number; resetTime: string } =>
@@ -223,7 +222,7 @@ function usageFromCodeAssist(load: CodeAssistLoadResponse, quota: CodeAssistQuot
     )
     .map((bucket) => ({
       runtime: "gemini",
-      label: `${tier}: ${bucket.modelId}`,
+      label: bucket.modelId,
       utilization: Number(((1 - bucket.remainingFraction) * 100).toFixed(2)),
       resets_at: bucket.resetTime,
     }));
@@ -516,8 +515,8 @@ export const geminiProvider: AgentProvider = {
 
   async fetchUsage(): Promise<UsageInfo | null> {
     if (!existsSync(OAUTH_CREDS_PATH)) return null;
-    const { load, quota } = await retrieveCodeAssistQuota();
-    return usageFromCodeAssist(load, quota);
+    const { quota } = await retrieveCodeAssistQuota();
+    return usageFromCodeAssist(quota);
   },
 
   async execute(opts: ExecuteOpts): Promise<AgentHandle> {
