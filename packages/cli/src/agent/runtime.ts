@@ -1,22 +1,25 @@
 import { execFileSync } from "node:child_process";
 
 interface RuntimeSpec {
-  /** Environment variable set by the runtime when it spawns subprocesses. */
-  envVar: string;
+  /** Environment variables set by the runtime when it spawns subprocesses. */
+  envVars: string[];
   commandPattern: RegExp;
 }
 
 const RUNTIMES: Record<string, RuntimeSpec> = {
-  claude: { envVar: "CLAUDECODE", commandPattern: /(^|\/)claude(\s|$)/ },
-  codex: { envVar: "CODEX_CI", commandPattern: /(^|\/)codex(\s|$)/ },
-  gemini: { envVar: "GEMINI_CLI", commandPattern: /(^|\/)gemini(\s|$)/ },
-  copilot: { envVar: "COPILOT_CLI", commandPattern: /(^|\/)copilot(\s|$)/ },
-  hermes: { envVar: "HERMES_INTERACTIVE", commandPattern: /(^|\/)hermes(\s|$)/ },
+  claude: { envVars: ["CLAUDECODE"], commandPattern: /(^|\/)claude(\s|$)/ },
+  codex: { envVars: ["CODEX_CI"], commandPattern: /(^|\/)codex(\s|$)/ },
+  gemini: { envVars: ["GEMINI_CLI"], commandPattern: /(^|\/)gemini(\s|$)/ },
+  copilot: { envVars: ["COPILOT_CLI"], commandPattern: /(^|\/)copilot(\s|$)/ },
+  hermes: {
+    envVars: ["HERMES_INTERACTIVE", "HERMES_SESSION_KEY"],
+    commandPattern: /(^|\/)hermes(\s|$)|(^|\s)hermes_cli\.main(\s|$)/,
+  },
 };
 
 export function detectRuntime(): string | null {
-  for (const [name, { envVar }] of Object.entries(RUNTIMES)) {
-    if (process.env[envVar]) return name;
+  for (const [name, { envVars }] of Object.entries(RUNTIMES)) {
+    if (envVars.some((envVar) => process.env[envVar])) return name;
   }
   return null;
 }
