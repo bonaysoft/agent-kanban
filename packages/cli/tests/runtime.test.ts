@@ -33,6 +33,8 @@ function clearRuntimeEnv() {
   delete process.env.CODEX_CI;
   delete process.env.GEMINI_CLI;
   delete process.env.COPILOT_CLI;
+  delete process.env.HERMES_INTERACTIVE;
+  delete process.env.HERMES_SESSION_KEY;
 }
 
 beforeEach(() => {
@@ -69,6 +71,16 @@ describe("detectRuntime", () => {
   it("returns 'copilot' when COPILOT_CLI is set", () => {
     process.env.COPILOT_CLI = "1";
     expect(detectRuntime()).toBe("copilot");
+  });
+
+  it("returns 'hermes' when HERMES_INTERACTIVE is set", () => {
+    process.env.HERMES_INTERACTIVE = "1";
+    expect(detectRuntime()).toBe("hermes");
+  });
+
+  it("returns 'hermes' when HERMES_SESSION_KEY is set", () => {
+    process.env.HERMES_SESSION_KEY = "agent:main:telegram:dm:527035525";
+    expect(detectRuntime()).toBe("hermes");
   });
 
   it("prioritises CLAUDECODE over CODEX_CI when both are set", () => {
@@ -151,6 +163,11 @@ describe("findRuntimeAncestorPid — happy paths", () => {
     // e.g. "claude --dangerously-skip-permissions"
     mockExecFileSync.mockReturnValueOnce(psLine(1, "/usr/local/bin/claude --dangerously-skip-permissions"));
     expect(findRuntimeAncestorPid("claude")).toBe(process.ppid);
+  });
+
+  it("matches Hermes gateway process command", () => {
+    mockExecFileSync.mockReturnValueOnce(psLine(1, "/Users/saltbo/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run --replace"));
+    expect(findRuntimeAncestorPid("hermes")).toBe(process.ppid);
   });
 
   it("does not match a command where runtime name is a substring of another word", () => {
