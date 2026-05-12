@@ -749,6 +749,17 @@ describe("task lifecycle HTTP permissions", () => {
     expect(body.status).toBe("todo");
   });
 
+  it("leader agent can reject after BA grants are cleared", async () => {
+    await env.DB.prepare("DELETE FROM agentCapabilityGrant WHERE agentId = ?").bind(leaderSessionId).run();
+    const task = await createTestTask();
+    await forceStatus(task.id, "in_review");
+    const jwt = await signLeaderSessionJWT();
+    const res = await apiRequest("POST", `/api/tasks/${task.id}/reject`, { reason: "needs work" }, jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.status).toBe("in_progress");
+  });
+
   it("machine can release a task (200)", async () => {
     const task = await createTestTask();
     const { assignTask } = await import("../apps/web/server/taskRepo");

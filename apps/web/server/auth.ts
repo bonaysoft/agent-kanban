@@ -9,6 +9,9 @@ interface RouteRule {
   capability?: string; // required agent capability (only checked for agent identities)
 }
 
+const LEADER_CAPABILITIES = ["task:complete", "task:reject", "task:cancel", "task:log", "task:message", "agent:usage"];
+const WORKER_CAPABILITIES = ["task:claim", "task:review", "task:log", "task:message", "agent:usage"];
+
 // Route permission rules: method + path pattern → allowed identity types + required capability
 // Routes not listed here are open to any authenticated identity.
 const ROUTE_RULES: { method: string; pattern: RegExp; rule: RouteRule }[] = [
@@ -200,9 +203,9 @@ async function handleAgentIdentity(c: Context<{ Bindings: Env }>, identity: any,
   c.set("sessionId", sessionId);
   c.set("agentId", agentId);
   c.set("machineId", identity.agent.hostId);
-  const caps = (identity.agent.capabilityGrants || []).map((g: any) => g.capability as string);
-  c.set("agentCapabilities", caps);
-  c.set("identityType", row?.kind === "leader" ? "agent:leader" : "agent:worker");
+  const kind = row?.kind === "leader" ? "leader" : "worker";
+  c.set("agentCapabilities", kind === "leader" ? LEADER_CAPABILITIES : WORKER_CAPABILITIES);
+  c.set("identityType", kind === "leader" ? "agent:leader" : "agent:worker");
 
   return enforceRouteRule(c, next);
 }
