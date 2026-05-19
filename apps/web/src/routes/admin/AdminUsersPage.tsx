@@ -4,6 +4,7 @@ import { formatRelative } from "../../components/TaskDetailFields";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { authClient, useSession } from "../../lib/auth-client";
 import { BanUserDialog } from "./BanUserDialog";
 import { DeleteUserDialog } from "./DeleteUserDialog";
@@ -13,7 +14,10 @@ import { type DialogKind, type User } from "./types";
 import { RoleBadge, StatusBadge } from "./UserBadges";
 import { SkeletonRows, UserRowActions } from "./UserTableRows";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+type RoleFilter = "all" | "admin" | "user";
+type StatusFilter = "all" | "active" | "banned";
+type SortDirection = "asc" | "desc";
 
 export function AdminUsersPage() {
   const { data: session } = useSession();
@@ -23,6 +27,11 @@ export function AdminUsersPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(20);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
 
   const [activeDialog, setActiveDialog] = useState<{ kind: DialogKind; user: User } | null>(null);
@@ -30,29 +39,76 @@ export function AdminUsersPage() {
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchUsers = useCallback(async (offset: number, searchValue: string) => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const params: Record<string, unknown> = { query: { limit: PAGE_SIZE, offset } };
-    if (searchValue) {
-      params.query = { ...(params.query as object), searchField: "email", searchValue };
+    const query: Record<string, unknown> = {
+      limit: pageSize,
+      offset: page * pageSize,
+      sortBy: "createdAt",
+      sortDirection,
+    };
+    if (search) {
+      query.searchField = "email";
+      query.searchValue = search;
     }
-    const { data, error } = await (authClient.admin as any).listUsers(params);
-    setLoading(false);
-    if (error || !data) return;
+    if (roleFilter !== "all") {
+      query.filterField = "role";
+      query.filterValue = roleFilter;
+      query.filterOperator = "eq";
+    } else if (statusFilter !== "all") {
+      query.filterField = "banned";
+      query.filterValue = statusFilter === "banned";
+      query.filterOperator = "eq";
+    }
+
+    const { data, error } = await (authClient.admin as any).listUsers({ query });
+    if (error || !data) {
+      toast.error("Failed to load users");
+      setLoading(false);
+      return;
+    }
     setUsers(data.users ?? []);
     setTotal(data.total ?? 0);
-  }, []);
+    setLoading(false);
+  }, [page, pageSize, roleFilter, search, sortDirection, statusFilter]);
 
   useEffect(() => {
-    fetchUsers(page * PAGE_SIZE, search);
-  }, [fetchUsers, page, search]);
+    fetchUsers();
+  }, [fetchUsers]);
 
   function handleSearchChange(value: string) {
+    setSearchInput(value);
     if (searchRef.current) clearTimeout(searchRef.current);
     searchRef.current = setTimeout(() => {
       setPage(0);
-      setSearch(value);
+      setSearch(value.trim());
     }, 300);
+  }
+
+  function applyRoleFilter(value: RoleFilter | null) {
+    if (!value) return;
+    setPage(0);
+    setRoleFilter(value);
+    if (value !== "all") setStatusFilter("all");
+  }
+
+  function applyStatusFilter(value: StatusFilter | null) {
+    if (!value) return;
+    setPage(0);
+    setStatusFilter(value);
+    if (value !== "all") setRoleFilter("all");
+  }
+
+  function applySortDirection(value: SortDirection | null) {
+    if (!value) return;
+    setPage(0);
+    setSortDirection(value);
+  }
+
+  function applyPageSize(value: string | null) {
+    if (!value) return;
+    setPage(0);
+    setPageSize(Number(value) as (typeof PAGE_SIZE_OPTIONS)[number]);
   }
 
   async function handleUnban(user: User) {
@@ -61,7 +117,7 @@ export function AdminUsersPage() {
       toast.error("Failed to unban user");
     } else {
       toast.success("User unbanned");
-      fetchUsers(page * PAGE_SIZE, search);
+      fetchUsers();
     }
   }
 
@@ -80,7 +136,7 @@ export function AdminUsersPage() {
       delete: "User deleted",
     };
     if (activeDialog) toast.success(messages[activeDialog.kind]);
-    fetchUsers(page * PAGE_SIZE, search);
+    fetchUsers();
   }
 
   function showSessionToast(type: "success" | "error", message: string) {
@@ -88,8 +144,8 @@ export function AdminUsersPage() {
     else toast.error(message);
   }
 
-  const offset = page * PAGE_SIZE;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const offset = page * pageSize;
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="px-8 py-10 max-w-6xl">
@@ -98,8 +154,43 @@ export function AdminUsersPage() {
         <span className="text-xs font-mono text-content-tertiary">{total} total</span>
       </div>
 
-      <div className="mb-4">
-        <Input placeholder="Search by email…" onChange={(e) => handleSearchChange(e.target.value)} className="max-w-xs" />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input placeholder="Search by email…" value={searchInput} onChange={(e) => handleSearchChange(e.target.value)} className="max-w-xs" />
+        <Select value={roleFilter} onValueChange={applyRoleFilter}>
+          <SelectTrigger size="sm" className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All roles</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="user">User</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={applyStatusFilter}>
+          <SelectTrigger size="sm" className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="banned">Banned</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={sortDirection} onValueChange={applySortDirection}>
+          <SelectTrigger size="sm" className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="desc">Newest registered</SelectItem>
+              <SelectItem value="asc">Oldest registered</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
@@ -177,9 +268,23 @@ export function AdminUsersPage() {
       {total > 0 && (
         <div className="mt-4 flex items-center justify-between text-xs text-content-tertiary">
           <span>
-            Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            Showing {offset + 1}–{Math.min(offset + pageSize, total)} of {total}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Select value={String(pageSize)} onValueChange={applyPageSize}>
+              <SelectTrigger size="sm" className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size} / page
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
               Previous
             </Button>

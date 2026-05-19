@@ -56,6 +56,11 @@ function formatElapsed(ms: number): string {
   return `${s}s`;
 }
 
+function formatPrLabel(prUrl: string): string {
+  const match = prUrl.match(/\/pull\/(\d+)(?:[/?#]|$)/);
+  return match ? `#${match[1]}` : "PR";
+}
+
 function LiveDuration({ startedAt, finishedMinutes }: { startedAt: string | null; finishedMinutes: number | null }) {
   const [now, setNow] = useState(Date.now());
 
@@ -161,12 +166,24 @@ export function TaskDetail({ taskId, labels = [], onClose, onRefresh, onAgentCli
 
   const detailsContent = (
     <div className="p-5 space-y-4">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <div>
           <FieldLabel>Status</FieldLabel>
           <span className="text-sm font-medium text-accent">{TASK_STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <Field label="Assigned to" value={agentDisplay} />
+        <Field
+          label="PR"
+          value={
+            task.pr_url ? (
+              <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="font-mono text-[13px] text-accent hover:underline">
+                {formatPrLabel(task.pr_url)}
+              </a>
+            ) : (
+              <span className="text-content-tertiary">—</span>
+            )
+          }
+        />
         {task.scheduled_at && (
           <Field
             label="Scheduled"
@@ -241,15 +258,6 @@ export function TaskDetail({ taskId, labels = [], onClose, onRefresh, onAgentCli
         <div>
           <FieldLabel>Result</FieldLabel>
           <p className="text-sm text-content-secondary">{task.result}</p>
-        </div>
-      )}
-
-      {task.pr_url && (
-        <div>
-          <FieldLabel>PR</FieldLabel>
-          <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
-            {task.pr_url}
-          </a>
         </div>
       )}
 
