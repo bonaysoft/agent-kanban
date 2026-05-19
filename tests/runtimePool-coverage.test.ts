@@ -106,6 +106,7 @@ function makeProvider(handle: AgentHandle): AgentProvider {
 
 function makeApiClient(overrides: Partial<Record<string, any>> = {}): ApiClient {
   return {
+    getTask: vi.fn().mockResolvedValue({ status: "in_progress" }),
     releaseTask: vi.fn().mockResolvedValue({}),
     closeSession: vi.fn().mockResolvedValue({}),
     ...overrides,

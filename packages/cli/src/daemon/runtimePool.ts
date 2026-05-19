@@ -12,8 +12,9 @@ import { createLogger } from "../logger.js";
 import type { AgentEvent, AgentHandle, AgentProvider } from "../providers/types.js";
 import { getSessionManager } from "../session/manager.js";
 import { classifyIteratorEnd, type SessionEvent } from "../session/stateMachine.js";
-import { apiFireAndForget, providerExecute } from "./boundaries.js";
+import { apiCallOptional, apiFireAndForget, providerExecute } from "./boundaries.js";
 import { classify } from "./errors.js";
+import { RuntimeCircuitBreaker } from "./runtimeCircuitBreaker.js";
 
 const logger = createLogger("runtime-pool");
 
@@ -37,6 +38,7 @@ export interface AgentProcess {
 export interface RuntimeContext {
   client: ApiClient;
   rateLimitSink: RateLimitSink;
+  circuitBreaker: RuntimeCircuitBreaker;
   tunnel: TunnelSink | null;
   isAlive: (taskId: string) => boolean;
 }
@@ -86,6 +88,7 @@ export class RuntimePool {
   private callbacks: PoolCallbacks;
   private taskTimeoutMs: number;
   private rateLimitSink: RateLimitSink;
+  private circuitBreaker: RuntimeCircuitBreaker;
   private tunnel: (TunnelSink & { sendStatus?(sid: string, s: string): void }) | null;
 
   constructor(
@@ -94,10 +97,12 @@ export class RuntimePool {
     rateLimitSink: RateLimitSink,
     taskTimeoutMs = 2 * 60 * 60 * 1000,
     tunnel?: TunnelSink | null,
+    circuitBreaker: RuntimeCircuitBreaker = new RuntimeCircuitBreaker(),
   ) {
     this.client = client;
     this.callbacks = callbacks;
     this.rateLimitSink = rateLimitSink;
+    this.circuitBreaker = circuitBreaker;
     this.taskTimeoutMs = taskTimeoutMs;
     this.tunnel = tunnel ?? null;
   }
@@ -228,6 +233,7 @@ export class RuntimePool {
     return {
       client: this.client,
       rateLimitSink: this.rateLimitSink,
+      circuitBreaker: this.circuitBreaker,
       tunnel: this.tunnel,
       isAlive: (taskId) => this.agents.has(taskId),
     };
@@ -472,21 +478,13 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
   const nextStatus = next?.status ?? "terminal";
 
   if (nextStatus === "completing") {
-    if (opts.crashed) {
-      logger.warn(`Releasing task ${taskId}: agent crashed`);
-    } else {
-      logger.info(`Releasing task ${taskId}: agent finished without moving task to review`);
-    }
-    apiFireAndForget(
-      "releaseTask",
-      () => ctx.client.releaseTask(taskId),
-      (msg) => logger.warn(`Failed to release task ${taskId}: ${msg}`),
-    );
+    await handleCompletingTask(agent, opts, ctx);
     runCleanup(agent, ctx.tunnel);
     await sessions.applyEvent(sessionId, { type: "cleanup_done" }).catch((e) => {
       logger.warn(`Cleanup transition failed for ${sessionId}: ${errMessage(e)}`);
     });
   } else if (nextStatus === "in_review") {
+    ctx.circuitBreaker.recordWorkflowEntered(agent.providerName);
     (ctx.tunnel as TunnelSink & { sendStatus?: (sid: string, s: string) => void })?.sendStatus?.(sessionId, "done");
     logger.info(`Task ${taskId} in review, preserving worktree`);
   } else if (nextStatus === "rate_limited") {
@@ -498,6 +496,46 @@ async function finalize(agent: AgentProcess, opts: { crashed: boolean; error?: u
       logger.warn(`Agent for task ${taskId} (${agent.providerName}) exited while rate-limited, suspending`);
     }
   }
+}
+
+async function handleCompletingTask(agent: AgentProcess, opts: { crashed: boolean; error?: unknown }, ctx: RuntimeContext): Promise<void> {
+  const { taskId } = agent;
+  const task = (await apiCallOptional("getTask", () => ctx.client.getTask(taskId))) as { status?: string } | null;
+  const reason = opts.crashed ? `agent crashed: ${errMessage(opts.error)}` : "agent exited before submitting review";
+
+  if (!task) {
+    logger.warn(`Task ${taskId} missing during finalize; cleaning up session without release`);
+    return;
+  }
+
+  if (task.status === "todo") {
+    ctx.circuitBreaker.recordPreClaimFailure(agent.providerName, taskId, reason);
+    logger.warn(`Task ${taskId} remained todo after ${agent.providerName} session ended; treating as pre-claim runtime failure`);
+    return;
+  }
+
+  if (task.status === "in_progress") {
+    ctx.circuitBreaker.recordWorkflowEntered(agent.providerName);
+    if (opts.crashed) {
+      logger.warn(`Releasing task ${taskId}: agent crashed`);
+    } else {
+      logger.info(`Releasing task ${taskId}: agent finished without moving task to review`);
+    }
+    apiFireAndForget(
+      "releaseTask",
+      () => ctx.client.releaseTask(taskId),
+      (msg) => logger.warn(`Failed to release task ${taskId}: ${msg}`),
+    );
+    return;
+  }
+
+  if (task.status === "in_review" || task.status === "done" || task.status === "cancelled") {
+    ctx.circuitBreaker.recordWorkflowEntered(agent.providerName);
+    logger.info(`Task ${taskId} is ${task.status}; cleaning up session without release`);
+    return;
+  }
+
+  logger.warn(`Task ${taskId} has unexpected status ${task.status ?? "unknown"}; cleaning up session without release`);
 }
 
 async function finalizeCancelled(agent: AgentProcess, ctx: RuntimeContext): Promise<void> {

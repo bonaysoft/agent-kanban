@@ -23,6 +23,7 @@ import { CleanupError } from "./errors.js";
 import type { PrMonitor } from "./prMonitor.js";
 import { type RateLimiter } from "./rateLimiter.js";
 import { resumeOneSession } from "./resumer.js";
+import { RuntimeCircuitBreaker } from "./runtimeCircuitBreaker.js";
 import type { RuntimePool } from "./runtimePool.js";
 
 const logger = createLogger("loop");
@@ -56,6 +57,7 @@ export class DaemonLoop {
     private rateLimiter: RateLimiter,
     private prMonitor: PrMonitor,
     private opts: LoopOpts,
+    private circuitBreaker: RuntimeCircuitBreaker = new RuntimeCircuitBreaker(),
   ) {
     this.errorBackoffMs = opts.pollInterval;
     this.idleBackoffMs = opts.pollInterval;
@@ -142,7 +144,7 @@ export class DaemonLoop {
     const activeBefore = this.pool.activeCount;
 
     await this.killCancelledTasks();
-    await reapOrphanWorkerSessions(this.sessions, this.pool, this.client);
+    await reapOrphanWorkerSessions(this.sessions, this.pool, this.client, this.circuitBreaker);
     await reapCleanupPending(this.sessions);
     await checkRejectedReviews(
       this.sessions,
@@ -156,10 +158,17 @@ export class DaemonLoop {
 
     const reapedOrResumed = this.pool.activeCount !== activeBefore;
 
-    const dispatched = await dispatchTasks(this.client, this.pool, this.rateLimiter, this.prMonitor, {
-      maxConcurrent: this.opts.maxConcurrent,
-      pollInterval: this.opts.pollInterval,
-    });
+    const dispatched = await dispatchTasks(
+      this.client,
+      this.pool,
+      this.rateLimiter,
+      this.prMonitor,
+      {
+        maxConcurrent: this.opts.maxConcurrent,
+        pollInterval: this.opts.pollInterval,
+      },
+      this.circuitBreaker,
+    );
 
     if (dispatched || reapedOrResumed) {
       this.resetIdleBackoff();
@@ -204,6 +213,7 @@ export async function reapOrphanWorkerSessions(
   sessions: SessionManager,
   pool: RuntimePool,
   client: { getTask(id: string): Promise<unknown>; releaseTask(id: string): Promise<unknown> },
+  circuitBreaker?: RuntimeCircuitBreaker,
 ): Promise<void> {
   for (const s of sessions.list({ type: "worker", status: "active" })) {
     if (!s.taskId || pool.hasTask(s.taskId)) continue;
@@ -222,12 +232,23 @@ export async function reapOrphanWorkerSessions(
       continue;
     }
 
-    await apiFireAndForget(
-      "releaseTask",
-      () => client.releaseTask(s.taskId!),
-      (msg) => logger.warn(`Failed to release orphan task ${s.taskId}: ${msg}`),
-    );
-    logger.info(`Released orphan task ${s.taskId} and reaped its session`);
+    if (task.status === "todo") {
+      circuitBreaker?.recordPreClaimFailure(s.runtime, s.taskId, "orphan session found before task was claimed");
+      logger.warn(`Reaping pre-claim orphan session for task ${s.taskId} (runtime=${s.runtime}) without release`);
+      await completeTerminal(sessions, s);
+      continue;
+    }
+
+    if (task.status === "in_progress") {
+      await apiFireAndForget(
+        "releaseTask",
+        () => client.releaseTask(s.taskId!),
+        (msg) => logger.warn(`Failed to release orphan task ${s.taskId}: ${msg}`),
+      );
+      logger.info(`Released orphan task ${s.taskId} and reaped its session`);
+    } else {
+      logger.warn(`Reaping orphan session for task ${s.taskId} with unexpected status ${task.status ?? "unknown"} without release`);
+    }
     await completeTerminal(sessions, s);
   }
 }

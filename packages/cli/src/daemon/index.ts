@@ -17,6 +17,7 @@ import { auditOrphanedTasks, cleanupLeaderSessions, cleanupStaleSessions } from 
 import { DaemonLoop } from "./loop.js";
 import { PrMonitor } from "./prMonitor.js";
 import { RateLimiter } from "./rateLimiter.js";
+import { RuntimeCircuitBreaker } from "./runtimeCircuitBreaker.js";
 import { isRuntimeLimitIgnored } from "./runtimeOverrides.js";
 import { RuntimePool } from "./runtimePool.js";
 import { TunnelClient } from "./tunnel.js";
@@ -40,6 +41,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   process.on("unhandledRejection", (err: any) => {
     logger.error(`Unhandled rejection: ${err?.message ?? err}`);
   });
+  const circuitBreaker = new RuntimeCircuitBreaker();
 
   mkdirSync(STATE_DIR, { recursive: true });
 
@@ -60,13 +62,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     },
   });
 
-  const machineInfo = await getMachineInfo(availableProviders, rateLimiter);
+  const machineInfo = await getMachineInfo(availableProviders, rateLimiter, circuitBreaker);
   const deviceId = generateDeviceId();
   const machine = await client.registerMachine({ ...machineInfo, device_id: deviceId });
   const machineId = machine.id;
   logger.info(`Machine ready: ${machineId} (device: ${deviceId})`);
 
-  await client.heartbeat(machineId, { version: machineInfo.version, runtimes: await buildRuntimeStates(availableProviders, rateLimiter) });
+  await client.heartbeat(machineId, {
+    version: machineInfo.version,
+    runtimes: await buildRuntimeStates(availableProviders, rateLimiter, circuitBreaker),
+  });
   migrateLegacySessions();
   await cleanupStaleSessions(client, machineId);
   await auditOrphanedTasks(client, machineId);
@@ -80,7 +85,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
   sendHeartbeat = async () => {
     await client.heartbeat(machineId, {
       version: machineInfo.version,
-      runtimes: await buildRuntimeStates(availableProviders, rateLimiter),
+      runtimes: await buildRuntimeStates(availableProviders, rateLimiter, circuitBreaker),
       usage_info: usageCollector.getSnapshot(),
     });
   };
@@ -107,6 +112,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     },
     opts.taskTimeout,
     tunnel,
+    circuitBreaker,
   );
 
   tunnel.onHistoryRequest((sessionId, requestId) => {
@@ -122,10 +128,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     }
   });
 
-  loop = new DaemonLoop(client, pool, rateLimiter, prMonitor, {
-    maxConcurrent: opts.maxConcurrent,
-    pollInterval,
-  });
+  loop = new DaemonLoop(
+    client,
+    pool,
+    rateLimiter,
+    prMonitor,
+    {
+      maxConcurrent: opts.maxConcurrent,
+      pollInterval,
+    },
+    circuitBreaker,
+  );
 
   const heartbeatInterval = setInterval(() => {
     (async () => {
@@ -138,6 +151,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<void> {
     logger.info("Shutting down daemon...");
     loop.stop();
     rateLimiter.stop();
+    circuitBreaker.stop();
     prMonitor.stop();
     usageCollector.stop();
     clearInterval(heartbeatInterval);
@@ -167,13 +181,17 @@ function removePidFile(): void {
   }
 }
 
-async function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter) {
+async function getMachineInfo(providers: AgentProvider[], rateLimiter: RateLimiter, circuitBreaker: RuntimeCircuitBreaker) {
   const os = `${platform()} ${arch()} ${release()}`;
-  const runtimes = await buildRuntimeStates(providers, rateLimiter);
+  const runtimes = await buildRuntimeStates(providers, rateLimiter, circuitBreaker);
   return { name: resolveMachineName(), os, version: getVersion(), runtimes };
 }
 
-async function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateLimiter): Promise<MachineRuntime[]> {
+async function buildRuntimeStates(
+  providers: AgentProvider[],
+  rateLimiter: RateLimiter,
+  circuitBreaker: RuntimeCircuitBreaker,
+): Promise<MachineRuntime[]> {
   const checked_at = new Date().toISOString();
   return Promise.all(
     providers.map(async (provider) => {
@@ -183,6 +201,15 @@ async function buildRuntimeStates(providers: AgentProvider[], rateLimiter: RateL
       const reset_at = rateLimiter.pauseResetAt(provider.name);
       if (reset_at) {
         return { name: provider.name, status: "limited", detail: "runtime paused by rate limiter", reset_at, checked_at };
+      }
+      if (circuitBreaker.isRuntimePaused(provider.name)) {
+        return {
+          name: provider.name,
+          status: "limited",
+          detail: "runtime paused by circuit breaker",
+          reset_at: circuitBreaker.pauseResetAt(provider.name) ?? undefined,
+          checked_at,
+        };
       }
       const availability = (await provider.checkAvailability?.()) ?? { status: "ready" };
       return { name: provider.name, ...availability, checked_at };

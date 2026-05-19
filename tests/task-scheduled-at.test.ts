@@ -321,6 +321,29 @@ describe("dispatchTasks — scheduled_at filter", () => {
     rl.stop();
   });
 
+  it("does not consume the circuit half-open probe when session creation fails before spawn", async () => {
+    const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
+    const { RuntimeCircuitBreaker } = await import("../packages/cli/src/daemon/runtimeCircuitBreaker");
+    const spawnSpy = vi.fn().mockResolvedValue(undefined);
+    const task = makeTask({ id: "task-half-open" });
+    const client = makeClient([task]);
+    client.createSession = vi.fn().mockResolvedValue(null);
+    const pool = makePool(spawnSpy);
+    const rl = makeRateLimiter();
+    const circuitBreaker = new RuntimeCircuitBreaker({ failureThreshold: 1, cooldownMs: 0 });
+
+    circuitBreaker.recordPreClaimFailure("claude", "task-half-open", "agent exited before claim");
+
+    const first = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts, circuitBreaker);
+    const second = await dispatchTasks(client as any, pool as any, rl, prMonitor, opts, circuitBreaker);
+
+    expect(first).toBe(false);
+    expect(second).toBe(false);
+    expect(client.createSession).toHaveBeenCalledTimes(2);
+    expect(spawnSpy).not.toHaveBeenCalled();
+    rl.stop();
+  });
+
   it("does not dispatch a future-scheduled task while dispatching a past-scheduled task in the same list", async () => {
     const { dispatchTasks } = await import("../packages/cli/src/daemon/dispatcher");
     const spawnSpy = vi.fn().mockResolvedValue(undefined);
